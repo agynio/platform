@@ -27,7 +27,7 @@ describe('ThreadTree realtime summary updates', () => {
             parentId: null,
             createdAt: t(0),
             metrics: { remindersCount: 0, runsCount: 0, containersCount: 0, activity: 'idle' },
-            agentTitle: 'Agent Uno',
+            agentName: 'Agent Uno',
           },
         ],
       });

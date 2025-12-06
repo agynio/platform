@@ -7,7 +7,7 @@ import { formatDistanceToNow, formatDistanceToNowStrict } from 'date-fns';
 import { useThreadMetrics, useThreadReminders, useThreadContainers, useThreadContainersCount } from '@/api/hooks/threads';
 import type { ThreadNode, ThreadReminder } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
-import { AGENT_TITLE_FALLBACK, computeAgentDefaultTitle, normalizeAgentName, normalizeAgentRole } from '../../utils/agentDisplay';
+import { normalizeAgentName } from '../../utils/agentDisplay';
 
 const defaultMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle' as const, runsCount: 0 };
 const badgeButtonClasses = 'rounded border px-3 py-1 text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400';
@@ -121,12 +121,7 @@ export function ThreadHeader({ thread, runsCount }: { thread: ThreadNode | undef
     return text.length > 0 ? text : '(no summary yet)';
   }, [thread]);
 
-  const normalizedName = normalizeAgentName(thread?.agentName);
-  const normalizedRole = normalizeAgentRole(thread?.agentRole);
-  const fallbackTitle = normalizeAgentName(thread?.agentTitle);
-  const agentTitle = normalizedName || normalizedRole
-    ? computeAgentDefaultTitle(normalizedName, normalizedRole, AGENT_TITLE_FALLBACK)
-    : fallbackTitle ?? AGENT_TITLE_FALLBACK;
+  const agentName = normalizeAgentName(thread?.agentName) ?? '(unknown agent)';
   const createdAt = thread?.createdAt ? new Date(thread.createdAt) : null;
   const createdAtLabel = createdAt && Number.isFinite(createdAt.getTime()) ? createdAt.toLocaleString() : null;
   const createdRelative = createdAt && Number.isFinite(createdAt.getTime()) ? formatDistanceToNow(createdAt, { addSuffix: true }) : null;
@@ -167,7 +162,7 @@ export function ThreadHeader({ thread, runsCount }: { thread: ThreadNode | undef
           </div>
           <div className="mt-1 text-xs text-gray-500">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span title={agentTitle}>{agentTitle}</span>
+              <span title={agentName}>{agentName}</span>
               {createdAtLabel && (
                 <>
                   <span aria-hidden="true">•</span>

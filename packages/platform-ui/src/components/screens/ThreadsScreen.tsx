@@ -33,6 +33,7 @@ import {
 } from '../ui/dropdown-menu';
 
 const THREAD_MESSAGE_MAX_LENGTH = 8000;
+const UNKNOWN_AGENT_LABEL = '(unknown agent)';
 
 interface ThreadsScreenProps {
   threads: Thread[];
@@ -68,7 +69,7 @@ interface ThreadsScreenProps {
   draftRecipientId?: string | null;
   draftRecipientLabel?: string | null;
   draftFetchOptions?: (query: string) => Promise<AutocompleteOption[]>;
-  onDraftRecipientChange?: (agentId: string | null, agentTitle: string | null) => void;
+  onDraftRecipientChange?: (agentId: string | null, agentName: string | null) => void;
   onDraftCancel?: () => void;
   className?: string;
 }
@@ -317,9 +318,10 @@ export default function ThreadsScreen({
       setIsStatusMenuOpen(false);
       onToggleThreadStatus(resolvedSelectedThread.id, nextStatus);
     };
-    const agentDisplayName = resolvedSelectedThread.agentName?.trim().length
-      ? resolvedSelectedThread.agentName.trim()
-      : resolvedSelectedThread.agentTitle?.trim() ?? '';
+    const agentDisplayName = (() => {
+      const trimmed = resolvedSelectedThread.agentName?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : UNKNOWN_AGENT_LABEL;
+    })();
     const agentDisplayRole = resolvedSelectedThread.agentRole?.trim();
 
     return (

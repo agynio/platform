@@ -21,7 +21,7 @@ import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTermin
 import { graph as graphApi } from '@/api/modules/graph';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
-import { AGENT_TITLE_FALLBACK, computeAgentDefaultTitle, normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
+import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
@@ -83,15 +83,16 @@ type ThreadViewCacheEntry = {
 type ThreadDraft = {
   id: string;
   agentNodeId?: string;
-  agentTitle?: string;
+  agentName?: string;
   inputValue: string;
   createdAt: string;
 };
 
-type AgentOption = { id: string; display: string; graphTitle?: string; name?: string; role?: string };
+type AgentOption = { id: string; name: string; graphTitle?: string };
 
 const DRAFT_SUMMARY_LABEL = '(new conversation)';
 const DRAFT_RECIPIENT_PLACEHOLDER = '(no recipient)';
+const UNKNOWN_AGENT_LABEL = '(unknown agent)';
 
 function isDraftThreadId(threadId: string | null | undefined): threadId is string {
   return typeof threadId === 'string' && threadId.startsWith('draft:');
@@ -108,7 +109,7 @@ function mapDraftToThread(draft: ThreadDraft): Thread {
   return {
     id: draft.id,
     summary: DRAFT_SUMMARY_LABEL,
-    agentName: draft.agentTitle ?? DRAFT_RECIPIENT_PLACEHOLDER,
+    agentName: draft.agentName ?? DRAFT_RECIPIENT_PLACEHOLDER,
     createdAt: draft.createdAt,
     status: 'pending',
     isOpen: true,
@@ -129,20 +130,10 @@ function sanitizeSummary(summary: string | null | undefined): string {
   return trimmed && trimmed.length > 0 ? trimmed : '(no summary yet)';
 }
 
-function resolveThreadAgentTitle(node: ThreadNode): string {
-  const name = normalizeAgentName(node.agentName);
-  const role = normalizeAgentRole(node.agentRole);
-  if (name || role) {
-    return computeAgentDefaultTitle(name, role, AGENT_TITLE_FALLBACK);
-  }
-  const explicit = normalizeAgentName(node.agentTitle);
-  return explicit ?? AGENT_TITLE_FALLBACK;
-}
-
 function resolveThreadAgentName(node: ThreadNode): string {
   const explicit = normalizeAgentName(node.agentName);
   if (explicit) return explicit;
-  return resolveThreadAgentTitle(node);
+  return UNKNOWN_AGENT_LABEL;
 }
 
 function resolveThreadAgentRole(node: ThreadNode): string | undefined {
@@ -265,7 +256,6 @@ function cloneThreadNode(item: ThreadTreeItem): ThreadNode {
     parentId: item.parentId ?? null,
     createdAt: item.createdAt,
     metrics: item.metrics ? { ...item.metrics } : undefined,
-    agentTitle: item.agentTitle,
     agentRole: item.agentRole,
     agentName: item.agentName,
   } satisfies ThreadNode;
@@ -278,7 +268,6 @@ function areThreadNodesEqual(a: ThreadNode, b: ThreadNode): boolean {
   if ((a.status ?? null) !== (b.status ?? null)) return false;
   if ((a.parentId ?? null) !== (b.parentId ?? null)) return false;
   if (a.createdAt !== b.createdAt) return false;
-  if ((a.agentTitle ?? null) !== (b.agentTitle ?? null)) return false;
   if ((a.agentRole ?? null) !== (b.agentRole ?? null)) return false;
   if ((a.agentName ?? null) !== (b.agentName ?? null)) return false;
   const metricsA = a.metrics;
@@ -330,7 +319,6 @@ function buildThreadTree(node: ThreadNode, children: ThreadChildrenState, overri
     id: node.id,
     summary: sanitizeSummary(node.summary ?? null),
     agentName: resolveThreadAgentName(node),
-    agentTitle: resolveThreadAgentTitle(node),
     agentRole: resolveThreadAgentRole(node),
     createdAt: node.createdAt,
     status: computeThreadStatus(node, mappedChildren, overrides),
@@ -670,22 +658,18 @@ export function AgentsThreads() {
       if (template?.kind !== 'agent') continue;
       const config = node.config && typeof node.config === 'object' ? (node.config as Record<string, unknown>) : undefined;
       const rawName = typeof config?.name === 'string' ? config.name.trim() : '';
-      const rawRole = typeof config?.role === 'string' ? config.role.trim() : '';
       const configTitleCandidate = typeof config?.title === 'string' ? config.title.trim() : '';
       const templateTitle = typeof template?.title === 'string' ? template.title.trim() : '';
-      const fallbackLabel = configTitleCandidate || templateTitle || node.template;
-      const display = rawName || rawRole ? computeAgentDefaultTitle(rawName, rawRole, fallbackLabel) : fallbackLabel;
+      const name = rawName.length > 0 ? rawName : UNKNOWN_AGENT_LABEL;
       seen.add(node.id);
       result.push({
         id: node.id,
-        display,
+        name,
         graphTitle: configTitleCandidate || templateTitle || undefined,
-        name: rawName || undefined,
-        role: rawRole || undefined,
       });
     }
 
-    result.sort((a, b) => a.display.localeCompare(b.display));
+    result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
   }, [fullGraphQuery.data, graphTemplatesQuery.data]);
 
@@ -693,8 +677,8 @@ export function AgentsThreads() {
     async (query: string): Promise<AutocompleteOption[]> => {
       const normalized = query.trim().toLowerCase();
       return agentOptions
-        .filter((option) => normalized.length === 0 || option.display.toLowerCase().includes(normalized))
-        .map((option) => ({ value: option.id, label: option.display }));
+        .filter((option) => normalized.length === 0 || option.name.toLowerCase().includes(normalized))
+        .map((option) => ({ value: option.id, label: option.name }));
     },
     [agentOptions],
   );
@@ -1089,7 +1073,6 @@ export function AgentsThreads() {
         parentId: thread.parentId ?? null,
         createdAt: thread.createdAt,
         metrics: defaultMetrics,
-        agentTitle: undefined,
       };
 
       if (node.parentId) {
@@ -1664,21 +1647,21 @@ export function AgentsThreads() {
   );
 
   const handleDraftRecipientChange = useCallback(
-    (agentId: string | null, agentTitle: string | null) => {
+    (agentId: string | null, agentName: string | null) => {
       if (!selectedThreadId || !isDraftThreadId(selectedThreadId)) return;
       setDrafts((prev) => {
         let mutated = false;
         const next = prev.map((draft) => {
           if (draft.id !== selectedThreadId) return draft;
           if (!agentId) {
-            if (!draft.agentNodeId && !draft.agentTitle) return draft;
+            if (!draft.agentNodeId && !draft.agentName) return draft;
             mutated = true;
-            return { ...draft, agentNodeId: undefined, agentTitle: undefined };
+            return { ...draft, agentNodeId: undefined, agentName: undefined };
           }
-          const nextTitle = agentTitle ?? agentOptions.find((item) => item.id === agentId)?.display ?? agentId;
-          if (draft.agentNodeId === agentId && draft.agentTitle === nextTitle) return draft;
+          const nextName = agentName ?? agentOptions.find((item) => item.id === agentId)?.name ?? agentId;
+          if (draft.agentNodeId === agentId && draft.agentName === nextName) return draft;
           mutated = true;
-          return { ...draft, agentNodeId: agentId, agentTitle: nextTitle };
+          return { ...draft, agentNodeId: agentId, agentName: nextName };
         });
         return mutated ? next : prev;
       });
@@ -1806,7 +1789,7 @@ export function AgentsThreads() {
           onOpenContainerTerminal={handleOpenContainerTerminal}
           draftMode={isDraftSelected}
           draftRecipientId={activeDraft?.agentNodeId ?? null}
-          draftRecipientLabel={activeDraft?.agentTitle ?? null}
+          draftRecipientLabel={activeDraft?.agentName ?? null}
           draftFetchOptions={draftFetchOptions}
           onDraftRecipientChange={handleDraftRecipientChange}
           onDraftCancel={handleDraftCancel}

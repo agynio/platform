@@ -20,7 +20,7 @@ const baseNode: ThreadNode = {
   parentId: null,
   createdAt: '2024-01-01T00:00:00.000Z',
   metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 },
-  agentTitle: 'Agent Alpha',
+  agentName: 'Agent Alpha',
 };
 
 function renderNode(node: ThreadNode) {

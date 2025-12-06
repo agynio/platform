@@ -13,7 +13,6 @@ const baseThread: Thread = {
   id: 'thread-1',
   summary: 'Investigate production error logs',
   agentName: 'Ops Agent',
-  agentTitle: 'Ops Agent',
   createdAt: '2024-06-01T11:00:00.000Z',
   status: 'running',
   isOpen: true,
@@ -165,7 +164,7 @@ describe('AgentsThreads status toggle integration', () => {
       parentId: null,
       createdAt,
       metrics: { remindersCount: 0, containersCount: 0, activity: 'working', runsCount: 0 },
-      agentTitle: 'Ops Agent',
+      agentName: 'Ops Agent',
     });
 
     const respondWithThreads = () => {

@@ -60,7 +60,6 @@ export function ThreadTree({
           parentId: thread.parentId,
           createdAt: thread.createdAt,
           metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 },
-          agentTitle: '(unknown agent)',
           agentName: '(unknown agent)',
         };
         const existing = prev?.items?.some((t) => t.id === node.id);

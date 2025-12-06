@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import type { ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { threads } from '@/api/modules/threads';
 import type { ThreadNode } from '@/api/types/agents';
-import { AGENT_TITLE_FALLBACK, computeAgentDefaultTitle, normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
+import { normalizeAgentName } from '@/utils/agentDisplay';
 
 export function ThreadTreeNode({
   node,
@@ -29,12 +29,7 @@ export function ThreadTreeNode({
   const [toggling, setToggling] = useState(false);
 
   const summary = node.summary && node.summary.trim().length > 0 ? node.summary.trim() : '(no summary yet)';
-  const normalizedName = normalizeAgentName(node.agentName);
-  const normalizedRole = normalizeAgentRole(node.agentRole);
-  const fallbackTitle = normalizeAgentName(node.agentTitle);
-  const agentLabel = normalizedName || normalizedRole
-    ? computeAgentDefaultTitle(normalizedName, normalizedRole, AGENT_TITLE_FALLBACK)
-    : fallbackTitle ?? AGENT_TITLE_FALLBACK;
+  const agentLabel = normalizeAgentName(node.agentName) ?? '(unknown agent)';
   const isSelected = selectedId === node.id;
   const activity = node.metrics?.activity ?? 'idle';
   const createdAtLabel = new Date(node.createdAt).toLocaleString();

@@ -33,7 +33,7 @@ describe('ThreadTree initial metrics rendering', () => {
             parentId: null,
             createdAt: new Date().toISOString(),
             metrics: { remindersCount: 1, activity: 'working' as const, runsCount: 3 },
-            agentTitle: 'Primary Agent',
+            agentName: 'Primary Agent',
           },
         ],
       });

@@ -17,7 +17,7 @@ export const ManageInvocationSchema = z
       .string()
       .min(1)
       .optional()
-      .describe('Optional child thread alias; defaults per worker title.'),
+      .describe('Optional child thread alias; defaults to worker name.'),
   })
   .strict();
 

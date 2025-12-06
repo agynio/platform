@@ -149,7 +149,7 @@ describe('AgentsThreads conversation view', () => {
       parentId: 'th1',
       createdAt: t(3),
       metrics: { remindersCount: 0, containersCount: 0, activity: 'waiting', runsCount: 0 },
-      agentTitle: 'Agent Junior',
+      agentName: 'Agent Junior',
     };
 
     const childrenHandler = vi.fn(() => HttpResponse.json({ items: [childThread] }));

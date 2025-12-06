@@ -15,7 +15,6 @@ type ThreadMock = {
   createdAt: string;
   parentId: string | null;
   metrics: { remindersCount: number; containersCount: number; activity: 'idle' | 'waiting' | 'working'; runsCount: number };
-  agentTitle?: string | null;
   agentRole?: string | null;
   agentName?: string | null;
   children?: ThreadMock[];
@@ -76,7 +75,6 @@ function makeThread(overrides: Partial<ThreadMock> = {}): ThreadMock {
     createdAt: t(0),
     parentId: null,
     metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 },
-    agentTitle: 'Agent',
     agentRole: 'Role',
     agentName: 'Agent Name',
     children: undefined,

@@ -8,7 +8,6 @@ export interface Thread {
   id: string;
   summary: string;
   agentName: string;
-  agentTitle?: string;
   agentRole?: string;
   agentAvatar?: string;
   createdAt: string;

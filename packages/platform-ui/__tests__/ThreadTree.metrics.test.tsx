@@ -33,7 +33,7 @@ describe('ThreadTree metrics badges and socket updates', () => {
           parentId: null,
           createdAt: new Date().toISOString(),
           metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 4 },
-          agentTitle: 'Agent 1',
+          agentName: 'Agent 1',
         },
       ] });
     };
