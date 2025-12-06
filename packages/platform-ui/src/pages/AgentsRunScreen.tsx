@@ -717,6 +717,10 @@ function resolveContextRecords(
 type CreateUiEventOptions = {
   context?: Record<string, unknown>[];
   tool?: ToolLinkData;
+  contextWindow?: {
+    totalCount: number;
+    newCount: number;
+  };
 };
 
 function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions): UiRunEvent {
@@ -770,6 +774,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
       status,
       data: {
         context,
+        contextWindow: options?.contextWindow,
         response,
         model: event.llmCall?.model ?? undefined,
         tokens: usage
@@ -1595,7 +1600,16 @@ export function AgentsRunScreen() {
           ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
           : [];
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
-      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
+      const totalContextCount = contextRecords.length;
+      const rawNewContextCount = event.llmCall?.newContextItemCount ?? 0;
+      const sanitizedNewContextCount = Number.isFinite(rawNewContextCount)
+        ? Math.max(0, Math.min(totalContextCount, Math.floor(rawNewContextCount)))
+        : 0;
+      const contextWindow = {
+        totalCount: totalContextCount,
+        newCount: sanitizedNewContextCount,
+      };
+      return createUiEvent(event, { context: contextRecords, tool: toolLinks, contextWindow });
     });
   }, [events, contextItemsVersion]);
 

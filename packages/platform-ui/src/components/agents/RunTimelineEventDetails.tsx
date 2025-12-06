@@ -674,6 +674,16 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const hasLlmResponse = Boolean(llmCall?.responseText);
   const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
   const usageMetrics = llmCall?.usage;
+  const contextInitialVisibleCount = useMemo(() => {
+    if (!llmCall) return undefined;
+    const rawCount = llmCall.newContextItemCount;
+    if (typeof rawCount !== 'number' || !Number.isFinite(rawCount)) return undefined;
+    const coerced = Math.max(0, Math.floor(rawCount));
+    if (coerced <= 0) return undefined;
+    const total = llmCall.contextItemIds.length;
+    if (total <= 0) return undefined;
+    return Math.min(coerced, total);
+  }, [llmCall]);
   const toolExecution = event.toolExecution;
   const callAgentMeta = useMemo(() => {
     if (!toolExecution || !CALL_AGENT_TOOL_NAMES.has(toolExecution.toolName)) return null;
@@ -889,6 +899,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                   <LLMContextViewer
                     ids={llmCall.contextItemIds}
                     highlightLastCount={llmCall.newContextItemCount}
+                    initialVisibleCount={contextInitialVisibleCount}
                     onItemsRendered={handleContextItemsRendered}
                     onBeforeLoadMore={handleBeforeLoadMore}
                   />

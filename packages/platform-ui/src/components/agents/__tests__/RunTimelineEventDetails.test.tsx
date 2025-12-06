@@ -862,6 +862,87 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
+  it('requests context items using the new item count as initial window', () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-1',
+        role: 'system',
+        contentText: 'System primer',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 64,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-2',
+        role: 'user',
+        contentText: 'Earlier user prompt',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 72,
+        createdAt: '2024-01-01T00:01:00.000Z',
+      },
+      {
+        id: 'ctx-3',
+        role: 'assistant',
+        contentText: 'Recent assistant answer',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 82,
+        createdAt: '2024-01-01T00:02:00.000Z',
+      },
+      {
+        id: 'ctx-4',
+        role: 'user',
+        contentText: 'Latest user reply',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 91,
+        createdAt: '2024-01-01T00:03:00.000Z',
+      },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems.slice(2),
+      total: contextItems.length,
+      loadedCount: 2,
+      targetCount: 2,
+      hasMore: true,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-window',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 2,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+
+      expect(useContextItemsSpy).toHaveBeenCalled();
+      const call = useContextItemsSpy.mock.calls[0];
+      expect(call?.[0]).toEqual(contextItems.map((item) => item.id));
+      expect(call?.[1]).toMatchObject({ initialCount: 2 });
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
   it('highlights only the last N conversational context items', () => {
     const contextItems: ContextItem[] = [
       {
