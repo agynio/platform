@@ -10,37 +10,6 @@ import type { CallAgentLinkingService } from '../../src/agents/call-agent-linkin
 
 type ToolLogger = { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
 
-type WorkerAgent = { invoke: ReturnType<typeof vi.fn> };
-
-const createManageNodeStub = (
-  workerName: string,
-  agent: WorkerAgent,
-  overrides: Record<string, unknown> = {},
-): ManageToolNode => {
-  const base = {
-    nodeId: 'manage-node',
-    config: {},
-    listWorkers: vi.fn().mockReturnValue([workerName]),
-    getWorkerByName: vi.fn().mockImplementation((name: string) =>
-      name.trim().toLowerCase() === workerName.toLowerCase() ? (agent as unknown as ManageToolNode['getWorkers'][number]) : undefined,
-    ),
-    getWorkers: vi.fn().mockReturnValue([agent as unknown as ManageToolNode['getWorkers'][number]]),
-    getWorkerName: vi.fn().mockImplementation((value: ManageToolNode['getWorkers'][number]) => {
-      if (value === (agent as unknown as ManageToolNode['getWorkers'][number])) return workerName;
-      throw new Error('unexpected agent');
-    }),
-    registerInvocation: vi.fn().mockResolvedValue(undefined),
-    awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
-    getMode: vi.fn().mockReturnValue('sync'),
-    getTimeoutMs: vi.fn().mockReturnValue(64000),
-    renderWorkerResponse: vi
-      .fn()
-      .mockImplementation((worker: string, text: string) => `Response from: ${worker}\n${text}`),
-    renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-  } satisfies Record<string, unknown>;
-  return Object.assign(base, overrides) as unknown as ManageToolNode;
-};
-
 const createCtx = (overrides: Partial<LLMContext> = {}): LLMContext => ({
   threadId: 'parent-thread',
   runId: 'parent-run',
@@ -80,13 +49,18 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const workerName = 'Worker Alpha';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-1',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
       getMode: vi.fn().mockReturnValue('sync'),
-    });
+      getTimeoutMs: vi.fn().mockReturnValue(64000),
+      renderWorkerResponse: vi.fn().mockImplementation((worker: string, text: string) => `Response from: ${worker}
+${text}`),
+      renderAsyncAcknowledgement: vi.fn(),
+    } as unknown as ManageToolNode;
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
@@ -104,7 +78,7 @@ describe('ManageFunctionTool.execute', () => {
     expect(manageNode.registerInvocation).toHaveBeenCalledWith({
       childThreadId: 'child-thread-1',
       parentThreadId: 'parent-thread',
-      workerName: 'Worker Alpha',
+      workerTitle: 'Worker Alpha',
       callerAgent: ctx.callerAgent,
     });
     expect(manageNode.awaitChildResponse).toHaveBeenCalledWith('child-thread-1', 64000);
@@ -124,15 +98,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub('Worker Alpha', workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-link-fail',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
       getMode: vi.fn().mockReturnValue('sync'),
       getTimeoutMs: vi.fn().mockReturnValue(64000),
       renderWorkerResponse: vi.fn().mockReturnValue('formatted'),
       renderAsyncAcknowledgement: vi.fn(),
-    });
+    } as unknown as ManageToolNode;
 
     const linking = {
       registerParentToolExecution: vi.fn().mockRejectedValue(new Error('link service down')),
@@ -163,16 +139,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const workerName = 'Worker Alpha';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-alias',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
@@ -206,16 +183,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const workerName = 'Worker Alpha';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-fallback',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -230,7 +208,7 @@ describe('ManageFunctionTool.execute', () => {
     expect(aliasMock).toHaveBeenNthCalledWith(1, 'manage', 'Invalid Alias!', 'parent-thread', '');
     expect(aliasMock).toHaveBeenNthCalledWith(2, 'manage', 'invalid-alias', 'parent-thread', '');
     expect(loggerWarnSpy).toHaveBeenCalledWith(
-      'Manage: provided threadAlias invalid, using sanitized fallback {"workerName":"Worker Alpha","parentThreadId":"parent-thread","providedAlias":"Invalid Alias!","fallbackAlias":"invalid-alias"}',
+      'Manage: provided threadAlias invalid, using sanitized fallback {"worker":"Worker Alpha","parentThreadId":"parent-thread","providedAlias":"Invalid Alias!","fallbackAlias":"invalid-alias"}',
     );
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -251,16 +229,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const workerName = 'Worker Alpha';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-long',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
@@ -289,16 +268,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'ignored' });
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-2',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
@@ -326,16 +306,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockReturnValue({ text: 'sync result' });
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-non-promise',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -346,7 +327,7 @@ describe('ManageFunctionTool.execute', () => {
 
     expect(result).toBe('async acknowledgement');
     expect(loggerErrorSpy).toHaveBeenCalledWith(
-      'Manage: async send_message invoke returned non-promise {"workerName":"Async Worker","childThreadId":"child-thread-non-promise","resultType":"object","promiseLike":false}',
+      'Manage: async send_message invoke returned non-promise {"worker":"Async Worker","childThreadId":"child-thread-non-promise","resultType":"object","promiseLike":false}',
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,
@@ -369,16 +350,17 @@ describe('ManageFunctionTool.execute', () => {
         setTimeout(() => resolve({ text: 'late reply' }), 2000);
       }),
     );
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-delayed',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -410,16 +392,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockRejectedValue('boom');
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-async',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -434,7 +417,7 @@ describe('ManageFunctionTool.execute', () => {
     expect(result).toBe('async acknowledgement');
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Manage: async send_message failed {"workerName":"Async Worker","childThreadId":"child-thread-async","error":{"code":"unknown_error","message":"boom","retriable":false}}',
+        'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-async","error":{"code":"unknown_error","message":"boom","retriable":false}}',
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -452,16 +435,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockRejectedValue(undefined);
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-undefined',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -476,7 +460,7 @@ describe('ManageFunctionTool.execute', () => {
     expect(result).toBe('async acknowledgement');
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Manage: async send_message failed {"workerName":"Async Worker","childThreadId":"child-thread-undefined","error":{"code":"unknown_error","message":"undefined","retriable":false}}',
+        'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-undefined","error":{"code":"unknown_error","message":"undefined","retriable":false}}',
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -495,16 +479,17 @@ describe('ManageFunctionTool.execute', () => {
 
     const diagnostic = { message: 'custom diagnostic', code: 'X' };
     const workerInvoke = vi.fn().mockRejectedValue(diagnostic);
-    const workerName = 'Async Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-object',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),
       getTimeoutMs: vi.fn(),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -519,7 +504,7 @@ describe('ManageFunctionTool.execute', () => {
     expect(result).toBe('async acknowledgement');
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Manage: async send_message failed {"workerName":"Async Worker","childThreadId":"child-thread-object","error":{"code":"X","message":"custom diagnostic","retriable":false}}',
+        'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-object","error":{"code":"X","message":"custom diagnostic","retriable":false}}',
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -537,16 +522,17 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockRejectedValue('boom');
-    const workerName = 'Fail Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-sync',
+      listWorkers: vi.fn().mockReturnValue(['Fail Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn().mockResolvedValue('ignored'),
       getMode: vi.fn().mockReturnValue('sync'),
       getTimeoutMs: vi.fn().mockReturnValue(64000),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn(),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -558,7 +544,7 @@ describe('ManageFunctionTool.execute', () => {
     ).rejects.toBe('boom');
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
-      'Manage: send_message failed {"workerName":"Fail Worker","childThreadId":"child-thread-sync","error":{"code":"unknown_error","message":"boom","retriable":false}}',
+      'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync","error":{"code":"unknown_error","message":"boom","retriable":false}}',
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,
@@ -576,16 +562,17 @@ describe('ManageFunctionTool.execute', () => {
 
     const diagnostic = { message: 'sync diagnostic', code: 'Y' };
     const workerInvoke = vi.fn().mockRejectedValue(diagnostic);
-    const workerName = 'Fail Worker';
-    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
-    const manageNode = createManageNodeStub(workerName, workerAgent, {
+    const manageNode = {
       nodeId: 'manage-node-sync-object',
+      listWorkers: vi.fn().mockReturnValue(['Fail Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn().mockResolvedValue('ignored'),
       getMode: vi.fn().mockReturnValue('sync'),
       getTimeoutMs: vi.fn().mockReturnValue(64000),
       renderWorkerResponse: vi.fn(),
       renderAsyncAcknowledgement: vi.fn(),
-    });
+    } as unknown as ManageToolNode;
 
     const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
@@ -597,7 +584,7 @@ describe('ManageFunctionTool.execute', () => {
     ).rejects.toEqual(diagnostic);
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
-      'Manage: send_message failed {"workerName":"Fail Worker","childThreadId":"child-thread-sync-object","error":{"code":"Y","message":"sync diagnostic","retriable":false}}',
+      'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync-object","error":{"code":"Y","message":"sync diagnostic","retriable":false}}',
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,
