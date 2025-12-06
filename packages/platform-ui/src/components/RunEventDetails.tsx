@@ -1,21 +1,5 @@
-import {
-  Clock,
-  MessageSquare,
-  Bot,
-  Wrench,
-  FileText,
-  Terminal,
-  Users,
-  Copy,
-  User,
-  Settings,
-  ExternalLink,
-  Loader2,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { runs } from '@/api/modules/runs';
-import type { ContextItem, ContextItemRole } from '@/api/types/agents';
+import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
@@ -51,6 +35,10 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
+  contextWindow?: {
+    totalCount?: number;
+    newCount?: number;
+  };
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -95,6 +83,11 @@ export interface RunEvent {
 export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+  const [showAllContext, setShowAllContext] = useState(false);
+
+  useEffect(() => {
+    setShowAllContext(false);
+  }, [event.id]);
 
   const isShellToolEvent =
     event.type === 'tool' &&
@@ -235,6 +228,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
+    const contextWindowRecord = isRecord(event.data.contextWindow) ? event.data.contextWindow : undefined;
+    const totalContextCount = context.length;
+    const rawNewContextCount = asNumber(contextWindowRecord?.newCount);
+    const sanitizedNewContextCount =
+      rawNewContextCount !== undefined ? Math.max(0, Math.min(totalContextCount, Math.floor(rawNewContextCount))) : 0;
+    const shouldLimitContext = sanitizedNewContextCount > 0 && sanitizedNewContextCount < totalContextCount;
+    const visibleContext = shouldLimitContext && !showAllContext
+      ? context.slice(totalContextCount - sanitizedNewContextCount)
+      : context;
+    const hasHiddenContext = shouldLimitContext && !showAllContext;
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -295,12 +298,18 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <span className="text-sm text-[var(--agyn-gray)]">Context</span>
               </div>
               <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                {context.length > 0 ? (
+                {visibleContext.length > 0 ? (
                   <div>
-                    <button className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors">
-                      Load older context
-                    </button>
-                    {renderContextMessages(context)}
+                    {hasHiddenContext && (
+                      <button
+                        className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors"
+                        type="button"
+                        onClick={() => setShowAllContext(true)}
+                      >
+                        Load older context
+                      </button>
+                    )}
+                    {renderContextMessages(visibleContext)}
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
@@ -666,67 +675,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     };
 
     const input = parseInput();
-    const output = parseOutput();
-    const inputRecord = isRecord(input) ? input : null;
-    const outputRecord = isRecord(output) ? output : null;
-    const inputChildRunRecord = isRecord(inputRecord?.childRun) ? (inputRecord?.childRun as Record<string, unknown>) : null;
-    const outputChildRunRecord = isRecord(outputRecord?.childRun) ? (outputRecord?.childRun as Record<string, unknown>) : null;
-
-    const pickId = (...candidates: unknown[]): string | undefined => {
-      for (const candidate of candidates) {
-        if (typeof candidate === 'string') {
-          const trimmed = candidate.trim();
-          if (trimmed.length > 0) return trimmed;
-        }
-      }
-      return undefined;
-    };
-
-    const childThreadId = pickId(
-      event.data.childThreadId,
-      event.data.threadId,
-      event.data.subthreadId,
-      inputRecord?.childThreadId,
-      inputRecord?.threadId,
-      inputRecord?.subthreadId,
-      outputRecord?.childThreadId,
-      outputRecord?.threadId,
-      outputRecord?.subthreadId,
-    );
-
-    const childRunId = pickId(
-      event.data.childRunId,
-      event.data.runId,
-      inputRecord?.childRunId,
-      inputRecord?.runId,
-      inputChildRunRecord?.id,
-      outputRecord?.childRunId,
-      outputRecord?.runId,
-      outputChildRunRecord?.id,
-    );
-
     const command = input?.command;
     const worker = input?.worker;
     const threadAlias = input?.threadAlias;
     const message = input?.message;
-    const linksClassName = 'inline-flex items-center gap-1 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 transition-colors';
+    const output = parseOutput();
+    const subthreadId = output?.subthreadId || output?.threadId;
+    const outputRunId = output?.runId;
 
     return (
       <>
-        {childThreadId && (
-          <div className="flex items-center gap-3 mb-4 flex-wrap">
-            <Link to={`/agents/threads/${childThreadId}`} className={linksClassName}>
-              <ExternalLink className="w-3 h-3" />
-              <span>View thread</span>
-            </Link>
-            {childThreadId && childRunId && (
-              <Link to={`/agents/threads/${childThreadId}/runs/${childRunId}/timeline`} className={linksClassName}>
-                <ExternalLink className="w-3 h-3" />
-                <span>View run</span>
-              </Link>
-            )}
-          </div>
-        )}
         {/* Tool Input & Output - Side by Side */}
         <div className="grid grid-cols-2 gap-4 h-full">
           {/* Tool Input */}
@@ -763,6 +721,15 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <div className="flex items-center gap-2 mb-3 h-8">
                   <span className="text-sm text-[var(--agyn-gray)]">Thread Alias</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
+                  {subthreadId && (
+                    <a
+                      href={`#/thread/${subthreadId}`}
+                      className="inline-flex items-center gap-1 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>View Thread</span>
+                    </a>
+                  )}
                 </div>
                 <div className="text-[var(--agyn-dark)] text-sm font-mono break-all">
                   {threadAlias}
@@ -776,6 +743,15 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
                   <span className="text-sm text-[var(--agyn-gray)]">Message</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
+                  {outputRunId && (
+                    <a
+                      href={`#/run/${outputRunId}`}
+                      className="inline-flex items-center gap-1 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>View Run</span>
+                    </a>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
                   <div className="prose prose-sm max-w-none">
