@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useEffect, useState, type Ref, type UIEvent } from 'react';
+import { memo, type ReactNode, useRef, useEffect, useState, type Ref, type UIEvent } from 'react';
 import { Message, type MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
 import { QueuedMessage } from './QueuedMessage';
@@ -48,10 +48,13 @@ interface ConversationProps {
   onScroll?: (event: UIEvent<HTMLDivElement>) => void;
 }
 
-export function Conversation({
+const EMPTY_QUEUED_MESSAGES: QueuedMessageData[] = [];
+const EMPTY_REMINDERS: ReminderData[] = [];
+
+function ConversationImpl({
   runs,
-  queuedMessages = [],
-  reminders = [],
+  queuedMessages = EMPTY_QUEUED_MESSAGES,
+  reminders = EMPTY_REMINDERS,
   header,
   footer,
   className = '',
@@ -221,3 +224,17 @@ export function Conversation({
     </div>
   );
 }
+
+function areEqual(prev: ConversationProps, next: ConversationProps): boolean {
+  return (
+    prev.runs === next.runs &&
+    prev.queuedMessages === next.queuedMessages &&
+    prev.reminders === next.reminders &&
+    prev.collapsed === next.collapsed &&
+    prev.className === next.className &&
+    prev.scrollRef === next.scrollRef &&
+    prev.onScroll === next.onScroll
+  );
+}
+
+export const Conversation = memo(ConversationImpl, areEqual);
