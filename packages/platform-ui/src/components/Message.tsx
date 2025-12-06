@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { User, Bot, Terminal, Settings } from 'lucide-react';
 import { MarkdownContent } from './MarkdownContent';
 
@@ -38,7 +38,7 @@ const roleConfig = {
   },
 };
 
-export function Message({ role, content, timestamp, className = '' }: MessageProps) {
+function MessageComponent({ role, content, timestamp, className = '' }: MessageProps) {
   const config = roleConfig[role];
   const Icon = config.icon;
 
@@ -79,3 +79,7 @@ export function Message({ role, content, timestamp, className = '' }: MessagePro
     </div>
   );
 }
+
+export const Message = memo(MessageComponent);
+
+Message.displayName = 'Message';
