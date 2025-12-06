@@ -105,19 +105,15 @@ describe('CallModelLLMReducer usage metrics', () => {
     );
 
     const startArgs = runEvents.startLLMCall.mock.calls[0]?.[0];
-    expect(startArgs?.metadata?.contextWindow).toEqual({
-      newIds: ['ctx-user-new'],
-      totalCount: 2,
-      prevCursorId: 'ctx-system-1',
-      pageSize: 10,
+    expect(startArgs?.metadata).toEqual({
+      summaryIncluded: false,
+      memoryPlacement: null,
     });
 
     const completeArgs = runEvents.completeLLMCall.mock.calls[0]?.[0];
-    expect(completeArgs?.metadataPatch?.contextWindow).toEqual({
-      newIds: ['ctx-user-new', 'ctx-assistant'],
-      totalCount: 3,
-      prevCursorId: 'ctx-system-1',
-      pageSize: 10,
+    expect(completeArgs?.metadataPatch).toEqual({
+      summaryIncluded: false,
+      memoryPlacement: null,
     });
   });
 
@@ -178,19 +174,15 @@ describe('CallModelLLMReducer usage metrics', () => {
     );
 
     const startArgs = runEvents.startLLMCall.mock.calls[0]?.[0];
-    expect(startArgs?.metadata?.contextWindow).toEqual({
-      newIds: ['ctx-user-tail'],
-      totalCount: 5,
-      prevCursorId: 'ctx-convo-existing',
-      pageSize: 10,
+    expect(startArgs?.metadata).toEqual({
+      summaryIncluded: true,
+      memoryPlacement: 'after_system',
     });
 
     const completeArgs = runEvents.completeLLMCall.mock.calls[0]?.[0];
-    expect(completeArgs?.metadataPatch?.contextWindow).toEqual({
-      newIds: ['ctx-user-tail', 'ctx-assistant-latest'],
-      totalCount: 6,
-      prevCursorId: 'ctx-convo-existing',
-      pageSize: 10,
+    expect(completeArgs?.metadataPatch).toEqual({
+      summaryIncluded: true,
+      memoryPlacement: 'after_system',
     });
   });
 });

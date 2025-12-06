@@ -11,7 +11,7 @@ import {
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
-import { RunEventsService, DEFAULT_CONTEXT_PAGE_SIZE } from '../../events/run-events.service';
+import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
@@ -102,8 +102,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const {
       contextItemIds,
       context: nextContext,
-      newContextCount,
-      newConversationIds,
+      tailConversationCount,
     } = await this.resolveContextIds(
       context,
       sequence,
@@ -112,18 +111,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const input = sequence.map((entry) => entry.message);
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
-    const initialNewIds = newConversationIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
-    const contextWindow = this.buildContextWindow(contextItemIds, initialNewIds, DEFAULT_CONTEXT_PAGE_SIZE);
     const baseMetadata = {
       summaryIncluded: Boolean(summaryMsg),
       memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
     } as const;
-    const startMetadata = {
-      ...baseMetadata,
-      contextWindow,
-    };
-
-    const newContextItemIds = [...initialNewIds];
 
     const llmEvent = await this.runEvents.startLLMCall({
       runId: ctx.runId,
@@ -131,9 +122,9 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       nodeId,
       model: this.model,
       contextItemIds,
-      newContextItemCount: newContextCount,
+      newContextItemCount: tailConversationCount,
       metadata: {
-        ...startMetadata,
+        ...baseMetadata,
       },
     });
     await this.eventsBus.publishEvent(llmEvent.id, 'append');
@@ -184,18 +175,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         messageIds: [...nextContext.messageIds, assistantContextId],
       };
 
-      if (typeof assistantContextId === 'string' && assistantContextId.length > 0) {
-        newContextItemIds.push(assistantContextId);
-      }
-      const completeContextItemIds =
-        typeof assistantContextId === 'string' && assistantContextId.length > 0
-          ? [...contextItemIds, assistantContextId]
-          : contextItemIds;
-      const finalMetadata = {
-        ...baseMetadata,
-        contextWindow: this.buildContextWindow(completeContextItemIds, newContextItemIds, DEFAULT_CONTEXT_PAGE_SIZE),
-      };
-
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.success,
@@ -204,7 +183,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         rawResponse,
         toolCalls,
         usage: usageMetrics,
-        metadataPatch: finalMetadata,
+        metadataPatch: baseMetadata,
       });
       await this.eventsBus.publishEvent(llmEvent.id, 'update');
 
@@ -294,17 +273,16 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   ): Promise<{
     contextItemIds: string[];
     context: LLMContextState;
-    newContextCount: number;
-    newConversationIds: string[];
+    tailConversationCount: number;
   }> {
-    const pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }> = [];
+    const pending: Array<{ input: ContextItemInput; assign: (id: string) => void }> = [];
     let conversationIndex = 0;
-    const initialConversationCount = context.messageIds.length;
-    const newConversationIds: string[] = [];
 
     if (!summaryText) {
       context.summary = undefined;
     }
+
+    const conversationIsNew: boolean[] = [];
 
     for (const entry of sequence) {
       switch (entry.kind) {
@@ -356,6 +334,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         case 'conversation': {
           const idx = conversationIndex;
           const existingId = context.messageIds[idx] ?? null;
+          const priorId = existingId && existingId.length > 0 ? existingId : null;
           this.collectContextId({
             existingId,
             pending,
@@ -366,8 +345,8 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
               } else {
                 context.messageIds.push(id);
               }
+              conversationIsNew[idx] = !priorId || id !== priorId;
             },
-            isConversation: existingId === null || idx >= initialConversationCount,
           });
           conversationIndex += 1;
           break;
@@ -379,56 +358,93 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       context.messageIds = context.messageIds.slice(0, conversationIndex);
     }
 
-    let newContextCount = 0;
     if (pending.length > 0) {
       const inputs = pending.map((item) => item.input);
       const created = await this.runEvents.createContextItems(inputs);
       created.forEach((id, index) => {
         pending[index].assign(id);
-        if (pending[index].isConversation && typeof id === 'string' && id.length > 0) {
-          newContextCount += 1;
-          newConversationIds.push(id);
-        }
       });
     }
 
     const contextItemIds: string[] = [];
+    const orderedKinds: Array<{
+      kind: SequenceEntry['kind'];
+      place?: 'after_system' | 'last_message';
+      id: string | null;
+      isNew?: boolean;
+    }> = [];
     for (const entry of sequence) {
       switch (entry.kind) {
         case 'system': {
           const id = context.system?.id ?? null;
-          if (id) contextItemIds.push(id);
+          if (id) {
+            contextItemIds.push(id);
+            orderedKinds.push({ kind: 'system', id });
+          }
           break;
         }
         case 'summary': {
           const id = context.summary?.id ?? null;
-          if (id) contextItemIds.push(id);
+          if (id) {
+            contextItemIds.push(id);
+            orderedKinds.push({ kind: 'summary', id });
+          }
           break;
         }
         case 'memory': {
           const memoryEntry = context.memory.find((m) => m.place === entry.place);
-          if (memoryEntry?.id) contextItemIds.push(memoryEntry.id);
+          if (memoryEntry?.id) {
+            contextItemIds.push(memoryEntry.id);
+            orderedKinds.push({ kind: 'memory', place: entry.place, id: memoryEntry.id });
+          }
           break;
         }
         case 'conversation': {
           const id = context.messageIds[entry.index] ?? null;
-          if (id) contextItemIds.push(id);
+          if (id) {
+            contextItemIds.push(id);
+            orderedKinds.push({ kind: 'conversation', id, isNew: conversationIsNew[entry.index] ?? false });
+          }
           break;
         }
       }
     }
 
-    return { contextItemIds, context, newContextCount, newConversationIds };
+    let tailConversationCount = 0;
+    for (let i = orderedKinds.length - 1; i >= 0; i -= 1) {
+      const entry = orderedKinds[i];
+      if (entry.kind === 'memory' && entry.place === 'last_message' && tailConversationCount === 0) {
+        continue;
+      }
+      if (entry.kind === 'conversation') {
+        if (entry.id && entry.isNew) {
+          tailConversationCount += 1;
+          continue;
+        }
+        if (tailConversationCount === 0) {
+          continue;
+        }
+        break;
+      }
+      if (entry.kind === 'memory' && entry.place === 'last_message') {
+        continue;
+      }
+      if (tailConversationCount === 0) {
+        continue;
+      }
+      break;
+    }
+
+    return { contextItemIds, context, tailConversationCount };
   }
 
   private collectContextId(params: {
     existingId: string | null;
-    pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }>;
+    pending: Array<{ input: ContextItemInput; assign: (id: string) => void }>;
     input: () => ContextItemInput;
     assign: (id: string) => void;
-    isConversation?: boolean;
   }): void {
-    const { existingId, pending, input, assign, isConversation } = params;
+    const { existingId, pending, input, assign } = params;
     const normalizedId = existingId && existingId.length > 0 ? existingId : null;
     if (normalizedId) {
       assign(normalizedId);
@@ -437,7 +453,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     pending.push({
       input: input(),
       assign,
-      isConversation,
     });
   }
 
@@ -524,42 +539,4 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     return null;
   }
 
-  private buildContextWindow(
-    contextItemIds: string[],
-    newIds: string[],
-    pageSize: number,
-  ): { newIds: string[]; totalCount: number; prevCursorId: string | null; pageSize: number } {
-    const normalizedNewIds = Array.isArray(newIds)
-      ? newIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
-      : [];
-
-    const uniqueIds = new Set<string>();
-    for (const id of contextItemIds) {
-      if (typeof id === 'string' && id.length > 0) uniqueIds.add(id);
-    }
-    for (const id of normalizedNewIds) {
-      uniqueIds.add(id);
-    }
-
-    let prevCursorId: string | null = null;
-    const contextIndices = normalizedNewIds
-      .map((id) => contextItemIds.indexOf(id))
-      .filter((index) => index >= 0);
-
-    if (contextIndices.length > 0) {
-      const firstIndex = Math.min(...contextIndices);
-      if (firstIndex > 0) {
-        prevCursorId = contextItemIds[firstIndex - 1] ?? null;
-      }
-    } else if (contextItemIds.length > 0) {
-      prevCursorId = contextItemIds[contextItemIds.length - 1] ?? null;
-    }
-
-    return {
-      newIds: normalizedNewIds,
-      totalCount: uniqueIds.size,
-      prevCursorId,
-      pageSize: Math.max(1, Number.isFinite(pageSize) ? Math.floor(pageSize) : DEFAULT_CONTEXT_PAGE_SIZE),
-    };
-  }
 }

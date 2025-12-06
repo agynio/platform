@@ -45,7 +45,6 @@ export function createRunEventsStub() {
     recordSummarization: vi.fn(async () => makeEvent()),
     publishEvent: vi.fn(async () => null),
     createContextItems,
-    appendLLMCallContextWindowNewIds: vi.fn(async () => {}),
   } as const;
 }
 
