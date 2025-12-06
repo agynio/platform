@@ -5,6 +5,7 @@ import { ModuleRef } from '@nestjs/core';
 import { ResponseMessage, AIMessage } from '@agyn/llm';
 
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { Signal } from '../src/signal';
@@ -59,6 +60,9 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
         getOrCreateSubthreadByAlias: defaultSpy,
         setThreadChannelNode: defaultSetThreadChannel,
       } as unknown as AgentsPersistenceService);
+  const linking = {
+    registerParentToolExecution: vi.fn().mockResolvedValue('evt-manage'),
+  };
 
   const module = await Test.createTestingModule({
     providers: [
@@ -74,6 +78,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
       FakeAgent,
       { provide: AgentsPersistenceService, useValue: persistence },
       RunSignalsRegistry,
+      { provide: CallAgentLinkingService, useValue: linking },
       { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
     ],
   }).compile();
@@ -104,6 +109,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
     defaultSetThreadChannel,
     setAwaitedResponse,
     awaitSpy,
+    linking,
   };
 }
 
@@ -144,6 +150,12 @@ describe('ManageTool unit', () => {
       '',
     );
     expect(setThreadChannelNode).toHaveBeenCalledWith('child-explicit', 'manage');
+    expect(harness.linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: 'run',
+      parentThreadId: 'parent',
+      childThreadId: 'child-explicit',
+      toolName: 'manage',
+    });
   });
 
   it('send_message: derives sanitized alias when omitted', async () => {
@@ -165,6 +177,12 @@ describe('ManageTool unit', () => {
     expect(res).toBe('Response from: Alpha Worker\nok-child-derived');
     expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'alpha-worker', 'parent', '');
     expect(setThreadChannelNode).toHaveBeenCalledWith('child-derived', 'manage');
+    expect(harness.linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: 'run',
+      parentThreadId: 'parent',
+      childThreadId: 'child-derived',
+      toolName: 'manage',
+    });
   });
 
   it('send_message: prefixes multi-line worker response preserving content', async () => {
@@ -237,16 +255,6 @@ describe('ManageTool unit', () => {
     await expect(
       harness.tool.execute({ command: 'send_message', worker: 'unknown', message: 'm' }, ctx),
     ).rejects.toThrow('Unknown worker: unknown');
-  });
-
-  it('send_message: persistence unavailable guard', async () => {
-    const harness = await createHarness({ persistence: undefined as unknown as AgentsPersistenceService });
-    await addWorker(harness.module, harness.node, 'Worker Y');
-    const ctx = buildCtx();
-
-    await expect(
-      harness.tool.execute({ command: 'send_message', worker: 'Worker Y', message: 'msg' }, ctx),
-    ).rejects.toThrow('Manage: persistence unavailable');
   });
 
   it('execute: missing threadId guard', async () => {
@@ -332,6 +340,7 @@ describe('ManageTool unit', () => {
           } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
+        { provide: CallAgentLinkingService, useValue: { registerParentToolExecution: vi.fn() } },
       ],
     }).compile();
 
@@ -380,6 +389,7 @@ describe('ManageTool graph wiring', () => {
           useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
+        { provide: CallAgentLinkingService, useValue: { registerParentToolExecution: vi.fn() } },
       ],
     }).compile();
 

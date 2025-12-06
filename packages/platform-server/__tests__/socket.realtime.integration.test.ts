@@ -64,8 +64,8 @@ const createPrismaStub = () =>
 
 const createLinkingStub = () =>
   ({
-    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
-      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+    buildInitialMetadata: (params: { tool: 'call_agent' | 'call_engineer'; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.tool,
       parentThreadId: params.parentThreadId,
       childThreadId: params.childThreadId,
       childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },

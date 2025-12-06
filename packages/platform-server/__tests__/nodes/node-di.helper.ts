@@ -21,7 +21,6 @@ import { NcpsKeyService } from '../../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../../src/llm/provisioners/llm.provisioner';
 import { SlackAdapter } from '../../src/messaging/slack/slack.adapter';
 import { ThreadTransportService } from '../../src/messaging/threadTransport.service';
-import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import { VaultService } from '../../src/vault/vault.service';
 import { ReferenceResolverService } from '../../src/utils/reference-resolver.service';
 import { createReferenceResolverStub } from '../helpers/reference-resolver.stub';
@@ -108,13 +107,6 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
       const { stub } = createReferenceResolverStub();
       return stub;
     },
-  ],
-  [
-    ManageFunctionTool,
-    () =>
-      new ManageFunctionTool(
-        createDefaultStub('AgentsPersistenceService') as AgentsPersistenceService,
-      ),
   ],
 ]);
 

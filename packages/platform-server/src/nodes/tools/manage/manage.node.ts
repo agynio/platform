@@ -5,6 +5,7 @@ import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool } from './manage.tool';
 import { AgentNode } from '../../agent/agent.node';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
+import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 import type { SendResult } from '../../../messaging/types';
 import { ThreadChannelNode } from '../../../messaging/threadTransport.service';
 import type { CallerAgent } from '../../../llm/types';
@@ -42,8 +43,8 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   private readonly queuedMessages: Map<string, string[]> = new Map();
 
   constructor(
-    @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(CallAgentLinkingService) private readonly linking: CallAgentLinkingService,
   ) {
     super();
   }
@@ -105,7 +106,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   }
 
   protected createTool() {
-    return this.manageTool.init(this, { persistence: this.persistence });
+    return new ManageFunctionTool(this.persistence, this.linking).init(this);
   }
 
   getTool() {

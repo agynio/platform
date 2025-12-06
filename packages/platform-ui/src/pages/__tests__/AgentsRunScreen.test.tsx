@@ -220,6 +220,10 @@ describe('AgentsRunScreen', () => {
         errorMessage: null,
         raw: null,
       },
+      metadata: {
+        childThreadId: 'child-thread-meta',
+        childRunId: 'child-run-meta',
+      },
     });
 
     runsHookMocks.summary.mockReturnValue(buildSummary());
@@ -253,13 +257,84 @@ describe('AgentsRunScreen', () => {
     const [capturedEvent] = capturedProps.events;
     const data = capturedEvent.data as Record<string, unknown>;
 
-    expect(data.runId).toBe('child-run');
-    expect(data.threadId).toBe('child-thread');
+    expect(data.runId).toBe('child-run-meta');
+    expect(data.threadId).toBe('child-thread-meta');
     expect(data.subthreadId).toBe('child-subthread');
+    expect(data.childRunId).toBe('child-run-meta');
+    expect(data.childThreadId).toBe('child-thread-meta');
     expect(typeof data.input).toBe('object');
     expect(typeof data.output).toBe('object');
-    expect((data.output as Record<string, unknown>).runId).toBe('child-run');
-    expect((data.output as Record<string, unknown>).subthreadId).toBe('child-subthread');
+    const normalizedOutput = data.output as Record<string, unknown>;
+    expect(normalizedOutput.runId).toBe('child-run-meta');
+    expect(normalizedOutput.childRunId).toBe('child-run-meta');
+    expect(normalizedOutput.childThreadId).toBe('child-thread-meta');
+    expect(normalizedOutput.subthreadId).toBe('child-subthread');
+  });
+
+  it('prioritizes metadata link targets over payload data', async () => {
+    const toolInput = JSON.stringify({
+      threadId: 'input-thread',
+      subthreadId: 'input-subthread',
+      runId: 'input-run',
+    });
+    const toolOutput = JSON.stringify({
+      threadId: 'output-thread',
+      subthreadId: 'output-subthread',
+      runId: 'output-run',
+    });
+
+    const event = buildEvent({
+      toolExecution: {
+        toolName: 'manage_agent',
+        toolCallId: 'call-2',
+        execStatus: 'success',
+        input: toolInput,
+        output: toolOutput,
+        errorMessage: null,
+        raw: null,
+      },
+      metadata: {
+        childThreadId: 'metadata-thread',
+        childRunId: 'metadata-run',
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/thread-1/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    let capturedProps: { events: Array<{ data: Record<string, unknown> }> } | undefined;
+    await waitFor(() => {
+      const call = [...runScreenMocks.props.mock.calls]
+        .reverse()
+        .find(([callProps]) => Array.isArray((callProps as { events?: unknown[] }).events) && ((callProps as { events: unknown[] }).events.length > 0));
+      expect(call).toBeDefined();
+      capturedProps = call?.[0] as { events: Array<{ data: Record<string, unknown> }> };
+    });
+
+    if (!capturedProps) {
+      throw new Error('RunScreen props were not captured.');
+    }
+
+    const [capturedEvent] = capturedProps.events;
+    const data = capturedEvent.data as Record<string, unknown>;
+
+    expect(data.threadId).toBe('metadata-thread');
+    expect(data.subthreadId).toBe('output-subthread');
+    expect(data.runId).toBe('metadata-run');
+    expect(data.childThreadId).toBe('metadata-thread');
+    expect(data.childRunId).toBe('metadata-run');
   });
 
   it('hydrates assistant context from stringified content text including tool calls and reasoning', async () => {

@@ -2,11 +2,12 @@ import z from 'zod';
 
 import { FunctionTool, HumanMessage, ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { ManageToolNode } from './manage.node';
-import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 import type { ErrorResponse } from '../../../utils/error-response';
 import { normalizeError } from '../../../utils/error-response';
+import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 
 export const ManageInvocationSchema = z
   .object({
@@ -26,21 +27,19 @@ type ManageInvocationSuccess = string;
 type InvocationOutcome = ResponseMessage | ToolCallOutputMessage;
 type InvocationResult = PromiseLike<InvocationOutcome> | InvocationOutcome;
 
-@Injectable({ scope: Scope.TRANSIENT })
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
-  private persistence?: AgentsPersistenceService;
   private readonly logger = new Logger(ManageFunctionTool.name);
 
   constructor(
-    @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
+    private readonly persistence: AgentsPersistenceService,
+    private readonly linking: CallAgentLinkingService,
   ) {
     super();
   }
 
-  init(node: ManageToolNode, options?: { persistence?: AgentsPersistenceService }) {
+  init(node: ManageToolNode) {
     this._node = node;
-    this.persistence = options?.persistence ?? this.injectedPersistence;
     return this;
   }
 
@@ -50,17 +49,19 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
   }
 
   get name() {
-    return this.node.config.name ?? 'manage';
+    const configured = this.node.config?.name;
+    return typeof configured === 'string' && configured.length > 0 ? configured : 'manage';
   }
   get schema() {
     return ManageInvocationSchema;
   }
   get description() {
-    return this.node.config.description ?? 'Manage tool';
+    const description = this.node.config?.description;
+    return typeof description === 'string' && description.length > 0 ? description : 'Manage tool';
   }
 
-  private getPersistence(): AgentsPersistenceService | undefined {
-    return this.persistence ?? this.injectedPersistence;
+  private getPersistence(): AgentsPersistenceService {
+    return this.persistence;
   }
 
   private format(context?: Record<string, unknown>): string {
@@ -115,7 +116,6 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       const targetAgent = this.node.getWorkerByTitle(targetTitle);
       if (!targetAgent) throw new Error(`Unknown worker: ${targetTitle}`);
       const persistence = this.getPersistence();
-      if (!persistence) throw new Error('Manage: persistence unavailable');
       const callerAgent = ctx.callerAgent;
       if (!callerAgent || typeof callerAgent.invoke !== 'function') {
         throw new Error('Manage: caller agent unavailable');
@@ -155,6 +155,27 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
         }
       }
       await persistence.setThreadChannelNode(childThreadId, this.node.nodeId);
+      const runId = typeof ctx.runId === 'string' ? ctx.runId : '';
+      if (runId) {
+        try {
+          await this.linking.registerParentToolExecution({
+            runId,
+            parentThreadId,
+            childThreadId,
+            toolName: this.name,
+          });
+        } catch (err) {
+          const errorInfo = err instanceof Error ? { name: err.name, message: err.message } : { message: String(err) };
+          this.logger.warn(
+            `Manage: failed to register parent tool execution${this.format({
+              parentThreadId,
+              childThreadId,
+              runId,
+              error: errorInfo,
+            })}`,
+          );
+        }
+      }
       const mode = this.node.getMode();
       const timeoutMs = this.node.getTimeoutMs();
       let waitPromise: Promise<string> | null = null;
@@ -209,7 +230,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
           // const threads = Array.isArray(res) ? res : [];
           // for (const t of threads) if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
         } catch (_err: unknown) {
-          // this.logger.error('Manage: listActiveThreads failed', {
+          // Logger.error('Manage: listActiveThreads failed', {
           //   worker: w.name,
           //   error: (err as { message?: string })?.message || String(err),
           // });

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { MemoryRouter } from 'react-router-dom';
 import { RunEventDetails, type EventType } from '../src/components/RunEventDetails';
 import type { RunEvent } from '../src/components/RunEventsList';
 
@@ -9,6 +10,13 @@ const meta: Meta<typeof RunEventDetails> = {
     layout: 'centered',
   },
   tags: ['!autodocs'],
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export default meta;

@@ -8,8 +8,13 @@ import { EventsBusService } from '../events/events-bus.service';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
-type CallAgentToolName = 'call_agent' | 'call_engineer';
-const CALL_AGENT_TOOL_NAMES: CallAgentToolName[] = ['call_agent', 'call_engineer'];
+type CanonicalToolName = 'call_agent' | 'call_engineer' | 'manage';
+const TOOL_NAME_ALIASES: Record<CanonicalToolName, string[]> = {
+  call_agent: ['call_agent'],
+  call_engineer: ['call_engineer'],
+  manage: ['manage', 'manage_agent'],
+};
+const LINKABLE_TOOL_NAMES: string[] = ['call_agent', 'call_engineer', 'manage', 'manage_agent'];
 
 export type CallAgentChildRunStatus = 'queued' | RunStatus;
 
@@ -21,7 +26,7 @@ export interface CallAgentChildRunLink {
 }
 
 export interface CallAgentLinkMetadata {
-  tool: CallAgentToolName;
+  tool: CanonicalToolName;
   parentThreadId: string;
   childThreadId: string;
   childRun: CallAgentChildRunLink;
@@ -60,8 +65,18 @@ export class CallAgentLinkingService {
     return this.prismaService.getClient();
   }
 
-  buildInitialMetadata(params: { toolName: string; parentThreadId: string; childThreadId: string }): CallAgentLinkMetadata {
-    const canonical: CallAgentToolName = params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent';
+  private canonicalizeToolName(toolName: string): CanonicalToolName | null {
+    if (toolName === 'call_agent') return 'call_agent';
+    if (toolName === 'call_engineer') return 'call_engineer';
+    if (toolName === 'manage' || toolName === 'manage_agent') return 'manage';
+    return null;
+  }
+
+  private toolSearchNames(tool: CanonicalToolName): string[] {
+    return TOOL_NAME_ALIASES[tool];
+  }
+
+  buildInitialMetadata(params: { tool: CanonicalToolName; parentThreadId: string; childThreadId: string }): CallAgentLinkMetadata {
     const childRun: CallAgentChildRunLink = {
       id: null,
       status: 'queued',
@@ -69,7 +84,7 @@ export class CallAgentLinkingService {
       latestMessageId: null,
     };
     return {
-      tool: canonical,
+      tool: params.tool,
       parentThreadId: params.parentThreadId,
       childThreadId: params.childThreadId,
       childRun,
@@ -86,14 +101,16 @@ export class CallAgentLinkingService {
     childThreadId: string;
     toolName: string;
   }): Promise<string | null> {
-    const canonical: CallAgentToolName = params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    const canonical = this.canonicalizeToolName(params.toolName);
+    if (!canonical) return null;
+    const toolNames = this.toolSearchNames(canonical);
     try {
       const eventId = await this.prisma.$transaction(async (tx) => {
-        const event = await this.findLatestToolEvent(tx, params.runId, canonical);
+        const event = await this.findLatestToolEvent(tx, params.runId, toolNames);
         if (!event) return null;
 
         const metadata = this.buildInitialMetadata({
-          toolName: canonical,
+          tool: canonical,
           parentThreadId: params.parentThreadId,
           childThreadId: params.childThreadId,
         });
@@ -108,6 +125,7 @@ export class CallAgentLinkingService {
         `call_agent_linking: failed to register parent tool execution${this.format({
           runId: params.runId,
           childThreadId: params.childThreadId,
+          tool: canonical,
           error: this.errorInfo(err),
         })}`,
       );
@@ -218,7 +236,7 @@ export class CallAgentLinkingService {
       const events = await this.prisma.runEvent.findMany({
         where: {
           type: 'tool_execution',
-          toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+          toolExecution: { toolName: { in: LINKABLE_TOOL_NAMES } },
           OR: clauses,
         },
         orderBy: { ts: 'desc' },
@@ -277,7 +295,7 @@ export class CallAgentLinkingService {
   private parseMetadata(raw: Prisma.JsonValue | null): CallAgentLinkMetadata | null {
     if (!isRecord(raw)) return null;
     const toolRaw = typeof raw.tool === 'string' ? raw.tool : 'call_agent';
-    const tool: CallAgentToolName = toolRaw === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    const tool = this.canonicalizeToolName(toolRaw) ?? 'call_agent';
     const parentThreadId = typeof raw.parentThreadId === 'string' ? raw.parentThreadId : null;
     const childThreadId = typeof raw.childThreadId === 'string' ? raw.childThreadId : null;
     if (!parentThreadId || !childThreadId) return null;
@@ -317,7 +335,7 @@ export class CallAgentLinkingService {
     return tx.runEvent.findFirst({
       where: {
         type: 'tool_execution',
-        toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+        toolExecution: { toolName: { in: LINKABLE_TOOL_NAMES } },
         metadata: { path: ['childThreadId'], equals: childThreadId },
       },
       orderBy: { ts: 'desc' },
@@ -329,7 +347,7 @@ export class CallAgentLinkingService {
     return tx.runEvent.findFirst({
       where: {
         type: 'tool_execution',
-        toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+        toolExecution: { toolName: { in: LINKABLE_TOOL_NAMES } },
         metadata: { path: ['childRunId'], equals: runId },
       },
       orderBy: { ts: 'desc' },
@@ -337,14 +355,14 @@ export class CallAgentLinkingService {
     });
   }
 
-  private async findLatestToolEvent(tx: Tx, runId: string, tool: CallAgentToolName) {
+  private async findLatestToolEvent(tx: Tx, runId: string, toolNames: readonly string[]) {
     return tx.runEvent.findFirst({
       where: {
         runId,
         type: 'tool_execution',
         toolExecution: {
           is: {
-            toolName: tool,
+            toolName: { in: [...toolNames] },
           },
         },
       },

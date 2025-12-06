@@ -15,7 +15,6 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
 import { ThreadTransportService } from '../messaging/threadTransport.service';
 import { LocalMCPServerNode } from './mcp';
 import { ManageToolNode } from './tools/manage/manage.node';
-import { ManageFunctionTool } from './tools/manage/manage.tool';
 import { CallAgentNode } from './tools/call_agent/call_agent.node';
 import { FinishNode } from './tools/finish/finish.node';
 import { MemoryToolNode } from './tools/memory/memory.node';
@@ -57,7 +56,6 @@ class NodesTemplateRegistrar implements OnModuleInit {
     SlackTrigger,
     LocalMCPServerNode,
     ManageToolNode,
-    ManageFunctionTool,
     CallAgentNode,
     FinishNode,
     MemoryToolNode,
@@ -89,7 +87,6 @@ class NodesTemplateRegistrar implements OnModuleInit {
     SlackTrigger,
     LocalMCPServerNode,
     ManageToolNode,
-    ManageFunctionTool,
     CallAgentNode,
     FinishNode,
     MemoryToolNode,

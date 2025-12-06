@@ -244,6 +244,8 @@ type LinkTargets = {
   threadId?: string;
   subthreadId?: string;
   runId?: string;
+  childThreadId?: string;
+  childRunId?: string;
 };
 
 type ToolLinkData = {
@@ -252,6 +254,8 @@ type ToolLinkData = {
   threadId?: string;
   subthreadId?: string;
   runId?: string;
+  childThreadId?: string;
+  childRunId?: string;
 };
 
 type LlmToolCall = NonNullable<RunTimelineEvent['llmCall']>['toolCalls'][number];
@@ -267,21 +271,62 @@ function readStringPath(record: Record<string, unknown>, path: readonly string[]
 
 function extractLinkTargets(record: Record<string, unknown> | null): LinkTargets {
   if (!record) return {};
-  const directThreadId = readStringPath(record, ['threadId']) ?? readStringPath(record, ['thread_id']);
-  const nestedThreadId = readStringPath(record, ['thread', 'id']) ?? readStringPath(record, ['thread', 'threadId']) ?? readStringPath(record, ['thread', 'thread_id']);
-  const directSubthreadId = readStringPath(record, ['subthreadId']) ?? readStringPath(record, ['subthread_id']);
-  const nestedSubthreadId = readStringPath(record, ['subthread', 'id']) ?? readStringPath(record, ['subthread', 'subthreadId']) ?? readStringPath(record, ['subthread', 'subthread_id']);
-  const directRunId = readStringPath(record, ['runId']) ?? readStringPath(record, ['run_id']);
-  const nestedRunId = readStringPath(record, ['run', 'id']) ?? readStringPath(record, ['run', 'runId']) ?? readStringPath(record, ['run', 'run_id']);
 
-  const threadId = directThreadId ?? nestedThreadId;
-  const subthreadId = directSubthreadId ?? nestedSubthreadId;
-  const runId = directRunId ?? nestedRunId;
+  const childRunRecord = coerceRecord(record.childRun);
+
+  const directChildThreadId = readStringPath(record, ['childThreadId']) ?? readStringPath(record, ['child_thread_id']);
+  const aliasChildThreadId =
+    readStringPath(record, ['threadId']) ??
+    readStringPath(record, ['thread_id']) ??
+    readStringPath(record, ['subthreadId']) ??
+    readStringPath(record, ['subthread_id']);
+  const nestedChildThreadId =
+    readStringPath(record, ['childThread', 'id']) ??
+    readStringPath(record, ['child_thread', 'id']) ??
+    readStringPath(record, ['thread', 'id']) ??
+    readStringPath(record, ['thread', 'threadId']) ??
+    readStringPath(record, ['thread', 'thread_id']);
+
+  const directChildRunId = readStringPath(record, ['childRunId']) ?? readStringPath(record, ['child_run_id']);
+  const aliasChildRunId = readStringPath(record, ['runId']) ?? readStringPath(record, ['run_id']);
+  const nestedChildRunId =
+    readStringPath(record, ['childRun', 'id']) ??
+    readStringPath(record, ['child_run', 'id']) ??
+    readStringPath(record, ['run', 'id']) ??
+    readStringPath(record, ['run', 'runId']) ??
+    readStringPath(record, ['run', 'run_id']) ??
+    (childRunRecord ? readStringPath(childRunRecord, ['id']) : undefined);
+
+  const subthreadId =
+    readStringPath(record, ['subthreadId']) ??
+    readStringPath(record, ['subthread_id']) ??
+    readStringPath(record, ['subthread', 'id']) ??
+    readStringPath(record, ['subthread', 'subthreadId']) ??
+    readStringPath(record, ['subthread', 'subthread_id']);
+
+  const threadId =
+    readStringPath(record, ['threadId']) ??
+    readStringPath(record, ['thread_id']) ??
+    readStringPath(record, ['thread', 'id']) ??
+    readStringPath(record, ['thread', 'threadId']) ??
+    readStringPath(record, ['thread', 'thread_id']);
+
+  const runId =
+    readStringPath(record, ['runId']) ??
+    readStringPath(record, ['run_id']) ??
+    readStringPath(record, ['run', 'id']) ??
+    readStringPath(record, ['run', 'runId']) ??
+    readStringPath(record, ['run', 'run_id']);
+
+  const childThreadId = directChildThreadId ?? aliasChildThreadId ?? nestedChildThreadId ?? subthreadId ?? threadId;
+  const childRunId = directChildRunId ?? aliasChildRunId ?? nestedChildRunId ?? runId;
 
   return {
-    threadId: threadId ?? undefined,
+    threadId: threadId ?? childThreadId ?? undefined,
     subthreadId: subthreadId ?? undefined,
-    runId: runId ?? undefined,
+    runId: runId ?? childRunId ?? undefined,
+    childThreadId: childThreadId ?? undefined,
+    childRunId: childRunId ?? undefined,
   };
 }
 
@@ -289,6 +334,9 @@ function normalizeRecordWithTargets(record: Record<string, unknown> | null, targ
   if (!record) return null;
   let changed = false;
   const next: Record<string, unknown> = { ...record };
+
+  const normalizedChildThreadId = targets.childThreadId ?? targets.threadId ?? targets.subthreadId;
+  const normalizedChildRunId = targets.childRunId ?? targets.runId;
 
   if (targets.threadId && !isNonEmptyString(next.threadId)) {
     next.threadId = targets.threadId;
@@ -300,6 +348,14 @@ function normalizeRecordWithTargets(record: Record<string, unknown> | null, targ
   }
   if (targets.runId && !isNonEmptyString(next.runId)) {
     next.runId = targets.runId;
+    changed = true;
+  }
+  if (normalizedChildThreadId && !isNonEmptyString(next.childThreadId)) {
+    next.childThreadId = normalizedChildThreadId;
+    changed = true;
+  }
+  if (normalizedChildRunId && !isNonEmptyString(next.childRunId)) {
+    next.childRunId = normalizedChildRunId;
     changed = true;
   }
 
@@ -612,14 +668,18 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   const parsedOutput = parseMaybeJson(rawOutput);
   const inputRecord = coerceRecord(parsedInput);
   const outputRecord = coerceRecord(parsedOutput);
+  const metadataRecord = coerceRecord(event.metadata);
 
   const inputTargets = extractLinkTargets(inputRecord);
   const outputTargets = extractLinkTargets(outputRecord);
+  const metadataTargets = extractLinkTargets(metadataRecord);
 
   const targets: LinkTargets = {
-    threadId: outputTargets.threadId ?? inputTargets.threadId,
-    subthreadId: outputTargets.subthreadId ?? inputTargets.subthreadId,
-    runId: outputTargets.runId ?? inputTargets.runId,
+    threadId: metadataTargets.threadId ?? outputTargets.threadId ?? inputTargets.threadId,
+    subthreadId: metadataTargets.subthreadId ?? outputTargets.subthreadId ?? inputTargets.subthreadId,
+    runId: metadataTargets.runId ?? outputTargets.runId ?? inputTargets.runId,
+    childThreadId: metadataTargets.childThreadId ?? outputTargets.childThreadId ?? inputTargets.childThreadId,
+    childRunId: metadataTargets.childRunId ?? outputTargets.childRunId ?? inputTargets.childRunId,
   };
 
   const normalizedInputRecord = normalizeRecordWithTargets(inputRecord, targets);
@@ -634,6 +694,8 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
     threadId: targets.threadId,
     subthreadId: targets.subthreadId,
     runId: targets.runId,
+    childThreadId: targets.childThreadId ?? targets.threadId,
+    childRunId: targets.childRunId ?? targets.runId,
   };
 }
 
@@ -731,9 +793,11 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
     const normalizedInput = options?.tool?.input ?? rawInput;
     const normalizedOutput = options?.tool?.output ?? rawOutput;
     const inputRecord = coerceRecord(normalizedInput);
-    const runId = options?.tool?.runId;
+    const runId = options?.tool?.runId ?? options?.tool?.childRunId;
     const subthreadId = options?.tool?.subthreadId;
-    const threadId = options?.tool?.threadId;
+    const threadId = options?.tool?.threadId ?? options?.tool?.childThreadId ?? options?.tool?.subthreadId;
+    const childThreadId = options?.tool?.childThreadId ?? options?.tool?.threadId ?? options?.tool?.subthreadId;
+    const childRunId = options?.tool?.childRunId ?? options?.tool?.runId;
 
     return {
       id: event.id,
@@ -754,6 +818,8 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
         threadId,
         runId,
         subthreadId,
+        childThreadId,
+        childRunId,
         tool_result: normalizedOutput,
         errorMessage: event.toolExecution?.errorMessage ?? undefined,
       },

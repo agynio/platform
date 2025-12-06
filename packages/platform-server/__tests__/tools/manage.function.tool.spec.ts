@@ -6,14 +6,35 @@ import type { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
 import type { AgentsPersistenceService } from '../../src/agents/agents.persistence.service';
 import type { LLMContext } from '../../src/llm/types';
 import { HumanMessage } from '@agyn/llm';
+import type { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
+
+type ToolLogger = { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
 
 const createCtx = (overrides: Partial<LLMContext> = {}): LLMContext => ({
   threadId: 'parent-thread',
+  runId: 'parent-run',
   callerAgent: {
     invoke: vi.fn().mockResolvedValue(undefined),
   },
   ...overrides,
 } as unknown as LLMContext);
+
+const createToolInstance = (
+  persistence: AgentsPersistenceService,
+  manageNode: ManageToolNode,
+  linking?: { registerParentToolExecution: ReturnType<typeof vi.fn> },
+) => {
+  const linkingMock = linking ?? {
+    registerParentToolExecution: vi.fn().mockResolvedValue('evt-manage'),
+  };
+  const tool = new ManageFunctionTool(
+    persistence,
+    linkingMock as unknown as CallAgentLinkingService,
+  );
+  tool.init(manageNode);
+  const logger = (tool as unknown as { logger: ToolLogger }).logger;
+  return { tool, linking: linkingMock, logger };
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -41,14 +62,19 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn(),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking } = createToolInstance(persistence, manageNode);
 
     const ctx = createCtx();
     const result = await tool.execute({ command: 'send_message', worker: 'Worker Alpha', message: 'hello', threadAlias: undefined }, ctx);
 
     expect(persistence.getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'worker-alpha', 'parent-thread', '');
     expect(persistence.setThreadChannelNode).toHaveBeenCalledWith('child-thread-1', 'manage-node-1');
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-1',
+      toolName: 'manage',
+    });
     expect(manageNode.registerInvocation).toHaveBeenCalledWith({
       childThreadId: 'child-thread-1',
       parentThreadId: 'parent-thread',
@@ -63,6 +89,47 @@ ${text}`),
     expect((messages[0] as HumanMessage).text).toBe('hello');
     expect(manageNode.renderWorkerResponse).toHaveBeenCalledWith('Worker Alpha', 'child response text');
     expect(result).toBe('Response from: Worker Alpha\nchild response text');
+  });
+
+  it('logs warning when parent run linking fails but continues execution', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-link-fail'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
+    const manageNode = {
+      nodeId: 'manage-node-link-fail',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
+      getMode: vi.fn().mockReturnValue('sync'),
+      getTimeoutMs: vi.fn().mockReturnValue(64000),
+      renderWorkerResponse: vi.fn().mockReturnValue('formatted'),
+      renderAsyncAcknowledgement: vi.fn(),
+    } as unknown as ManageToolNode;
+
+    const linking = {
+      registerParentToolExecution: vi.fn().mockRejectedValue(new Error('link service down')),
+    };
+
+    const { tool, logger } = createToolInstance(persistence, manageNode, linking);
+
+    const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const ctx = createCtx({ runId: 'run-link-fail' });
+    await tool.execute({ command: 'send_message', worker: 'Worker Alpha', message: 'hello', threadAlias: undefined }, ctx);
+
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: 'run-link-fail',
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-link-fail',
+      toolName: 'manage',
+    });
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      'Manage: failed to register parent tool execution {"parentThreadId":"parent-thread","childThreadId":"child-thread-link-fail","runId":"run-link-fail","error":{"name":"Error","message":"link service down"}}',
+    );
   });
 
   it('reuses provided threadAlias without altering case when accepted', async () => {
@@ -84,8 +151,7 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking } = createToolInstance(persistence, manageNode);
 
     const ctx = createCtx();
     const rawAlias = '  Mixed.Alias-Case_123  ';
@@ -99,6 +165,12 @@ ${text}`),
       '',
     );
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-alias',
+      toolName: 'manage',
+    });
   });
 
   it('falls back to sanitized alias when provided alias is rejected', async () => {
@@ -123,10 +195,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerWarnSpy = vi.spyOn((tool as any).logger, 'warn');
+    const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const rawAlias = 'Invalid Alias!';
@@ -140,6 +211,12 @@ ${text}`),
       'Manage: provided threadAlias invalid, using sanitized fallback {"worker":"Worker Alpha","parentThreadId":"parent-thread","providedAlias":"Invalid Alias!","fallbackAlias":"invalid-alias"}',
     );
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-fallback',
+      toolName: 'manage',
+    });
   });
 
   it('fallback alias enforces 64 character limit', async () => {
@@ -164,8 +241,7 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking } = createToolInstance(persistence, manageNode);
 
     const ctx = createCtx();
     const rawAlias = 'A'.repeat(100);
@@ -177,6 +253,12 @@ ${text}`),
     expect(fallbackAlias.length).toBeLessThanOrEqual(64);
     expect(fallbackAlias).toBe('a'.repeat(64));
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-long',
+      toolName: 'manage',
+    });
   });
 
   it('returns acknowledgement in async mode without awaiting child response', async () => {
@@ -198,8 +280,7 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking } = createToolInstance(persistence, manageNode);
 
     const ctx = createCtx();
     const result = await tool.execute({ command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined }, ctx);
@@ -210,6 +291,12 @@ ${text}`),
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Async Worker');
     expect(workerInvoke).toHaveBeenCalledTimes(1);
     expect(result).toBe('async acknowledgement');
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-2',
+      toolName: 'manage',
+    });
   });
 
   it('logs and continues when async invoke returns non-promise', async () => {
@@ -231,10 +318,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute({ command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined }, ctx);
@@ -243,6 +329,12 @@ ${text}`),
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: async send_message invoke returned non-promise {"worker":"Async Worker","childThreadId":"child-thread-non-promise","resultType":"object","promiseLike":false}',
     );
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-non-promise',
+      toolName: 'manage',
+    });
   });
 
   it('returns acknowledgement immediately for delayed async invocation and logs no errors', async () => {
@@ -270,10 +362,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -286,6 +377,12 @@ ${text}`),
     await Promise.resolve();
 
     expect(loggerErrorSpy).not.toHaveBeenCalled();
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-delayed',
+      toolName: 'manage',
+    });
   });
 
   it('logs async non-error rejections without crashing', async () => {
@@ -307,10 +404,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -323,6 +419,12 @@ ${text}`),
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-async","error":{"code":"unknown_error","message":"boom","retriable":false}}',
       );
+    });
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-async',
+      toolName: 'manage',
     });
   });
 
@@ -345,10 +447,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -361,6 +462,12 @@ ${text}`),
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-undefined","error":{"code":"unknown_error","message":"undefined","retriable":false}}',
       );
+    });
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-undefined',
+      toolName: 'manage',
     });
   });
 
@@ -384,10 +491,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -400,6 +506,12 @@ ${text}`),
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-object","error":{"code":"X","message":"custom diagnostic","retriable":false}}',
       );
+    });
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-object',
+      toolName: 'manage',
     });
   });
 
@@ -422,10 +534,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn(),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -435,6 +546,12 @@ ${text}`),
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync","error":{"code":"unknown_error","message":"boom","retriable":false}}',
     );
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-sync',
+      toolName: 'manage',
+    });
   });
 
   it('rethrows non-error objects while logging their message', async () => {
@@ -457,10 +574,9 @@ ${text}`),
       renderAsyncAcknowledgement: vi.fn(),
     } as unknown as ManageToolNode;
 
-    const tool = new ManageFunctionTool(persistence);
-    tool.init(manageNode, { persistence });
+    const { tool, linking, logger } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -470,5 +586,11 @@ ${text}`),
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync-object","error":{"code":"Y","message":"sync diagnostic","retriable":false}}',
     );
+    expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
+      runId: ctx.runId,
+      parentThreadId: 'parent-thread',
+      childThreadId: 'child-thread-sync-object',
+      toolName: 'manage',
+    });
   });
 });

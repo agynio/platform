@@ -2,17 +2,17 @@ import 'reflect-metadata';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
-import type { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import type { AgentsPersistenceService } from '../../src/agents/agents.persistence.service';
+import type { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
 import { HumanMessage } from '@agyn/llm';
 
 describe('ManageToolNode sendToChannel', () => {
   let node: ManageToolNode;
 
   beforeEach(async () => {
-    const fakeTool = { init: vi.fn().mockReturnValue({}) } as unknown as ManageFunctionTool;
     const fakePersistence = {} as unknown as AgentsPersistenceService;
-    node = new ManageToolNode(fakeTool, fakePersistence);
+    const fakeLinking = {} as unknown as CallAgentLinkingService;
+    node = new ManageToolNode(fakePersistence, fakeLinking);
     node.init({ nodeId: 'manage-node-test' });
     await node.setConfig({ mode: 'sync', timeoutMs: 1000 } as unknown as ManageToolNode['config']);
   });
