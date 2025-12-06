@@ -4,37 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { PersistedGraph } from '@agyn/shared';
 import * as api from '@/api/modules/graph';
 import { computeRequiredKeys, computeSecretsUnion } from '@/api/modules/graph';
-import type { SecretEntry, SecretKey } from '@/api/modules/graph';
+import type { SecretEntry } from '@/api/modules/graph';
 import { mapEntryToScreenSecret, toId, type ScreenSecret } from '../types';
-
-async function discoverVaultKeys(mounts: string[]): Promise<SecretKey[]> {
-  async function listAllPaths(mount: string, prefix = ''): Promise<string[]> {
-    const res = await api.graph.listVaultPaths(mount, prefix);
-    const items = res.items || [];
-    const folders = items.filter((item) => item.endsWith('/'));
-    const leaves = items.filter((item) => !item.endsWith('/'));
-
-    if (folders.length === 0) return leaves;
-
-    const nested = await Promise.all(folders.map((folder) => listAllPaths(mount, `${folder}`)));
-    return [...leaves, ...nested.flat()];
-  }
-
-  const keyLists = await Promise.all(
-    mounts.map(async (mount) => {
-      const paths = await listAllPaths(mount, '');
-      const perPath = await Promise.all(
-        paths.map(async (path) => {
-          const keys = await api.graph.listVaultKeys(mount, path, { maskErrors: false });
-          return (keys.items || []).map((key) => ({ mount, path, key } as SecretKey));
-        }),
-      );
-      return perPath.flat();
-    }),
-  );
-
-  return keyLists.flat();
-}
+import { discoverVaultKeys } from '../utils/flatVault';
 
 class VaultReadHydrationError extends Error {
   readonly failureCount: number;

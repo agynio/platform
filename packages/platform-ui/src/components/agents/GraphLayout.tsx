@@ -24,6 +24,7 @@ import { mapTemplatesToSidebarItems } from '@/lib/graph/sidebarNodeItems';
 import { buildGraphNodeFromTemplate } from '@/features/graph/mappers';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
 import type { TemplateSchema, NodeStatus as ApiNodeStatus } from '@/api/types/graph';
+import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 
 type FlowNode = Node<GraphNodeData>;
 
@@ -47,14 +48,13 @@ const nodeKindToColor: Record<GraphNodeConfig['kind'], string> = {
 const defaultSourceColor = 'var(--agyn-blue)';
 const defaultTargetColor = 'var(--agyn-purple)';
 const ACTION_GUARD_INTERVAL_MS = 600;
+const SECRET_SUGGESTION_TTL_MS = 5 * 60 * 1000;
+const VARIABLE_SUGGESTION_TTL_MS = 5 * 60 * 1000;
 
 export interface GraphLayoutServices {
   searchNixPackages: (query: string) => Promise<Array<{ name: string }>>;
   listNixPackageVersions: (name: string) => Promise<Array<{ version: string }>>;
   resolveNixSelection: (name: string, version: string) => Promise<{ version: string; commit: string; attr: string }>;
-  listVaultMounts: () => Promise<string[]>;
-  listVaultPaths: (mount: string, prefix?: string) => Promise<string[]>;
-  listVaultKeys: (mount: string, path?: string, opts?: { maskErrors?: boolean }) => Promise<string[]>;
   listVariableKeys: () => Promise<string[]>;
 }
 
@@ -221,11 +221,14 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     scheduleSave,
   } = useGraphData();
 
-  const providerDebounceMs = 275;
-  const vaultMountsRef = useRef<string[] | null>(null);
-  const vaultMountsPromiseRef = useRef<Promise<string[]> | null>(null);
-  const variableKeysRef = useRef<string[]>([]);
+  const secretKeysRef = useRef<string[] | null>(null);
+  const secretKeysPromiseRef = useRef<Promise<string[]> | null>(null);
+  const secretKeysFetchedAtRef = useRef<number>(0);
+  const [secretKeys, setSecretKeys] = useState<string[]>([]);
+  const variableKeysRef = useRef<string[] | null>(null);
   const variableKeysPromiseRef = useRef<Promise<string[]> | null>(null);
+  const variableKeysFetchedAtRef = useRef<number>(0);
+  const [variableKeys, setVariableKeys] = useState<string[]>([]);
   const updateNodeRef = useRef(updateNode);
   const setEdgesRef = useRef(setEdges);
   const nodesRef = useRef(nodes);
@@ -254,34 +257,42 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     return next;
   }, []);
 
-  const ensureVaultMounts = useCallback(async (): Promise<string[]> => {
-    if (vaultMountsRef.current) {
-      return vaultMountsRef.current;
+  const ensureSecretKeys = useCallback(async (): Promise<string[]> => {
+    const cached = secretKeysRef.current;
+    const now = Date.now();
+    if (cached && now - secretKeysFetchedAtRef.current < SECRET_SUGGESTION_TTL_MS) {
+      setSecretKeys((current) => (current === cached ? current : cached));
+      return cached;
     }
-    if (!vaultMountsPromiseRef.current) {
-      vaultMountsPromiseRef.current = services
-        .listVaultMounts()
+
+    if (!secretKeysPromiseRef.current) {
+      secretKeysPromiseRef.current = listAllSecretPaths()
         .then((items) => {
           const sanitized = Array.isArray(items)
             ? items.filter((item): item is string => typeof item === 'string' && item.length > 0)
             : [];
-          vaultMountsRef.current = sanitized;
+          secretKeysRef.current = sanitized;
+          secretKeysFetchedAtRef.current = Date.now();
+          setSecretKeys(sanitized);
           return sanitized;
         })
         .catch(() => {
-          vaultMountsRef.current = [];
+          secretKeysRef.current = [];
+          secretKeysFetchedAtRef.current = Date.now();
+          setSecretKeys([]);
           return [];
         })
         .finally(() => {
-          vaultMountsPromiseRef.current = null;
+          secretKeysPromiseRef.current = null;
         });
     }
+
     try {
-      return await vaultMountsPromiseRef.current;
+      return await secretKeysPromiseRef.current;
     } catch {
       return [];
     }
-  }, [services]);
+  }, []);
 
   const handleNixPackageSearch = useCallback(
     async (query: string): Promise<Array<{ value: string; label: string }>> => {
@@ -330,9 +341,13 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   );
 
   const ensureVariableKeys = useCallback(async (): Promise<string[]> => {
-    if (variableKeysRef.current.length > 0) {
-      return variableKeysRef.current;
+    const cached = variableKeysRef.current;
+    const now = Date.now();
+    if (cached && now - variableKeysFetchedAtRef.current < VARIABLE_SUGGESTION_TTL_MS) {
+      setVariableKeys((current) => (current === cached ? current : cached));
+      return cached;
     }
+
     if (!variableKeysPromiseRef.current) {
       variableKeysPromiseRef.current = services
         .listVariableKeys()
@@ -341,16 +356,21 @@ export function GraphLayout({ services }: GraphLayoutProps) {
             ? items.filter((item): item is string => typeof item === 'string' && item.length > 0)
             : [];
           variableKeysRef.current = sanitized;
+          variableKeysFetchedAtRef.current = Date.now();
+          setVariableKeys(sanitized);
           return sanitized;
         })
         .catch(() => {
           variableKeysRef.current = [];
+          variableKeysFetchedAtRef.current = Date.now();
+          setVariableKeys([]);
           return [];
         })
         .finally(() => {
           variableKeysPromiseRef.current = null;
         });
     }
+
     try {
       return await variableKeysPromiseRef.current;
     } catch {
@@ -358,81 +378,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     }
   }, [services]);
 
-  const fetchVariableSuggestions = useCallback(
-    async (raw: string) => {
-      try {
-        const keys = await ensureVariableKeys();
-        const query = (raw ?? '').trim().toLowerCase();
-        const filtered = query.length === 0
-          ? keys
-          : keys.filter((key) => key.toLowerCase().includes(query));
-        return filtered.slice(0, 50);
-      } catch {
-        return [];
-      }
-    },
-    [ensureVariableKeys],
-  );
-
-  const fetchVaultSuggestions = useCallback(
-    async (raw: string) => {
-      try {
-        const mounts = await ensureVaultMounts();
-        const input = (raw ?? '').trim();
-        if (!input) {
-          return mounts.map((mount) => `${mount}/`);
-        }
-
-        const normalized = input.replace(/^\/+/, '');
-        const lowerNormalized = normalized.toLowerCase();
-
-        if (!normalized.includes('/')) {
-          return mounts
-            .filter((mount) => mount.toLowerCase().startsWith(lowerNormalized))
-            .map((mount) => `${mount}/`);
-        }
-
-        const [mountName, ...restParts] = normalized.split('/');
-        if (!mountName) {
-          return mounts.map((mount) => `${mount}/`);
-        }
-
-        if (!mounts.includes(mountName)) {
-          return mounts
-            .filter((mount) => mount.toLowerCase().startsWith(lowerNormalized))
-            .map((mount) => `${mount}/`);
-        }
-
-        const remainder = restParts.join('/');
-        if (!remainder) {
-          const paths = await services.listVaultPaths(mountName, '');
-          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
-        }
-
-        if (input.endsWith('/')) {
-          const paths = await services.listVaultPaths(mountName, remainder);
-          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
-        }
-
-        if (!remainder.includes('/')) {
-          const paths = await services.listVaultPaths(mountName, remainder);
-          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
-        }
-
-        const lastSlash = remainder.lastIndexOf('/');
-        const pathPrefix = lastSlash >= 0 ? remainder.slice(0, lastSlash) : '';
-        const keyFragment = lastSlash >= 0 ? remainder.slice(lastSlash + 1) : remainder;
-        const keys = await services.listVaultKeys(mountName, pathPrefix, { maskErrors: true });
-        const lowerFragment = keyFragment.toLowerCase();
-        return keys
-          .filter((key) => (lowerFragment ? key.toLowerCase().startsWith(lowerFragment) : true))
-          .map((key) => `${mountName}/${pathPrefix ? `${pathPrefix}/` : ''}${key}`);
-      } catch {
-        return [];
-      }
-    },
-    [ensureVaultMounts, services],
-  );
 
   useEffect(() => {
     updateNodeRef.current = updateNode;
@@ -948,9 +893,10 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           nixPackageSearch={handleNixPackageSearch}
           fetchNixPackageVersions={handleFetchNixPackageVersions}
           resolveNixPackageSelection={handleResolveNixPackageSelection}
-          secretSuggestionProvider={fetchVaultSuggestions}
-          variableSuggestionProvider={fetchVariableSuggestions}
-          providerDebounceMs={providerDebounceMs}
+          secretKeys={secretKeys}
+          variableKeys={variableKeys}
+          ensureSecretKeys={ensureSecretKeys}
+          ensureVariableKeys={ensureVariableKeys}
         />
       ) : (
         <EmptySelectionSidebar nodeItems={sidebarNodeItems} statusMessage={sidebarStatusMessage} />

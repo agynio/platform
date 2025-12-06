@@ -9,9 +9,6 @@ export function AgentsGraphContainer() {
     searchNixPackages: graphApiService.searchNixPackages,
     listNixPackageVersions: graphApiService.listNixPackageVersions,
     resolveNixSelection: graphApiService.resolveNixSelection,
-    listVaultMounts: graphApiService.listVaultMounts,
-    listVaultPaths: graphApiService.listVaultPaths,
-    listVaultKeys: graphApiService.listVaultKeys,
     listVariableKeys: async () => {
       try {
         const variables = await listVariables();

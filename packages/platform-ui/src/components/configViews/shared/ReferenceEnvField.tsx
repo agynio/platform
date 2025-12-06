@@ -25,6 +25,7 @@ export interface ReferenceEnvFieldProps {
   onValidate?: (errors: string[]) => void;
   secretKeys?: string[];
   variableKeys?: string[];
+  onValueFocus?: (index: number) => void;
 }
 
 function isVaultRef(v: string) {
@@ -41,6 +42,7 @@ export default function ReferenceEnvField({
   onValidate,
   secretKeys = [],
   variableKeys = [],
+  onValueFocus,
 }: ReferenceEnvFieldProps) {
   const isDisabled = !!readOnly || !!disabled;
 
@@ -86,36 +88,41 @@ export default function ReferenceEnvField({
   );
 
   const updateAt = useCallback(
-    (idx: number, next: Partial<EnvVar>) => {
-      commit(
-        value.map((item, i) => {
-          if (i !== idx) return item;
-          const mergedMeta = next.meta ? { ...item.meta, ...next.meta } : item.meta;
-          return { ...item, ...next, meta: mergedMeta };
-        }),
-      );
+    (idx: number, updater: (current: EnvVar) => EnvVar) => {
+      commit(value.map((item, i) => (i === idx ? updater(item) : item)));
     },
     [value, commit],
   );
 
   const handleValueChange = useCallback(
     (idx: number, nextValue: string) => {
-      const item = value[idx];
-      const sourceType = toReferenceSourceType(item.source);
-      const nextShape = writeReferenceValue(item.meta.valueShape, nextValue, sourceType);
-      updateAt(idx, { value: nextValue, meta: { valueShape: nextShape } });
+      updateAt(idx, (current) => {
+        const sourceType = toReferenceSourceType(current.source);
+        const nextShape = writeReferenceValue(current.meta.valueShape, nextValue, sourceType);
+        return {
+          ...current,
+          value: nextValue,
+          meta: { ...current.meta, valueShape: nextShape },
+        } satisfies EnvVar;
+      });
     },
-    [value, updateAt],
+    [updateAt],
   );
 
   const handleSourceTypeChange = useCallback(
     (idx: number, nextType: ReferenceSourceType) => {
-      const item = value[idx];
-      const nextSource = fromReferenceSourceType(nextType);
-      const nextShape = encodeReferenceValue(nextType, '', item.meta.valueShape);
-      updateAt(idx, { source: nextSource, value: '', meta: { valueShape: nextShape } });
+      updateAt(idx, (current) => {
+        const nextSource = fromReferenceSourceType(nextType);
+        const nextShape = encodeReferenceValue(nextType, '', current.meta.valueShape);
+        return {
+          ...current,
+          source: nextSource,
+          value: '',
+          meta: { ...current.meta, valueShape: nextShape },
+        } satisfies EnvVar;
+      });
     },
-    [value, updateAt],
+    [updateAt],
   );
 
   return (
@@ -128,7 +135,9 @@ export default function ReferenceEnvField({
             <Input
               className="text-xs w-1/3"
               value={it.name}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => updateAt(idx, { name: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                updateAt(idx, (current) => ({ ...current, name: e.target.value }))
+              }
               disabled={isDisabled}
               placeholder="VARIABLE_NAME"
               data-testid={`env-name-${idx}`}
@@ -144,6 +153,7 @@ export default function ReferenceEnvField({
               variableKeys={variableKeys}
               size="sm"
               className="text-xs"
+              onFocus={() => onValueFocus?.(idx)}
               data-testid={`env-value-${idx}`}
             />
             <Button

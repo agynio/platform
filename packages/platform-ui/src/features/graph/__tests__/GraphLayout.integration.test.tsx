@@ -8,6 +8,8 @@ import type { GraphNodeConfig, GraphPersistedEdge, GraphSaveState } from '@/feat
 const sidebarProps: any[] = [];
 const emptySidebarProps: any[] = [];
 const canvasSpy = vi.hoisted(() => vi.fn());
+const listAllSecretPathsMock = vi
+  .hoisted(() => vi.fn<[], Promise<string[]>>().mockResolvedValue([]));
 
 type GraphLayoutServiceMocks = {
   [K in keyof GraphLayoutServices]: vi.Mock<
@@ -72,6 +74,10 @@ vi.mock('@/features/graph/hooks/useNodeAction', () => ({
   useNodeAction: hookMocks.useNodeAction,
 }));
 
+vi.mock('@/features/secrets/utils/flatVault', () => ({
+  listAllSecretPaths: listAllSecretPathsMock,
+}));
+
 const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () => {
   const searchNixPackages = vi
     .fn<Parameters<GraphLayoutServices['searchNixPackages']>, ReturnType<GraphLayoutServices['searchNixPackages']>>()
@@ -82,15 +88,6 @@ const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () 
   const resolveNixSelection = vi
     .fn<Parameters<GraphLayoutServices['resolveNixSelection']>, ReturnType<GraphLayoutServices['resolveNixSelection']>>()
     .mockResolvedValue({ version: 'latest', commit: 'abc123', attr: 'pkg' });
-  const listVaultMounts = vi
-    .fn<Parameters<GraphLayoutServices['listVaultMounts']>, ReturnType<GraphLayoutServices['listVaultMounts']>>()
-    .mockResolvedValue([]);
-  const listVaultPaths = vi
-    .fn<Parameters<GraphLayoutServices['listVaultPaths']>, ReturnType<GraphLayoutServices['listVaultPaths']>>()
-    .mockResolvedValue([]);
-  const listVaultKeys = vi
-    .fn<Parameters<GraphLayoutServices['listVaultKeys']>, ReturnType<GraphLayoutServices['listVaultKeys']>>()
-    .mockResolvedValue([]);
   const listVariableKeys = vi
     .fn<Parameters<GraphLayoutServices['listVariableKeys']>, ReturnType<GraphLayoutServices['listVariableKeys']>>()
     .mockResolvedValue([]);
@@ -99,9 +96,6 @@ const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () 
     searchNixPackages,
     listNixPackageVersions,
     resolveNixSelection,
-    listVaultMounts,
-    listVaultPaths,
-    listVaultKeys,
     listVariableKeys,
   } satisfies GraphLayoutServiceMocks;
 });
@@ -158,6 +152,8 @@ describe('GraphLayout', () => {
     nodeActionMutate = vi.fn().mockResolvedValue(undefined);
     hookMocks.useNodeAction.mockReturnValue({ mutateAsync: nodeActionMutate, isPending: false });
     canvasSpy.mockReset();
+    listAllSecretPathsMock.mockReset();
+    listAllSecretPathsMock.mockResolvedValue([]);
     services = createServiceMocks();
   });
 
@@ -403,9 +399,10 @@ describe('GraphLayout', () => {
       nixPackageSearch: (...args: unknown[]) => Promise<unknown>;
       fetchNixPackageVersions: (...args: unknown[]) => Promise<unknown>;
       resolveNixPackageSelection: (...args: unknown[]) => Promise<unknown>;
-      secretSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
-      variableSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
-      providerDebounceMs: number;
+      secretKeys: string[];
+      variableKeys: string[];
+      ensureSecretKeys?: () => Promise<string[]>;
+      ensureVariableKeys?: () => Promise<string[]>;
       tools?: unknown[];
       enabledTools?: unknown[];
       onToggleTool?: (name: string, enabled: boolean) => void;
@@ -420,14 +417,14 @@ describe('GraphLayout', () => {
     expect(typeof sidebar.nixPackageSearch).toBe('function');
     expect(typeof sidebar.fetchNixPackageVersions).toBe('function');
     expect(typeof sidebar.resolveNixPackageSelection).toBe('function');
-    expect(typeof sidebar.secretSuggestionProvider).toBe('function');
-    expect(typeof sidebar.variableSuggestionProvider).toBe('function');
+    expect(Array.isArray(sidebar.secretKeys)).toBe(true);
+    expect(Array.isArray(sidebar.variableKeys)).toBe(true);
+    expect(typeof sidebar.ensureSecretKeys).toBe('function');
+    expect(typeof sidebar.ensureVariableKeys).toBe('function');
     expect(Array.isArray(sidebar.tools)).toBe(true);
     expect(Array.isArray(sidebar.enabledTools)).toBe(true);
     expect(typeof sidebar.onToggleTool).toBe('function');
     expect(typeof sidebar.toolsLoading).toBe('boolean');
-    expect(sidebar.providerDebounceMs).toBeGreaterThanOrEqual(200);
-    expect(sidebar.providerDebounceMs).toBeLessThanOrEqual(350);
     expect(typeof sidebar.onProvision).toBe('function');
     expect(typeof sidebar.onDeprovision).toBe('function');
     expect(typeof sidebar.canProvision).toBe('boolean');
@@ -1524,24 +1521,7 @@ describe('GraphLayout', () => {
     services.searchNixPackages.mockResolvedValue([{ name: 'nodejs' }]);
     services.listNixPackageVersions.mockResolvedValue([{ version: '18.16.0' }]);
     services.resolveNixSelection.mockResolvedValue({ version: '18.16.0', commit: 'abc123', attr: 'pkgs.nodejs' });
-    services.listVaultMounts.mockResolvedValue(['secret', 'kv']);
-    services.listVaultPaths.mockImplementation(async (mount: string, prefix = '') => {
-      if (mount !== 'secret') return [];
-      const normalized = prefix.replace(/\/+$/, '');
-      if (!normalized) {
-        return ['github/'];
-      }
-      if (normalized === 'github') {
-        return ['github/tokens/'];
-      }
-      return [];
-    });
-    services.listVaultKeys.mockImplementation(async (mount: string, path = '') => {
-      if (mount === 'secret' && path === 'github') {
-        return ['token-app'];
-      }
-      return [];
-    });
+    listAllSecretPathsMock.mockResolvedValue(['secret/github/token-app', 'kv/prod/db']);
     services.listVariableKeys.mockResolvedValue(['API_TOKEN', 'DB_URL']);
 
     render(<GraphLayout services={services} />);
@@ -1566,8 +1546,10 @@ describe('GraphLayout', () => {
       nixPackageSearch: (...args: unknown[]) => Promise<unknown>;
       fetchNixPackageVersions: (...args: unknown[]) => Promise<unknown>;
       resolveNixPackageSelection: (...args: unknown[]) => Promise<unknown>;
-      secretSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
-      variableSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
+      secretKeys: string[];
+      variableKeys: string[];
+      ensureSecretKeys?: () => Promise<string[]>;
+      ensureVariableKeys?: () => Promise<string[]>;
     };
 
     await expect(sidebar.nixPackageSearch('node')).resolves.toEqual([
@@ -1585,21 +1567,33 @@ describe('GraphLayout', () => {
     });
     expect(services.resolveNixSelection).toHaveBeenCalledWith('nodejs', '18.16.0');
 
-    await expect(sidebar.secretSuggestionProvider('')).resolves.toEqual(['secret/', 'kv/']);
-    await expect(sidebar.secretSuggestionProvider('secret/')).resolves.toEqual(['secret/github/']);
-    await expect(sidebar.secretSuggestionProvider('secret/github')).resolves.toEqual([
-      'secret/github/tokens/',
-    ]);
-    await expect(sidebar.secretSuggestionProvider('secret/github/token')).resolves.toEqual([
-      'secret/github/token-app',
-    ]);
-    expect(services.listVaultMounts).toHaveBeenCalledTimes(1);
-    expect(services.listVaultPaths).toHaveBeenCalledWith('secret', '');
-    expect(services.listVaultPaths).toHaveBeenCalledWith('secret', 'github');
-    expect(services.listVaultKeys).toHaveBeenCalledWith('secret', 'github', { maskErrors: true });
+    expect(sidebar.secretKeys).toEqual([]);
+    expect(sidebar.variableKeys).toEqual([]);
 
-    await expect(sidebar.variableSuggestionProvider('API')).resolves.toEqual(['API_TOKEN']);
+    await expect(sidebar.ensureSecretKeys?.()).resolves.toEqual(['secret/github/token-app', 'kv/prod/db']);
+    expect(listAllSecretPathsMock).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      const latest = sidebarProps.at(-1) as { secretKeys: string[] };
+      expect(latest.secretKeys).toEqual(['secret/github/token-app', 'kv/prod/db']);
+    });
+
+    const afterSecret = sidebarProps.at(-1) as {
+      secretKeys: string[];
+      ensureSecretKeys?: () => Promise<string[]>;
+      ensureVariableKeys?: () => Promise<string[]>;
+    };
+
+    await expect(afterSecret.ensureSecretKeys?.()).resolves.toEqual(['secret/github/token-app', 'kv/prod/db']);
+    expect(listAllSecretPathsMock).toHaveBeenCalledTimes(1);
+
+    await expect(afterSecret.ensureVariableKeys?.()).resolves.toEqual(['API_TOKEN', 'DB_URL']);
     expect(services.listVariableKeys).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      const latest = sidebarProps.at(-1) as { variableKeys: string[] };
+      expect(latest.variableKeys).toEqual(['API_TOKEN', 'DB_URL']);
+    });
 
     services.searchNixPackages.mockRejectedValueOnce(new Error('boom'));
     await expect(sidebar.nixPackageSearch('whatever')).resolves.toEqual([]);

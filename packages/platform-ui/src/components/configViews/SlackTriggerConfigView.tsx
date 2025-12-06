@@ -4,6 +4,8 @@ import { deepEqual } from '@/lib/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceField from './shared/ReferenceField';
 import { normalizeReferenceValue, readReferenceDetails } from './shared/referenceUtils';
+import { useSecretKeyOptions } from './shared/useSecretKeyOptions';
+import { useVariableKeyOptions } from './shared/useVariableKeyOptions';
 
 function isVaultRef(v: string) {
   // Expect mount/path/key
@@ -13,6 +15,8 @@ function isVaultRef(v: string) {
 export default function SlackTriggerConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const appTokenRaw = value['app_token'];
   const botTokenRaw = value['bot_token'];
+  const secretKeys = useSecretKeyOptions();
+  const variableKeys = useVariableKeyOptions();
 
   const normalizedAppToken = useMemo(() => normalizeReferenceValue(appTokenRaw), [appTokenRaw]);
   const normalizedBotToken = useMemo(() => normalizeReferenceValue(botTokenRaw), [botTokenRaw]);
@@ -63,6 +67,8 @@ export default function SlackTriggerConfigView({ value, onChange, readOnly, disa
         onChange={setAppToken}
         readOnly={readOnly}
         disabled={disabled}
+        secretKeys={secretKeys}
+        variableKeys={variableKeys}
         helpText="Use source=vault to reference a secret as mount/path/key. Must start with xapp- for static."
       />
       <ReferenceField
@@ -71,6 +77,8 @@ export default function SlackTriggerConfigView({ value, onChange, readOnly, disa
         onChange={setBotToken}
         readOnly={readOnly}
         disabled={disabled}
+        secretKeys={secretKeys}
+        variableKeys={variableKeys}
         helpText="Use source=vault to reference a secret as mount/path/key. Must start with xoxb- for static."
       />
     </div>

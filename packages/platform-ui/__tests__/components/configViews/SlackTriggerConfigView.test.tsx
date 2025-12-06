@@ -80,7 +80,7 @@ describe('SlackTriggerConfigView', () => {
     await user.click(secretOption);
     await user.clear(botInput);
     fireEvent.change(botInput, { target: { value: 'mount/path/key' } });
-    expect(cfg.bot_token).toMatchObject({ kind: 'vault', path: 'mount/path', key: 'key' });
+    expect(cfg.bot_token).toMatchObject({ kind: 'vault', mount: 'mount', path: 'path', key: 'key' });
 
     // Ensure switching back to text works and placeholder updates automatically
     await user.click(appTrigger);

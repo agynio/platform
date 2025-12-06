@@ -8,6 +8,8 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceField from './shared/ReferenceField';
 import { ToolNameLabel } from './shared/ToolNameLabel';
 import { normalizeReferenceValue, readReferenceDetails } from './shared/referenceUtils';
+import { useSecretKeyOptions } from './shared/useSecretKeyOptions';
+import { useVariableKeyOptions } from './shared/useVariableKeyOptions';
 
 function isVaultRef(v: string) {
   // Expect mount/path/key with no leading slash
@@ -17,6 +19,8 @@ function isVaultRef(v: string) {
 export default function GithubCloneRepoToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
   const tokenRaw = value['token'];
   const nameRaw = value['name'];
+  const secretKeys = useSecretKeyOptions();
+  const variableKeys = useVariableKeyOptions();
 
   const normalizedToken = useMemo(() => normalizeReferenceValue(tokenRaw), [tokenRaw]);
   const [token, setToken] = useState<ReferenceConfigValue>(normalizedToken);
@@ -86,6 +90,8 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
         onChange={setToken}
         readOnly={readOnly}
         disabled={disabled}
+        secretKeys={secretKeys}
+        variableKeys={variableKeys}
         helpText="When using vault, value should be 'mount/path/key'."
       />
       {errors.length > 0 && <div className="text-[10px] text-red-600">{errors.join(', ')}</div>}

@@ -1,4 +1,13 @@
-import { type InputHTMLAttributes, type ReactNode, useState, useRef, useEffect } from 'react';
+import {
+  type ChangeEvent,
+  type FocusEvent,
+  type InputHTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Select,
   SelectContent,
@@ -21,10 +30,10 @@ interface ReferenceInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>
   variableKeys?: string[];
 }
 
-export function ReferenceInput({ 
-  label, 
-  error, 
-  helperText, 
+export function ReferenceInput({
+  label,
+  error,
+  helperText,
   rightIcon,
   size = 'default',
   sourceType: controlledSourceType,
@@ -32,12 +41,16 @@ export function ReferenceInput({
   className = '',
   secretKeys = [],
   variableKeys = [],
-  ...props 
+  onFocus,
+  onChange,
+  onKeyDown,
+  ...inputProps
 }: ReferenceInputProps) {
   const [internalSourceType, setInternalSourceType] = useState<SourceType>('text');
   const sourceType = controlledSourceType ?? internalSourceType;
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [filterValue, setFilterValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -51,12 +64,11 @@ export function ReferenceInput({
   };
 
   // Filter keys based on input value
-  const inputValue = (props.value as string) || '';
+  const normalizedFilter = filterValue.trim().toLowerCase();
   const baseKeys = sourceType === 'secret' ? secretKeys : sourceType === 'variable' ? variableKeys : [];
-  const normalizedInput = inputValue.trim().toLowerCase();
-  const filteredKeys = normalizedInput.length === 0
+  const filteredKeys = normalizedFilter.length === 0
     ? baseKeys
-    : baseKeys.filter((key) => key.toLowerCase().includes(normalizedInput));
+    : baseKeys.filter((key) => key.toLowerCase().includes(normalizedFilter));
 
   // Handle click outside to close autocomplete
   useEffect(() => {
@@ -75,7 +87,22 @@ export function ReferenceInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInputFocus = () => {
+  useEffect(() => {
+    const inputElement = inputRef.current;
+    if (!inputElement) return;
+    if (document.activeElement !== inputElement) return;
+    if (sourceType === 'secret' && secretKeys.length > 0) {
+      setShowAutocomplete(true);
+      setSelectedIndex(-1);
+    } else if (sourceType === 'variable' && variableKeys.length > 0) {
+      setShowAutocomplete(true);
+      setSelectedIndex(-1);
+    }
+  }, [secretKeys, variableKeys, sourceType]);
+
+  const handleInputFocus = (event: FocusEvent<HTMLInputElement>) => {
+    onFocus?.(event);
+    setFilterValue('');
     if (sourceType === 'secret' && secretKeys.length > 0) {
       setShowAutocomplete(true);
       setSelectedIndex(-1);
@@ -85,7 +112,7 @@ export function ReferenceInput({
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (sourceType === 'secret' && secretKeys.length > 0) {
       setShowAutocomplete(true);
       setSelectedIndex(-1);
@@ -93,24 +120,26 @@ export function ReferenceInput({
       setShowAutocomplete(true);
       setSelectedIndex(-1);
     }
-    if (props.onChange) {
-      props.onChange(e);
+    setFilterValue(e.target.value);
+    if (onChange) {
+      onChange(e);
     }
   };
 
   const handleKeySelect = (key: string) => {
-    if (inputRef.current && props.onChange) {
+    if (inputRef.current && onChange) {
       const syntheticEvent = {
         target: { value: key },
         currentTarget: inputRef.current,
-      } as React.ChangeEvent<HTMLInputElement>;
-      props.onChange(syntheticEvent);
+      } as ChangeEvent<HTMLInputElement>;
+      onChange(syntheticEvent);
     }
+    setFilterValue(key);
     setShowAutocomplete(false);
     setSelectedIndex(-1);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (sourceType === 'secret' && showAutocomplete && filteredKeys.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -140,10 +169,15 @@ export function ReferenceInput({
         setSelectedIndex(-1);
       }
     }
-    if (props.onKeyDown) {
-      props.onKeyDown(e);
+    if (onKeyDown) {
+      onKeyDown(e);
     }
   };
+
+  useEffect(() => {
+    setFilterValue('');
+    setShowAutocomplete(false);
+  }, [sourceType]);
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const inputLeftPadding = size === 'sm' ? 'pl-[52px]' : 'pl-[64px]';
@@ -187,16 +221,16 @@ export function ReferenceInput({
             ${rightIcon ? iconRightPadding : ''}
             ${className}
           `}
-          {...props}
           ref={inputRef}
           onFocus={handleInputFocus}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          {...inputProps}
         />
         
         {/* Source Selector - Square with right border, positioned inside input */}
         <div className={`absolute left-[1px] top-[1px] z-10 ${selectorSize}`}>
-          <Select value={sourceType} onValueChange={handleSourceTypeChange} disabled={props.disabled}>
+          <Select value={sourceType} onValueChange={handleSourceTypeChange} disabled={inputProps.disabled}>
             <SelectTrigger
               size={undefined}
               className="

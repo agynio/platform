@@ -37,7 +37,7 @@ describe('ReferenceField', () => {
     const input = screen.getByRole('textbox');
     await user.clear(input);
     fireEvent.change(input, { target: { value: 'secret/data/api' } });
-    expect(last).toMatchObject({ kind: 'vault', path: 'secret/data', key: 'api' });
+    expect(last).toMatchObject({ kind: 'vault', mount: 'secret', path: 'data', key: 'api' });
   });
 
   it('preserves string output for static references', async () => {

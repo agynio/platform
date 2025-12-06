@@ -4,6 +4,8 @@ import type { EnvVar } from '@/components/nodeProperties/types';
 import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField from './shared/ReferenceEnvField';
+import { useSecretKeyOptions } from './shared/useSecretKeyOptions';
+import { useVariableKeyOptions } from './shared/useVariableKeyOptions';
 
 type VolumesFormState = {
   enabled: boolean;
@@ -27,6 +29,8 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || '');
   const [env, setEnv] = useState<EnvVar[]>(() => readEnvList(init.env));
+  const secretKeys = useSecretKeyOptions();
+  const variableKeys = useVariableKeyOptions();
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [cpuLimit, setCpuLimit] = useState<string>(() => {
     const raw = init.cpu_limit as unknown;
@@ -97,7 +101,16 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env} onChange={(next) => setEnv(next)} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
+        <ReferenceEnvField
+          value={env}
+          onChange={(next) => setEnv(next)}
+          readOnly={readOnly}
+          disabled={disabled}
+          addLabel="Add env"
+          onValidate={onValidate}
+          secretKeys={secretKeys}
+          variableKeys={variableKeys}
+        />
       </div>
       <div>
         <label htmlFor="initialScript" className="block text-xs mb-1">Initial script (optional)</label>

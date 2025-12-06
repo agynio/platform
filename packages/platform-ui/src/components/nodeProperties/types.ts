@@ -81,7 +81,8 @@ export interface NodePropertiesSidebarProps {
     commitHash: string;
     attributePath: string;
   }>;
-  secretSuggestionProvider?: (query: string) => Promise<string[]>;
-  variableSuggestionProvider?: (query: string) => Promise<string[]>;
-  providerDebounceMs?: number;
+  secretKeys?: string[];
+  variableKeys?: string[];
+  ensureSecretKeys?: () => Promise<string[]>;
+  ensureVariableKeys?: () => Promise<string[]>;
 }

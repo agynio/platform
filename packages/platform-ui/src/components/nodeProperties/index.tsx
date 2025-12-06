@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Input } from '../Input';
 import { Dropdown } from '../Dropdown';
@@ -48,12 +48,6 @@ import type {
   WorkspaceNixPackage,
 } from './types';
 
-type SuggestionFetcher = {
-  suggestions: string[];
-  fetchNow: (query: string) => void;
-  scheduleFetch: (query: string) => void;
-};
-
 type ToolLimitKey =
   | 'executionTimeoutMs'
   | 'idleTimeoutMs'
@@ -61,62 +55,6 @@ type ToolLimitKey =
   | 'chunkCoalesceMs'
   | 'chunkSizeBytes'
   | 'clientBufferLimitBytes';
-
-function useSuggestionFetcher(
-  provider?: (query: string) => Promise<string[]>,
-  debounceMs = 250,
-): SuggestionFetcher {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestQueryRef = useRef('');
-  const providerRef = useRef(provider);
-
-  useEffect(() => {
-    providerRef.current = provider;
-  }, [provider]);
-
-  const fetchNow = useCallback(
-    async (query: string) => {
-      const normalized = query.trim();
-      latestQueryRef.current = normalized;
-      if (!normalized || !providerRef.current) {
-        setSuggestions([]);
-        return;
-      }
-      try {
-        const result = await providerRef.current(normalized);
-        if (latestQueryRef.current !== normalized) return;
-        setSuggestions(Array.isArray(result) ? result : []);
-      } catch {
-        if (latestQueryRef.current !== normalized) return;
-        setSuggestions([]);
-      }
-    },
-    [],
-  );
-
-  const scheduleFetch = useCallback(
-    (query: string) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-      timerRef.current = setTimeout(() => {
-        void fetchNow(query);
-      }, debounceMs);
-    },
-    [debounceMs, fetchNow],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
-
-  return { suggestions, fetchNow, scheduleFetch };
-}
 
 function NodePropertiesSidebar({
   config,
@@ -135,9 +73,10 @@ function NodePropertiesSidebar({
   nixPackageSearch,
   fetchNixPackageVersions,
   resolveNixPackageSelection,
-  secretSuggestionProvider,
-  variableSuggestionProvider,
-  providerDebounceMs = 250,
+  secretKeys = [],
+  variableKeys = [],
+  ensureSecretKeys,
+  ensureVariableKeys,
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle, template } = config;
   const nodeTitleValue = typeof nodeTitle === 'string' ? nodeTitle : '';
@@ -164,16 +103,6 @@ function NodePropertiesSidebar({
   const toolName = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const [toolNameInput, setToolNameInput] = useState(toolName);
   const [toolNameError, setToolNameError] = useState<string | null>(null);
-
-  const secretFetcher = useSuggestionFetcher(secretSuggestionProvider, providerDebounceMs);
-  const variableFetcher = useSuggestionFetcher(variableSuggestionProvider, providerDebounceMs);
-
-  const { suggestions: secretSuggestions, fetchNow: fetchSecretNow, scheduleFetch: scheduleSecretFetch } = secretFetcher;
-  const {
-    suggestions: variableSuggestions,
-    fetchNow: fetchVariableNow,
-    scheduleFetch: scheduleVariableFetch,
-  } = variableFetcher;
 
   const envVars = useMemo(() => readEnvList(configRecord.env), [configRecord.env]);
   const toolWorkdir =
@@ -245,6 +174,9 @@ function NodePropertiesSidebar({
     [config, nodeKind],
   );
 
+  const secretSuggestions = useMemo(() => (Array.isArray(secretKeys) ? secretKeys : []), [secretKeys]);
+  const variableSuggestions = useMemo(() => (Array.isArray(variableKeys) ? variableKeys : []), [variableKeys]);
+
   const handleConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
       if (!onConfigChange) return;
@@ -281,60 +213,56 @@ function NodePropertiesSidebar({
   const handleSlackAppValueChange = useCallback(
     (value: string) => {
       onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, value, slackAppSourceType) });
-      if (slackAppSourceType === 'secret') {
-        scheduleSecretFetch(value);
-      } else if (slackAppSourceType === 'variable') {
-        scheduleVariableFetch(value);
-      }
     },
-    [onConfigChange, slackAppReference.raw, slackAppSourceType, scheduleSecretFetch, scheduleVariableFetch],
+    [onConfigChange, slackAppReference.raw, slackAppSourceType],
   );
 
   const handleSlackBotValueChange = useCallback(
     (value: string) => {
       onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, value, slackBotSourceType) });
-      if (slackBotSourceType === 'secret') {
-        scheduleSecretFetch(value);
-      } else if (slackBotSourceType === 'variable') {
-        scheduleVariableFetch(value);
-      }
     },
-    [onConfigChange, slackBotReference.raw, slackBotSourceType, scheduleSecretFetch, scheduleVariableFetch],
+    [onConfigChange, slackBotReference.raw, slackBotSourceType],
   );
 
   const handleSlackAppSourceChange = useCallback(
     (type: ReferenceSourceType) => {
       onConfigChange?.({ app_token: encodeReferenceValue(type, '', slackAppReference.raw) });
+      if (type === 'secret') {
+        void ensureSecretKeys?.();
+      } else if (type === 'variable') {
+        void ensureVariableKeys?.();
+      }
     },
-    [onConfigChange, slackAppReference.raw],
+    [ensureSecretKeys, ensureVariableKeys, onConfigChange, slackAppReference.raw],
   );
 
   const handleSlackBotSourceChange = useCallback(
     (type: ReferenceSourceType) => {
       onConfigChange?.({ bot_token: encodeReferenceValue(type, '', slackBotReference.raw) });
+      if (type === 'secret') {
+        void ensureSecretKeys?.();
+      } else if (type === 'variable') {
+        void ensureVariableKeys?.();
+      }
     },
-    [onConfigChange, slackBotReference.raw],
+    [ensureSecretKeys, ensureVariableKeys, onConfigChange, slackBotReference.raw],
   );
 
   const handleSlackAppFocus = useCallback(() => {
-    const trimmed = slackAppReference.value.trim();
-    if (trimmed.length === 0) return;
     if (slackAppSourceType === 'secret') {
-      fetchSecretNow(trimmed);
+      void ensureSecretKeys?.();
     } else if (slackAppSourceType === 'variable') {
-      fetchVariableNow(trimmed);
+      void ensureVariableKeys?.();
     }
-  }, [fetchSecretNow, fetchVariableNow, slackAppReference.value, slackAppSourceType]);
+  }, [ensureSecretKeys, ensureVariableKeys, slackAppSourceType]);
 
   const handleSlackBotFocus = useCallback(() => {
-    const trimmed = slackBotReference.value.trim();
-    if (trimmed.length === 0) return;
     if (slackBotSourceType === 'secret') {
-      fetchSecretNow(trimmed);
+      void ensureSecretKeys?.();
     } else if (slackBotSourceType === 'variable') {
-      fetchVariableNow(trimmed);
+      void ensureVariableKeys?.();
     }
-  }, [fetchSecretNow, fetchVariableNow, slackBotReference.value, slackBotSourceType]);
+  }, [ensureSecretKeys, ensureVariableKeys, slackBotSourceType]);
 
   const mcpRequestTimeout = readNumber(configRecord.requestTimeoutMs);
   const mcpStartupTimeout = readNumber(configRecord.startupTimeoutMs);
@@ -480,14 +408,8 @@ function NodePropertiesSidebar({
     (index: number, value: string) => {
       const next = envVars.map((item, idx) => (idx === index ? { ...item, value } : item));
       onConfigChange?.({ env: serializeEnvVars(next) });
-      const source = next[index]?.source;
-      if (source === 'vault') {
-        scheduleSecretFetch(value);
-      } else if (source === 'variable') {
-        scheduleVariableFetch(value);
-      }
     },
-    [envVars, onConfigChange, scheduleSecretFetch, scheduleVariableFetch],
+    [envVars, onConfigChange],
   );
 
   const handleEnvValueFocus = useCallback(
@@ -495,12 +417,12 @@ function NodePropertiesSidebar({
       const current = envVars[index];
       if (!current) return;
       if (current.source === 'vault') {
-        fetchSecretNow(current.value);
+        void ensureSecretKeys?.();
       } else if (current.source === 'variable') {
-        fetchVariableNow(current.value);
+        void ensureVariableKeys?.();
       }
     },
-    [envVars, fetchSecretNow, fetchVariableNow],
+    [envVars, ensureSecretKeys, ensureVariableKeys],
   );
 
   const handleEnvSourceChange = useCallback(
@@ -508,14 +430,13 @@ function NodePropertiesSidebar({
       const source = fromReferenceSourceType(type);
       const next = envVars.map((item, idx) => (idx === index ? { ...item, source } : item));
       onConfigChange?.({ env: serializeEnvVars(next) });
-      const value = next[index]?.value ?? '';
       if (source === 'vault') {
-        fetchSecretNow(value);
+        void ensureSecretKeys?.();
       } else if (source === 'variable') {
-        fetchVariableNow(value);
+        void ensureVariableKeys?.();
       }
     },
-    [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
+    [envVars, onConfigChange, ensureSecretKeys, ensureVariableKeys],
   );
 
   const handleAgentNameChange = useCallback((value: string) => {

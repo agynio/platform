@@ -142,7 +142,8 @@ describe('NodePropertiesSidebar Slack trigger references', () => {
     await waitFor(() => {
       expect(latestUpdate(onConfigChange, 'bot_token')).toEqual({
         kind: 'vault',
-        path: 'secret/slack',
+        mount: 'secret',
+        path: 'slack',
         key: 'BOT_SECRET',
       });
     });

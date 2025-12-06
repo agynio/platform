@@ -8,6 +8,8 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceField from './shared/ReferenceField';
 import { ToolNameLabel } from './shared/ToolNameLabel';
 import { normalizeReferenceValue, readReferenceDetails } from './shared/referenceUtils';
+import { useSecretKeyOptions } from './shared/useSecretKeyOptions';
+import { useVariableKeyOptions } from './shared/useVariableKeyOptions';
 
 function isVaultRef(v: string) {
   // Expect mount/path/key
@@ -18,6 +20,8 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
   const defaultChannelRaw = value['default_channel'];
   const botTokenRaw = value['bot_token'];
   const rawName = value['name'];
+  const secretKeys = useSecretKeyOptions();
+  const variableKeys = useVariableKeyOptions();
   const currentDefaultChannel = typeof defaultChannelRaw === 'string' ? defaultChannelRaw : '';
   const currentBotToken = botTokenRaw;
   const currentName = typeof rawName === 'string' ? rawName : undefined;
@@ -102,6 +106,8 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
         onChange={setBotToken}
         readOnly={readOnly}
         disabled={disabled}
+        secretKeys={secretKeys}
+        variableKeys={variableKeys}
         helpText="Use source=vault to reference a secret as mount/path/key."
       />
       {errors.length > 0 && <div className="text-[10px] text-red-600">{errors.join(', ')}</div>}

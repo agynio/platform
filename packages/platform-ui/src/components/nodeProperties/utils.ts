@@ -46,6 +46,9 @@ function parseVaultString(
   if (preferredMount && pathSegments[0] === preferredMount) {
     mount = preferredMount;
     pathSegments = pathSegments.slice(1);
+  } else if (pathSegments.length > 0) {
+    mount = pathSegments[0];
+    pathSegments = pathSegments.slice(1);
   }
 
   const path = pathSegments.join('/');
@@ -231,9 +234,11 @@ export function inferReferenceSource(raw: ReferenceConfigValue | undefined): Ref
   if (typeof raw === 'string') return 'text';
   if (isVaultReferenceValue(raw)) return 'secret';
   if (isVariableReferenceValue(raw)) return 'variable';
-  if (isRecord(raw) && typeof raw.source === 'string') {
-    if (raw.source === 'vault') return 'secret';
-    if (raw.source === 'variable') return 'variable';
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    const source = typeof record.source === 'string' ? record.source : undefined;
+    if (source === 'vault') return 'secret';
+    if (source === 'variable') return 'variable';
   }
   return 'text';
 }
@@ -274,8 +279,12 @@ export function readEnvList(raw: unknown): EnvVar[] {
     }
 
     const rawSource = typeof item.source === 'string' ? item.source : undefined;
-    const source: EnvVar['source'] = rawSource === 'vault' || rawSource === 'variable' ? rawSource : 'static';
-    const rawValue = item.value as unknown;
+    const rawValue = item.value as unknown as ReferenceConfigValue;
+    const inferredSourceType = inferReferenceSource(rawValue);
+    const inferredSource = fromReferenceSourceType(inferredSourceType);
+    const source: EnvVar['source'] = rawSource === 'vault' || rawSource === 'variable' || rawSource === 'static'
+      ? rawSource
+      : inferredSource;
     const keyField = resolveKeyField(item);
     const nameValue = keyField === 'name' ? item.name : item.key;
     const meta: EnvVarMeta = {
@@ -296,7 +305,7 @@ export function readEnvList(raw: unknown): EnvVar[] {
 }
 
 export function serializeEnvVars(list: EnvVar[]): Array<Record<string, unknown>> {
-  return list.map((item) => {
+  return list.map((item: EnvVar) => {
     const base = item.meta.original ? deepClone(item.meta.original) : {};
     const record = base as Record<string, unknown>;
 
