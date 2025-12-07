@@ -14,7 +14,7 @@ import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-event
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
-import { toPrismaJsonValue } from '../services/messages.serialization';
+import { sanitizeJsonStrings, sanitizeNullCharacters, toPrismaJsonValue } from '../services/messages.serialization';
 import {
   contextItemInputFromMemory,
   contextItemInputFromMessage,
@@ -484,9 +484,9 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         parsed = { raw: call.args };
       }
       return {
-        callId: call.callId,
-        name: call.name,
-        arguments: toPrismaJsonValue(parsed),
+        callId: sanitizeNullCharacters(call.callId),
+        name: sanitizeNullCharacters(call.name),
+        arguments: sanitizeJsonStrings(toPrismaJsonValue(parsed)),
       };
     });
   }

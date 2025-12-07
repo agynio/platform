@@ -3,6 +3,15 @@ import { Prisma } from '@prisma/client';
 export type JsonValue = Prisma.JsonValue;
 export type InputJsonValue = Prisma.InputJsonValue;
 
+const NULL_CHAR = '\u0000';
+const NULL_CHAR_PATTERN = /\u0000/g;
+const NULL_REPLACEMENT = '\uFFFD';
+
+const isPrismaJsonNull = (
+  value: unknown,
+): value is typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull =>
+  value === Prisma.JsonNull || value === Prisma.DbNull || value === Prisma.AnyNull;
+
 // Internal guards
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object') return false;
@@ -58,4 +67,42 @@ function toPrismaJsonValueNullable(input: unknown): InputJsonValue | null {
   if (input === null) return null;
 
   return toPrismaJsonValue(input);
+}
+
+export function sanitizeNullCharacters(value: string): string {
+  return value.includes(NULL_CHAR) ? value.replace(NULL_CHAR_PATTERN, NULL_REPLACEMENT) : value;
+}
+
+export function sanitizeJsonStrings<T extends Prisma.InputJsonValue>(input: T): T {
+  if (input === null) return input;
+  if (isPrismaJsonNull(input)) return input;
+
+  if (typeof input === 'string') {
+    return sanitizeNullCharacters(input) as T;
+  }
+
+  if (Array.isArray(input)) {
+    let mutated = false;
+    const next = input.map((entry) => {
+      const sanitized = sanitizeJsonStrings(entry as Prisma.InputJsonValue);
+      if (sanitized !== entry) mutated = true;
+      return sanitized;
+    });
+    return (mutated ? (next as unknown as T) : input);
+  }
+
+  if (typeof input === 'object') {
+    let mutated = false;
+    const record = input as Record<string, Prisma.InputJsonValue | null>;
+    const entries = Object.entries(record);
+    const next: Record<string, Prisma.InputJsonValue | null> = {};
+    for (const [key, value] of entries) {
+      const sanitized = value === null ? null : sanitizeJsonStrings(value);
+      if (sanitized !== value) mutated = true;
+      next[key] = sanitized;
+    }
+    return (mutated ? (next as unknown as T) : input);
+  }
+
+  return input;
 }

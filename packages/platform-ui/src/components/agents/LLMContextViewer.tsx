@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { Badge } from '@/components/Badge';
+import { JsonViewer } from '@/components/JsonViewer';
+import { gatherToolCalls } from '@/lib/toolCalls';
 import { useContextItems } from '@/api/hooks/contextItems';
 import type { ContextItem } from '@/api/types/agents';
 
@@ -43,6 +46,9 @@ const ROLE_COLORS: Record<ContextItem['role'], string> = {
   other: 'bg-gray-500 text-white',
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const HIGHLIGHT_ROLES: ReadonlySet<ContextItem['role']> = new Set(['user', 'assistant', 'tool']);
 
 export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount, onItemsRendered, onBeforeLoadMore }: LLMContextViewerProps) {
@@ -54,6 +60,43 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
   const { items, hasMore, isInitialLoading, isFetching, error, loadMore, total, targetCount } = useContextItems(ids, {
     initialCount: sanitizedInitialVisibleCount ?? 10,
   });
+
+  const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setExpandedToolCalls((prev) => {
+      if (items.length === 0) {
+        return prev.size === 0 ? prev : new Set<string>();
+      }
+      const validIds = new Set(items.map((item) => item.id));
+      const next = new Set<string>();
+      let changed = false;
+      for (const key of prev) {
+        const [itemId] = key.split('::');
+        if (validIds.has(itemId)) {
+          next.add(key);
+        } else {
+          changed = true;
+        }
+      }
+      if (!changed && next.size === prev.size) {
+        return prev;
+      }
+      return next;
+    });
+  }, [items]);
+
+  const toggleToolCall = useCallback((key: string) => {
+    setExpandedToolCalls((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const emptyState = ids.length === 0;
   const displayedCount = useMemo(() => Math.min(targetCount, total), [targetCount, total]);
@@ -106,12 +149,14 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
 
       {items.map((item) => {
         const textContent = toPlainText(item.contentText, item.contentJson);
+        const toolCalls = gatherToolCalls(item.contentJson, item.metadata, item.contentText);
         const roleColor = ROLE_COLORS[item.role] ?? 'bg-gray-900 text-white';
         const isHighlighted = highlightSet.has(item.id);
         const wrapperClasses = ['space-y-2 text-[11px] text-gray-800'];
         if (isHighlighted) {
           wrapperClasses.push('rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2');
         }
+
         return (
           <div
             key={item.id}
@@ -130,6 +175,44 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
               )}
             </header>
             {textContent ? <div className="content-wrap text-gray-800">{textContent}</div> : null}
+            {toolCalls.length > 0 && (
+              <div className="space-y-1">
+                {toolCalls.map((toolCall, index) => {
+                  const key = `${item.id}::${index}`;
+                  const isExpanded = expandedToolCalls.has(key);
+                  const functionRecord = isRecord(toolCall.function) ? toolCall.function : undefined;
+                  const toolLabel = typeof toolCall.name === 'string' && toolCall.name.length > 0
+                    ? toolCall.name
+                    : typeof functionRecord?.name === 'string' && functionRecord.name.length > 0
+                      ? functionRecord.name
+                      : `Tool Call ${index + 1}`;
+                  const argumentsValue = toolCall.arguments ?? functionRecord?.arguments ?? toolCall;
+
+                  return (
+                    <div key={key} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleToolCall(key)}
+                        className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        )}
+                        <Wrench className="h-3.5 w-3.5" />
+                        <span className="font-medium">{toolLabel}</span>
+                      </button>
+                      {isExpanded && (
+                        <div className="ml-5 mt-2">
+                          <JsonViewer data={argumentsValue ?? null} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

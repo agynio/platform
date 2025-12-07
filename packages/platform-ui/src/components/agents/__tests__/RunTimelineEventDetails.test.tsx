@@ -1158,6 +1158,119 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
+  it('renders assistant context tool calls and clears between events', async () => {
+    const toolCallContext: ContextItem = {
+      id: 'ctx-tool',
+      role: 'assistant',
+      contentText: null,
+      contentJson: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Tool reasoning' },
+          {
+            type: 'function_call',
+            function: {
+              name: 'lookup_weather',
+              arguments: '{"city":"Paris"}',
+            },
+          },
+        ],
+        tool_calls: [
+          {
+            id: 'call-1',
+            type: 'function',
+            name: 'lookup_weather',
+            function: {
+              name: 'lookup_weather',
+              arguments: '{"city":"Paris"}',
+            },
+          },
+        ],
+      },
+      metadata: null,
+      sizeBytes: 256,
+      createdAt: '2024-01-01T00:05:00.000Z',
+    };
+    const plainContext: ContextItem[] = [
+      {
+        id: 'ctx-plain',
+        role: 'assistant',
+        contentText: 'Assistant follow-up',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 200,
+        createdAt: '2024-01-01T00:06:00.000Z',
+      },
+    ];
+
+    let currentItems: ContextItem[] = [toolCallContext];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockImplementation((): UseContextItemsResult => ({
+      items: currentItems,
+      total: currentItems.length,
+      loadedCount: currentItems.length,
+      targetCount: currentItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    }));
+
+    try {
+      const eventWithTool = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-weather',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: currentItems.map((item) => item.id),
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      const { rerender } = renderDetails(eventWithTool);
+
+      const toggle = await screen.findByRole('button', { name: 'lookup_weather' });
+      await userEvent.click(toggle);
+
+      expect(
+        screen.getByText((content) => content.includes('{"city":"Paris"}')),
+      ).toBeInTheDocument();
+
+      currentItems = plainContext;
+      const eventWithoutTool = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-weather',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: plainContext.map((item) => item.id),
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+        id: 'evt-tool-clean',
+      });
+
+      await act(async () => {
+        rerender(eventWithoutTool);
+      });
+
+      expect(screen.queryByRole('button', { name: /lookup_weather|Tool Call/ })).not.toBeInTheDocument();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
   it('auto-scrolls context to bottom when items resolve asynchronously', async () => {
     const contextItems: ContextItem[] = [
       {

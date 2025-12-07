@@ -16,6 +16,7 @@ import type {
 } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { gatherToolCalls } from '@/lib/toolCalls';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 
 const EVENT_FILTER_OPTIONS: EventFilter[] = ['message', 'llm', 'tool', 'summary'];
@@ -390,44 +391,7 @@ function collectToolCalls(
   metadata: Record<string, unknown> | null,
   metadataAdditionalKwargs: Record<string, unknown> | null,
 ): Record<string, unknown>[] {
-  const seen = new Set<string>();
-  const result: Record<string, unknown>[] = [];
-
-  const addRecords = (value: unknown) => {
-    if (value === undefined || value === null) return;
-    const normalized = typeof value === 'string' ? parseMaybeJson(value) : value;
-    for (const record of toRecordArray(normalized)) {
-      const key = (() => {
-        try {
-          return JSON.stringify(record);
-        } catch (_err) {
-          return undefined;
-        }
-      })();
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      result.push(record);
-    }
-  };
-
-  if (primary) {
-    addRecords(primary.tool_calls);
-    addRecords(primary.toolCalls);
-  }
-  if (primaryAdditionalKwargs) {
-    addRecords(primaryAdditionalKwargs.tool_calls);
-    addRecords(primaryAdditionalKwargs.toolCalls);
-  }
-  if (metadata) {
-    addRecords(metadata.tool_calls);
-    addRecords(metadata.toolCalls);
-  }
-  if (metadataAdditionalKwargs) {
-    addRecords(metadataAdditionalKwargs.tool_calls);
-    addRecords(metadataAdditionalKwargs.toolCalls);
-  }
-
-  return result;
+  return gatherToolCalls(primary, primaryAdditionalKwargs, metadata, metadataAdditionalKwargs);
 }
 
 function extractReasoning(

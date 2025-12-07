@@ -14,7 +14,7 @@ import {
   ToolOutputStatus,
 } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
-import { toPrismaJsonValue } from '../llm/services/messages.serialization';
+import { sanitizeJsonStrings, sanitizeNullCharacters, toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
@@ -1236,15 +1236,44 @@ export class RunEventsService {
     });
 
     if (Array.isArray(args.toolCalls) && args.toolCalls.length > 0) {
+      const sanitizedRecords = args.toolCalls.map((call, idx) => ({
+        llmCallEventId: args.eventId,
+        callId: sanitizeNullCharacters(call.callId),
+        name: sanitizeNullCharacters(call.name),
+        arguments: sanitizeJsonStrings(call.arguments),
+        idx,
+      }));
+
+      const limit = (value: string) => (value.length > 120 ? `${value.slice(0, 117)}…` : value);
+      const safeStringify = (value: Prisma.InputJsonValue | null) => {
+        try {
+          const serialized = JSON.stringify(value);
+          if (serialized === undefined) return '[unserializable]';
+          return serialized.length > 180 ? `${serialized.slice(0, 177)}…` : serialized;
+        } catch (error) {
+          return `[stringify-error:${error instanceof Error ? error.message : String(error)}]`;
+        }
+      };
+      const previewRecords = sanitizedRecords.slice(0, 3).map((record) => ({
+        idx: record.idx,
+        callId: limit(record.callId),
+        name: limit(record.name),
+        args: safeStringify(record.arguments),
+      }));
+      const previewSerialized = JSON.stringify(
+        previewRecords,
+        (_key, value) => (typeof value === 'string' ? sanitizeNullCharacters(value) : value),
+      );
+
+      this.logger.debug('Persisting sanitized tool calls', {
+        eventId: args.eventId,
+        sample: previewSerialized,
+        containsNullChar: previewSerialized.includes('\\u0000'),
+      });
+
       await tx.toolCall.deleteMany({ where: { llmCallEventId: args.eventId } });
       await tx.toolCall.createMany({
-        data: args.toolCalls.map((call, idx) => ({
-          llmCallEventId: args.eventId,
-          callId: call.callId,
-          name: call.name,
-          arguments: call.arguments,
-          idx,
-        })),
+        data: sanitizedRecords,
       });
     }
   }

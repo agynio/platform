@@ -68,4 +68,63 @@ describe('RunEventDetails context window behaviour', () => {
     expect(within(contextContainer).getByText('Earlier summary')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load older context' })).not.toBeInTheDocument();
   });
+
+  it('renders assistant context tool calls with toggles and clears between events', () => {
+    const baseEvent = buildLlmEvent();
+    const eventWithTool: RunEvent = {
+      ...baseEvent,
+      id: 'event-llm-tool',
+      data: {
+        ...baseEvent.data,
+        context: [
+          {
+            id: 'ctx-tool',
+            role: 'assistant',
+            content: 'Responding with a tool call',
+            timestamp: '2024-01-01T00:10:00.000Z',
+            tool_calls: [
+              {
+                id: 'call-1',
+                type: 'function',
+                name: 'lookup_weather',
+                function: {
+                  name: 'lookup_weather',
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const eventWithoutTool: RunEvent = {
+      ...baseEvent,
+      id: 'event-llm-plain',
+      data: {
+        ...baseEvent.data,
+        context: [
+          {
+            id: 'ctx-plain',
+            role: 'assistant',
+            content: 'Assistant reply without tool use',
+            timestamp: '2024-01-01T00:11:00.000Z',
+          },
+        ],
+      },
+    };
+
+    const { rerender } = render(<RunEventDetails event={eventWithTool} />);
+
+    const toggle = screen.getByRole('button', { name: 'lookup_weather' });
+    fireEvent.click(toggle);
+
+    expect(
+      screen.getByText((content) => content.includes('{"city":"Paris"}')),
+    ).toBeInTheDocument();
+
+    rerender(<RunEventDetails event={eventWithoutTool} />);
+
+    expect(screen.queryByRole('button', { name: /lookup_weather|Tool Call/ })).not.toBeInTheDocument();
+  });
 });

@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
 import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { toPrismaJsonValue } from './messages.serialization';
+import { sanitizeJsonStrings, toPrismaJsonValue } from './messages.serialization';
 
 export type ContextItemInput = {
   role?: ContextItemRole | string | null;
@@ -13,8 +13,8 @@ export type ContextItemInput = {
 export type NormalizedContextItem = {
   role: ContextItemRole;
   contentText: string | null;
-  contentJson: Prisma.InputJsonValue | typeof Prisma.JsonNull;
-  metadata: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  contentJson: Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull;
+  metadata: Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull;
   sizeBytes: number;
 };
 
@@ -22,6 +22,17 @@ export type LoggerLike = {
   info?: (message: string, context?: Record<string, unknown>) => void;
   debug?: (message: string, context?: Record<string, unknown>) => void;
   warn?: (message: string, context?: Record<string, unknown>) => void;
+};
+
+const sanitizeText = (value: string): string => value.replace(/\u0000/g, '\uFFFD');
+
+const sanitizeJsonValue = (
+  value: Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull => {
+  if (value === Prisma.JsonNull) return value;
+  if (value === Prisma.DbNull) return value;
+  if (value === Prisma.AnyNull) return value;
+  return sanitizeJsonStrings(value as Prisma.InputJsonValue);
 };
 
 const ROLE_ALIASES: Record<string, ContextItemRole> = {
@@ -55,7 +66,7 @@ export function normalizeContextItem(input: ContextItemInput, logger?: LoggerLik
   const role = coerceContextItemRole(input.role);
 
   let text: string | null = null;
-  if (typeof input.contentText === 'string') text = input.contentText;
+  if (typeof input.contentText === 'string') text = sanitizeText(input.contentText);
   else if (input.contentText === null) text = null;
 
   const { jsonValue, canonicalJson } = normalizeJsonValue(input.contentJson, logger);
@@ -103,12 +114,16 @@ export async function upsertNormalizedContextItems(
 
   for (const item of items) {
     try {
+      const sanitizedText = typeof item.contentText === 'string' ? sanitizeText(item.contentText) : item.contentText;
+      const sanitizedContentJson = sanitizeJsonValue(item.contentJson) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+      const sanitizedMetadata = sanitizeJsonValue(item.metadata) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+
       const createdRecord = await client.contextItem.create({
         data: {
           role: item.role,
-          contentText: item.contentText,
-          contentJson: item.contentJson,
-          metadata: item.metadata,
+          contentText: sanitizedText,
+          contentJson: sanitizedContentJson,
+          metadata: sanitizedMetadata,
           sizeBytes: item.sizeBytes,
         },
         select: { id: true },
@@ -197,12 +212,12 @@ export function contextItemInputFromMessage(
 }
 
 function normalizeJsonValue(value: unknown, logger?: LoggerLike): {
-  jsonValue: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  jsonValue: Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull;
   canonicalJson: unknown | null;
 } {
   if (value === undefined || value === null) return { jsonValue: Prisma.JsonNull, canonicalJson: null };
   try {
-    const jsonValue = toPrismaJsonValue(value);
+    const jsonValue = sanitizeJsonValue(toPrismaJsonValue(value));
     const canonicalJson = toCanonicalJson(jsonValue);
     return { jsonValue, canonicalJson };
   } catch (err) {
@@ -211,17 +226,19 @@ function normalizeJsonValue(value: unknown, logger?: LoggerLike): {
   }
 }
 
-function normalizeMetadata(value: unknown, logger?: LoggerLike): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+function normalizeMetadata(value: unknown, logger?: LoggerLike): Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull {
   if (value === undefined || value === null) return Prisma.JsonNull;
   try {
-    return toPrismaJsonValue(value);
+    return sanitizeJsonValue(toPrismaJsonValue(value));
   } catch (err) {
     logger?.warn?.('context_items.normalize_metadata_failed', { error: err instanceof Error ? err.message : String(err) });
     return Prisma.JsonNull;
   }
 }
 
-function toCanonicalJson(value: Prisma.InputJsonValue | typeof Prisma.JsonNull): unknown {
+function toCanonicalJson(
+  value: Prisma.InputJsonValue | typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull,
+): unknown {
   const maybeNull = value as unknown;
   if (maybeNull === Prisma.JsonNull || maybeNull === Prisma.DbNull || maybeNull === Prisma.AnyNull) return null;
   if (Array.isArray(value)) return value.map((entry) => toCanonicalJson(entry as Prisma.InputJsonValue));
