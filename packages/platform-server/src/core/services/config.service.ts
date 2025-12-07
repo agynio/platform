@@ -76,6 +76,13 @@ export const configSchema = z.object({
       const n = typeof value === 'number' ? value : Number(value);
       return Number.isFinite(n) && n > 0 ? n : 300;
     }),
+  litellmTokenLockStaleMs: z
+    .union([z.string(), z.number()])
+    .default('60000')
+    .transform((value) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(n) && n > 0 ? n : 60000;
+    }),
   // Optional explicit OpenAI base URL passthrough
   openaiBaseUrl: z.string().optional(),
   githubToken: z.string().min(1).optional(),
@@ -288,6 +295,9 @@ export class ConfigService implements Config {
   get litellmKeyApiRetryBaseMs(): number {
     return this.params.litellmKeyApiRetryBaseMs;
   }
+  get litellmTokenLockStaleMs(): number {
+    return this.params.litellmTokenLockStaleMs;
+  }
   get openaiBaseUrl(): string | undefined {
     return this.params.openaiBaseUrl;
   }
@@ -437,6 +447,7 @@ export class ConfigService implements Config {
       litellmKeyValidationTimeoutMs: process.env.LITELLM_KEY_VALIDATION_TIMEOUT_MS,
       litellmKeyApiRetryMax: process.env.LITELLM_KEY_API_RETRY_MAX,
       litellmKeyApiRetryBaseMs: process.env.LITELLM_KEY_API_RETRY_BASE_MS,
+      litellmTokenLockStaleMs: process.env.LITELLM_TOKEN_LOCK_STALE_MS,
       openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default

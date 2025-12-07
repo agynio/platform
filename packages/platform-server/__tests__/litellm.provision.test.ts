@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from 'vitest';
 import nock from 'nock';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir, hostname } from 'os';
 import { join } from 'path';
 import { LiteLLMProvisioner } from '../src/llm/provisioners/litellm.provisioner';
 import { LiteLLMTokenStore } from '../src/llm/provisioners/litellm.token-store';
@@ -194,6 +194,127 @@ describe('LiteLLMProvisioner', () => {
     expect(second.apiKey).toBe('sk-concurrent');
     const stored = await store.read();
     expect(stored?.token).toBe('sk-concurrent');
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('recovers from a stale lock file left by a crashed process', async () => {
+    const recoveryStore = new LiteLLMTokenStore({
+      paths: store.paths,
+      lockStaleThresholdMs: 10,
+    });
+    const lockMeta = {
+      pid: 999999,
+      hostname: hostname(),
+      acquired_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+      instance_id: 'stale-lock',
+    };
+    await writeFile(recoveryStore.paths.lockPath, `${JSON.stringify(lockMeta)}\n`, { mode: 0o600 });
+
+    const provisioner = new LiteLLMProvisioner(config, {
+      tokenStore: recoveryStore,
+      now: () => new Date('2025-01-04T00:00:00Z'),
+    });
+
+    const scope = nock(BASE_URL)
+      .post('/key/delete', { key_aliases: ['agents-service'] })
+      .reply(200, {})
+      .get('/team/info')
+      .query({ team_alias: 'agents-service' })
+      .reply(404, {})
+      .post('/team/new', { team_alias: 'agents-service' })
+      .reply(200, { team_id: 'team-004', team_alias: 'agents-service' })
+      .post('/key/generate', {
+        key_alias: 'agents-service',
+        models: ['all-team-models'],
+        team_id: 'team-004',
+      })
+      .reply(200, { key: 'sk-stale', id: 'key-004', team_id: 'team-004' });
+
+    const result = await (provisioner as any).fetchOrCreateKeysInternal();
+
+    expect(result.apiKey).toBe('sk-stale');
+    const stored = await recoveryStore.read();
+    expect(stored?.token).toBe('sk-stale');
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('recovers lock when owner pid is dead on same host even within threshold', async () => {
+    const recoveryStore = new LiteLLMTokenStore({
+      paths: store.paths,
+      lockStaleThresholdMs: 60_000,
+    });
+    const lockMeta = {
+      pid: 999998,
+      hostname: hostname(),
+      acquired_at: new Date().toISOString(),
+      instance_id: 'dead-pid',
+    };
+    await writeFile(recoveryStore.paths.lockPath, `${JSON.stringify(lockMeta)}\n`, { mode: 0o600 });
+
+    const provisioner = new LiteLLMProvisioner(config, {
+      tokenStore: recoveryStore,
+      now: () => new Date('2025-01-05T00:00:00Z'),
+    });
+
+    const scope = nock(BASE_URL)
+      .post('/key/delete', { key_aliases: ['agents-service'] })
+      .reply(200, {})
+      .get('/team/info')
+      .query({ team_alias: 'agents-service' })
+      .reply(404, {})
+      .post('/team/new', { team_alias: 'agents-service' })
+      .reply(200, { team_id: 'team-005', team_alias: 'agents-service' })
+      .post('/key/generate', {
+        key_alias: 'agents-service',
+        models: ['all-team-models'],
+        team_id: 'team-005',
+      })
+      .reply(200, { key: 'sk-dead', id: 'key-005', team_id: 'team-005' });
+
+    const result = await (provisioner as any).fetchOrCreateKeysInternal();
+
+    expect(result.apiKey).toBe('sk-dead');
+    const stored = await recoveryStore.read();
+    expect(stored?.token).toBe('sk-dead');
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('reuses an existing valid token after recovering a stale lock', async () => {
+    await store.write({
+      token: 'sk-reuse',
+      alias: 'agents-service',
+      team_id: 'team-010',
+      base_url: BASE_URL,
+      created_at: '2025-01-01T00:00:00.000Z',
+    });
+
+    const recoveryStore = new LiteLLMTokenStore({
+      paths: store.paths,
+      lockStaleThresholdMs: 5,
+    });
+    const lockMeta = {
+      pid: 424242,
+      hostname: hostname(),
+      acquired_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+      instance_id: 'stale-reuse',
+    };
+    await writeFile(recoveryStore.paths.lockPath, `${JSON.stringify(lockMeta)}\n`, { mode: 0o600 });
+
+    const provisioner = new LiteLLMProvisioner(config, {
+      tokenStore: recoveryStore,
+      now: () => new Date('2025-01-06T00:00:00Z'),
+    });
+
+    const scope = nock(BASE_URL)
+      .get('/key/info')
+      .query({ key: 'sk-reuse' })
+      .reply(200, { key: 'sk-reuse' });
+
+    const result = await (provisioner as any).fetchOrCreateKeysInternal();
+
+    expect(result.apiKey).toBe('sk-reuse');
+    const stored = await recoveryStore.read();
+    expect(stored?.token).toBe('sk-reuse');
     expect(scope.isDone()).toBe(true);
   });
 });

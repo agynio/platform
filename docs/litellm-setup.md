@@ -42,6 +42,7 @@ App configuration: long-lived service token
   - `LITELLM_KEY_VALIDATION_TIMEOUT_MS` (`2000`)
   - `LITELLM_KEY_API_RETRY_MAX` (`3`)
   - `LITELLM_KEY_API_RETRY_BASE_MS` (`300`)
+  - `LITELLM_TOKEN_LOCK_STALE_MS` (`60000`, max age before recovering a stale `service_token.lock`)
 - To force rotation, delete `service_token.json` (and optionally clean up the alias in LiteLLM); the next startup will provision a fresh token.
 - Successful provisioning still exports `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the runtime (`${LITELLM_BASE_URL}/v1` if not explicitly provided).
 

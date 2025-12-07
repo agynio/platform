@@ -22,7 +22,12 @@ export class LiteLLMProvisioner extends LLMProvisioner {
 
   constructor(@Inject(ConfigService) private cfg: ConfigService, overrides: LiteLLMProvisionerOverrides = {}) {
     super();
-    this.tokenStore = overrides.tokenStore ?? new LiteLLMTokenStore();
+    this.tokenStore =
+      overrides.tokenStore ??
+      new LiteLLMTokenStore({
+        lockStaleThresholdMs: cfg.litellmTokenLockStaleMs,
+        logger: this.logger,
+      });
     this.now = overrides.now ?? (() => new Date());
     this.fetchImpl = overrides.fetchImpl;
   }

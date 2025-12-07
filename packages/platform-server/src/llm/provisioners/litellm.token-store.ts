@@ -1,8 +1,11 @@
-import { mkdir, readFile, rename, unlink, writeFile, chmod, open } from 'fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile, chmod, open, stat } from 'fs/promises';
 import { constants as fsConstants } from 'fs';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { setTimeout as delay } from 'timers/promises';
+import { hostname as resolveHostname } from 'os';
+import { randomUUID } from 'crypto';
+import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
 export interface StoredLiteLLMServiceToken {
@@ -30,6 +33,8 @@ export interface LiteLLMTokenStoreOptions {
   paths?: Partial<LiteLLMTokenStorePaths>;
   lockMaxAttempts?: number;
   lockBaseDelayMs?: number;
+  lockStaleThresholdMs?: number;
+  logger?: Logger;
 }
 
 const DEFAULT_TOKEN_PATH = fileURLToPath(
@@ -44,13 +49,27 @@ export class LiteLLMTokenStore {
   private readonly lockPath: string;
   private readonly maxAttempts: number;
   private readonly baseDelayMs: number;
+  private readonly staleThresholdMs: number;
+  private readonly hostname: string;
+  private readonly instanceId: string;
+  private readonly logger?: Logger;
 
   constructor(options: LiteLLMTokenStoreOptions = {}) {
-    const { paths, lockMaxAttempts = 40, lockBaseDelayMs = 50 } = options;
+    const {
+      paths,
+      lockMaxAttempts = 40,
+      lockBaseDelayMs = 50,
+      lockStaleThresholdMs = 60_000,
+      logger,
+    } = options;
     this.tokenPath = paths?.tokenPath ?? DEFAULT_TOKEN_PATH;
     this.lockPath = paths?.lockPath ?? DEFAULT_LOCK_PATH;
     this.maxAttempts = lockMaxAttempts;
     this.baseDelayMs = lockBaseDelayMs;
+    this.staleThresholdMs = lockStaleThresholdMs;
+    this.hostname = resolveHostname();
+    this.instanceId = randomUUID();
+    this.logger = logger;
   }
 
   get paths(): LiteLLMTokenStorePaths {
@@ -109,9 +128,21 @@ export class LiteLLMTokenStore {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
       try {
-        return await open(this.lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_RDWR, 0o600);
+        const handle = await open(
+          this.lockPath,
+          fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_RDWR,
+          0o600,
+        );
+        await this.writeLockMetadata(handle);
+        return handle;
       } catch (error) {
         if (!this.isAlreadyExists(error)) throw error;
+        const recovered = await this.tryRecoverStaleLock();
+        if (recovered) {
+          // Try again immediately after cleanup
+          attempt -= 1;
+          continue;
+        }
         if (attempt === this.maxAttempts) {
           throw new Error('litellm_service_token_lock_timeout');
         }
@@ -122,6 +153,100 @@ export class LiteLLMTokenStore {
     throw new Error('litellm_service_token_lock_timeout');
   }
 
+  private async writeLockMetadata(handle: import('fs/promises').FileHandle): Promise<void> {
+    const metadata: LockMetadata = {
+      pid: process.pid,
+      hostname: this.hostname,
+      acquired_at: new Date().toISOString(),
+      instance_id: this.instanceId,
+    };
+    await handle.truncate(0).catch(() => {});
+    await handle.writeFile(`${JSON.stringify(metadata)}\n`);
+    await handle.sync().catch(() => {});
+  }
+
+  private async tryRecoverStaleLock(): Promise<boolean> {
+    try {
+      const raw = await readFile(this.lockPath, 'utf8');
+      const meta = this.safeParseMetadata(raw);
+      const ageMs = await this.computeLockAge(meta?.acquired_at);
+      const sameHost = meta?.hostname && meta.hostname === this.hostname;
+
+      const staleByAge = ageMs !== undefined && ageMs > this.staleThresholdMs;
+      const staleByDeadPid =
+        sameHost && typeof meta?.pid === 'number' && meta.pid > 0 && !this.isProcessAlive(meta.pid);
+
+      if (staleByDeadPid || staleByAge) {
+        await unlink(this.lockPath).catch(() => {});
+        this.logger?.warn(
+          `LiteLLM token lock recovered ${JSON.stringify({
+            reason: staleByDeadPid ? 'dead_pid' : 'stale_age',
+            pid: meta?.pid,
+            hostname: meta?.hostname,
+            age_ms: ageMs,
+            instance_id: meta?.instance_id,
+          })}`,
+        );
+        return true;
+      }
+    } catch (error) {
+      const ageMs = await this.computeLockAge();
+      if (ageMs !== undefined && ageMs > this.staleThresholdMs) {
+        await unlink(this.lockPath).catch(() => {});
+        this.logger?.warn(
+          `LiteLLM token lock recovered ${JSON.stringify({ reason: 'unreadable', age_ms: ageMs })}`,
+        );
+        return true;
+      }
+      if (this.isNotFound(error)) {
+        return false;
+      }
+      // If read failed for another reason and not stale, surface last error
+      this.logger?.warn(
+        `LiteLLM token lock read failed ${JSON.stringify({ error: this.describeError(error) })}`,
+      );
+    }
+    return false;
+  }
+
+  private safeParseMetadata(raw: string | undefined): LockMetadata | undefined {
+    if (!raw) return undefined;
+    try {
+      const parsed = JSON.parse(raw) as LockMetadata;
+      if (!parsed || typeof parsed !== 'object') return undefined;
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async computeLockAge(acquiredAt?: string): Promise<number | undefined> {
+    if (acquiredAt) {
+      const parsed = Date.parse(acquiredAt);
+      if (!Number.isNaN(parsed)) {
+        return Date.now() - parsed;
+      }
+    }
+    try {
+      const stats = await stat(this.lockPath);
+      return Date.now() - stats.mtimeMs;
+    } catch (error) {
+      if (this.isNotFound(error)) return undefined;
+      return undefined;
+    }
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ESRCH') return false;
+      // Lack of permission implies process exists but inaccessible
+      return true;
+    }
+  }
+
   private isNotFound(error: unknown): boolean {
     return Boolean((error as NodeJS.ErrnoException)?.code === 'ENOENT');
   }
@@ -129,4 +254,17 @@ export class LiteLLMTokenStore {
   private isAlreadyExists(error: unknown): boolean {
     return Boolean((error as NodeJS.ErrnoException)?.code === 'EEXIST');
   }
+
+  private describeError(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return JSON.stringify(error);
+  }
+}
+
+interface LockMetadata {
+  pid: number;
+  hostname: string;
+  acquired_at: string;
+  instance_id?: string;
 }
