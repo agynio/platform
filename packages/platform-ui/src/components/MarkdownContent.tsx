@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement } from 'react';
+import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
@@ -141,8 +141,8 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
 
     // Code blocks
     pre: ({ children, className: preClassName, style: preStyle, node: _node, ...props }: MarkdownPreProps) => {
-      const childArray = Children.toArray(children) as ReactElement[];
-      const firstElement = childArray.find((item) => isValidElement(item)) as ReactElement | undefined;
+      const childArray = Children.toArray(children);
+      const firstElement = childArray.find((node): node is ReactElement => isValidElement(node));
 
       if (firstElement && firstElement.type === SyntaxHighlighter) {
         return firstElement;
@@ -169,18 +169,20 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
 
       return (
         <pre className={mergedClassName} style={mergedStyle} {...props}>
-          {childArray.map((item) =>
-            isValidElement(item)
-              ? cloneElement(item, {
-                  className: [
-                    'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
-                    item.props.className,
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                })
-              : item,
-          )}
+          {childArray.map((node: ReactNode) => {
+            if (!isValidElement<{ className?: string }>(node)) {
+              return node;
+            }
+
+            const mergedChildClassName = [
+              'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
+              node.props.className,
+            ]
+              .filter(Boolean)
+              .join(' ');
+
+            return cloneElement(node, { className: mergedChildClassName });
+          })}
         </pre>
       );
     },
