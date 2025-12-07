@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { PassThrough } from 'node:stream';
@@ -102,6 +102,9 @@ function createInProcessMock() {
 describe('LocalMCPServer (mock)', () => {
   let server: LocalMCPServerNode;
   let containerService: ContainerService;
+  const execCalls: Array<{ id: string; options: Record<string, unknown> }> = [];
+  let currentResolvedEnv: Record<string, string> | undefined;
+  let envStub: { resolveProviderEnv: ReturnType<typeof vi.fn>; resolveEnvItems: ReturnType<typeof vi.fn> };
 
   const createContainerService = () => {
     const registryStub = {
@@ -129,18 +132,23 @@ describe('LocalMCPServer (mock)', () => {
         stream.pipe(stdout);
       };
     }
-    docker.getContainer = () => ({
-      exec: async () => ({
-        start: (_opts: any, cb: any) => {
-          // Create fresh stream for each exec call
-          const { stream } = mock.createFreshStreamPair();
-          cb(undefined, stream);
-        },
-        inspect: async () => ({ ExitCode: 0 }),
-      }),
+    docker.getContainer = (id: string) => ({
+      exec: async (options: Record<string, unknown>) => {
+        execCalls.push({ id, options });
+        return {
+          start: (_opts: any, cb: any) => {
+            const { stream } = mock.createFreshStreamPair();
+            cb(undefined, stream);
+          },
+          inspect: async () => ({ ExitCode: 0 }),
+        };
+      },
     });
-    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    server = new LocalMCPServerNode(containerService as any, envStub, {} as any, createModuleRefStub());
+    envStub = {
+      resolveProviderEnv: vi.fn(async () => currentResolvedEnv),
+      resolveEnvItems: vi.fn(),
+    };
+    server = new LocalMCPServerNode(containerService as any, envStub as any, {} as any, createModuleRefStub());
     // Provide a dummy container provider to satisfy start precondition (reuse mocked docker above)
     const mockProvider = {
       provide: async (threadId: string) => ({ 
@@ -155,6 +163,18 @@ describe('LocalMCPServer (mock)', () => {
     await server.provision();
   }, 10000);
 
+  beforeEach(async () => {
+    execCalls.length = 0;
+    currentResolvedEnv = undefined;
+    if (envStub) {
+      envStub.resolveProviderEnv.mockClear();
+      envStub.resolveProviderEnv.mockImplementation(async () => currentResolvedEnv);
+      envStub.resolveEnvItems.mockClear();
+    }
+    // reset env on server to avoid cross-test leakage
+    await server.setConfig({ ...server.config, env: undefined });
+  });
+
   afterAll(async () => {
     await server.deprovision();
   });
@@ -166,9 +186,36 @@ describe('LocalMCPServer (mock)', () => {
     expect(tools.find((t) => String(t.name).endsWith('_echo'))).toBeTruthy();
   });
 
+  it('passes resolved env to docker exec during discovery', async () => {
+    currentResolvedEnv = { STATIC: 'value', SECRET: 'resolved' };
+    await server.setConfig({ ...server.config, env: [{ name: 'STATIC', value: '1' }] as any });
+    (server as any).toolsDiscovered = false;
+    (server as any).toolsCache = null;
+    await server.discoverTools();
+    expect(execCalls.length).toBeGreaterThan(0);
+    const discoveryCall = execCalls[0];
+    const envArr = discoveryCall.options.Env as string[] | undefined;
+    expect(envArr).toBeDefined();
+    expect(envArr).toEqual(expect.arrayContaining(['STATIC=value', 'SECRET=resolved']));
+  });
+
   it('calls tool', async () => {
     const result = await server.callTool('echo', { text: 'hello' }, { threadId: 'test-thread' });
     expect(result.content).toContain('echo:hello');
+  });
+
+  it('passes resolved env to docker exec during tool calls', async () => {
+    currentResolvedEnv = { TOOL_ENV: 'tool-value' };
+    await server.setConfig({ ...server.config, env: [{ name: 'TOOL_ENV', value: 'placeholder' }] as any });
+    (server as any).toolsDiscovered = false;
+    (server as any).toolsCache = null;
+    await server.callTool('echo', { text: 'env' }, { threadId: 'env-thread' });
+    expect(execCalls.length).toBeGreaterThan(0);
+    const toolExec = execCalls.at(-1);
+    expect(toolExec?.id).toEqual('mock-container-env-thread');
+    const envArr = toolExec?.options.Env as string[] | undefined;
+    expect(envArr).toBeDefined();
+    expect(envArr).toEqual(expect.arrayContaining(['TOOL_ENV=tool-value']));
   });
 
   it('emits unified tools_updated events', async () => {

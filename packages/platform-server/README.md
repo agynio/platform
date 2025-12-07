@@ -20,7 +20,55 @@ Graph persistence
 - DinD sidecars keep `networkMode=container:<workspaceId>` so the workspace and sidecar share namespaces regardless of the workspace network.
 - Set `NCPS_URL_SERVER` (host-reachable) and `NCPS_URL_CONTAINER` (in-network, e.g., `http://ncps:8501`) together so Nix substituters resolve correctly inside workspaces.
 - When the server injects `NIX_CONFIG`, workspace startup logs the resolved substituters/trusted keys and runs `getent hosts ncps` plus `curl http://ncps:8501/nix-cache-info`, emitting warnings if connectivity fails.
--
+## MCP environment configuration
+
+Local MCP server nodes accept an environment overlay via the `env` array in node config. Each entry includes a `name` and a `value`, where `value` may be a literal string or a reference resolved at runtime.
+
+Examples:
+
+- Static string
+
+  ```json
+  {
+    "name": "API_BASE_URL",
+    "value": "https://api.example.com"
+  }
+  ```
+
+- Vault-backed secret
+
+  ```json
+  {
+    "name": "API_KEY",
+    "value": {
+      "kind": "vault",
+      "path": "secret/data/mcp",
+      "key": "API_KEY"
+    }
+  }
+  ```
+
+- Graph variable
+
+  ```json
+  {
+    "name": "ORG_ID",
+    "value": {
+      "kind": "var",
+      "name": "ORG_ID"
+    }
+  }
+  ```
+
+At runtime the node calls `EnvService.resolveProviderEnv`, which delegates to `ReferenceResolverService` in strict mode. Resolution rules:
+
+- Values must resolve to strings; references are coerced using vault and graph variable providers.
+- Duplicate names are rejected with `env_name_duplicate` before any lookup occurs.
+- Missing resolver dependencies raise `env_reference_resolver_missing`.
+- Unresolved references throw `env_reference_unresolved` and include the JSON Pointer path (e.g. `/env/API_KEY/value`) in the error details.
+
+The resolved overlay is merged with any base environment and forwarded to Docker exec sessions for both discovery and tool calls, ensuring MCP servers receive the same env regardless of execution path.
+
 Storage layout (format: 2)
 - Preferred working tree layout is root-level per-entity: `graph.meta.yaml`, `nodes/`, `edges/`.
 - Filenames are `encodeURIComponent(id)`; edge id is deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
