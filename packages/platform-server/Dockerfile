@@ -44,6 +44,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /opt/app /opt/app
+COPY --from=build --chown=node:node /workspace/packages/platform-server/src /opt/app/packages/platform-server/src
+COPY --from=build --chown=node:node /workspace/packages/platform-server/package.json /opt/app/packages/platform-server/package.json
 COPY --from=build --chown=node:node /workspace/packages/platform-server/prisma /opt/app/packages/platform-server/prisma
 
 EXPOSE 3010
