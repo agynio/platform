@@ -410,8 +410,19 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     let countedNonHuman = false;
     for (let i = orderedKinds.length - 1; i >= 0; i -= 1) {
       const entry = orderedKinds[i];
-      if (entry.kind === 'memory' && entry.place === 'last_message' && tailConversationCount === 0) {
-        continue;
+      if (entry.kind === 'memory') {
+        if (!entry.id) {
+          continue;
+        }
+        if (entry.place === 'last_message') {
+          tailConversationCount = tailConversationCount === 0 ? 1 : tailConversationCount + 1;
+          countedNonHuman = true;
+          continue;
+        }
+        if (tailConversationCount === 0) {
+          continue;
+        }
+        break;
       }
       if (entry.kind !== 'conversation') {
         if (tailConversationCount > 0) {
@@ -434,6 +445,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       }
       if (!isHuman) {
         tailConversationCount += 1;
+        countedNonHuman = true;
         continue;
       }
       if (!countedNonHuman) {

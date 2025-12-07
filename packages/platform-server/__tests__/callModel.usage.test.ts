@@ -261,4 +261,81 @@ describe('CallModelLLMReducer usage metrics', () => {
       'ctx-tool-output-1',
     ]);
   });
+
+  it('includes tail memory items for the subsequent call', async () => {
+    const startLLMCall = vi.fn(async () => ({ id: `evt-memory-${startLLMCall.mock.calls.length + 1}` }));
+    const createContextItems = vi
+      .fn()
+      .mockResolvedValueOnce(['ctx-user-initial'])
+      .mockResolvedValueOnce(['ctx-assistant-initial'])
+      .mockResolvedValueOnce(['ctx-memory-tail'])
+      .mockResolvedValueOnce(['ctx-assistant-followup']);
+
+    const runEvents = {
+      startLLMCall,
+      publishEvent: vi.fn(async () => {}),
+      completeLLMCall: vi.fn(async () => {}),
+      createContextItems,
+      connectContextItemsToRun: vi.fn(async () => {}),
+      createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
+    };
+
+    const firstResponse = new ResponseMessage({ output: [] as any, text: 'assistant initial' } as any);
+    const secondResponse = new ResponseMessage({ output: [] as any, text: 'assistant followup' } as any);
+    const llm = {
+      call: vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse),
+    };
+
+    let invocation = 0;
+    const memoryProvider = vi.fn(async () => {
+      invocation += 1;
+      if (invocation === 2) {
+        return { msg: SystemMessage.fromText('Tail memory note'), place: 'last_message' as const };
+      }
+      return null;
+    });
+
+    const eventsBus = { publishEvent: vi.fn(async () => {}), subscribeToRunEvents: vi.fn(() => vi.fn()) };
+    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({
+      llm: llm as any,
+      model: 'gpt-tail-memory',
+      systemPrompt: 'SYS',
+      tools: [],
+      memoryProvider,
+    });
+
+    const initialState = {
+      messages: [HumanMessage.fromText('Bring memory into tail')],
+      context: { messageIds: [], memory: [], system: { id: 'ctx-system-1' } },
+    } as any;
+
+    const ctxBase = {
+      threadId: 'thread-memory-tail',
+      runId: 'run-memory-tail',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-memory-tail' } as any,
+    };
+
+    const afterFirstCall = await reducer.invoke(initialState, ctxBase);
+
+    const firstStartArgs = startLLMCall.mock.calls[0]?.[0];
+    expect(firstStartArgs?.newContextItemCount).toBe(1);
+    expect(firstStartArgs?.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-initial']);
+
+    await reducer.invoke({ ...afterFirstCall }, {
+      ...ctxBase,
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+    });
+
+    const secondStartArgs = startLLMCall.mock.calls[1]?.[0];
+    expect(secondStartArgs?.newContextItemCount).toBe(2);
+    expect(secondStartArgs?.contextItemIds).toEqual([
+      'ctx-system-1',
+      'ctx-user-initial',
+      'ctx-assistant-initial',
+      'ctx-memory-tail',
+    ]);
+  });
 });
