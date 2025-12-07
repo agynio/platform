@@ -406,6 +406,90 @@ describe('AgentsRunScreen', () => {
     expect(data.toolCalls).toEqual(event.llmCall?.toolCalls);
     expect(data.tokens).toEqual({ input: 10, cached: 2, output: 5, reasoning: 1, total: 18 });
   });
+
+  it('isolates llm responses and tool calls per event', async () => {
+    const llmEventA = buildEvent({
+      id: 'evt-llm-a',
+      type: 'llm_call',
+      toolExecution: undefined,
+      attachments: [],
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-a',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        newContextItemCount: 0,
+        responseText: null,
+        rawResponse: {
+          output: [{ type: 'text', text: 'Response A' }],
+          message: 'should be ignored',
+        },
+        toolCalls: [{ callId: 'call-a', name: 'lookup', arguments: { topic: 'alpha' } }],
+        usage: undefined,
+      },
+    });
+
+    const llmEventB = buildEvent({
+      id: 'evt-llm-b',
+      type: 'llm_call',
+      toolExecution: undefined,
+      attachments: [],
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-b',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        newContextItemCount: 0,
+        responseText: null,
+        rawResponse: {
+          outputs: [{ content: 'Response B' }],
+        },
+        toolCalls: [{ callId: 'call-b', name: 'search', arguments: { topic: 'beta' } }],
+        usage: undefined,
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [llmEventA, llmEventB], nextCursor: null });
+
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${llmEventA.threadId}/runs/${llmEventA.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    let capturedProps: { events: Array<{ id: string; type: string; data: Record<string, unknown> }> } | undefined;
+    await waitFor(() => {
+      const call = [...runScreenMocks.props.mock.calls]
+        .reverse()
+        .find(([callProps]) => Array.isArray((callProps as { events?: unknown[] }).events) && ((callProps as { events: unknown[] }).events.length > 0));
+      expect(call).toBeDefined();
+      capturedProps = call?.[0] as { events: Array<{ id: string; type: string; data: Record<string, unknown> }> };
+    });
+
+    if (!capturedProps) {
+      throw new Error('RunScreen props were not captured.');
+    }
+
+    const llmUiEvents = capturedProps.events.filter((evt) => evt.type === 'llm');
+    expect(llmUiEvents).toHaveLength(2);
+
+    const uiEventA = llmUiEvents.find((evt) => evt.id === 'evt-llm-a');
+    const uiEventB = llmUiEvents.find((evt) => evt.id === 'evt-llm-b');
+    expect(uiEventA?.data.response).toBe('Response A');
+    expect(uiEventB?.data.response).toBe('Response B');
+    expect(uiEventA?.data.toolCalls).toEqual(llmEventA.llmCall?.toolCalls);
+    expect(uiEventB?.data.toolCalls).toEqual(llmEventB.llmCall?.toolCalls);
+  });
 });
 
 describe('extractLlmResponse', () => {
@@ -461,12 +545,15 @@ describe('extractLlmResponse', () => {
     expect(extract(event)).toBe('LLM unhappy');
   });
 
-  it('uses rawResponse.message when errorMessage is absent', () => {
+  it('prefers output-derived text over rawResponse.message', () => {
     const event = baseEvent({ status: 'error' });
     if (!event.llmCall) throw new Error('llmCall missing');
-    event.llmCall.rawResponse = { message: 'LLM crashed', name: 'ModelError' };
+    event.llmCall.rawResponse = {
+      message: 'LLM crashed',
+      output: [{ type: 'text', text: 'Recovered result' }],
+    };
     const extract = getExtract();
-    expect(extract(event)).toBe('LLM crashed');
+    expect(extract(event)).toBe('Recovered result');
   });
 
   it('prefers responseText when present', () => {

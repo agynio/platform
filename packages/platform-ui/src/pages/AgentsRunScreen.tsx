@@ -258,8 +258,6 @@ type ToolLinkData = {
   childRunId?: string;
 };
 
-type LlmToolCall = NonNullable<RunTimelineEvent['llmCall']>['toolCalls'][number];
-
 function readStringPath(record: Record<string, unknown>, path: readonly string[]): string | undefined {
   let current: unknown = record;
   for (const segment of path) {
@@ -456,7 +454,8 @@ function extractReasoning(
   return undefined;
 }
 
-function extractTextFromRawResponse(raw: unknown): string | null {
+function extractTextFromRawResponse(raw: unknown, options?: { ignoreMessage?: boolean }): string | null {
+  const ignoreMessage = options?.ignoreMessage === true;
   const visited = new WeakSet<object>();
 
   const extract = (value: unknown): string | null => {
@@ -492,14 +491,16 @@ function extractTextFromRawResponse(raw: unknown): string | null {
       }
     }
 
-    if ('message' in record) {
-      const text = extract((record as Record<string, unknown>).message);
-      if (typeof text === 'string' && text.length > 0) return text;
-    }
+    if (!ignoreMessage) {
+      if ('message' in record) {
+        const text = extract((record as Record<string, unknown>).message);
+        if (typeof text === 'string' && text.length > 0) return text;
+      }
 
-    if ('messages' in record) {
-      const text = extract((record as Record<string, unknown>).messages);
-      if (typeof text === 'string' && text.length > 0) return text;
+      if ('messages' in record) {
+        const text = extract((record as Record<string, unknown>).messages);
+        if (typeof text === 'string' && text.length > 0) return text;
+      }
     }
 
     const arrayKeys: Array<keyof typeof record> = ['choices', 'outputs', 'output', 'responses'];
@@ -543,14 +544,25 @@ function extractLlmResponse(event: RunTimelineEvent): string {
   if (isNonEmptyString(responseText)) return responseText;
 
   const rawResponse = llmCall.rawResponse;
-  if (rawResponse && typeof rawResponse === 'object') {
-    const messageCandidate = (rawResponse as { message?: unknown }).message;
-    const messageText = extractTextFromRawResponse(messageCandidate);
-    if (isNonEmptyString(messageText)) return messageText;
-  }
+  if (rawResponse !== null && rawResponse !== undefined) {
+    if (typeof rawResponse === 'string') {
+      const trimmed = rawResponse.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
 
-  const rawText = extractTextFromRawResponse(rawResponse);
-  if (isNonEmptyString(rawText)) return rawText;
+    const record = coerceRecord(rawResponse);
+    if (record) {
+      const candidateKeys: Array<keyof typeof record> = ['output', 'outputs', 'responses', 'choices', 'result', 'response', 'value'];
+      for (const key of candidateKeys) {
+        if (!(key in record)) continue;
+        const text = extractTextFromRawResponse(record[key], { ignoreMessage: key !== 'choices' });
+        if (isNonEmptyString(text)) return text;
+      }
+    }
+
+    const rawText = extractTextFromRawResponse(rawResponse, { ignoreMessage: true });
+    if (isNonEmptyString(rawText)) return rawText;
+  }
 
   if (Array.isArray(event.attachments)) {
     for (const attachment of event.attachments) {
@@ -567,7 +579,7 @@ function extractLlmResponse(event: RunTimelineEvent): string {
       }
 
       for (const candidate of candidates) {
-        const text = extractTextFromRawResponse(candidate);
+        const text = extractTextFromRawResponse(candidate, { ignoreMessage: true });
         if (isNonEmptyString(text)) return text;
       }
     }
@@ -576,7 +588,61 @@ function extractLlmResponse(event: RunTimelineEvent): string {
   return '';
 }
 
-function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmToolCall[]): Record<string, unknown> {
+function normalizeRunEvent(event: RunTimelineEvent, previous?: RunTimelineEvent): RunTimelineEvent {
+  const merged: RunTimelineEvent = {
+    ...(previous ?? {}),
+    ...event,
+  } as RunTimelineEvent;
+
+  if (previous && event.attachments === undefined) {
+    merged.attachments = previous.attachments;
+  }
+
+  if (previous && event.metadata === undefined) {
+    merged.metadata = previous.metadata;
+  }
+
+  if (merged.type === 'llm_call') {
+    const prevCall = previous?.llmCall ?? null;
+    const incomingCall = event.llmCall ?? prevCall;
+    if (incomingCall) {
+      const mergedCall = {
+        ...(prevCall ?? {}),
+        ...incomingCall,
+      } as NonNullable<RunTimelineEvent['llmCall']>;
+
+      const selectedToolCalls = (() => {
+        if (Array.isArray(incomingCall.toolCalls)) return incomingCall.toolCalls;
+        if (Array.isArray(prevCall?.toolCalls)) return prevCall!.toolCalls;
+        return [] as typeof mergedCall.toolCalls;
+      })();
+      mergedCall.toolCalls = Array.isArray(selectedToolCalls) ? selectedToolCalls.slice() : [];
+
+      const existingResponse = isNonEmptyString(incomingCall.responseText)
+        ? incomingCall.responseText
+        : isNonEmptyString(prevCall?.responseText)
+          ? prevCall!.responseText
+          : null;
+
+      const extractionTarget: RunTimelineEvent = {
+        ...merged,
+        llmCall: {
+          ...mergedCall,
+          responseText: existingResponse,
+        },
+      } as RunTimelineEvent;
+
+      const extracted = extractLlmResponse(extractionTarget);
+      mergedCall.responseText = isNonEmptyString(extracted) ? extracted : existingResponse ?? null;
+
+      merged.llmCall = mergedCall;
+    }
+  }
+
+  return merged;
+}
+
+function toContextRecord(item: ContextItem): Record<string, unknown> {
   const metadataRecord = normalizeMetadata(item.metadata);
   const metadataAdditionalKwargs = metadataRecord ? coerceRecord(metadataRecord.additional_kwargs) : null;
   const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
@@ -628,12 +694,7 @@ function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmTool
     result.additional_kwargs = mergedAdditionalKwargs;
   }
 
-  const collectedToolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
-  let toolCalls: Record<string, unknown>[] = collectedToolCalls;
-
-  if (toolCalls.length === 0 && result.role === 'assistant' && Array.isArray(fallbackToolCalls) && fallbackToolCalls.length > 0) {
-    toolCalls = toRecordArray(fallbackToolCalls as unknown);
-  }
+  const toolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
 
   if (toolCalls.length > 0) {
     result.tool_calls = toolCalls;
@@ -699,17 +760,13 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   };
 }
 
-function resolveContextRecords(
-  ids: readonly string[],
-  lookup: Map<string, ContextItem>,
-  fallbackToolCalls?: readonly LlmToolCall[],
-): Record<string, unknown>[] {
+function resolveContextRecords(ids: readonly string[], lookup: Map<string, ContextItem>): Record<string, unknown>[] {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const records: Record<string, unknown>[] = [];
   for (const id of ids) {
     if (!isNonEmptyString(id)) continue;
     const item = lookup.get(id);
-    if (item) records.push(toContextRecord(item, fallbackToolCalls));
+    if (item) records.push(toContextRecord(item));
   }
   return records;
 }
@@ -1078,7 +1135,9 @@ export function AgentsRunScreen() {
         map.set(event.id, event);
       }
       for (const event of incoming) {
-        map.set(event.id, event);
+        const previous = map.get(event.id);
+        const normalized = normalizeRunEvent(event, previous);
+        map.set(event.id, normalized);
       }
       return sortEvents(Array.from(map.values()));
     });
@@ -1597,7 +1656,7 @@ export function AgentsRunScreen() {
     return events.map((event) => {
       const contextRecords =
         event.type === 'llm_call'
-          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
+          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup)
           : [];
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
       const totalContextCount = contextRecords.length;

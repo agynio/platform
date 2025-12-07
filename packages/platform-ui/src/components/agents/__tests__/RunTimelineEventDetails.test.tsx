@@ -248,6 +248,59 @@ describe('RunTimelineEventDetails', () => {
     expect(screen.queryByText('Raw response')).toBeNull();
   });
 
+  it('keeps tool calls isolated between events when rerendering', () => {
+    const firstEvent = buildEvent({
+      id: 'evt-first',
+      type: 'llm_call',
+      toolExecution: undefined,
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-first',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        responseText: 'First derived response',
+        rawResponse: {
+          output: [{ type: 'text', text: 'First derived response' }],
+          message: 'ignore me',
+        },
+        toolCalls: [{ callId: 'call-first', name: 'lookup', arguments: { q: 'first' } }],
+      },
+    });
+
+    const secondEvent = buildEvent({
+      id: 'evt-second',
+      type: 'llm_call',
+      toolExecution: undefined,
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-second',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        responseText: 'Second derived response',
+        rawResponse: {
+          outputs: [{ content: 'Second derived response' }],
+        },
+        toolCalls: [{ callId: 'call-second', name: 'search', arguments: { q: 'second' } }],
+      },
+    });
+
+    const { rerender } = renderDetails(firstEvent);
+
+    expect(screen.getByText('First derived response')).toBeInTheDocument();
+    expect(screen.getByText(/call-first/)).toBeInTheDocument();
+
+    rerender(secondEvent);
+
+    expect(screen.getByText('Second derived response')).toBeInTheDocument();
+    expect(screen.queryByText('First derived response')).toBeNull();
+    expect(screen.queryByText(/call-first/)).toBeNull();
+    expect(screen.getByText(/call-second/)).toBeInTheDocument();
+  });
+
   it('displays LLM usage metrics when available', () => {
     const event = buildEvent({
       type: 'llm_call',
