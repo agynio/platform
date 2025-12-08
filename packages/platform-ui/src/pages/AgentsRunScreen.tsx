@@ -16,8 +16,6 @@ import type {
 } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import { gatherToolCalls } from '@/lib/toolCalls';
-import { deriveAssistantContextFromRecords, extractLlmResponse } from '@/utils/llmResponse';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 
 const EVENT_FILTER_OPTIONS: EventFilter[] = ['message', 'llm', 'tool', 'summary'];
@@ -260,6 +258,8 @@ type ToolLinkData = {
   childRunId?: string;
 };
 
+type LlmToolCall = NonNullable<RunTimelineEvent['llmCall']>['toolCalls'][number];
+
 function readStringPath(record: Record<string, unknown>, path: readonly string[]): string | undefined {
   let current: unknown = record;
   for (const segment of path) {
@@ -392,7 +392,44 @@ function collectToolCalls(
   metadata: Record<string, unknown> | null,
   metadataAdditionalKwargs: Record<string, unknown> | null,
 ): Record<string, unknown>[] {
-  return gatherToolCalls(primary, primaryAdditionalKwargs, metadata, metadataAdditionalKwargs);
+  const seen = new Set<string>();
+  const result: Record<string, unknown>[] = [];
+
+  const addRecords = (value: unknown) => {
+    if (value === undefined || value === null) return;
+    const normalized = typeof value === 'string' ? parseMaybeJson(value) : value;
+    for (const record of toRecordArray(normalized)) {
+      const key = (() => {
+        try {
+          return JSON.stringify(record);
+        } catch (_err) {
+          return undefined;
+        }
+      })();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      result.push(record);
+    }
+  };
+
+  if (primary) {
+    addRecords(primary.tool_calls);
+    addRecords(primary.toolCalls);
+  }
+  if (primaryAdditionalKwargs) {
+    addRecords(primaryAdditionalKwargs.tool_calls);
+    addRecords(primaryAdditionalKwargs.toolCalls);
+  }
+  if (metadata) {
+    addRecords(metadata.tool_calls);
+    addRecords(metadata.toolCalls);
+  }
+  if (metadataAdditionalKwargs) {
+    addRecords(metadataAdditionalKwargs.tool_calls);
+    addRecords(metadataAdditionalKwargs.toolCalls);
+  }
+
+  return result;
 }
 
 function extractReasoning(
@@ -419,63 +456,127 @@ function extractReasoning(
   return undefined;
 }
 
+function extractTextFromRawResponse(raw: unknown): string | null {
+  const visited = new WeakSet<object>();
 
+  const extract = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? value : null;
+    }
 
-function normalizeRunEvent(event: RunTimelineEvent, previous?: RunTimelineEvent): RunTimelineEvent {
-  const merged: RunTimelineEvent = {
-    ...(previous ?? {}),
-    ...event,
-  } as RunTimelineEvent;
+    if (Array.isArray(value)) {
+      const parts: string[] = [];
+      for (const item of value) {
+        const text = extract(item);
+        if (typeof text === 'string' && text.length > 0) {
+          parts.push(text);
+        }
+      }
+      if (parts.length > 0) {
+        return parts.join('\n\n');
+      }
+      return null;
+    }
 
-  if (previous && event.attachments === undefined) {
-    merged.attachments = previous.attachments;
+    const record = coerceRecord(value);
+    if (!record) return null;
+    if (visited.has(record)) return null;
+    visited.add(record);
+
+    const directKeys: Array<keyof typeof record> = ['content', 'text', 'output_text', 'outputText'];
+    for (const key of directKeys) {
+      if (key in record) {
+        const text = extract(record[key]);
+        if (typeof text === 'string' && text.length > 0) return text;
+      }
+    }
+
+    if ('message' in record) {
+      const text = extract((record as Record<string, unknown>).message);
+      if (typeof text === 'string' && text.length > 0) return text;
+    }
+
+    if ('messages' in record) {
+      const text = extract((record as Record<string, unknown>).messages);
+      if (typeof text === 'string' && text.length > 0) return text;
+    }
+
+    const arrayKeys: Array<keyof typeof record> = ['choices', 'outputs', 'output', 'responses'];
+    for (const key of arrayKeys) {
+      if (Array.isArray(record[key])) {
+        for (const entry of record[key] as unknown[]) {
+          const text = extract(entry);
+          if (typeof text === 'string' && text.length > 0) return text;
+        }
+      }
+    }
+
+    if ('delta' in record) {
+      const text = extract((record as Record<string, unknown>).delta);
+      if (typeof text === 'string' && text.length > 0) return text;
+    }
+
+    const nestedKeys: Array<keyof typeof record> = ['data', 'body', 'result', 'response', 'value'];
+    for (const key of nestedKeys) {
+      if (key in record) {
+        const text = extract(record[key]);
+        if (typeof text === 'string' && text.length > 0) return text;
+      }
+    }
+
+    return null;
+  };
+
+  return extract(raw);
+}
+
+function extractLlmResponse(event: RunTimelineEvent): string {
+  if (isNonEmptyString(event.errorMessage)) {
+    return event.errorMessage;
   }
 
-  if (previous && event.metadata === undefined) {
-    merged.metadata = previous.metadata;
+  const llmCall = event.llmCall;
+  if (!llmCall) return '';
+
+  const responseText = llmCall.responseText;
+  if (isNonEmptyString(responseText)) return responseText;
+
+  const rawResponse = llmCall.rawResponse;
+  if (rawResponse && typeof rawResponse === 'object') {
+    const messageCandidate = (rawResponse as { message?: unknown }).message;
+    const messageText = extractTextFromRawResponse(messageCandidate);
+    if (isNonEmptyString(messageText)) return messageText;
   }
 
-  if (merged.type === 'llm_call') {
-    const prevCall = previous?.llmCall ?? null;
-    const incomingCall = event.llmCall ?? prevCall;
-    if (incomingCall) {
-      const mergedCall = {
-        ...(prevCall ?? {}),
-        ...incomingCall,
-      } as NonNullable<RunTimelineEvent['llmCall']>;
+  const rawText = extractTextFromRawResponse(rawResponse);
+  if (isNonEmptyString(rawText)) return rawText;
 
-      const selectedToolCalls = (() => {
-        if (Array.isArray(incomingCall.toolCalls)) return incomingCall.toolCalls;
-        if (Array.isArray(prevCall?.toolCalls)) return prevCall!.toolCalls;
-        return [] as typeof mergedCall.toolCalls;
-      })();
-      mergedCall.toolCalls = Array.isArray(selectedToolCalls) ? selectedToolCalls.slice() : [];
+  if (Array.isArray(event.attachments)) {
+    for (const attachment of event.attachments) {
+      if (!attachment || attachment.kind !== 'response') continue;
 
-      const existingResponse = isNonEmptyString(incomingCall.responseText)
-        ? incomingCall.responseText
-        : isNonEmptyString(prevCall?.responseText)
-          ? prevCall!.responseText
-          : null;
+      const candidates: unknown[] = [];
+      if (attachment.contentText !== undefined && attachment.contentText !== null) {
+        const parsedText = typeof attachment.contentText === 'string' ? parseMaybeJson(attachment.contentText) : attachment.contentText;
+        candidates.push(parsedText);
+      }
+      if (attachment.contentJson !== undefined && attachment.contentJson !== null) {
+        const parsedJson = typeof attachment.contentJson === 'string' ? parseMaybeJson(attachment.contentJson) : attachment.contentJson;
+        candidates.push(parsedJson);
+      }
 
-      const extractionTarget: RunTimelineEvent = {
-        ...merged,
-        llmCall: {
-          ...mergedCall,
-          responseText: existingResponse,
-        },
-      } as RunTimelineEvent;
-
-      const extracted = extractLlmResponse(extractionTarget);
-      mergedCall.responseText = isNonEmptyString(extracted) ? extracted : existingResponse ?? null;
-
-      merged.llmCall = mergedCall;
+      for (const candidate of candidates) {
+        const text = extractTextFromRawResponse(candidate);
+        if (isNonEmptyString(text)) return text;
+      }
     }
   }
 
-  return merged;
+  return '';
 }
 
-function toContextRecord(item: ContextItem): Record<string, unknown> {
+function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmToolCall[]): Record<string, unknown> {
   const metadataRecord = normalizeMetadata(item.metadata);
   const metadataAdditionalKwargs = metadataRecord ? coerceRecord(metadataRecord.additional_kwargs) : null;
   const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
@@ -527,7 +628,12 @@ function toContextRecord(item: ContextItem): Record<string, unknown> {
     result.additional_kwargs = mergedAdditionalKwargs;
   }
 
-  const toolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  const collectedToolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  let toolCalls: Record<string, unknown>[] = collectedToolCalls;
+
+  if (toolCalls.length === 0 && result.role === 'assistant' && Array.isArray(fallbackToolCalls) && fallbackToolCalls.length > 0) {
+    toolCalls = toRecordArray(fallbackToolCalls as unknown);
+  }
 
   if (toolCalls.length > 0) {
     result.tool_calls = toolCalls;
@@ -593,13 +699,17 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   };
 }
 
-function resolveContextRecords(ids: readonly string[], lookup: Map<string, ContextItem>): Record<string, unknown>[] {
+function resolveContextRecords(
+  ids: readonly string[],
+  lookup: Map<string, ContextItem>,
+  fallbackToolCalls?: readonly LlmToolCall[],
+): Record<string, unknown>[] {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const records: Record<string, unknown>[] = [];
   for (const id of ids) {
     if (!isNonEmptyString(id)) continue;
     const item = lookup.get(id);
-    if (item) records.push(toContextRecord(item));
+    if (item) records.push(toContextRecord(item, fallbackToolCalls));
   }
   return records;
 }
@@ -607,10 +717,6 @@ function resolveContextRecords(ids: readonly string[], lookup: Map<string, Conte
 type CreateUiEventOptions = {
   context?: Record<string, unknown>[];
   tool?: ToolLinkData;
-  contextWindow?: {
-    totalCount: number;
-    newCount: number;
-  };
 };
 
 function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions): UiRunEvent {
@@ -655,7 +761,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
     const usage = event.llmCall?.usage;
     const fallbackContext = toRecordArray(event.metadata);
     const context = options?.context && options.context.length > 0 ? options.context : fallbackContext;
-    const assistantSnapshot = deriveAssistantContextFromRecords(context);
+    const response = extractLlmResponse(event);
     return {
       id: event.id,
       type: 'llm',
@@ -664,8 +770,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
       status,
       data: {
         context,
-        contextWindow: options?.contextWindow,
-        response: assistantSnapshot.text ?? '',
+        response,
         model: event.llmCall?.model ?? undefined,
         tokens: usage
           ? {
@@ -676,7 +781,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
               total: usage.totalTokens ?? undefined,
             }
           : undefined,
-        toolCalls: assistantSnapshot.toolCalls,
+        toolCalls: event.llmCall?.toolCalls,
         rawResponse: event.llmCall?.rawResponse,
       },
     };
@@ -968,9 +1073,7 @@ export function AgentsRunScreen() {
         map.set(event.id, event);
       }
       for (const event of incoming) {
-        const previous = map.get(event.id);
-        const normalized = normalizeRunEvent(event, previous);
-        map.set(event.id, normalized);
+        map.set(event.id, event);
       }
       return sortEvents(Array.from(map.values()));
     });
@@ -1489,19 +1592,10 @@ export function AgentsRunScreen() {
     return events.map((event) => {
       const contextRecords =
         event.type === 'llm_call'
-          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup)
+          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
           : [];
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
-      const totalContextCount = contextRecords.length;
-      const rawNewContextCount = event.llmCall?.newContextItemCount ?? 0;
-      const sanitizedNewContextCount = Number.isFinite(rawNewContextCount)
-        ? Math.max(0, Math.min(totalContextCount, Math.floor(rawNewContextCount)))
-        : 0;
-      const contextWindow = {
-        totalCount: totalContextCount,
-        newCount: sanitizedNewContextCount,
-      };
-      return createUiEvent(event, { context: contextRecords, tool: toolLinks, contextWindow });
+      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
     });
   }, [events, contextItemsVersion]);
 
@@ -1556,3 +1650,13 @@ export function AgentsRunScreen() {
     </>
   );
 }
+
+type AgentsRunScreenComponent = typeof AgentsRunScreen & {
+  __testing__?: {
+    extractLlmResponse: typeof extractLlmResponse;
+  };
+};
+
+(AgentsRunScreen as AgentsRunScreenComponent).__testing__ = {
+  extractLlmResponse,
+};

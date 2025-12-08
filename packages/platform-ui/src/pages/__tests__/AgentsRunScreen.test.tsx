@@ -50,14 +50,12 @@ vi.mock('@/api/modules/runs', () => ({
   runs: runsModuleMocks,
 }));
 
-const contextItemsModuleMocks = vi.hoisted(() => ({
-  getMany: vi.fn<Promise<ContextItem[]>, [string[]]>(),
+const contextItemsMocks = vi.hoisted(() => ({
+  getMany: vi.fn(async () => [] as never[]),
 }));
 
 vi.mock('@/api/modules/contextItems', () => ({
-  contextItems: {
-    getMany: (ids: string[]) => contextItemsModuleMocks.getMany(ids),
-  },
+  contextItems: contextItemsMocks,
 }));
 
 const notifyMocks = vi.hoisted(() => ({
@@ -114,7 +112,8 @@ beforeEach(() => {
   runScreenMocks.props.mockClear();
   runsHookMocks.summary.mockReset();
   runsHookMocks.events.mockReset();
-  contextItemsModuleMocks.getMany.mockReset();
+  contextItemsMocks.getMany.mockReset();
+  contextItemsMocks.getMany.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -184,6 +183,12 @@ function buildSummary(): RunTimelineSummary {
     totalEvents: 1,
   };
 }
+
+type AgentsRunScreenWithTesting = typeof AgentsRunScreen & {
+  __testing__?: {
+    extractLlmResponse: (event: RunTimelineEvent) => string;
+  };
+};
 
 function latestRunScreenProps<T = Record<string, unknown>>(): T | undefined {
   const calls = runScreenMocks.props.mock.calls;
@@ -332,94 +337,66 @@ describe('AgentsRunScreen', () => {
     expect(data.childRunId).toBe('metadata-run');
   });
 
-  it('provides assistant response and tool calls from tail context items', async () => {
-    const contextStore = new Map<string, ContextItem>([
-      [
-        'ctx-user',
-        {
-          id: 'ctx-user',
-          role: 'user',
-          contentText: 'Hello there',
-          contentJson: null,
-          metadata: null,
-          sizeBytes: 64,
-          createdAt: '2024-01-01T00:00:00.000Z',
-        },
-      ],
-      [
-        'ctx-assistant',
-        {
-          id: 'ctx-assistant',
-          role: 'assistant',
-          contentText: 'Completed request successfully.',
-          contentJson: {
-            content: [
-              {
-                type: 'text',
-                text: 'Completed request successfully.',
-              },
-            ],
-          },
-          metadata: {
-            additional_kwargs: {
-              tool_calls: [
-                {
-                  id: 'call-1',
-                  type: 'function',
-                  name: 'lookup_weather',
-                  function: {
-                    name: 'lookup_weather',
-                    arguments: '{"city":"Paris"}',
-                  },
-                },
-              ],
-            },
-          },
-          sizeBytes: 96,
-          createdAt: '2024-01-01T00:00:05.000Z',
-        },
-      ],
-    ]);
-
-    contextItemsModuleMocks.getMany.mockImplementation(async (ids: string[]) =>
-      ids
-        .map((id) => contextStore.get(id))
-        .filter((item): item is ContextItem => Boolean(item)),
-    );
+  it('hydrates assistant context from stringified content text including tool calls and reasoning', async () => {
+    const assistantContext: ContextItem = {
+      id: 'ctx-1',
+      role: 'assistant',
+      contentText: JSON.stringify({
+        content: 'Final response',
+        tool_calls: [{ name: 'write_file', arguments: { path: '/tmp/file.ts' } }],
+        reasoning: { tokens: 88 },
+      }),
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 256,
+      createdAt: '2024-01-01T00:00:02.000Z',
+    };
 
     const event = buildEvent({
-      id: 'event-llm-1',
       type: 'llm_call',
       toolExecution: undefined,
-      attachments: [],
-      metadata: {},
       llmCall: {
         provider: 'openai',
-        model: 'test-model',
+        model: 'gpt-4.1',
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: ['ctx-user', 'ctx-assistant'],
+        contextItemIds: [assistantContext.id],
         newContextItemCount: 1,
-        responseText: null,
+        responseText: 'Final response',
         rawResponse: null,
-        toolCalls: [],
-        usage: {
-          inputTokens: 10,
-          cachedInputTokens: 2,
-          outputTokens: 5,
-          reasoningTokens: 1,
-          totalTokens: 18,
-        },
+        toolCalls: [
+          {
+            callId: 'call-embedded',
+            name: 'write_file',
+            arguments: { path: '/tmp/file.ts' },
+          },
+        ],
+        usage: undefined,
       },
+      metadata: {},
     });
 
-    const summary = buildSummary();
     runsHookMocks.summary.mockReturnValue({
-      ...summary,
-      countsByType: { ...summary.countsByType, llm_call: 1, tool_execution: 0 },
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 1,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 1,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    contextItemsMocks.getMany.mockImplementation(async () => [assistantContext]);
 
     const queryClient = new QueryClient();
 
@@ -433,170 +410,109 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    let latestData: Record<string, unknown> | undefined;
+    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([assistantContext.id]));
+
+    let capturedProps: { events: Array<{ data: Record<string, unknown> }> } | undefined;
     await waitFor(() => {
-      const props = latestRunScreenProps<{ events: Array<{ id: string; data: Record<string, unknown> }> }>();
-      expect(props).toBeDefined();
-      const llmEvent = props?.events.find((evt) => evt.id === 'event-llm-1');
-      expect(llmEvent).toBeDefined();
-      const data = llmEvent?.data as Record<string, unknown> | undefined;
-      expect(data).toBeDefined();
-      expect(Array.isArray(data?.context)).toBe(true);
-      expect(data?.response).toBe('Completed request successfully.');
-      expect(data?.toolCalls).toEqual([
-        expect.objectContaining({
-          id: 'call-1',
-          name: 'lookup_weather',
-          arguments: { city: 'Paris' },
-          type: 'function_call',
-        }),
-      ]);
-      latestData = data;
+      const call = [...runScreenMocks.props.mock.calls]
+        .reverse()
+        .find(([callProps]) => {
+          const events = (callProps as { events?: unknown[] }).events;
+          if (!Array.isArray(events) || events.length === 0) return false;
+          const candidate = events[0] as { data?: { context?: unknown[] } };
+          return Array.isArray(candidate.data?.context) && candidate.data.context.length > 0;
+        });
+      expect(call).toBeDefined();
+      capturedProps = call?.[0] as { events: Array<{ data: Record<string, unknown> }> };
     });
 
-    const contextRecords = (latestData?.context ?? []) as unknown[];
-    expect(contextRecords).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'ctx-user', role: 'user' }),
-        expect.objectContaining({ id: 'ctx-assistant', role: 'assistant', contentText: 'Completed request successfully.' }),
-      ]),
-    );
-    expect(latestData?.tokens).toEqual({ input: 10, cached: 2, output: 5, reasoning: 1, total: 18 });
+    if (!capturedProps) {
+      throw new Error('RunScreen props were not captured.');
+    }
+
+    const [capturedEvent] = capturedProps.events;
+    const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+    expect(context).toHaveLength(1);
+    const assistant = context[0];
+    expect(assistant.role).toBe('assistant');
+    expect(assistant.content).toBe('Final response');
+
+    const toolCalls = assistant['tool_calls'] as Record<string, unknown>[] | undefined;
+    expect(Array.isArray(toolCalls)).toBe(true);
+    expect(toolCalls?.[0]?.name).toBe('write_file');
+    expect(toolCalls?.[0]?.arguments).toEqual({ path: '/tmp/file.ts' });
+    expect(assistant['toolCalls']).toEqual(toolCalls);
+    expect(assistant['reasoning']).toEqual({ tokens: 88 });
   });
 
-  it('isolates llm responses and tool calls per event', async () => {
-    const contextStore = new Map<string, ContextItem>([
-      [
-        'ctx-a-user',
-        {
-          id: 'ctx-a-user',
-          role: 'user',
-          contentText: 'Input A',
-          contentJson: null,
-          metadata: null,
-          sizeBytes: 32,
-          createdAt: '2024-01-01T00:00:00.000Z',
+  it('falls back to llmCall tool calls and metadata reasoning when assistant context lacks tool_calls', async () => {
+    const assistantContext: ContextItem = {
+      id: 'ctx-2',
+      role: 'assistant',
+      contentText: JSON.stringify({ content: 'Working on it.' }),
+      contentJson: null,
+      metadata: JSON.stringify({
+        additional_kwargs: {
+          reasoning: { tokens: 55, score: 0.42 },
         },
-      ],
-      [
-        'ctx-a-assistant',
-        {
-          id: 'ctx-a-assistant',
-          role: 'assistant',
-          contentText: 'Response A',
-          contentJson: null,
-          metadata: {
-            additional_kwargs: {
-              tool_calls: [
-                {
-                  id: 'call-a',
-                  type: 'function',
-                  name: 'lookup_alpha',
-                  function: {
-                    name: 'lookup_alpha',
-                    arguments: '{"topic":"alpha"}',
-                  },
-                },
-              ],
-            },
-          },
-          sizeBytes: 64,
-          createdAt: '2024-01-01T00:00:05.000Z',
-        },
-      ],
-      [
-        'ctx-b-user',
-        {
-          id: 'ctx-b-user',
-          role: 'user',
-          contentText: 'Input B',
-          contentJson: null,
-          metadata: null,
-          sizeBytes: 34,
-          createdAt: '2024-01-01T00:01:00.000Z',
-        },
-      ],
-      [
-        'ctx-b-assistant',
-        {
-          id: 'ctx-b-assistant',
-          role: 'assistant',
-          contentText: 'Response B',
-          contentJson: null,
-          metadata: {
-            additional_kwargs: {
-              tool_calls: [
-                {
-                  id: 'call-b',
-                  type: 'function',
-                  name: 'search_beta',
-                  function: {
-                    name: 'search_beta',
-                    arguments: '{"topic":"beta"}',
-                  },
-                },
-              ],
-            },
-          },
-          sizeBytes: 70,
-          createdAt: '2024-01-01T00:01:05.000Z',
-        },
-      ],
-    ]);
+      }),
+      sizeBytes: 192,
+      createdAt: '2024-01-01T00:00:03.000Z',
+    };
 
-    contextItemsModuleMocks.getMany.mockImplementation(async (ids: string[]) =>
-      ids
-        .map((id) => contextStore.get(id))
-        .filter((item): item is ContextItem => Boolean(item)),
-    );
+    const fallbackToolCalls = [
+      {
+        callId: 'call-fallback',
+        name: 'delegate_agent',
+        arguments: { target: 'agent-security' },
+      },
+    ];
 
-    const llmEventA = buildEvent({
-      id: 'evt-llm-a',
+    const event = buildEvent({
       type: 'llm_call',
       toolExecution: undefined,
-      attachments: [],
       llmCall: {
         provider: 'openai',
-        model: 'gpt-a',
+        model: 'gpt-4.1-mini',
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: ['ctx-a-user', 'ctx-a-assistant'],
+        contextItemIds: [assistantContext.id],
         newContextItemCount: 1,
-        responseText: null,
+        responseText: 'Working on it.',
         rawResponse: null,
-        toolCalls: [],
+        toolCalls: fallbackToolCalls.map((call) => ({ ...call })),
         usage: undefined,
       },
+      metadata: {},
     });
 
-    const llmEventB = buildEvent({
-      id: 'evt-llm-b',
-      type: 'llm_call',
-      toolExecution: undefined,
-      attachments: [],
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-b',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: ['ctx-b-user', 'ctx-b-assistant'],
-        newContextItemCount: 1,
-        responseText: null,
-        rawResponse: null,
-        toolCalls: [],
-        usage: undefined,
+    runsHookMocks.summary.mockReturnValue({
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 1,
+        tool_execution: 0,
+        summarization: 0,
       },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 1,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 1,
     });
-
-    runsHookMocks.summary.mockReturnValue(buildSummary());
-    runsHookMocks.events.mockReturnValue({ items: [llmEventA, llmEventB], nextCursor: null });
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    contextItemsMocks.getMany.mockImplementation(async () => [assistantContext]);
 
     const queryClient = new QueryClient();
+
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${llmEventA.threadId}/runs/${llmEventA.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -604,31 +520,252 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => {
-      const props = latestRunScreenProps<{ events: Array<{ id: string; type: string; data: Record<string, unknown> }> }>();
-      expect(props).toBeDefined();
-      const llmUiEvents = props?.events.filter((evt) => evt.type === 'llm') ?? [];
-      expect(llmUiEvents).toHaveLength(2);
+    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([assistantContext.id]));
 
-      const uiEventA = llmUiEvents.find((evt) => evt.id === 'evt-llm-a');
-      const uiEventB = llmUiEvents.find((evt) => evt.id === 'evt-llm-b');
-      expect(uiEventA?.data.response).toBe('Response A');
-      expect(uiEventB?.data.response).toBe('Response B');
-      expect(uiEventA?.data.toolCalls).toEqual([
-        expect.objectContaining({
-          id: 'call-a',
-          name: 'lookup_alpha',
-          arguments: { topic: 'alpha' },
-        }),
-      ]);
-      expect(uiEventB?.data.toolCalls).toEqual([
-        expect.objectContaining({
-          id: 'call-b',
-          name: 'search_beta',
-          arguments: { topic: 'beta' },
-        }),
-      ]);
+    let capturedProps: { events: Array<{ data: Record<string, unknown> }> } | undefined;
+    await waitFor(() => {
+      const call = [...runScreenMocks.props.mock.calls]
+        .reverse()
+        .find(([callProps]) => {
+          const events = (callProps as { events?: unknown[] }).events;
+          if (!Array.isArray(events) || events.length === 0) return false;
+          const candidate = events[0] as { data?: { context?: unknown[] } };
+          return Array.isArray(candidate.data?.context) && candidate.data.context.length > 0;
+        });
+      expect(call).toBeDefined();
+      capturedProps = call?.[0] as { events: Array<{ data: Record<string, unknown> }> };
     });
+
+    if (!capturedProps) {
+      throw new Error('RunScreen props were not captured.');
+    }
+
+    const [capturedEvent] = capturedProps.events;
+    const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+    expect(context).toHaveLength(1);
+    const assistant = context[0];
+    const toolCalls = assistant['tool_calls'] as Record<string, unknown>[] | undefined;
+    expect(Array.isArray(toolCalls)).toBe(true);
+    expect(toolCalls?.[0]?.name).toBe('delegate_agent');
+    expect(toolCalls?.[0]?.arguments).toEqual({ target: 'agent-security' });
+    expect(assistant['reasoning']).toEqual({ tokens: 55, score: 0.42 });
+  });
+
+  it('omits assistant content when context lacks textual fields but exposes tool calls and reasoning', async () => {
+    const assistantContext: ContextItem = {
+      id: 'ctx-structured',
+      role: 'assistant',
+      contentText: null,
+      contentJson: {
+        tool_calls: [
+          {
+            name: 'lookup_status',
+            arguments: { ticket: 'INC-42' },
+          },
+        ],
+        metadata: { extra: true },
+      },
+      metadata: {
+        reasoning: { tokens: 12 },
+      },
+      sizeBytes: 128,
+      createdAt: '2024-01-01T00:00:04.000Z',
+    };
+
+    const event = buildEvent({
+      type: 'llm_call',
+      toolExecution: undefined,
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-4-mini',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [assistantContext.id],
+        newContextItemCount: 1,
+        responseText: null,
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      metadata: {},
+      attachments: [],
+    });
+
+    runsHookMocks.summary.mockReturnValue({
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 1,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 1,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 1,
+    });
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    contextItemsMocks.getMany.mockImplementation(async () => [assistantContext]);
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([assistantContext.id]));
+
+    let capturedProps: { events: Array<{ data: Record<string, unknown> }> } | undefined;
+    await waitFor(() => {
+      const call = [...runScreenMocks.props.mock.calls]
+        .reverse()
+        .find(([callProps]) => {
+          const events = (callProps as { events?: unknown[] }).events;
+          if (!Array.isArray(events) || events.length === 0) return false;
+          const candidate = events[0] as { data?: { context?: unknown[] } };
+          return Array.isArray(candidate.data?.context) && candidate.data.context.length > 0;
+        });
+      expect(call).toBeDefined();
+      capturedProps = call?.[0] as { events: Array<{ data: Record<string, unknown> }> };
+    });
+
+    if (!capturedProps) {
+      throw new Error('RunScreen props were not captured.');
+    }
+
+    const [capturedEvent] = capturedProps.events;
+    const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+    expect(context).toHaveLength(1);
+    const assistant = context[0];
+
+    expect(assistant.role).toBe('assistant');
+    expect(assistant['content']).toBeUndefined();
+    expect(assistant['response']).toBeUndefined();
+    expect(assistant['tool_calls']).toEqual([
+      expect.objectContaining({ name: 'lookup_status', arguments: { ticket: 'INC-42' } }),
+    ]);
+    expect(assistant['reasoning']).toEqual({ tokens: 12 });
+  });
+});
+
+describe('extractLlmResponse', () => {
+  const getExtract = () => {
+    const helper = (AgentsRunScreen as AgentsRunScreenWithTesting).__testing__?.extractLlmResponse;
+    if (!helper) {
+      throw new Error('extractLlmResponse helper not available');
+    }
+    return helper;
+  };
+
+  const baseEvent = (overrides: Partial<RunTimelineEvent>): RunTimelineEvent =>
+    ({
+      id: 'event-resp',
+      runId: 'run-1',
+      threadId: 'thread-1',
+      type: 'llm_call',
+      status: 'success',
+      ts: '2024-01-01T00:00:00.000Z',
+      startedAt: null,
+      endedAt: null,
+      durationMs: null,
+      nodeId: null,
+      sourceKind: 'internal',
+      sourceSpanId: null,
+      metadata: {},
+      errorCode: null,
+      errorMessage: null,
+      toolExecution: undefined,
+      summarization: undefined,
+      injection: undefined,
+      message: undefined,
+      attachments: [],
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-test',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        newContextItemCount: 0,
+        responseText: null,
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      ...overrides,
+    } satisfies RunTimelineEvent);
+
+  it('returns errorMessage when provided on the event', () => {
+    const event = baseEvent({ status: 'error', errorMessage: 'LLM unhappy' });
+    const extract = getExtract();
+    expect(extract(event)).toBe('LLM unhappy');
+  });
+
+  it('uses rawResponse.message when errorMessage is absent', () => {
+    const event = baseEvent({ status: 'error' });
+    if (!event.llmCall) throw new Error('llmCall missing');
+    event.llmCall.rawResponse = { message: 'LLM crashed', name: 'ModelError' };
+    const extract = getExtract();
+    expect(extract(event)).toBe('LLM crashed');
+  });
+
+  it('prefers responseText when present', () => {
+    const event = baseEvent({});
+    if (!event.llmCall) throw new Error('llmCall missing');
+    event.llmCall.responseText = 'Direct response';
+    const extract = getExtract();
+    expect(extract(event)).toBe('Direct response');
+  });
+
+  it('extracts text from rawResponse choices payloads', () => {
+    const event = baseEvent({});
+    if (!event.llmCall) throw new Error('llmCall missing');
+    event.llmCall.rawResponse = {
+      choices: [
+        {
+          message: {
+            content: 'From choices',
+          },
+        },
+      ],
+    };
+
+    const extract = getExtract();
+    expect(extract(event)).toBe('From choices');
+  });
+
+  it('falls back to response attachments when other sources are empty', () => {
+    const event = baseEvent({});
+    event.attachments = [
+      {
+        id: 'att-1',
+        kind: 'response',
+        isGzip: false,
+        sizeBytes: 10,
+        contentJson: { content: 'Attachment response' },
+        contentText: null,
+      },
+    ];
+    const extract = getExtract();
+    expect(extract(event)).toBe('Attachment response');
+  });
+
+  it('returns empty string when no response sources are present', () => {
+    const event = baseEvent({});
+    const extract = getExtract();
+    expect(extract(event)).toBe('');
   });
 });
 

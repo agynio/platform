@@ -1,8 +1,7 @@
 import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
-import { gatherToolCalls } from '@/lib/toolCalls';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
 import { JsonViewer } from './JsonViewer';
@@ -37,10 +36,6 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
-  contextWindow?: {
-    totalCount?: number;
-    newCount?: number;
-  };
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -85,12 +80,6 @@ export interface RunEvent {
 export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
-  const [showAllContext, setShowAllContext] = useState(false);
-
-  useEffect(() => {
-    setShowAllContext(false);
-    setExpandedToolCalls(new Set());
-  }, [event.id]);
 
   const isShellToolEvent =
     event.type === 'tool' &&
@@ -231,16 +220,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
-    const contextWindowRecord = isRecord(event.data.contextWindow) ? event.data.contextWindow : undefined;
-    const totalContextCount = context.length;
-    const rawNewContextCount = asNumber(contextWindowRecord?.newCount);
-    const sanitizedNewContextCount =
-      rawNewContextCount !== undefined ? Math.max(0, Math.min(totalContextCount, Math.floor(rawNewContextCount))) : 0;
-    const shouldLimitContext = sanitizedNewContextCount > 0 && sanitizedNewContextCount < totalContextCount;
-    const visibleContext = shouldLimitContext && !showAllContext
-      ? context.slice(totalContextCount - sanitizedNewContextCount)
-      : context;
-    const hasHiddenContext = shouldLimitContext && !showAllContext;
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -301,18 +280,12 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <span className="text-sm text-[var(--agyn-gray)]">Context</span>
               </div>
               <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                {visibleContext.length > 0 ? (
+                {context.length > 0 ? (
                   <div>
-                    {hasHiddenContext && (
-                      <button
-                        className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors"
-                        type="button"
-                        onClick={() => setShowAllContext(true)}
-                      >
-                        Load older context
-                      </button>
-                    )}
-                    {renderContextMessages(visibleContext)}
+                    <button className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors">
+                      Load older context
+                    </button>
+                    {renderContextMessages(context)}
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
@@ -412,51 +385,21 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       };
 
       const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
-      const toolCalls = gatherToolCalls(message, additionalKwargs);
+      const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
+      const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
       const hasToolCalls = toolCalls.length > 0;
-      const messageId = typeof message.id === 'string' && message.id.length > 0 ? message.id : `idx-${index}`;
 
       const toolResultValue = message.tool_result ?? message.tool_result_if_exists;
       const hasToolResult = toolResultValue !== undefined;
 
       const renderAssistantContent = () => {
-        const textSegments: string[] = [];
-        const pushSegment = (value: unknown) => {
-          if (typeof value !== 'string') return;
-          const trimmed = value.trim();
-          if (trimmed.length === 0) return;
-          textSegments.push(trimmed);
-        };
-
-        const contentValue = message.content;
-
-        if (typeof contentValue === 'string') {
-          pushSegment(contentValue);
-        } else if (Array.isArray(contentValue)) {
-          for (const entry of contentValue) {
-            if (!isRecord(entry)) continue;
-            const typeValue = typeof entry.type === 'string' ? entry.type.toLowerCase() : '';
-            if (typeValue === 'text' && typeof entry.text === 'string') {
-              pushSegment(entry.text);
-            }
-          }
-        } else if (isRecord(contentValue) && typeof contentValue.text === 'string') {
-          pushSegment(contentValue.text);
+        const content = message.content ?? message.response;
+        if (typeof content === 'string') {
+          return <MarkdownContent content={content} />;
         }
-
-        if (textSegments.length === 0 && typeof message.response === 'string') {
-          pushSegment(message.response);
+        if (Array.isArray(content) || isRecord(content)) {
+          return <JsonViewer data={content} />;
         }
-
-        if (textSegments.length > 0) {
-          return <MarkdownContent content={textSegments.join('\n\n')} />;
-        }
-
-        const fallbackValue = contentValue ?? message.response;
-        if (fallbackValue !== undefined) {
-          return <JsonViewer data={fallbackValue ?? null} />;
-        }
-
         return null;
       };
 
@@ -514,14 +457,12 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                     {toolCalls.map((toolCall, tcIndex) => {
                       const toolCallRecord = toolCall;
                       const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
-                      const toggleKey = `${messageId}-${tcIndex}`;
+                      const toggleKey = `${index}-${tcIndex}`;
                       const isExpanded = expandedToolCalls.has(toggleKey);
                       const toolLabel =
                         asString(toolCallRecord.name) ||
                         asString(toolFunction?.name) ||
-                        `Tool Call ${tcIndex + 1}`;
-                      const argumentSource = toolCallRecord.arguments ?? toolFunction?.arguments;
-                      const viewerData = argumentSource !== undefined ? argumentSource : toolCallRecord;
+                        'Tool Call';
 
                       return (
                         <div key={toggleKey} className="space-y-1">
@@ -540,7 +481,13 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                           </button>
                           {isExpanded && (
                             <div className="ml-5 mt-2">
-                              <JsonViewer data={viewerData} />
+                              <JsonViewer
+                                data={
+                                  toolCallRecord.arguments ??
+                                  toolFunction?.arguments ??
+                                  toolCallRecord
+                                }
+                              />
                             </div>
                           )}
                         </div>
@@ -807,7 +754,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 </div>
               </div>
             )}
-
+            
             {/* Message */}
             {message && (
               <div className="flex-1 flex flex-col min-h-0">

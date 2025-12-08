@@ -8,36 +8,12 @@ import type {
   ToolOutputTerminal,
   ToolOutputSource,
 } from '@/api/types/agents';
-import { deriveAssistantContextFromItems } from '@/utils/llmResponse';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 import { LLMContextViewer } from './LLMContextViewer';
 import { waitForStableScrollHeight } from './waitForStableScrollHeight';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 
 type Attachment = RunTimelineEvent['attachments'][number];
-
-type AssistantPanelState = {
-  id: string | null;
-  text: string | null;
-  toolCalls: Record<string, unknown>[];
-  key: string;
-};
-
-const serializeToolCalls = (toolCalls: readonly Record<string, unknown>[]): string => {
-  if (!toolCalls || toolCalls.length === 0) return '';
-  try {
-    return JSON.stringify(toolCalls);
-  } catch (_error) {
-    return `count:${toolCalls.length}`;
-  }
-};
-
-const createEmptyAssistantPanelState = (): AssistantPanelState => ({
-  id: null,
-  text: null,
-  toolCalls: [],
-  key: '',
-});
 
 function formatJson(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -695,11 +671,8 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const hasOtherSections = otherSections.length > 0;
 
   const llmCall = event.llmCall;
-  const [assistantPanel, setAssistantPanel] = useState<AssistantPanelState>(createEmptyAssistantPanelState);
-  const assistantResponseText = assistantPanel.text ?? '';
-  const assistantToolCalls = assistantPanel.toolCalls;
-  const hasLlmResponse = typeof assistantPanel.text === 'string' && assistantPanel.text.trim().length > 0;
-  const hasLlmToolCalls = assistantToolCalls.length > 0;
+  const hasLlmResponse = Boolean(llmCall?.responseText);
+  const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
   const usageMetrics = llmCall?.usage;
   const contextInitialVisibleCount = useMemo(() => {
     if (!llmCall) return undefined;
@@ -761,22 +734,6 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const hasLlmCall = Boolean(llmCall);
   const contextItemsKey = llmCall ? `${event.id}:${llmCall.contextItemIds.join('|')}` : '';
 
-  const updateAssistantPanelFromItems = useCallback((items: ContextItem[]) => {
-    const snapshot = deriveAssistantContextFromItems(items);
-    const key = serializeToolCalls(snapshot.toolCalls);
-    setAssistantPanel((prev) => {
-      if (prev.id === snapshot.id && prev.text === snapshot.text && prev.key === key) {
-        return prev;
-      }
-      return {
-        id: snapshot.id,
-        text: snapshot.text,
-        toolCalls: snapshot.toolCalls,
-        key,
-      };
-    });
-  }, []);
-
   const isShellTool = toolExecution?.toolName === 'shell_command';
   const {
     text: streamedOutput,
@@ -821,8 +778,6 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   }, []);
 
   const handleContextItemsRendered = useCallback((items: ContextItem[]) => {
-    updateAssistantPanelFromItems(items);
-
     const prevIds = contextPrevItemIdsRef.current;
     contextPrevItemIdsRef.current = items.map((item) => item.id);
 
@@ -860,7 +815,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
     if (initialLoad || appended) {
       scrollContextToBottom();
     }
-  }, [scrollContextToBottom, updateAssistantPanelFromItems]);
+  }, [scrollContextToBottom]);
 
   const handleBeforeLoadMore = useCallback(() => {
     const container = contextScrollRef.current;
@@ -953,22 +908,18 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                   {hasLlmResponse && (
                     <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
                       <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Response</header>
-                  <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(assistantResponseText, 'default', '', false)}</div>
-                  </div>
-                )}
-                {hasLlmToolCalls && (
-                  <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
-                    <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Tool Calls ({assistantToolCalls.length})
+                      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(llmCall.responseText ?? '', 'default', '', false)}</div>
+                    </div>
+                  )}
+                  {hasLlmToolCalls && (
+                    <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
+                      <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Tool Calls ({llmCall.toolCalls.length})
                       </header>
                       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2">
-                        {assistantToolCalls.map((toolCall, index) => {
-                          const toolCallRecord = toolCall as Record<string, unknown>;
-                          const toolCallId = typeof toolCallRecord.id === 'string' && toolCallRecord.id.length > 0
-                            ? toolCallRecord.id
-                            : `tool-call-${index}`;
-                          return <div key={toolCallId}>{jsonBlock(toolCallRecord, 'default', '', false)}</div>;
-                        })}
+                        {llmCall.toolCalls.map((tc) => (
+                          <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments }, 'default', '', false)}</div>
+                        ))}
                       </div>
                     </div>
                   )}

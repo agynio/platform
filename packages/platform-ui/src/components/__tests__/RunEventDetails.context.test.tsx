@@ -3,94 +3,73 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { RunEventDetails, type RunEvent } from '../RunEventDetails';
 
-const buildLlmEvent = (overrides: Partial<RunEvent> = {}): RunEvent => {
-  const context = [
-    {
-      id: 'ctx-1',
-      role: 'system',
-      content: 'System primer',
-      timestamp: '2024-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'ctx-2',
-      role: 'user',
-      content: 'Earlier summary',
-      timestamp: '2024-01-01T00:01:00.000Z',
-    },
-    {
-      id: 'ctx-3',
-      role: 'user',
-      content: 'New user prompt',
-      timestamp: '2024-01-01T00:02:00.000Z',
-    },
-    {
-      id: 'ctx-4',
-      role: 'assistant',
-      content: 'Assistant follow-up',
-      timestamp: '2024-01-01T00:03:00.000Z',
-    },
-  ];
+const buildLlmEvent = (overrides: Partial<RunEvent> = {}): RunEvent => ({
+  id: 'event-llm',
+  type: 'llm',
+  timestamp: '2024-01-01T00:05:00.000Z',
+  duration: '1s',
+  status: 'finished',
+  data: {
+    context: [
+      {
+        id: 'ctx-1',
+        role: 'system',
+        content: 'System primer',
+        timestamp: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-2',
+        role: 'user',
+        content: 'Earlier summary',
+        timestamp: '2024-01-01T00:01:00.000Z',
+      },
+      {
+        id: 'ctx-3',
+        role: 'user',
+        content: 'New user prompt',
+        timestamp: '2024-01-01T00:02:00.000Z',
+      },
+      {
+        id: 'ctx-4',
+        role: 'assistant',
+        content: 'Assistant follow-up',
+        timestamp: '2024-01-01T00:03:00.000Z',
+      },
+    ],
+    model: 'gpt-window',
+    response: 'Assistant follow-up',
+    tokens: { total: 42 },
+  },
+  ...overrides,
+});
 
-  return {
-    id: 'event-llm',
-    type: 'llm',
-    timestamp: '2024-01-01T00:05:00.000Z',
-    duration: '1s',
-    status: 'finished',
-    data: {
-      context,
-      contextWindow: { totalCount: context.length, newCount: 2 },
-      model: 'gpt-window',
-      response: 'Assistant follow-up',
-      tokens: { total: 42 },
-    },
-    ...overrides,
-  } satisfies RunEvent;
-};
-
-describe('RunEventDetails context window behaviour', () => {
-  it('initially shows only new context items and reveals older ones on demand', () => {
+describe('RunEventDetails context display', () => {
+  it('renders all provided context messages', () => {
     const event = buildLlmEvent();
 
     render(<RunEventDetails event={event} />);
 
     const loadButton = screen.getByRole('button', { name: 'Load older context' });
+    expect(loadButton).toBeInTheDocument();
+
     const contextContainer = loadButton.parentElement as HTMLElement;
-
-    expect(within(contextContainer).getByText('New user prompt')).toBeInTheDocument();
-    expect(within(contextContainer).getByText('Assistant follow-up')).toBeInTheDocument();
-    expect(within(contextContainer).queryByText('System primer')).not.toBeInTheDocument();
-    expect(within(contextContainer).queryByText('Earlier summary')).not.toBeInTheDocument();
-
-    fireEvent.click(loadButton);
+    expect(contextContainer).toBeTruthy();
 
     expect(within(contextContainer).getByText('System primer')).toBeInTheDocument();
     expect(within(contextContainer).getByText('Earlier summary')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Load older context' })).not.toBeInTheDocument();
+    expect(within(contextContainer).getByText('New user prompt')).toBeInTheDocument();
+    expect(within(contextContainer).getByText('Assistant follow-up')).toBeInTheDocument();
   });
 
-  it('renders assistant context tool calls with toggles and clears between events', () => {
-    const baseEvent = buildLlmEvent();
-    const eventWithTool: RunEvent = {
-      ...baseEvent,
-      id: 'event-llm-tool',
+  it('renders assistant tool call toggle when metadata is present', () => {
+    const event = buildLlmEvent({
       data: {
-        ...baseEvent.data,
+        ...buildLlmEvent().data,
         context: [
           {
             id: 'ctx-tool',
             role: 'assistant',
-            content: [
-              { type: 'text', text: 'Responding with a tool call' },
-              {
-                type: 'function_call',
-                function: {
-                  name: 'lookup_weather',
-                  arguments: '{"city":"Paris"}',
-                },
-              },
-            ],
-            response: 'Responding with a tool call',
+            content: 'Responding with a tool call',
             timestamp: '2024-01-01T00:10:00.000Z',
             additional_kwargs: {
               tool_calls: [
@@ -108,36 +87,18 @@ describe('RunEventDetails context window behaviour', () => {
           },
         ],
       },
-    };
+    });
 
-    const eventWithoutTool: RunEvent = {
-      ...baseEvent,
-      id: 'event-llm-plain',
-      data: {
-        ...baseEvent.data,
-        context: [
-          {
-            id: 'ctx-plain',
-            role: 'assistant',
-            content: 'Assistant reply without tool use',
-            timestamp: '2024-01-01T00:11:00.000Z',
-          },
-        ],
-      },
-    };
+    render(<RunEventDetails event={event} />);
 
-    const { rerender } = render(<RunEventDetails event={eventWithTool} />);
+    const loadButton = screen.getByRole('button', { name: 'Load older context' });
+    const contextContainer = loadButton.parentElement as HTMLElement;
 
-    expect(screen.getByText('Responding with a tool call')).toBeInTheDocument();
+    expect(within(contextContainer).getByText('Responding with a tool call')).toBeInTheDocument();
 
-    const toggle = screen.getByRole('button', { name: 'lookup_weather' });
-    fireEvent.click(toggle);
+    const toggleButton = screen.getByRole('button', { name: 'lookup_weather' });
+    fireEvent.click(toggleButton);
 
-    expect(screen.getByText('city:')).toBeInTheDocument();
-    expect(screen.getByText('"Paris"')).toBeInTheDocument();
-
-    rerender(<RunEventDetails event={eventWithoutTool} />);
-
-    expect(screen.queryByRole('button', { name: /lookup_weather|Tool Call/ })).not.toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('"city":"Paris"'))).toBeInTheDocument();
   });
 });
