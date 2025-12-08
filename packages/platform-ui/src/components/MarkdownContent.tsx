@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import type { ComponentPropsWithoutRef } from 'react';
+import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
@@ -12,6 +12,10 @@ interface MarkdownContentProps {
 
 type MarkdownCodeProps = ComponentPropsWithoutRef<'code'> & {
   inline?: boolean;
+  node?: unknown;
+};
+
+type MarkdownPreProps = ComponentPropsWithoutRef<'pre'> & {
   node?: unknown;
 };
 
@@ -78,19 +82,23 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
       const match = /language-(\w+)/.exec(codeClassName || '');
       const text = String(children).replace(/\n$/, '');
 
-      return !inline && match ? (
-        <div className="my-4 w-full overflow-x-auto" style={{ minWidth: 0, maxWidth: '100%' }}>
+      if (!inline && match) {
+        return (
           <SyntaxHighlighter
             style={oneDark}
             language={match[1]}
-            PreTag="div"
+            PreTag="pre"
             customStyle={{
-              margin: 0,
+              margin: '16px 0',
               borderRadius: '10px',
               padding: '16px',
               fontSize: '13px',
               lineHeight: '1.6',
               maxWidth: '100%',
+              minWidth: 0,
+              overflowX: 'auto',
+              background: 'var(--agyn-bg-light)',
+              color: 'var(--agyn-dark)',
             }}
             codeTagProps={{
               style: {
@@ -101,8 +109,26 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
           >
             {text}
           </SyntaxHighlighter>
-        </div>
-      ) : (
+        );
+      }
+
+      if (!inline) {
+        return (
+          <code
+            className={[
+              'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
+              codeClassName,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            {...props}
+          >
+            {text}
+          </code>
+        );
+      }
+
+      return (
         <code
           className="bg-[var(--agyn-bg-light)] text-[var(--agyn-purple)] px-1.5 py-0.5 rounded text-sm break-all"
           style={style}
@@ -114,11 +140,52 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
     },
 
     // Code blocks
-    pre: ({ children }) => (
-      <div className="my-4">
-        {children}
-      </div>
-    ),
+    pre: ({ children, className: preClassName, style: preStyle, node: _node, ...props }: MarkdownPreProps) => {
+      const childArray = Children.toArray(children);
+      const firstElement = childArray.find((node): node is ReactElement => isValidElement(node));
+
+      if (firstElement && firstElement.type === SyntaxHighlighter) {
+        return firstElement;
+      }
+
+      if (firstElement && firstElement.type === 'pre') {
+        return firstElement;
+      }
+
+      const mergedClassName = [
+        'my-4 w-full overflow-x-auto rounded-[10px] bg-[var(--agyn-bg-light)] p-3 font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
+        preClassName,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const mergedStyle = {
+        whiteSpace: 'pre-wrap' as const,
+        wordBreak: 'break-word' as const,
+        minWidth: 0,
+        maxWidth: '100%',
+        ...(preStyle ?? {}),
+      };
+
+      return (
+        <pre className={mergedClassName} style={mergedStyle} {...props}>
+          {childArray.map((node: ReactNode) => {
+            if (!isValidElement<{ className?: string }>(node)) {
+              return node;
+            }
+
+            const mergedChildClassName = [
+              'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
+              node.props.className,
+            ]
+              .filter(Boolean)
+              .join(' ');
+
+            return cloneElement(node, { className: mergedChildClassName });
+          })}
+        </pre>
+      );
+    },
 
     // Blockquotes
     blockquote: ({ children }) => (

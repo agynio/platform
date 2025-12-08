@@ -16,14 +16,15 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
 import { isEqual } from 'lodash-es';
 import { ModuleRef } from '@nestjs/core';
+import { ReferenceValueSchema } from '../../utils/reference-schemas';
 
 const EnvItemSchema = z
   .object({
     name: z.string().min(1),
-    value: z.string(),
+    value: ReferenceValueSchema,
   })
   .strict()
-  .describe('Environment variable entry with resolved string value.');
+  .describe('Environment variable entry (static string or reference).');
 
 export const LocalMcpServerStaticConfigSchema = z.object({
   title: z.string().optional(),
@@ -54,12 +55,9 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStaticConfigSchema>> {
-  private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
-    const items: EnvItem[] = (this.config?.env || []) as EnvItem[];
-    if (!items.length) return undefined;
-
-    const r = await this.envService.resolveEnvItems(items);
-    return Object.keys(r).length ? r : undefined;
+  private async resolveEnvOverlay(base?: Record<string, string>): Promise<Record<string, string> | undefined> {
+    const cfgEnv = this.config?.env as EnvItem[] | undefined;
+    return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
   }
 
   private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
@@ -148,8 +146,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
    * If a delegate is provided, it is used (for discovered tools); otherwise, a fallback delegate is used (for preloaded tools).
    */
   private createLocalTool(tool: McpTool): LocalMCPServerTool {
-    const schema = jsonSchemaToZod(tool.inputSchema);
-    const inputSchema = schema instanceof z.ZodObject ? schema : z.object({}).strict();
+    const schemaCandidate: unknown = jsonSchemaToZod(tool.inputSchema);
+    const inputSchema = schemaCandidate instanceof z.ZodObject ? schemaCandidate : z.object({}).strict();
     return new LocalMCPServerTool(tool.name, tool.description || 'MCP tool', inputSchema, this);
   }
 

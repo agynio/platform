@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import type { Reference } from '../utils/references';
+import { ResolveError } from '../utils/references';
+import { ReferenceResolverService } from '../utils/reference-resolver.service';
 
 export class EnvError extends Error {
   code: string;
@@ -13,11 +16,13 @@ export class EnvError extends Error {
 
 export type EnvItem = {
   name: string;
-  value: string;
+  value: string | Reference;
 };
 
 @Injectable()
 export class EnvService {
+  constructor(private readonly referenceResolver?: ReferenceResolverService) {}
+
   mergeEnv(base?: Record<string, string>, overlay?: Record<string, string>): Record<string, string> {
     return { ...(base || {}), ...(overlay || {}) };
   }
@@ -26,7 +31,8 @@ export class EnvService {
     if (!Array.isArray(items)) throw new EnvError('env items must be an array', 'env_items_invalid');
     const seen = new Set<string>();
     const result: Record<string, string> = {};
-    for (const rawItem of items) {
+    for (let index = 0; index < items.length; index += 1) {
+      const rawItem = items[index];
       const item = rawItem ?? ({} as EnvItem);
       const rawName = typeof item.name === 'string' ? item.name.trim() : '';
       if (!rawName) {
@@ -36,37 +42,69 @@ export class EnvService {
         throw new EnvError(`duplicate env name: ${rawName}`, 'env_name_duplicate', { name: rawName });
       }
       seen.add(rawName);
-      if (typeof item.value !== 'string') {
-        throw new EnvError('env value must be a string', 'env_value_invalid', { name: rawName, value: item.value });
-      }
-      result[rawName] = item.value;
+      const resolved = await this.resolveEnvValue(item.value, rawName, index);
+      result[rawName] = resolved;
     }
     return result;
   }
 
+  private async resolveEnvValue(value: string | Reference, name: string, index: number): Promise<string> {
+    if (typeof value === 'string') {
+      return value;
+    }
+    const resolver = this.referenceResolver;
+    if (!resolver) {
+      throw new EnvError('reference resolver unavailable', 'env_reference_resolver_missing', { name, value });
+    }
+    const pointerSegment = name.replace(/~/g, '~0').replace(/\//g, '~1');
+    const basePath = `/env/${pointerSegment || index}/value`;
+    try {
+      const { output } = await resolver.resolve(value, {
+        strict: true,
+        coerceToString: true,
+        basePath,
+      });
+      if (typeof output !== 'string') {
+        throw new EnvError('resolved env value must be string', 'env_value_invalid', { name, value: output });
+      }
+      return output;
+    } catch (error) {
+      if (error instanceof EnvError) throw error;
+      if (error instanceof ResolveError) {
+        throw new EnvError('failed to resolve env reference', 'env_reference_unresolved', {
+          name,
+          value,
+          code: error.code,
+          path: error.path,
+          source: error.source,
+        });
+      }
+      throw new EnvError('failed to resolve env reference', 'env_reference_error', { name, value, error });
+    }
+  }
+
   async resolveProviderEnv(
-    cfgEnv: Record<string, string> | EnvItem[] | undefined,
+    cfgEnv: Record<string, string | Reference> | EnvItem[] | undefined,
     cfgEnvRefs: undefined,
     base?: Record<string, string>,
   ): Promise<Record<string, string> | undefined> {
     if (cfgEnvRefs !== undefined) throw new EnvError('envRefs not supported', 'env_items_invalid');
     const hasBaseParam = base !== undefined;
-    const baseMap = base || {};
+    const baseMap = base ? { ...base } : {};
     if (!cfgEnv) return Object.keys(baseMap).length || hasBaseParam ? { ...baseMap } : undefined;
+    let overlay: Record<string, string> = {};
     if (Array.isArray(cfgEnv)) {
-      const overlay = await this.resolveEnvItems(cfgEnv);
-      const merged = this.mergeEnv(baseMap, overlay);
-      // Special-case: when cfgEnv is provided as an array but resolves to empty,
-      // preserve explicit emptiness (return {}) instead of undefined when a base
-      // value was provided by caller. This allows callers to distinguish between
-      // "no env provided" vs "provided but empty".
-      if (!Object.keys(merged).length) return hasBaseParam ? {} : undefined;
-      return merged;
+      overlay = await this.resolveEnvItems(cfgEnv);
+    } else if (cfgEnv && typeof cfgEnv === 'object') {
+      const items = Object.entries(cfgEnv).map(([name, value]) => ({ name, value })) as EnvItem[];
+      overlay = await this.resolveEnvItems(items);
+    } else {
+      throw new EnvError('invalid env configuration', 'env_items_invalid');
     }
-    if (typeof cfgEnv === 'object') {
-      const merged = this.mergeEnv(baseMap, cfgEnv as Record<string, string>);
-      return Object.keys(merged).length || hasBaseParam ? merged : undefined;
+    const merged = this.mergeEnv(baseMap, overlay);
+    if (!Object.keys(merged).length) {
+      return hasBaseParam ? {} : undefined;
     }
-    throw new EnvError('invalid env configuration', 'env_items_invalid');
+    return merged;
   }
 }
