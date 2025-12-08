@@ -17,7 +17,7 @@ import type {
 import { graphSocket } from '@/lib/graph/socket';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { gatherToolCalls } from '@/lib/toolCalls';
-import { extractLlmResponse } from '@/utils/llmResponse';
+import { deriveAssistantContextFromRecords, extractLlmResponse } from '@/utils/llmResponse';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 
 const EVENT_FILTER_OPTIONS: EventFilter[] = ['message', 'llm', 'tool', 'summary'];
@@ -655,7 +655,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
     const usage = event.llmCall?.usage;
     const fallbackContext = toRecordArray(event.metadata);
     const context = options?.context && options.context.length > 0 ? options.context : fallbackContext;
-    const response = extractLlmResponse(event);
+    const assistantSnapshot = deriveAssistantContextFromRecords(context);
     return {
       id: event.id,
       type: 'llm',
@@ -665,7 +665,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
       data: {
         context,
         contextWindow: options?.contextWindow,
-        response,
+        response: assistantSnapshot.text ?? '',
         model: event.llmCall?.model ?? undefined,
         tokens: usage
           ? {
@@ -676,7 +676,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
               total: usage.totalTokens ?? undefined,
             }
           : undefined,
-        toolCalls: event.llmCall?.toolCalls,
+        toolCalls: assistantSnapshot.toolCalls,
         rawResponse: event.llmCall?.rawResponse,
       },
     };
@@ -1556,13 +1556,3 @@ export function AgentsRunScreen() {
     </>
   );
 }
-
-type AgentsRunScreenComponent = typeof AgentsRunScreen & {
-  __testing__?: {
-    extractLlmResponse: typeof extractLlmResponse;
-  };
-};
-
-(AgentsRunScreen as AgentsRunScreenComponent).__testing__ = {
-  extractLlmResponse,
-};

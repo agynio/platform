@@ -8,6 +8,7 @@ import { RunTimelineEventDetails } from '../RunTimelineEventDetails';
 import * as contextItemsModule from '@/api/hooks/contextItems';
 import type { UseContextItemsResult } from '@/api/hooks/contextItems';
 import type { ContextItem, RunTimelineEvent } from '@/api/types/agents';
+import * as llmResponseModule from '@/utils/llmResponse';
 const useToolOutputStreamingMock = vi.fn();
 
 vi.mock('@/hooks/useToolOutputStreaming', () => ({
@@ -45,6 +46,13 @@ function renderDetails(event: RunTimelineEvent) {
       result.rerender(<RunTimelineEventDetails event={nextEvent} />);
     },
   };
+}
+
+async function findPanelContainer(label: string): Promise<HTMLElement> {
+  const header = await screen.findByText(label, { selector: 'header' });
+  const container = header.parentElement;
+  expect(container).toBeTruthy();
+  return container as HTMLElement;
 }
 
 function makeScrollable(element: HTMLElement, {
@@ -217,123 +225,273 @@ describe('RunTimelineEventDetails', () => {
     expect(screen.queryByText('Output')).toBeNull();
   });
 
-  it('renders response and tool calls when provided', () => {
-    const event = buildEvent({
-      type: 'llm_call',
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-test',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: [],
-        responseText: 'All good',
-        rawResponse: { content: 'All good' },
-        toolCalls: [{ callId: 'tool-1', name: 'search', arguments: { q: 'hi' } }],
+  it('renders response and tool calls when provided', async () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-user',
+        role: 'user',
+        contentText: 'Hello there',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 40,
+        createdAt: '2024-01-01T00:00:00.000Z',
       },
-      toolExecution: undefined,
+      {
+        id: 'ctx-assistant',
+        role: 'assistant',
+        contentText: 'All good',
+        contentJson: null,
+        metadata: {
+          additional_kwargs: {
+            tool_calls: [
+              {
+                id: 'tool-1',
+                type: 'function',
+                name: 'search',
+                function: {
+                  name: 'search',
+                  arguments: '{"q":"hi"}',
+                },
+              },
+            ],
+          },
+        },
+        sizeBytes: 64,
+        createdAt: '2024-01-01T00:00:05.000Z',
+      },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
     });
+    const deriveSpy = vi.spyOn(llmResponseModule, 'deriveAssistantContextFromItems');
 
-    renderDetails(event);
-    const responseLabel = screen.getByText('Response');
-    const responseContainer = responseLabel.parentElement;
-    expect(responseContainer).toBeTruthy();
-    if (responseContainer) {
-      expect(within(responseContainer).getByText('All good')).toBeInTheDocument();
+    try {
+      const snapshot = llmResponseModule.deriveAssistantContextFromItems(contextItems);
+      expect(snapshot.text).toBe('All good');
+      expect(snapshot.toolCalls).toEqual([
+        expect.objectContaining({ name: 'search', arguments: { q: 'hi' } }),
+      ]);
+
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-test',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+      expect(deriveSpy).toHaveBeenCalled();
+      const responseContainer = await findPanelContainer('Response');
+      expect(await within(responseContainer).findByText('All good')).toBeInTheDocument();
+
+      expect(await screen.findByText('Tool Calls (1)')).toBeInTheDocument();
+      expect((await screen.findAllByText(/search/)).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Raw response')).toBeNull();
+    } finally {
+      useContextItemsSpy.mockRestore();
+      deriveSpy.mockRestore();
     }
-
-    const toolCallsLabel = screen.getByText(/Tool Calls/i);
-    expect(toolCallsLabel).toBeInTheDocument();
-    expect(screen.getByText(/search/)).toBeInTheDocument();
-    expect(screen.queryByText('Raw response')).toBeNull();
   });
 
-  it('renders response text derived from raw response when responseText is missing', () => {
-    const event = buildEvent({
-      type: 'llm_call',
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-derived',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: [],
-        responseText: null,
-        rawResponse: {
-          outputs: [
+  it('renders assistant response from tail context content text', async () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-user',
+        role: 'user',
+        contentText: 'Question?',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 32,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-assistant',
+        role: 'assistant',
+        contentText: 'Assistant final answer',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 48,
+        createdAt: '2024-01-01T00:00:05.000Z',
+      },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        toolExecution: undefined,
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-ctx-text',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+      });
+
+      renderDetails(event);
+
+      const responseContainer = await findPanelContainer('Response');
+      expect(await within(responseContainer).findByText('Assistant final answer')).toBeInTheDocument();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
+  it('renders assistant response from structured content payload', async () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-system',
+        role: 'system',
+        contentText: 'policy',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 16,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-assistant',
+        role: 'assistant',
+        contentText: null,
+        contentJson: {
+          content: [
             {
-              content: {
-                type: 'text',
-                text: 'Synthesized assistant reasoning',
-              },
+              type: 'text',
+              text: 'Structured assistant output',
             },
           ],
         },
-        toolCalls: [],
+        metadata: null,
+        sizeBytes: 64,
+        createdAt: '2024-01-01T00:00:05.000Z',
       },
-      toolExecution: undefined,
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
     });
 
-    renderDetails(event);
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        toolExecution: undefined,
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-ctx-json',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+      });
 
-    const responseSection = screen.getByText('Response').parentElement;
-    expect(responseSection).toBeTruthy();
-    if (responseSection) {
-      expect(within(responseSection).getByText('Synthesized assistant reasoning')).toBeInTheDocument();
+      renderDetails(event);
+
+      const responseContainer = await findPanelContainer('Response');
+      expect(await within(responseContainer).findByText('Structured assistant output')).toBeInTheDocument();
+    } finally {
+      useContextItemsSpy.mockRestore();
     }
   });
 
-  it('keeps tool calls isolated between events when rerendering', () => {
-    const firstEvent = buildEvent({
-      id: 'evt-first',
-      type: 'llm_call',
-      toolExecution: undefined,
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-first',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: [],
-        responseText: 'First derived response',
-        rawResponse: {
-          output: [{ type: 'text', text: 'First derived response' }],
-          message: 'ignore me',
+  it('omits response panel when assistant context lacks textual content', () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-tool',
+        role: 'assistant',
+        contentText: null,
+        contentJson: {
+          content: [],
         },
-        toolCalls: [{ callId: 'call-first', name: 'lookup', arguments: { q: 'first' } }],
+        metadata: null,
+        sizeBytes: 24,
+        createdAt: '2024-01-01T00:00:05.000Z',
       },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
     });
 
-    const secondEvent = buildEvent({
-      id: 'evt-second',
-      type: 'llm_call',
-      toolExecution: undefined,
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-second',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: [],
-        responseText: 'Second derived response',
-        rawResponse: {
-          outputs: [{ content: 'Second derived response' }],
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        toolExecution: undefined,
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-ctx-empty',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
         },
-        toolCalls: [{ callId: 'call-second', name: 'search', arguments: { q: 'second' } }],
-      },
-    });
+      });
 
-    const { rerender } = renderDetails(firstEvent);
+      renderDetails(event);
 
-    expect(screen.getByText('First derived response')).toBeInTheDocument();
-    expect(screen.getByText(/call-first/)).toBeInTheDocument();
-
-    rerender(secondEvent);
-
-    expect(screen.getByText('Second derived response')).toBeInTheDocument();
-    expect(screen.queryByText('First derived response')).toBeNull();
-    expect(screen.queryByText(/call-first/)).toBeNull();
-    expect(screen.getByText(/call-second/)).toBeInTheDocument();
+      expect(screen.queryByText('Response', { selector: 'header' })).toBeNull();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
   });
 
   it('displays LLM usage metrics when available', () => {
@@ -371,27 +529,57 @@ describe('RunTimelineEventDetails', () => {
     expect(screen.getByText('Total:', { selector: 'span' }).parentElement).toHaveTextContent(/Total:\s*190/);
   });
 
-  it('wraps long response text using content-wrap', () => {
+  it('wraps long response text using content-wrap', async () => {
     const longText = 'A'.repeat(120);
-    const event = buildEvent({
-      type: 'llm_call',
-      llmCall: {
-        provider: 'openai',
-        model: 'gpt-test',
-        temperature: null,
-        topP: null,
-        stopReason: null,
-        contextItemIds: [],
-        responseText: longText,
-        rawResponse: { content: longText },
-        toolCalls: [],
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-long',
+        role: 'assistant',
+        contentText: longText,
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 256,
+        createdAt: '2024-01-01T00:00:05.000Z',
       },
-      toolExecution: undefined,
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
     });
 
-    renderDetails(event);
-    const responseText = screen.getByText(longText);
-    expect(responseText).toHaveClass('content-wrap');
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-test',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+      const responseContainer = await findPanelContainer('Response');
+      const responseText = await within(responseContainer).findByText(longText);
+      expect(responseText).toHaveClass('content-wrap');
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
   });
 
   it('omits raw message source in invocation message details', () => {
@@ -1202,27 +1390,23 @@ describe('RunTimelineEventDetails', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Tool reasoning' },
-          {
-            type: 'function_call',
-            function: {
-              name: 'lookup_weather',
-              arguments: '{"city":"Paris"}',
-            },
-          },
-        ],
-        tool_calls: [
-          {
-            id: 'call-1',
-            type: 'function',
-            name: 'lookup_weather',
-            function: {
-              name: 'lookup_weather',
-              arguments: '{"city":"Paris"}',
-            },
-          },
         ],
       },
-      metadata: null,
+      metadata: {
+        additional_kwargs: {
+          tool_calls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              name: 'lookup_weather',
+              function: {
+                name: 'lookup_weather',
+                arguments: '{"city":"Paris"}',
+              },
+            },
+          ],
+        },
+      },
       sizeBytes: 256,
       createdAt: '2024-01-01T00:05:00.000Z',
     };
@@ -1274,9 +1458,13 @@ describe('RunTimelineEventDetails', () => {
       const toggle = await screen.findByRole('button', { name: 'lookup_weather' });
       await userEvent.click(toggle);
 
-      expect(screen.getByText('Tool reasoning')).toBeInTheDocument();
-      expect(screen.getByText('city:')).toBeInTheDocument();
-      expect(screen.getByText('"Paris"')).toBeInTheDocument();
+      const responseContainer = await findPanelContainer('Response');
+      expect(await within(responseContainer).findByText('Tool reasoning')).toBeInTheDocument();
+
+      const toolCallsContainer = await findPanelContainer('Tool Calls (1)');
+      expect(await within(toolCallsContainer).findByText(/"city"/)).toBeInTheDocument();
+      expect(await within(toolCallsContainer).findByText(/"Paris"/)).toBeInTheDocument();
+      expect((await screen.findAllByText(/lookup_weather/)).length).toBeGreaterThan(0);
 
       currentItems = plainContext;
       const eventWithoutTool = buildEvent({
@@ -1301,6 +1489,7 @@ describe('RunTimelineEventDetails', () => {
       });
 
       expect(screen.queryByRole('button', { name: /lookup_weather|Tool Call/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('Tool Calls (1)')).toBeNull();
     } finally {
       useContextItemsSpy.mockRestore();
     }

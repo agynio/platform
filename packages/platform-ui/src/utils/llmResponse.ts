@@ -1,10 +1,12 @@
-import type { RunTimelineEvent } from '@/api/types/agents';
+import type { ContextItem, RunTimelineEvent } from '@/api/types/agents';
+import { gatherToolCalls } from '@/lib/toolCalls';
 
 type RecordLike = Record<string, unknown>;
 
+const isRecordLike = (value: unknown): value is RecordLike => typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const coerceRecord = (value: unknown): RecordLike | null => {
-  if (!value || typeof value !== 'object') return null;
-  if (Array.isArray(value)) return null;
+  if (!isRecordLike(value)) return null;
   return value as RecordLike;
 };
 
@@ -18,6 +20,155 @@ const parseMaybeJson = (value: unknown): unknown => {
 };
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+
+const parseAdditionalKwargs = (value: unknown): RecordLike | null => {
+  if (!value) return null;
+  const parsed = parseMaybeJson(value);
+  return coerceRecord(parsed);
+};
+
+const extractTextCandidate = (value: unknown, visited: WeakSet<object>): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? value : null;
+  }
+
+  if (Array.isArray(value)) {
+    const segments: string[] = [];
+    for (const entry of value) {
+      const text = extractTextCandidate(entry, visited);
+      if (typeof text === 'string' && text.length > 0) segments.push(text);
+    }
+    if (segments.length > 0) return segments.join('\n\n');
+    return null;
+  }
+
+  const record = coerceRecord(value);
+  if (!record) return null;
+  if (visited.has(record)) return null;
+  visited.add(record);
+
+  const candidateKeys: Array<keyof RecordLike> = ['text', 'content', 'response'];
+  for (const key of candidateKeys) {
+    if (!(key in record)) continue;
+    const text = extractTextCandidate(record[key], visited);
+    if (typeof text === 'string' && text.length > 0) return text;
+  }
+
+  return null;
+};
+
+const resolveTextFromCandidates = (candidates: unknown[]): string | null => {
+  for (const candidate of candidates) {
+    const text = extractTextCandidate(candidate, new WeakSet<object>());
+    if (isNonEmptyString(text)) return text;
+  }
+  return null;
+};
+
+export type AssistantContextSnapshot = {
+  id: string | null;
+  text: string | null;
+  toolCalls: Record<string, unknown>[];
+};
+
+const deriveAssistantData = ({
+  explicitText,
+  primaryRecord,
+  contentJson,
+  metadata,
+}: {
+  explicitText: string | null;
+  primaryRecord: RecordLike | null;
+  contentJson: unknown;
+  metadata: unknown;
+}): { text: string | null; toolCalls: Record<string, unknown>[] } => {
+  const parsedContent = parseMaybeJson(contentJson);
+  const contentRecord = coerceRecord(parsedContent);
+  const metadataRecord = coerceRecord(parseMaybeJson(metadata));
+
+  let text: string | null = isNonEmptyString(explicitText) ? explicitText : null;
+
+  if (!text) {
+    const candidates: unknown[] = [];
+    if (primaryRecord) {
+      if (isNonEmptyString(primaryRecord.contentText)) candidates.push(primaryRecord.contentText);
+      if ('content' in primaryRecord) candidates.push(primaryRecord.content);
+      if ('response' in primaryRecord) candidates.push(primaryRecord.response);
+    }
+    if (contentRecord) {
+      if ('content' in contentRecord) candidates.push(contentRecord.content);
+      if ('response' in contentRecord) candidates.push(contentRecord.response);
+    } else {
+      candidates.push(parsedContent);
+    }
+    text = resolveTextFromCandidates(candidates);
+  }
+
+  const gatherSources: unknown[] = [];
+  if (primaryRecord) {
+    gatherSources.push(primaryRecord);
+    const additional = parseAdditionalKwargs(primaryRecord.additional_kwargs);
+    if (additional) gatherSources.push(additional);
+  }
+  if (contentRecord && contentRecord !== primaryRecord) {
+    gatherSources.push(contentRecord);
+    const additional = parseAdditionalKwargs(contentRecord.additional_kwargs);
+    if (additional) gatherSources.push(additional);
+  }
+  if (metadataRecord) {
+    gatherSources.push(metadataRecord);
+    const additional = parseAdditionalKwargs(metadataRecord.additional_kwargs);
+    if (additional) gatherSources.push(additional);
+  }
+
+  const toolCalls = gatherSources.length > 0 ? gatherToolCalls(...gatherSources) : [];
+
+  return { text: text ?? null, toolCalls };
+};
+
+export const deriveAssistantContextFromItems = (items: readonly ContextItem[]): AssistantContextSnapshot => {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item || item.role !== 'assistant') continue;
+    const explicitText = typeof item.contentText === 'string' ? item.contentText : null;
+    const { text, toolCalls } = deriveAssistantData({
+      explicitText,
+      primaryRecord: null,
+      contentJson: item.contentJson,
+      metadata: item.metadata,
+    });
+    return {
+      id: typeof item.id === 'string' ? item.id : null,
+      text,
+      toolCalls,
+    };
+  }
+  return { id: null, text: null, toolCalls: [] };
+};
+
+export const deriveAssistantContextFromRecords = (records: readonly Record<string, unknown>[]): AssistantContextSnapshot => {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = coerceRecord(records[index]);
+    if (!record) continue;
+    const role = typeof record.role === 'string' ? record.role : null;
+    if (role !== 'assistant') continue;
+    const explicitText = typeof record.contentText === 'string' ? record.contentText : null;
+    const { text, toolCalls } = deriveAssistantData({
+      explicitText,
+      primaryRecord: record,
+      contentJson: record.contentJson,
+      metadata: record.metadata,
+    });
+    const identifier = typeof record.id === 'string' ? record.id : null;
+    return {
+      id: identifier,
+      text,
+      toolCalls,
+    };
+  }
+  return { id: null, text: null, toolCalls: [] };
+};
 
 export const extractTextFromRawResponse = (raw: unknown, options?: { ignoreMessage?: boolean }): string | null => {
   const ignoreMessage = options?.ignoreMessage === true;
