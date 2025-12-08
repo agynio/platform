@@ -80,19 +80,31 @@ describe('RunEventDetails context window behaviour', () => {
           {
             id: 'ctx-tool',
             role: 'assistant',
-            content: 'Responding with a tool call',
-            timestamp: '2024-01-01T00:10:00.000Z',
-            tool_calls: [
+            content: [
+              { type: 'text', text: 'Responding with a tool call' },
               {
-                id: 'call-1',
-                type: 'function',
-                name: 'lookup_weather',
+                type: 'function_call',
                 function: {
                   name: 'lookup_weather',
                   arguments: '{"city":"Paris"}',
                 },
               },
             ],
+            response: 'Responding with a tool call',
+            timestamp: '2024-01-01T00:10:00.000Z',
+            additional_kwargs: {
+              tool_calls: [
+                {
+                  id: 'call-1',
+                  type: 'function',
+                  name: 'lookup_weather',
+                  function: {
+                    name: 'lookup_weather',
+                    arguments: '{"city":"Paris"}',
+                  },
+                },
+              ],
+            },
           },
         ],
       },
@@ -116,12 +128,13 @@ describe('RunEventDetails context window behaviour', () => {
 
     const { rerender } = render(<RunEventDetails event={eventWithTool} />);
 
+    expect(screen.getByText('Responding with a tool call')).toBeInTheDocument();
+
     const toggle = screen.getByRole('button', { name: 'lookup_weather' });
     fireEvent.click(toggle);
 
-    expect(
-      screen.getByText((content) => content.includes('{"city":"Paris"}')),
-    ).toBeInTheDocument();
+    expect(screen.getByText('city:')).toBeInTheDocument();
+    expect(screen.getByText('"Paris"')).toBeInTheDocument();
 
     rerender(<RunEventDetails event={eventWithoutTool} />);
 

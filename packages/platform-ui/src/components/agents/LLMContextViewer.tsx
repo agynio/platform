@@ -28,7 +28,44 @@ function formatBytes(value: number): string {
 
 function toPlainText(content: ContextItem['contentText'], fallback: ContextItem['contentJson']): string {
   if (typeof content === 'string' && content.trim().length > 0) return content;
+
   if (fallback === null || fallback === undefined) return '';
+
+  const segments: string[] = [];
+  const seen = new WeakSet<object>();
+
+  const visit = (value: unknown) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) segments.push(trimmed);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!isRecord(value)) return;
+    if (seen.has(value)) return;
+    seen.add(value);
+
+    const typeValue = typeof value.type === 'string' ? value.type.toLowerCase() : '';
+    if (typeValue === 'text' && typeof value.text === 'string') {
+      visit(value.text);
+    } else if (!('type' in value) && typeof value.text === 'string') {
+      visit(value.text);
+    }
+
+    if ('content' in value) visit(value.content);
+    if ('response' in value) visit((value as Record<string, unknown>).response);
+    if ('message' in value) visit((value as Record<string, unknown>).message);
+  };
+
+  visit(fallback);
+
+  if (segments.length > 0) {
+    return segments.join('\n\n');
+  }
+
   try {
     return JSON.stringify(fallback, null, 2);
   } catch (_err) {
@@ -149,7 +186,7 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
 
       {items.map((item) => {
         const textContent = toPlainText(item.contentText, item.contentJson);
-        const toolCalls = gatherToolCalls(item.contentJson, item.metadata, item.contentText);
+        const toolCalls = gatherToolCalls(item, item.contentJson, item.metadata, item.contentText);
         const roleColor = ROLE_COLORS[item.role] ?? 'bg-gray-900 text-white';
         const isHighlighted = highlightSet.has(item.id);
         const wrapperClasses = ['space-y-2 text-[11px] text-gray-800'];
@@ -186,7 +223,8 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
                     : typeof functionRecord?.name === 'string' && functionRecord.name.length > 0
                       ? functionRecord.name
                       : `Tool Call ${index + 1}`;
-                  const argumentsValue = toolCall.arguments ?? functionRecord?.arguments ?? toolCall;
+                  const argumentSource = toolCall.arguments ?? functionRecord?.arguments;
+                  const viewerData = argumentSource !== undefined ? argumentSource : toolCall;
 
                   return (
                     <div key={key} className="space-y-1">
@@ -205,7 +243,7 @@ export function LLMContextViewer({ ids, highlightLastCount, initialVisibleCount,
                       </button>
                       {isExpanded && (
                         <div className="ml-5 mt-2">
-                          <JsonViewer data={argumentsValue ?? null} />
+                          <JsonViewer data={viewerData ?? null} />
                         </div>
                       )}
                     </div>

@@ -1239,9 +1239,9 @@ describe('RunTimelineEventDetails', () => {
       const toggle = await screen.findByRole('button', { name: 'lookup_weather' });
       await userEvent.click(toggle);
 
-      expect(
-        screen.getByText((content) => content.includes('{"city":"Paris"}')),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Tool reasoning')).toBeInTheDocument();
+      expect(screen.getByText('city:')).toBeInTheDocument();
+      expect(screen.getByText('"Paris"')).toBeInTheDocument();
 
       currentItems = plainContext;
       const eventWithoutTool = buildEvent({

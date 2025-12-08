@@ -2,6 +2,7 @@ import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDo
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
+import { gatherToolCalls } from '@/lib/toolCalls';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
 import { JsonViewer } from './JsonViewer';
@@ -88,6 +89,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
   useEffect(() => {
     setShowAllContext(false);
+    setExpandedToolCalls(new Set());
   }, [event.id]);
 
   const isShellToolEvent =
@@ -410,21 +412,51 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       };
 
       const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
-      const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
-      const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
+      const toolCalls = gatherToolCalls(message, additionalKwargs);
       const hasToolCalls = toolCalls.length > 0;
+      const messageId = typeof message.id === 'string' && message.id.length > 0 ? message.id : `idx-${index}`;
 
       const toolResultValue = message.tool_result ?? message.tool_result_if_exists;
       const hasToolResult = toolResultValue !== undefined;
 
       const renderAssistantContent = () => {
-        const content = message.content ?? message.response;
-        if (typeof content === 'string') {
-          return <MarkdownContent content={content} />;
+        const textSegments: string[] = [];
+        const pushSegment = (value: unknown) => {
+          if (typeof value !== 'string') return;
+          const trimmed = value.trim();
+          if (trimmed.length === 0) return;
+          textSegments.push(trimmed);
+        };
+
+        const contentValue = message.content;
+
+        if (typeof contentValue === 'string') {
+          pushSegment(contentValue);
+        } else if (Array.isArray(contentValue)) {
+          for (const entry of contentValue) {
+            if (!isRecord(entry)) continue;
+            const typeValue = typeof entry.type === 'string' ? entry.type.toLowerCase() : '';
+            if (typeValue === 'text' && typeof entry.text === 'string') {
+              pushSegment(entry.text);
+            }
+          }
+        } else if (isRecord(contentValue) && typeof contentValue.text === 'string') {
+          pushSegment(contentValue.text);
         }
-        if (Array.isArray(content) || isRecord(content)) {
-          return <JsonViewer data={content} />;
+
+        if (textSegments.length === 0 && typeof message.response === 'string') {
+          pushSegment(message.response);
         }
+
+        if (textSegments.length > 0) {
+          return <MarkdownContent content={textSegments.join('\n\n')} />;
+        }
+
+        const fallbackValue = contentValue ?? message.response;
+        if (fallbackValue !== undefined) {
+          return <JsonViewer data={fallbackValue ?? null} />;
+        }
+
         return null;
       };
 
@@ -482,12 +514,14 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                     {toolCalls.map((toolCall, tcIndex) => {
                       const toolCallRecord = toolCall;
                       const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
-                      const toggleKey = `${index}-${tcIndex}`;
+                      const toggleKey = `${messageId}-${tcIndex}`;
                       const isExpanded = expandedToolCalls.has(toggleKey);
                       const toolLabel =
                         asString(toolCallRecord.name) ||
                         asString(toolFunction?.name) ||
-                        'Tool Call';
+                        `Tool Call ${tcIndex + 1}`;
+                      const argumentSource = toolCallRecord.arguments ?? toolFunction?.arguments;
+                      const viewerData = argumentSource !== undefined ? argumentSource : toolCallRecord;
 
                       return (
                         <div key={toggleKey} className="space-y-1">
@@ -506,13 +540,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                           </button>
                           {isExpanded && (
                             <div className="ml-5 mt-2">
-                              <JsonViewer
-                                data={
-                                  toolCallRecord.arguments ??
-                                  toolFunction?.arguments ??
-                                  toolCallRecord
-                                }
-                              />
+                              <JsonViewer data={viewerData} />
                             </div>
                           )}
                         </div>

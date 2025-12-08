@@ -12,6 +12,9 @@ const parseMaybeJson = (value: unknown): unknown => {
 
 const normalizeArguments = (value: unknown): unknown => {
   if (value === undefined) return undefined;
+  if (typeof value === 'string') {
+    return parseMaybeJson(value);
+  }
   return value;
 };
 
