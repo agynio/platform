@@ -3,6 +3,11 @@ node_modules
 .turbo
 node-compile-cache/
 .env
+packages/platform-server/build-ts
+# Bundled artifacts generated during build
+packages/platform-server/dist
+# Vitest JSON reports
+packages/platform-server/vitest-report.json
 # LangGraph API
 .langgraph_api
 agent_instances
