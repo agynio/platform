@@ -26,7 +26,7 @@ export const ManageToolStaticConfigSchema = z
       .number()
       .int()
       .min(0)
-      .default(0)
+      .default(15000)
       .describe('Timeout in milliseconds when waiting for child responses in sync mode. 0 disables timeout.'),
   })
   .strict();

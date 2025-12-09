@@ -266,6 +266,18 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     }
   }
 
+  private isAutoSendEnabled(effectiveBehavior?: EffectiveAgentConfig['behavior']): boolean {
+    if (effectiveBehavior) {
+      return effectiveBehavior.autoSendFinalResponseToThread;
+    }
+    try {
+      const cfg = this.config;
+      return cfg.sendFinalResponseToThread ?? true;
+    } catch {
+      return true;
+    }
+  }
+
   get config() {
     if (!this._config) throw new Error('Agent not configured.');
     return this._config;
@@ -601,7 +613,11 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
 
       if (terminateSignal.isActive) {
         await persistence.completeRun(ensuredRunId, 'terminated', []);
-        result = ResponseMessage.fromText('terminated');
+        const terminationMessage = ResponseMessage.fromText('terminated');
+        if (this.isAutoSendEnabled(effectiveBehavior)) {
+          await this.autoSendFinalResponse(thread, terminationMessage, [], ensuredRunId);
+        }
+        result = terminationMessage;
       } else {
         const last = newState.messages.at(-1);
         const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
@@ -639,17 +655,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
         }
       }
 
-      const autoSendEnabled = (() => {
-        if (effectiveBehavior) {
-          return effectiveBehavior.autoSendFinalResponseToThread;
-        }
-        try {
-          const cfg = this.config;
-          return cfg.sendFinalResponseToThread ?? true;
-        } catch {
-          return true;
-        }
-      })();
+      const autoSendEnabled = this.isAutoSendEnabled(effectiveBehavior);
 
       if (runId && autoSendEnabled) {
         const normalized = normalizeError(err);
