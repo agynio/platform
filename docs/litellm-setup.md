@@ -36,7 +36,8 @@ App configuration: LiteLLM service alias
   - `LITELLM_BASE_URL=http://localhost:4000`
   - `LITELLM_MASTER_KEY=sk-<master-key>`
 - Optional: set `LITELLM_MODELS` (comma-separated) to restrict which LiteLLM models are granted to the generated key. When unset, the provisioner requests `all-team-models` to inherit your LiteLLM default access list.
-- Provisioning requests include bounded retries with exponential backoff; transient failures of the delete step are tolerated and the generate step will continue.
+- Alias deletion is attempted once per startup; failures are logged and startup continues.
+- Key generation is attempted once per startup; failures surface immediately so operators can address configuration issues.
 - Because keys are regenerated on every boot, you do not need to manage secrets files or clean up stale locks.
 
 Model naming guidance

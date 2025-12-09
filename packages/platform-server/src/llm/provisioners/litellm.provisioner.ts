@@ -63,8 +63,8 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   private createAdminClient(base: string, masterKey: string): LiteLLMAdminClient {
     return new LiteLLMAdminClient(masterKey, base, {
       logger: this.logger,
-      maxAttempts: ADMIN_MAX_ATTEMPTS,
-      baseDelayMs: ADMIN_BASE_DELAY_MS,
+      maxAttempts: 1,
+      baseDelayMs: 1,
       fetchImpl: this.fetchImpl,
     });
   }
@@ -94,5 +94,3 @@ export class LiteLLMProvisioner extends LLMProvisioner {
 
 const SERVICE_KEY_ALIAS = 'agents-service';
 const DEFAULT_SERVICE_MODELS = ['all-team-models'];
-const ADMIN_MAX_ATTEMPTS = 3;
-const ADMIN_BASE_DELAY_MS = 300;

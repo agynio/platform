@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect, vi } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from 'vitest';
 import nock from 'nock';
 import * as fsPromises from 'fs/promises';
 import { join } from 'path';
@@ -74,7 +74,7 @@ describe('LiteLLMProvisioner (stateless tokens)', () => {
     expect(scope.isDone()).toBe(true);
   });
 
-  it('retries key generation on transient failure', async () => {
+  it('throws when key generation fails', async () => {
     const provisioner = new LiteLLMProvisioner(config);
     const scope = nock(BASE_URL)
       .post('/key/delete', { key_aliases: [SERVICE_ALIAS] })
@@ -83,16 +83,9 @@ describe('LiteLLMProvisioner (stateless tokens)', () => {
         key_alias: SERVICE_ALIAS,
         models: ['all-team-models'],
       })
-      .reply(500, { error: 'retry-me' })
-      .post('/key/generate', {
-        key_alias: SERVICE_ALIAS,
-        models: ['all-team-models'],
-      })
-      .reply(200, { key: 'sk-retry' });
+      .reply(500, { error: 'fail' });
 
-    const result = await (provisioner as any).fetchOrCreateKeysInternal();
-
-    expect(result.apiKey).toBe('sk-retry');
+    await expect((provisioner as any).fetchOrCreateKeysInternal()).rejects.toThrow();
     expect(scope.isDone()).toBe(true);
   });
 
@@ -156,5 +149,21 @@ describe('LiteLLMProvisioner (stateless tokens)', () => {
     expect(first.apiKey).toBe('sk-first');
     expect(second.apiKey).toBe('sk-second');
     expect(scope.isDone()).toBe(true);
+  });
+
+  it('uses OPENAI_API_KEY directly when provided', async () => {
+    const parsed = configSchema.parse({
+      agentsDatabaseUrl: 'postgres://user:pass@localhost:5432/agents',
+      llmProvider: 'openai',
+      openaiApiKey: 'sk-openai',
+    });
+    const openaiConfig = new ConfigService().init(parsed);
+    const provisioner = new LiteLLMProvisioner(openaiConfig);
+
+    const result = await (provisioner as any).fetchOrCreateKeysInternal();
+
+    expect(result.apiKey).toBe('sk-openai');
+    expect(result.baseUrl).toBeUndefined();
+    expect(nock.pendingMocks()).toEqual([]);
   });
 });
