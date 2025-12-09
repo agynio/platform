@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node tools/fix-esm-extensions.mjs dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "pnpm run prisma:generate && eslint .",
@@ -64,6 +65,9 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
+    "@babel/generator": "^7.26.3",
+    "@babel/parser": "^7.26.3",
+    "@babel/traverse": "^7.26.3",
     "@eslint/js": "^9.13.0",
     "@langchain/langgraph-cli": "0.0.66",
     "@nestjs/testing": "^11.1.8",
