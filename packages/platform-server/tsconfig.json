@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "esnext",
     "moduleResolution": "Bundler",
-    "outDir": "build-ts",
+    "outDir": "dist",
     "rootDir": "src",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -11,9 +11,6 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "sourceMap": true,
-    "useDefineForClassFields": false,
-    "importHelpers": true,
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
