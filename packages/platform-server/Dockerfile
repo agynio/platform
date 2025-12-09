@@ -10,7 +10,7 @@ RUN corepack enable \
  && corepack prepare pnpm@10.5.0 --activate
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl \
+ && apt-get install -y --no-install-recommends git openssl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -25,6 +25,8 @@ COPY . .
 
 RUN pnpm install --filter @agyn/platform-server... --offline --frozen-lockfile
 
+RUN pnpm --filter @agyn/platform-server run prisma:generate
+
 RUN pnpm --filter @agyn/platform-server run prebuild
 
 RUN pnpm deploy --filter @agyn/platform-server --prod --legacy /opt/app
@@ -38,7 +40,7 @@ ENV NODE_ENV=production \
 WORKDIR /opt/app/packages/platform-server
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl \
+ && apt-get install -y --no-install-recommends git openssl \
  && npm install --global prisma@^6.18.0 tsx@^4.20.5 \
  && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
