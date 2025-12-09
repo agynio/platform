@@ -25,9 +25,7 @@ COPY . .
 
 RUN pnpm install --filter @agyn/platform-server... --offline --frozen-lockfile
 
-RUN pnpm --filter @agyn/platform-server run prisma:generate
-
-RUN pnpm --filter @agyn/platform-server run build
+RUN pnpm --filter @agyn/platform-server run prebuild
 
 RUN pnpm deploy --filter @agyn/platform-server --prod --legacy /opt/app
 
