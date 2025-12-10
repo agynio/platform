@@ -10,6 +10,10 @@ const DEFAULT_PAGE_SIZE = 10;
 export type UseContextItemsOptions = {
   initialCount?: number;
   pageSize?: number;
+  scopeKey?: {
+    runId?: string;
+    eventId?: string;
+  };
 };
 
 export type UseContextItemsResult = {
@@ -27,6 +31,14 @@ export type UseContextItemsResult = {
 export function useContextItems(ids: readonly string[] | undefined, options?: UseContextItemsOptions): UseContextItemsResult {
   const queryClient = useQueryClient();
   const allIds = useMemo(() => (Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id.length > 0) : []), [ids]);
+
+  const scopeRunId = typeof options?.scopeKey?.runId === 'string' && options.scopeKey.runId.length > 0 ? options.scopeKey.runId : '';
+  const scopeEventId = typeof options?.scopeKey?.eventId === 'string' && options.scopeKey.eventId.length > 0 ? options.scopeKey.eventId : '';
+
+  const scopeFragment = useMemo(() => {
+    if (!scopeRunId && !scopeEventId) return '';
+    return `${scopeRunId}::${scopeEventId}`;
+  }, [scopeEventId, scopeRunId]);
 
   const sanitizedInitialCount = useMemo(() => {
     if (options?.initialCount === undefined) return DEFAULT_INITIAL_COUNT;
@@ -49,7 +61,11 @@ export function useContextItems(ids: readonly string[] | undefined, options?: Us
   const [visibleCount, setVisibleCount] = useState(() => Math.min(sanitizedInitialCount, allIds.length));
   const [cacheVersion, setCacheVersion] = useState(0);
 
-  const idsKey = useMemo(() => allIds.join('|'), [allIds]);
+  const idsKey = useMemo(() => {
+    const joinedIds = allIds.join('|');
+    if (!scopeFragment) return joinedIds;
+    return `${scopeFragment}::${joinedIds}`;
+  }, [allIds, scopeFragment]);
 
   useEffect(() => {
     setVisibleCount(Math.min(sanitizedInitialCount, allIds.length));
@@ -77,7 +93,7 @@ export function useContextItems(ids: readonly string[] | undefined, options?: Us
   }, [windowIds, queryClient, cacheVersion]);
 
   const batchQuery = useQuery({
-    queryKey: [...BASE_KEY, 'batch', missingIds.join('|')],
+    queryKey: [...BASE_KEY, 'batch', scopeFragment, missingIds.join('|')],
     queryFn: () => contextItems.getMany(missingIds),
     enabled: missingIds.length > 0,
     staleTime: Number.POSITIVE_INFINITY,

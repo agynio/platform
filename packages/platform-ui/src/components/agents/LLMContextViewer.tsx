@@ -7,6 +7,10 @@ type LLMContextViewerProps = {
   ids: readonly string[];
   highlightLastCount?: number;
   initialCount?: number;
+  scopeKey?: {
+    runId?: string;
+    eventId?: string;
+  };
   onItemsRendered?: (items: ContextItem[]) => void;
   onBeforeLoadMore?: () => void;
 };
@@ -45,7 +49,7 @@ const ROLE_COLORS: Record<ContextItem['role'], string> = {
 
 const HIGHLIGHT_ROLES: ReadonlySet<ContextItem['role']> = new Set(['user', 'assistant', 'tool']);
 
-export function LLMContextViewer({ ids, highlightLastCount, initialCount, onItemsRendered, onBeforeLoadMore }: LLMContextViewerProps) {
+export function LLMContextViewer({ ids, highlightLastCount, initialCount, scopeKey, onItemsRendered, onBeforeLoadMore }: LLMContextViewerProps) {
   const normalizedInitialCount = useMemo(() => {
     if (typeof initialCount !== 'number' || !Number.isFinite(initialCount)) return 10;
     return Math.max(0, Math.floor(initialCount));
@@ -53,6 +57,7 @@ export function LLMContextViewer({ ids, highlightLastCount, initialCount, onItem
 
   const { items, hasMore, isInitialLoading, isFetching, error, loadMore, total, targetCount } = useContextItems(ids, {
     initialCount: normalizedInitialCount,
+    scopeKey,
   });
 
   const emptyState = ids.length === 0;

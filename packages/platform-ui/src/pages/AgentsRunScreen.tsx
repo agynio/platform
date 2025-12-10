@@ -236,6 +236,24 @@ function parseMaybeJson(value: unknown): unknown {
   }
 }
 
+function cloneJson<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object') return value;
+  const structured = (globalThis as { structuredClone?: (<U>(value: U) => U) | undefined }).structuredClone;
+  if (typeof structured === 'function') {
+    try {
+      return structured(value);
+    } catch (_error) {
+      // fall back to JSON clone below
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch (_error) {
+    return value;
+  }
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -582,7 +600,8 @@ function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmTool
   const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
   const contentAdditionalKwargs = parsedRecord ? coerceRecord(parsedRecord.additional_kwargs) : null;
 
-  const result: Record<string, unknown> = parsedRecord ? { ...parsedRecord } : {};
+  const baseRecord = parsedRecord ? cloneJson(parsedRecord as Record<string, unknown>) : null;
+  const result: Record<string, unknown> = baseRecord ? { ...baseRecord } : {};
 
   if (!isNonEmptyString(result.id)) {
     result.id = item.id;
@@ -590,8 +609,8 @@ function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmTool
   result.role = typeof result.role === 'string' && result.role.length > 0 ? result.role : item.role;
   result.timestamp = result.timestamp ?? item.createdAt;
   result.sizeBytes = item.sizeBytes;
-  result.contentJson = parsedContent;
-  result.metadata = metadataRecord ?? item.metadata;
+  result.contentJson = cloneJson(parsedContent);
+  result.metadata = cloneJson(metadataRecord ?? item.metadata);
 
   const normalizedText = typeof textContent === 'string' && textContent.length > 0
     ? textContent
@@ -625,7 +644,7 @@ function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmTool
 
   const mergedAdditionalKwargs = contentAdditionalKwargs ?? metadataAdditionalKwargs;
   if (mergedAdditionalKwargs) {
-    result.additional_kwargs = mergedAdditionalKwargs;
+    result.additional_kwargs = cloneJson(mergedAdditionalKwargs);
   }
 
   const collectedToolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
@@ -636,13 +655,14 @@ function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmTool
   }
 
   if (toolCalls.length > 0) {
-    result.tool_calls = toolCalls;
-    result.toolCalls = toolCalls;
+    const clonedToolCalls = toolCalls.map((call) => cloneJson(call));
+    result.tool_calls = clonedToolCalls;
+    result.toolCalls = clonedToolCalls;
   }
 
   const reasoning = extractReasoning(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
   if (reasoning !== undefined) {
-    result.reasoning = reasoning;
+    result.reasoning = cloneJson(reasoning);
   }
 
   return result;

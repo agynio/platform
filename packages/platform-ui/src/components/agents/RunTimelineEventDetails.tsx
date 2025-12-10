@@ -890,6 +890,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                     ids={llmCall.contextItemIds}
                     highlightLastCount={llmCall.newContextItemCount}
                     initialCount={llmCall.newContextItemCount}
+                    scopeKey={{ runId: event.runId, eventId: event.id }}
                     onItemsRendered={handleContextItemsRendered}
                     onBeforeLoadMore={handleBeforeLoadMore}
                   />

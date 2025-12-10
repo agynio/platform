@@ -897,7 +897,7 @@ describe('RunTimelineEventDetails', () => {
 
       expect(useContextItemsSpy).toHaveBeenCalled();
       const callArgs = useContextItemsSpy.mock.calls[0]?.[1];
-      expect(callArgs).toMatchObject({ initialCount: 2 });
+      expect(callArgs).toMatchObject({ initialCount: 2, scopeKey: { runId: 'run-1', eventId: event.id } });
     } finally {
       useContextItemsSpy.mockRestore();
     }

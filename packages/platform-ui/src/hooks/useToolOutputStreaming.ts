@@ -39,9 +39,15 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
 
   const lastSeqRef = useRef(0);
   const catchupRef = useRef<Promise<void> | null>(null);
+  const scopeRef = useRef<string>('');
 
-  const applyState = useCallback((updater: (prev: StreamState) => StreamState) => {
+  const currentScope = `${runId ?? ''}::${eventId ?? ''}`;
+  scopeRef.current = currentScope;
+
+  const applyState = useCallback((scope: string, updater: (prev: StreamState) => StreamState) => {
+    if (scopeRef.current !== scope) return;
     setState((prev) => {
+      if (scopeRef.current !== scope) return prev;
       const next = updater(prev);
       lastSeqRef.current = next.lastSeq;
       return next;
@@ -59,7 +65,8 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
         if (!sinceSeq) setLoading(true);
         const snapshot = await runs.toolOutputSnapshot(runId, eventId, params);
         setError(null);
-        applyState((prev) => {
+        const requestScope = `${runId ?? ''}::${eventId ?? ''}`;
+        applyState(requestScope, (prev) => {
           const append = Boolean(sinceSeq && sinceSeq > 0);
           const baseSeq = append ? prev.lastSeq : 0;
           const baseChunks = append ? prev.chunks.slice() : [];
@@ -103,7 +110,9 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
   );
 
   useEffect(() => {
-    applyState(() => INITIAL_STATE);
+    const nextScope = `${runId ?? ''}::${eventId ?? ''}`;
+    scopeRef.current = nextScope;
+    applyState(nextScope, () => INITIAL_STATE);
     setError(null);
     setLoading(enabled);
     if (!enabled || !runId || !eventId) return;
@@ -132,7 +141,8 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
     if (!enabled) return;
     const offChunk = graphSocket.onToolOutputChunk((payload) => {
       if (payload.runId !== runId || payload.eventId !== eventId) return;
-      applyState((prev) => {
+      const handlerScope = `${runId ?? ''}::${eventId ?? ''}`;
+      applyState(handlerScope, (prev) => {
         if (payload.seqGlobal <= prev.lastSeq) return prev;
         if (payload.seqGlobal > prev.lastSeq + 1) {
           requestCatchup(prev.lastSeq);
@@ -152,7 +162,8 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
     });
     const offTerminal = graphSocket.onToolOutputTerminal((payload) => {
       if (payload.runId !== runId || payload.eventId !== eventId) return;
-      applyState((prev) => {
+      const handlerScope = `${runId ?? ''}::${eventId ?? ''}`;
+      applyState(handlerScope, (prev) => {
         const prevTs = prev.terminal ? Date.parse(prev.terminal.ts) || 0 : 0;
         const nextTs = Date.parse(payload.ts) || 0;
         if (prev.terminal && prevTs >= nextTs) return prev;
