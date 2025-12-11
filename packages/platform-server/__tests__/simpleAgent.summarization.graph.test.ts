@@ -22,8 +22,9 @@ describe('Agent summarization graph', () => {
           provide: ConfigService,
           useValue: new ConfigService().init(
             configSchema.parse({
-              llmProvider: 'openai',
               agentsDatabaseUrl: 'postgres://localhost/agents',
+              litellmBaseUrl: 'http://litellm.local',
+              litellmMasterKey: 'master-key',
             }),
           ),
         },

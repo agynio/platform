@@ -19,7 +19,9 @@ import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
+process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
+process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://litellm.local';
+process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'master-key';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 
 describe('AppModule bootstrap smoke test', () => {

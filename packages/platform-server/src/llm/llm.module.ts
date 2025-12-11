@@ -11,7 +11,6 @@ import { ConditionalLLMRouter } from './routers/conditional.llm.router';
 import { LLMProvisioner } from './provisioners/llm.provisioner';
 import { ConfigService } from '../core/services/config.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
-import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { CoreModule } from '../core/core.module';
 import { EventsModule } from '../events/events.module';
 
@@ -20,13 +19,7 @@ import { EventsModule } from '../events/events.module';
   providers: [
     {
       provide: LLMProvisioner,
-      useFactory: (cfg: ConfigService) => {
-        const provider = (cfg.llmProvider || 'auto') as 'openai' | 'litellm' | 'auto';
-        if (provider === 'openai') return new OpenAILLMProvisioner(cfg);
-        if (provider === 'litellm') return new LiteLLMProvisioner(cfg);
-        if (cfg.openaiApiKey) return new OpenAILLMProvisioner(cfg);
-        return new LiteLLMProvisioner(cfg);
-      },
+      useFactory: (cfg: ConfigService) => new LiteLLMProvisioner(cfg),
       inject: [ConfigService],
     },
     ConversationStateRepository,

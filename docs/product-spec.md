@@ -105,7 +105,8 @@ Configuration matrix (server env vars)
   - GITHUB_APP_ID
   - GITHUB_APP_PRIVATE_KEY (PEM; multiline ok)
   - GITHUB_INSTALLATION_ID
-  - OPENAI_API_KEY
+  - LITELLM_BASE_URL
+  - LITELLM_MASTER_KEY
   - GH_TOKEN
 - Optional
   - GRAPH_REPO_PATH (default ./data/graph)
@@ -129,7 +130,7 @@ HTTP API and sockets (pointers)
 Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: OPENAI_API_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Set: LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL. Optional VAULT_* and DOCKER_MIRROR_URL.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev

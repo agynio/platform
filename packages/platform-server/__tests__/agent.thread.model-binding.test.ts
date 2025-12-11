@@ -27,7 +27,8 @@ class StubProvisioner extends LLMProvisioner {
 
 describe('Agent thread model binding', () => {
   const baseConfig = {
-    llmProvider: 'openai',
+    litellmBaseUrl: 'http://litellm.local',
+    litellmMasterKey: 'master-key',
   } as Partial<ConfigService>;
 
   let moduleRef: Awaited<ReturnType<typeof Test.createTestingModule>>;

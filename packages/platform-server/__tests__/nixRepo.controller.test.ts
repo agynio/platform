@@ -25,12 +25,13 @@ describe('NixRepoController', () => {
   beforeEach(() => {
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         githubAppId: 'app',
         githubAppPrivateKey: 'key',
         githubInstallationId: 'inst',
         githubToken: 'token',
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        litellmBaseUrl: 'http://litellm.local',
+        litellmMasterKey: 'master-key',
         graphRepoPath: './data/graph',
         graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000',
@@ -104,12 +105,13 @@ describe('NixRepoController', () => {
   it('returns 400 when repository is outside allowlist', async () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         githubAppId: 'app',
         githubAppPrivateKey: 'key',
         githubInstallationId: 'inst',
         githubToken: 'token',
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        litellmBaseUrl: 'http://litellm.local',
+        litellmMasterKey: 'master-key',
         graphRepoPath: './data/graph',
         graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000',

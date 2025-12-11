@@ -8,15 +8,9 @@ export const configSchema = z.object({
   githubAppId: z.string().min(1).optional(),
   githubAppPrivateKey: z.string().min(1).optional(),
   githubInstallationId: z.string().min(1).optional(),
-  // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
-  openaiApiKey: z.string().min(1).optional(),
-  // LLM provider selection: must be explicit; no default
-  llmProvider: z.enum(['openai', 'litellm']),
-  // Optional LiteLLM details for auto-provisioning
-  litellmBaseUrl: z.string().optional(),
-  litellmMasterKey: z.string().optional(),
-  // Optional explicit OpenAI base URL passthrough
-  openaiBaseUrl: z.string().optional(),
+  // LiteLLM provisioning requires explicit base URL and master key
+  litellmBaseUrl: z.string().min(1, 'LITELLM_BASE_URL is required'),
+  litellmMasterKey: z.string().min(1, 'LITELLM_MASTER_KEY is required'),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
@@ -191,20 +185,11 @@ export class ConfigService implements Config {
     return this.params.githubInstallationId;
   }
 
-  get openaiApiKey(): string | undefined {
-    return this.params.openaiApiKey;
-  }
-  get llmProvider(): 'openai' | 'litellm' {
-    return this.params.llmProvider;
-  }
   get litellmBaseUrl(): string | undefined {
     return this.params.litellmBaseUrl;
   }
   get litellmMasterKey(): string | undefined {
     return this.params.litellmMasterKey;
-  }
-  get openaiBaseUrl(): string | undefined {
-    return this.params.openaiBaseUrl;
   }
   get githubToken(): string | undefined {
     return this.params.githubToken;
@@ -333,14 +318,8 @@ export class ConfigService implements Config {
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
-      openaiApiKey: process.env.OPENAI_API_KEY,
-      llmProvider: process.env.LLM_PROVIDER,
-      // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
-      litellmBaseUrl:
-        process.env.LITELLM_BASE_URL ||
-        (process.env.OPENAI_BASE_URL ? process.env.OPENAI_BASE_URL.replace(/\/v1$/, '') : undefined),
+      litellmBaseUrl: process.env.LITELLM_BASE_URL,
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
-      openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
       graphRepoPath: process.env.GRAPH_REPO_PATH,

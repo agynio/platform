@@ -29,7 +29,7 @@ describe('RunEventsService serializeEvent usage metrics', () => {
       errorMessage: null,
       attachments: [],
       llmCall: {
-        provider: 'openai',
+        provider: 'litellm',
         model: 'gpt-test',
         temperature: null,
         topP: null,
@@ -82,7 +82,7 @@ describe('RunEventsService serializeEvent usage metrics', () => {
       errorMessage: null,
       attachments: [],
       llmCall: {
-        provider: 'openai',
+        provider: 'litellm',
         model: 'gpt-test',
         temperature: null,
         topP: null,

@@ -33,7 +33,11 @@ describe('AgentNode error termination handling', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://user:pass@host/db' }),
+            configSchema.parse({
+              agentsDatabaseUrl: 'postgres://user:pass@host/db',
+              litellmBaseUrl: 'http://litellm.local',
+              litellmMasterKey: 'master-key',
+            }),
           ),
         },
         { provide: LLMProvisioner, useValue: {} },

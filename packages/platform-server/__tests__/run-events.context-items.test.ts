@@ -57,7 +57,7 @@ if (!shouldRunDbTests) {
       const event = await runEvents.startLLMCall({
         runId: run.id,
         threadId: thread.id,
-        provider: 'openai',
+        provider: 'litellm',
         model: 'gpt-test',
         contextItemIds: [systemId, userId],
       });

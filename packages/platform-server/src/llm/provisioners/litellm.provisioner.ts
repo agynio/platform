@@ -29,14 +29,9 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     return this.llm;
   }
 
-  private async fetchOrCreateKeysInternal(): Promise<{ apiKey: string; baseUrl?: string }> {
-    // Prefer direct OpenAI if available
-    if (this.cfg.openaiApiKey) {
-      return { apiKey: this.cfg.openaiApiKey, baseUrl: this.cfg.openaiBaseUrl };
-    }
-
+  private async fetchOrCreateKeysInternal(): Promise<{ apiKey: string; baseUrl: string }> {
     if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) {
-      throw new Error('litellm_missing_config');
+      throw new Error('LiteLLM configuration missing: set LITELLM_BASE_URL and LITELLM_MASTER_KEY');
     }
 
     return this.provisionLiteLLMToken();
@@ -45,7 +40,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   private async provisionLiteLLMToken(): Promise<{ apiKey: string; baseUrl: string }> {
     const base = this.sanitizeBaseUrl(this.cfg.litellmBaseUrl as string);
     const master = this.cfg.litellmMasterKey as string;
-    const inferenceBase = this.cfg.openaiBaseUrl || `${base}/v1`;
+    const inferenceBase = `${base}/v1`;
     const admin = this.createAdminClient(base, master);
 
     await admin

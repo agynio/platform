@@ -48,7 +48,7 @@ Persistent conversation state (Prisma)
   - `pnpm --filter @agyn/platform-server prisma studio`
 - Best-effort: if AGENTS_DATABASE_URL is not set or DB errors occur, reducers fall back to in-memory only.
 - Local dev:
-  - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
+  - LiteLLM configuration is required: set `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY`. Startup fails fast if either is missing.
   - GitHub integration is optional. If no GitHub env is provided, the server boots and logs that GitHub is disabled. Any GitHub-dependent feature will error at runtime until credentials are configured.
 - Shell tool streaming persistence:
   - Tool stdout/stderr chunks are stored via Prisma when the `tool_output_*` tables exist.

@@ -29,8 +29,9 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const provider = new SharedProvider();
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         agentsDatabaseUrl: 'postgres://localhost/agents',
+        litellmBaseUrl: 'http://litellm.local',
+        litellmMasterKey: 'master-key',
       }),
     );
     const envService = new EnvService();

@@ -11,7 +11,6 @@ const SERVICE_ALIAS = 'agents-service';
 function createConfig(): ConfigService {
   const parsed = configSchema.parse({
     agentsDatabaseUrl: 'postgres://user:pass@localhost:5432/agents',
-    llmProvider: 'litellm',
     litellmBaseUrl: BASE_URL,
     litellmMasterKey: 'master-key',
   });
@@ -149,21 +148,5 @@ describe('LiteLLMProvisioner (stateless tokens)', () => {
     expect(first.apiKey).toBe('sk-first');
     expect(second.apiKey).toBe('sk-second');
     expect(scope.isDone()).toBe(true);
-  });
-
-  it('uses OPENAI_API_KEY directly when provided', async () => {
-    const parsed = configSchema.parse({
-      agentsDatabaseUrl: 'postgres://user:pass@localhost:5432/agents',
-      llmProvider: 'openai',
-      openaiApiKey: 'sk-openai',
-    });
-    const openaiConfig = new ConfigService().init(parsed);
-    const provisioner = new LiteLLMProvisioner(openaiConfig);
-
-    const result = await (provisioner as any).fetchOrCreateKeysInternal();
-
-    expect(result.apiKey).toBe('sk-openai');
-    expect(result.baseUrl).toBeUndefined();
-    expect(nock.pendingMocks()).toEqual([]);
   });
 });

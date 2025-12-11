@@ -27,14 +27,15 @@ Initial configuration (via UI)
   - In the Agents UI, the Model field now accepts free-text. Enter either your alias name (e.g., gpt-5) or a provider-prefixed identifier (e.g., openai/gpt-4o-mini). The UI does not validate availability; runtime will surface errors if misconfigured.
 
 App configuration: LiteLLM service alias
-- When `OPENAI_API_KEY` is unset, the platform-server provisions a LiteLLM virtual key on startup using the constant alias `agents-service`.
+- The platform-server provisions a LiteLLM virtual key on startup using the constant alias `agents-service`—LiteLLM is the only supported runtime path.
 - Boot sequence:
   1. POST `/key/delete` with `key_aliases: ["agents-service"]` to clear any prior token for the alias. Errors are logged but do not block boot.
   2. POST `/key/generate` with `key_alias: "agents-service"` (and default LiteLLM duration) to mint a new key. The token is kept in memory only; no filesystem persistence is used.
-  3. The generated key is surfaced to the runtime as `OPENAI_API_KEY` with `OPENAI_BASE_URL` defaulting to `${LITELLM_BASE_URL}/v1` if unset.
+  3. The generated key is returned to the runtime and used with the inference base `${LITELLM_BASE_URL}/v1`.
 - Required admin credentials remain unchanged:
   - `LITELLM_BASE_URL=http://localhost:4000`
   - `LITELLM_MASTER_KEY=sk-<master-key>`
+- These env vars are mandatory; the server exits at startup if either is missing.
 - Optional: set `LITELLM_MODELS` (comma-separated) to restrict which LiteLLM models are granted to the generated key. When unset, the provisioner requests `all-team-models` to inherit your LiteLLM default access list.
 - Alias deletion is attempted once per startup; failures are logged and startup continues.
 - Key generation is attempted once per startup; failures surface immediately so operators can address configuration issues.
@@ -48,9 +49,6 @@ Model naming guidance
 Agent configuration behavior
 - Agents respect the configured model end-to-end. If you set a model in the Agent configuration, the runtime binds that model to both the CallModel and Summarization nodes and will not silently fall back to the default (gpt-5).
 - Ensure the chosen model or alias exists in LiteLLM; misconfigured names will surface as runtime errors from the provider.
-
-Fallback to direct OpenAI
-- Unset LITELLM_* envs and set OPENAI_API_KEY to your real OpenAI key.
 
 Persistence verification
 - The LiteLLM DB persists to the named volume litellm_pgdata.

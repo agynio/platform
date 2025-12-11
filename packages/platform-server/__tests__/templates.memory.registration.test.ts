@@ -23,8 +23,9 @@ describe('templates: memory registration and agent memory port', () => {
   maybeIt('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
     const configService = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
+        litellmBaseUrl: 'http://litellm.local',
+        litellmMasterKey: 'master-key',
       }),
     );
     const containerService = new ContainerService(undefined as unknown as ContainerRegistry);
