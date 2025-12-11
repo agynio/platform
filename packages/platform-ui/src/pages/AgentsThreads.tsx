@@ -27,6 +27,8 @@ import { graph as graphApi } from '@/api/modules/graph';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
+import { clearDraft, readDraft, writeDraft, THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
+import { useUser } from '@/user/user.runtime';
 
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
@@ -164,8 +166,6 @@ function resolveThreadAgentRole(node: ThreadNode): string | undefined {
 function containerDisplayName(container: ContainerItem): string {
   return container.name;
 }
-
-const THREAD_MESSAGE_MAX_LENGTH = 8000;
 
 const sendMessageErrorMap: Record<string, string> = {
   bad_message_payload: 'Please enter a message up to 8000 characters.',
@@ -506,6 +506,8 @@ export function AgentsThreads() {
   const params = useParams<{ threadId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useUser();
+  const userEmail = user?.email ?? null;
 
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   const [threadLimit, setThreadLimit] = useState<number>(INITIAL_THREAD_LIMIT);
@@ -536,6 +538,11 @@ export function AgentsThreads() {
   const scrollPersistTimerRef = useRef<number | null>(null);
   const scrollRestoreTokenRef = useRef(0);
   const pendingRestoreFrameRef = useRef<number | null>(null);
+  const draftSaveTimerRef = useRef<number | null>(null);
+  const latestInputValueRef = useRef<string>('');
+  const lastPersistedTextRef = useRef<string>('');
+  const previousThreadIdRef = useRef<string | null>(params.threadId ?? null);
+  const activeThreadIdRef = useRef<string | null>(params.threadId ?? null);
 
   const updateCacheEntry = useCallback(
     (threadId: string, updates: Partial<Omit<ThreadViewCacheEntry, 'threadId'>>) => {
@@ -565,6 +572,10 @@ export function AgentsThreads() {
   );
 
   useEffect(() => {
+    activeThreadIdRef.current = selectedThreadId ?? null;
+  }, [selectedThreadId]);
+
+  useEffect(() => {
     if (params.threadId) {
       setSelectedThreadIdState(params.threadId);
     }
@@ -573,6 +584,43 @@ export function AgentsThreads() {
   useEffect(() => {
     draftsRef.current = drafts;
   }, [drafts]);
+
+  const cancelDraftSave = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (draftSaveTimerRef.current !== null) {
+      window.clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+    }
+  }, []);
+
+  const persistDraftNow = useCallback(
+    (threadId: string, value: string) => {
+      if (!threadId || isDraftThreadId(threadId)) return;
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        clearDraft(threadId, userEmail);
+        lastPersistedTextRef.current = '';
+        return;
+      }
+      const limited = value.slice(0, THREAD_MESSAGE_MAX_LENGTH);
+      if (limited === lastPersistedTextRef.current) return;
+      writeDraft(threadId, limited, userEmail);
+      lastPersistedTextRef.current = limited;
+    },
+    [userEmail],
+  );
+
+  const scheduleDraftPersist = useCallback(
+    (threadId: string, value: string) => {
+      if (typeof window === 'undefined') return;
+      cancelDraftSave();
+      draftSaveTimerRef.current = window.setTimeout(() => {
+        draftSaveTimerRef.current = null;
+        persistDraftNow(threadId, value);
+      }, 250);
+    },
+    [cancelDraftSave, persistDraftNow],
+  );
 
   useEffect(() => {
     const prevSelectedId = lastSelectedIdRef.current;
@@ -591,6 +639,46 @@ export function AgentsThreads() {
       lastNonDraftIdRef.current = selectedThreadId;
     }
   }, [selectedThreadId, isDraftSelected]);
+
+  useEffect(() => {
+    const prevThreadId = previousThreadIdRef.current;
+    const nextThreadId = selectedThreadId ?? null;
+
+    if (prevThreadId && prevThreadId !== nextThreadId) {
+      cancelDraftSave();
+      persistDraftNow(prevThreadId, latestInputValueRef.current);
+    }
+
+    previousThreadIdRef.current = nextThreadId;
+
+    if (!nextThreadId || isDraftThreadId(nextThreadId)) {
+      cancelDraftSave();
+      lastPersistedTextRef.current = '';
+      return;
+    }
+
+    const previousValue = latestInputValueRef.current;
+    const stored = readDraft(nextThreadId, userEmail);
+    const nextValue = stored?.text ?? '';
+    lastPersistedTextRef.current = nextValue;
+    latestInputValueRef.current = nextValue;
+    if (nextValue === previousValue) return;
+    setInputValue(nextValue);
+  }, [selectedThreadId, userEmail, cancelDraftSave, persistDraftNow]);
+
+  useEffect(() => {
+    latestInputValueRef.current = inputValue;
+  }, [inputValue]);
+
+  useEffect(() => {
+    return () => {
+      cancelDraftSave();
+      const currentThreadId = activeThreadIdRef.current;
+      if (currentThreadId) {
+        persistDraftNow(currentThreadId, latestInputValueRef.current);
+      }
+    };
+  }, [cancelDraftSave, persistDraftNow]);
 
   const loadThreadChildren = useCallback(
     async (threadId: string) => {
@@ -1410,6 +1498,10 @@ export function AgentsThreads() {
       return { threadId };
     },
     onSuccess: ({ threadId }) => {
+      cancelDraftSave();
+      clearDraft(threadId, userEmail);
+      lastPersistedTextRef.current = '';
+      latestInputValueRef.current = '';
       setInputValue('');
       void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', threadId, 'queued'] });
     },
@@ -1739,6 +1831,16 @@ export function AgentsThreads() {
   const handleInputValueChange = useCallback(
     (value: string) => {
       setInputValue(value);
+      if (selectedThreadId && !isDraftThreadId(selectedThreadId)) {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          cancelDraftSave();
+          persistDraftNow(selectedThreadId, value);
+        } else {
+          scheduleDraftPersist(selectedThreadId, value);
+        }
+        return;
+      }
       setDrafts((prev) => {
         if (!selectedThreadId || !isDraftThreadId(selectedThreadId)) return prev;
         let mutated = false;
@@ -1751,7 +1853,7 @@ export function AgentsThreads() {
         return mutated ? next : prev;
       });
     },
-    [selectedThreadId],
+    [selectedThreadId, scheduleDraftPersist, cancelDraftSave, persistDraftNow],
   );
 
   const handleDraftRecipientChange = useCallback(
@@ -1834,9 +1936,11 @@ export function AgentsThreads() {
         notifyError('Messages are limited to 8000 characters.');
         return;
       }
+      cancelDraftSave();
+      persistDraftNow(threadId, value);
       sendThreadMessage({ threadId, text: trimmed });
     },
-    [createThread, isCreateThreadPending, isSendMessagePending, sendThreadMessage],
+    [cancelDraftSave, createThread, isCreateThreadPending, isSendMessagePending, persistDraftNow, sendThreadMessage],
   );
 
   const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
