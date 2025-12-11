@@ -3,14 +3,42 @@ import * as dotenv from 'dotenv';
 import { z } from 'zod';
 dotenv.config();
 
+const TEST_NODE_ENV = 'test';
+
+const createRequiredLiteLLMField = (
+  envKey: 'LITELLM_BASE_URL' | 'LITELLM_MASTER_KEY',
+  message: string,
+  testFallback: string,
+) =>
+  z
+    .union([z.string(), z.undefined(), z.null()])
+    .transform((value, ctx) => {
+      const direct = typeof value === 'string' ? value.trim() : undefined;
+      if (direct && direct.length > 0) {
+        return direct;
+      }
+
+      const fromEnv = process.env[envKey];
+      if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
+        return fromEnv.trim();
+      }
+
+      if (process.env.NODE_ENV === TEST_NODE_ENV) {
+        return testFallback;
+      }
+
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+      return z.NEVER;
+    });
+
 export const configSchema = z.object({
   // GitHub settings are optional to allow dev boot without GitHub
   githubAppId: z.string().min(1).optional(),
   githubAppPrivateKey: z.string().min(1).optional(),
   githubInstallationId: z.string().min(1).optional(),
   // LiteLLM provisioning requires explicit base URL and master key
-  litellmBaseUrl: z.string().min(1, 'LITELLM_BASE_URL is required'),
-  litellmMasterKey: z.string().min(1, 'LITELLM_MASTER_KEY is required'),
+  litellmBaseUrl: createRequiredLiteLLMField('LITELLM_BASE_URL', 'LITELLM_BASE_URL is required', 'http://litellm.local'),
+  litellmMasterKey: createRequiredLiteLLMField('LITELLM_MASTER_KEY', 'LITELLM_MASTER_KEY is required', 'test-master-key'),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
