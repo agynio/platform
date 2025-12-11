@@ -185,10 +185,10 @@ export class ConfigService implements Config {
     return this.params.githubInstallationId;
   }
 
-  get litellmBaseUrl(): string | undefined {
+  get litellmBaseUrl(): string {
     return this.params.litellmBaseUrl;
   }
-  get litellmMasterKey(): string | undefined {
+  get litellmMasterKey(): string {
     return this.params.litellmMasterKey;
   }
   get githubToken(): string | undefined {
