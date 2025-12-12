@@ -423,10 +423,10 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             )}
             {isNew && (
               <Badge
-                variant="success"
+                variant="default"
                 className="ml-2"
-                title="Tail context added this step"
-                aria-label="Tail context added this step"
+                title="Added since previous LLM call"
+                aria-label="Added since previous LLM call"
               >
                 New
               </Badge>

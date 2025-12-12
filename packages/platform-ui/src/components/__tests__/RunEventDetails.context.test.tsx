@@ -30,20 +30,20 @@ describe('RunEventDetails – context badges', () => {
 
     render(<RunEventDetails event={event} />);
 
-    const badges = screen.getAllByLabelText('Tail context added this step');
+    const badges = screen.getAllByLabelText('Added since previous LLM call');
     expect(badges).toHaveLength(1);
     expect(badges[0]).toHaveTextContent('New');
 
     const assistantHeader = screen.getByText('assistant', { exact: false }).closest('div');
     expect(assistantHeader).not.toBeNull();
     if (assistantHeader) {
-      expect(within(assistantHeader).getByLabelText('Tail context added this step')).toBeInTheDocument();
+      expect(within(assistantHeader).getByLabelText('Added since previous LLM call')).toBeInTheDocument();
     }
 
     const userHeader = screen.getByText('user', { exact: false }).closest('div');
     expect(userHeader).not.toBeNull();
     if (userHeader) {
-      expect(within(userHeader).queryByLabelText('Tail context added this step')).toBeNull();
+      expect(within(userHeader).queryByLabelText('Added since previous LLM call')).toBeNull();
     }
   });
 });
