@@ -150,6 +150,18 @@ export class LiteLLMAdminClient {
     };
     const sanitizedBody = body !== undefined && method !== 'GET' ? this.sanitizePayload(body) : undefined;
     const payload = sanitizedBody !== undefined ? JSON.stringify(sanitizedBody) : undefined;
+    if (payload) {
+      const debugPayload = sanitizedBody ?? body;
+      const environment = process.env.NODE_ENV ?? 'undefined';
+      if (environment !== 'production') {
+        if (this.logger?.debug) {
+          this.logger.debug(`LiteLLM admin payload ${method} ${path}`, { body: debugPayload });
+        }
+        console.debug('[LiteLLM admin]', { method, path, body: debugPayload, env: environment });
+      } else {
+        console.debug('[LiteLLM admin skipped logging in production]', { method, path });
+      }
+    }
     if (payload) headers['content-type'] = 'application/json';
 
     let lastError: unknown;
@@ -229,7 +241,9 @@ export class LiteLLMAdminClient {
 
   private sanitizePayload(value: unknown): unknown {
     if (Array.isArray(value)) {
-      return value.map((entry) => this.sanitizePayload(entry));
+      return value
+        .map((entry) => this.sanitizePayload(entry))
+        .filter((entry) => entry !== undefined && entry !== null);
     }
 
     if (value && typeof value === 'object') {

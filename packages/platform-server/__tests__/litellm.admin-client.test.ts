@@ -57,6 +57,16 @@ describe('LiteLLMAdminClient payload sanitation', () => {
     expect(body.team_id).toBe('team-123');
   });
 
+  it('drops empty duration values', async () => {
+    await client.generateKey({ alias: 'agents-service', models: ['all-team-models'], duration: '   ' });
+
+    const [, requestInit] = fetchSpy.mock.calls[0];
+    expect(typeof requestInit?.body).toBe('string');
+    const body = JSON.parse(requestInit?.body as string);
+
+    expect(body).toEqual({ key_alias: 'agents-service', models: ['all-team-models'] });
+  });
+
   it('sends delete requests without stray optional fields', async () => {
     fetchSpy = createFetchSpy({}, 200);
     client = new LiteLLMAdminClient(masterKey, baseUrl, {
