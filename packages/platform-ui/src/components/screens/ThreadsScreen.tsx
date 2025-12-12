@@ -30,8 +30,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 
-const THREAD_MESSAGE_MAX_LENGTH = 8000;
 const UNKNOWN_AGENT_LABEL = '(unknown agent)';
 
 interface ThreadsScreenProps {
