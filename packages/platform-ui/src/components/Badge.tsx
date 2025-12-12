@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 type BadgeVariant =
   | 'default'
@@ -14,13 +14,12 @@ type BadgeVariant =
   | 'destructive'
   | 'outline';
 
-interface BadgeProps {
+interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   children: ReactNode;
   variant?: BadgeVariant;
   size?: 'sm' | 'default';
   color?: string;
   bgColor?: string;
-  className?: string;
 }
 
 const variantStyles: Record<BadgeVariant, { color: string; bgColor: string; borderColor?: string }> = {
@@ -69,6 +68,7 @@ export function Badge({
   color,
   bgColor,
   className = '',
+  ...rest
 }: BadgeProps) {
   const styles = variantStyles[variant];
   const sizeClasses = size === 'sm' ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm';
@@ -76,6 +76,7 @@ export function Badge({
 
   return (
     <span
+      {...rest}
       className={`inline-flex items-center ${sizeClasses} rounded-[6px] border ${borderClasses} ${className}`.trim()}
       style={{
         color: color ?? styles.color,

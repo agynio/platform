@@ -36,6 +36,7 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
+  newContextIndices?: number[];
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -285,7 +286,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                     <button className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors">
                       Load older context
                     </button>
-                    {renderContextMessages(context)}
+                    {renderContextMessages(context, event.data.newContextIndices)}
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
@@ -315,10 +316,17 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     );
   };
 
-  const renderContextMessages = (contextArray: Record<string, unknown>[]) =>
-    contextArray.map((message, index) => {
+  const renderContextMessages = (contextArray: Record<string, unknown>[], highlightedIndices?: readonly number[]) => {
+    const highlightSet = Array.isArray(highlightedIndices) && highlightedIndices.length > 0
+      ? new Set<number>(
+          highlightedIndices.filter((value): value is number => Number.isInteger(value) && value >= 0),
+        )
+      : null;
+
+    return contextArray.map((message, index) => {
       const roleValue = asString(message.role).toLowerCase();
       const role = roleValue || 'user';
+      const isNew = highlightSet?.has(index) ?? false;
 
       const getRoleConfig = () => {
         switch (role) {
@@ -412,6 +420,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             </span>
             {timestamp && (
               <span className="text-xs text-[var(--agyn-gray)] ml-1">{timestamp}</span>
+            )}
+            {isNew && (
+              <Badge
+                variant="success"
+                className="ml-2"
+                title="Tail context added this step"
+                aria-label="Tail context added this step"
+              >
+                New
+              </Badge>
             )}
             {role === 'tool' && (
               <div className="ml-auto">
@@ -512,6 +530,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
         </div>
       );
     });
+  };
 
   const renderGenericToolView = () => {
     const parseInput = () => {

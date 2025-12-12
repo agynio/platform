@@ -17,6 +17,7 @@ import type {
 import { graphSocket } from '@/lib/graph/socket';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
+import { computeTailNewIndices, type ContextMessage } from '@/lib/llmContextDiff';
 
 const EVENT_FILTER_OPTIONS: EventFilter[] = ['message', 'llm', 'tool', 'summary'];
 const STATUS_FILTER_OPTIONS: StatusFilter[] = ['running', 'finished', 'failed', 'terminated'];
@@ -717,6 +718,7 @@ function resolveContextRecords(
 type CreateUiEventOptions = {
   context?: Record<string, unknown>[];
   tool?: ToolLinkData;
+  newContextIndices?: number[];
 };
 
 function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions): UiRunEvent {
@@ -762,6 +764,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
     const fallbackContext = toRecordArray(event.metadata);
     const context = options?.context && options.context.length > 0 ? options.context : fallbackContext;
     const response = extractLlmResponse(event);
+    const newContextIndices = Array.isArray(options?.newContextIndices) && options.newContextIndices.length > 0 ? options.newContextIndices : undefined;
     return {
       id: event.id,
       type: 'llm',
@@ -770,6 +773,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
       status,
       data: {
         context,
+        newContextIndices,
         response,
         model: event.llmCall?.model ?? undefined,
         tokens: usage
@@ -1589,13 +1593,25 @@ export function AgentsRunScreen() {
   const uiEvents = useMemo<UiRunEvent[]>(() => {
     const lookup = contextItemsRef.current;
     void contextItemsVersion;
+
+    let previousLlmContext: ContextMessage[] | undefined;
+
     return events.map((event) => {
-      const contextRecords =
-        event.type === 'llm_call'
-          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
-          : [];
+      let contextRecords: Record<string, unknown>[] = [];
+      let newContextIndices: number[] | undefined;
+
+      if (event.type === 'llm_call') {
+        contextRecords = resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? []);
+        const currentMessages = contextRecords as ContextMessage[];
+        const indices = computeTailNewIndices(previousLlmContext, currentMessages);
+        if (indices.length > 0) {
+          newContextIndices = indices;
+        }
+        previousLlmContext = currentMessages;
+      }
+
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
-      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
+      return createUiEvent(event, { context: contextRecords, tool: toolLinks, newContextIndices });
     });
   }, [events, contextItemsVersion]);
 

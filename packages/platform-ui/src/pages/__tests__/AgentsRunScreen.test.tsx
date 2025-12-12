@@ -658,6 +658,138 @@ describe('AgentsRunScreen', () => {
     ]);
     expect(assistant['reasoning']).toEqual({ tokens: 12 });
   });
+
+  it('computes tail context indices for sequential llm events', async () => {
+    const contextA: ContextItem = {
+      id: 'ctx-user',
+      role: 'user',
+      contentText: 'Initial question',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 128,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    const contextB: ContextItem = {
+      id: 'ctx-assistant-1',
+      role: 'assistant',
+      contentText: 'Interim reply',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 256,
+      createdAt: '2024-01-01T00:00:01.000Z',
+    };
+
+    const contextC: ContextItem = {
+      id: 'ctx-assistant-2',
+      role: 'assistant',
+      contentText: 'Final answer',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 512,
+      createdAt: '2024-01-01T00:00:02.000Z',
+    };
+
+    const contextLookup = new Map<string, ContextItem>([
+      [contextA.id, contextA],
+      [contextB.id, contextB],
+      [contextC.id, contextC],
+    ]);
+
+    contextItemsMocks.getMany.mockImplementation(async (ids: readonly string[]) =>
+      ids
+        .map((id) => contextLookup.get(id))
+        .filter((item): item is ContextItem => Boolean(item)),
+    );
+
+    const llmEventA = buildEvent({
+      id: 'event-llm-1',
+      type: 'llm_call',
+      toolExecution: undefined,
+      ts: '2024-01-01T00:00:05.000Z',
+      startedAt: '2024-01-01T00:00:05.000Z',
+      endedAt: '2024-01-01T00:00:06.000Z',
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [contextA.id, contextB.id],
+        newContextItemCount: 2,
+        responseText: contextB.contentText,
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      metadata: {},
+    });
+
+    const llmEventB = buildEvent({
+      id: 'event-llm-2',
+      type: 'llm_call',
+      toolExecution: undefined,
+      ts: '2024-01-01T00:00:10.000Z',
+      startedAt: '2024-01-01T00:00:10.000Z',
+      endedAt: '2024-01-01T00:00:11.000Z',
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [contextA.id, contextB.id, contextC.id],
+        newContextItemCount: 1,
+        responseText: contextC.contentText,
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      metadata: {},
+    });
+
+    runsHookMocks.summary.mockReturnValue({
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 2,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 2,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 2,
+    });
+
+    runsHookMocks.events.mockReturnValue({ items: [llmEventA, llmEventB], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/thread-1/runs/${llmEventB.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const props = latestRunScreenProps<{ events: Array<{ type: string; data: { newContextIndices?: number[] } }> }>();
+      expect(props).toBeDefined();
+      const llmEvents = props?.events.filter((event) => event.type === 'llm') ?? [];
+      expect(llmEvents.length).toBe(2);
+      expect(llmEvents[0].data.newContextIndices).toEqual([0, 1]);
+      expect(llmEvents[1].data.newContextIndices).toEqual([2]);
+    });
+  });
 });
 
 describe('extractLlmResponse', () => {
