@@ -123,8 +123,14 @@ export class LiteLLMAdminClient {
       key_alias: params.alias,
       models: params.models,
     };
-    if (params.teamId) body.team_id = params.teamId;
-    if (params.duration) body.duration = params.duration;
+    if (typeof params.teamId === 'string') {
+      const trimmed = params.teamId.trim();
+      if (trimmed.length > 0) body.team_id = trimmed;
+    }
+    if (typeof params.duration === 'string') {
+      const trimmed = params.duration.trim();
+      if (trimmed.length > 0) body.duration = trimmed;
+    }
     const response = await this.request('POST', 'key/generate', { body });
     const parsed = keyResponseSchema.parse(response.json);
     return { key: parsed.key, id: parsed.id, teamId: parsed.team_id };
@@ -135,14 +141,15 @@ export class LiteLLMAdminClient {
     const url = new URL(path, this.base);
     if (query) {
       for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined) url.searchParams.set(key, value);
+        if (value !== undefined && value !== null) url.searchParams.set(key, value);
       }
     }
 
     const headers: Record<string, string> = {
       authorization: `Bearer ${this.masterKey}`,
     };
-    const payload = body !== undefined && method !== 'GET' ? JSON.stringify(body) : undefined;
+    const sanitizedBody = body !== undefined && method !== 'GET' ? this.sanitizePayload(body) : undefined;
+    const payload = sanitizedBody !== undefined ? JSON.stringify(sanitizedBody) : undefined;
     if (payload) headers['content-type'] = 'application/json';
 
     let lastError: unknown;
@@ -218,6 +225,26 @@ export class LiteLLMAdminClient {
   private async backoff(attempt: number): Promise<void> {
     const delayMs = this.baseDelayMs * Math.pow(2, attempt - 1);
     await delay(delayMs);
+  }
+
+  private sanitizePayload(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.sanitizePayload(entry));
+    }
+
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>(
+        (acc, [key, entryValue]) => {
+          if (entryValue === null || entryValue === undefined) return acc;
+          acc[key] = this.sanitizePayload(entryValue);
+          return acc;
+        },
+        {},
+      );
+      return entries;
+    }
+
+    return value;
   }
 
   private parseTeam(response: RawResponse): TeamInfo {
