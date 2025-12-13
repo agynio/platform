@@ -2,6 +2,7 @@ import { Play, Square } from 'lucide-react';
 
 import Badge from '../Badge';
 import { IconButton } from '../IconButton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
 import { statusConfig } from './constants';
 import type { NodeStatus } from './types';
@@ -9,6 +10,7 @@ import type { NodeStatus } from './types';
 interface HeaderProps {
   title: string;
   status: NodeStatus;
+  errorDetail?: string;
   canProvision?: boolean;
   canDeprovision?: boolean;
   isActionPending?: boolean;
@@ -16,9 +18,12 @@ interface HeaderProps {
   onDeprovision?: () => void;
 }
 
+const ERROR_FALLBACK_MESSAGE = 'Node failed to initialize. No additional error details available.';
+
 export function Header({
   title,
   status,
+  errorDetail,
   canProvision = false,
   canDeprovision = false,
   isActionPending = false,
@@ -26,6 +31,9 @@ export function Header({
   onDeprovision,
 }: HeaderProps) {
   const statusInfo = statusConfig[status];
+  const isErrorStatus = status === 'provisioning_error' || status === 'deprovisioning_error';
+  const trimmedDetail = typeof errorDetail === 'string' ? errorDetail.trim() : '';
+  const tooltipMessage = trimmedDetail.length > 0 ? trimmedDetail : ERROR_FALLBACK_MESSAGE;
   const handleClick = () => {
     if (isActionPending) return;
     if (canProvision) {
@@ -43,6 +51,37 @@ export function Header({
     : canDeprovision
       ? 'Deprovision node'
       : 'Node action unavailable';
+  const badge = (
+    <Badge color={statusInfo.color} bgColor={statusInfo.bgColor}>
+      {statusInfo.label}
+    </Badge>
+  );
+  const badgeWithTooltip = isErrorStatus ? (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--agyn-status-failed)]"
+            aria-label="View node error details"
+            title="View node error details"
+          >
+            {badge}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="right"
+          sideOffset={6}
+          align="center"
+          className="max-w-[360px] whitespace-pre-wrap break-words text-left leading-relaxed"
+        >
+          <p>{tooltipMessage}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  ) : (
+    badge
+  );
 
   return (
     <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--agyn-border-default)]">
@@ -51,9 +90,7 @@ export function Header({
         <p className="text-sm text-[var(--agyn-gray)] mt-0.5">{title}</p>
       </div>
       <div className="flex items-center gap-3">
-        <Badge color={statusInfo.color} bgColor={statusInfo.bgColor}>
-          {statusInfo.label}
-        </Badge>
+        {badgeWithTooltip}
         <IconButton
           icon={canProvision ? <Play className="w-5 h-5" /> : <Square className="w-5 h-5" />}
           variant="ghost"

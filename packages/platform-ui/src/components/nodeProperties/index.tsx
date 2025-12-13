@@ -81,6 +81,7 @@ function NodePropertiesSidebar({
   const { kind: nodeKind, title: nodeTitle, template } = config;
   const nodeTitleValue = typeof nodeTitle === 'string' ? nodeTitle : '';
   const { status } = state;
+  const errorDetail = typeof state.errorDetail === 'string' ? state.errorDetail : undefined;
   const configRecord = config as Record<string, unknown>;
   const configTemplate = typeof template === 'string' ? template : undefined;
   const recordTemplate =
@@ -810,6 +811,7 @@ function NodePropertiesSidebar({
       <Header
         title={headerTitle}
         status={status}
+        errorDetail={errorDetail}
         canProvision={canProvision}
         canDeprovision={canDeprovision}
         isActionPending={isActionPending}

@@ -14,6 +14,8 @@ interface NodeProps {
   avatarSeed?: string;
   selected?: boolean;
   className?: string;
+  status?: GraphNodeStatus;
+  errorDetail?: string;
 }
 
 const nodeKindConfig: Record<NodeKind, { color: string; bgColor: string; borderColor: string; gradient?: string }> = {
@@ -48,13 +50,40 @@ const nodeKindConfig: Record<NodeKind, { color: string; bgColor: string; borderC
 import { Handle, Position } from '@xyflow/react';
 import { createAvatar } from '@dicebear/core';
 import { avataaars } from '@dicebear/collection';
+import { AlertCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import type { GraphNodeStatus } from '@/features/graph/types';
 
-export default function GraphNode({ kind, title, inputs = [], outputs = [], avatar, avatarSeed, selected = false, className = '' }: NodeProps) {
+const ERROR_FALLBACK_MESSAGE = 'Node failed to initialize. No additional error details available.';
+
+export default function GraphNode({
+  kind,
+  title,
+  inputs = [],
+  outputs = [],
+  avatar,
+  avatarSeed,
+  selected = false,
+  className = '',
+  status,
+  errorDetail,
+}: NodeProps) {
   const config = nodeKindConfig[kind];
   const avatarSvg = !avatar && avatarSeed
     ? createAvatar(avataaars, { seed: avatarSeed }).toString()
     : undefined;
   const showAvatar = kind === 'Agent' && (avatar || avatarSvg);
+  const isProvisioningError = status === 'provisioning_error';
+  const trimmedErrorDetail = typeof errorDetail === 'string' ? errorDetail.trim() : '';
+  const errorMessage = trimmedErrorDetail.length > 0 ? trimmedErrorDetail : ERROR_FALLBACK_MESSAGE;
+  const baseBoxShadow = selected
+    ? '0 4px 12px rgba(0, 0, 0, 0.12)'
+    : '0 2px 8px rgba(0, 0, 0, 0.08)';
+  const boxShadow = isProvisioningError
+    ? '0 0 0 2px var(--agyn-status-failed), 0 6px 18px rgba(220, 38, 38, 0.28)'
+    : baseBoxShadow;
+  const borderColor = isProvisioningError ? 'var(--agyn-status-failed)' : `${config.borderColor}40`;
+  const selectionOutlineColor = isProvisioningError ? 'var(--agyn-status-failed)' : config.borderColor;
 
   return (
     <div className={`relative ${className}`}>
@@ -62,10 +91,8 @@ export default function GraphNode({ kind, title, inputs = [], outputs = [], avat
       <div 
         className="relative bg-white rounded-[10px] w-[280px] transition-all cursor-pointer"
         style={{ 
-          border: `1px solid ${config.borderColor}40`,
-          boxShadow: selected
-            ? '0 4px 12px rgba(0,0,0,0.12)'
-            : '0 2px 8px rgba(0,0,0,0.08)',
+          border: `1px solid ${borderColor}`,
+          boxShadow,
         }}
       >
         {/* Selection outline overlay so it sits above header background */}
@@ -73,7 +100,7 @@ export default function GraphNode({ kind, title, inputs = [], outputs = [], avat
           <div
             className="pointer-events-none absolute inset-0 rounded-[10px]"
             style={{
-              boxShadow: `0 0 0 2px ${config.borderColor}`,
+              boxShadow: `0 0 0 2px ${selectionOutlineColor}`,
             }}
           />
         )}
@@ -108,6 +135,30 @@ export default function GraphNode({ kind, title, inputs = [], outputs = [], avat
                 </div>
               )}
             </div>
+            {isProvisioningError && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--agyn-status-failed)] hover:bg-[var(--agyn-status-failed-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--agyn-status-failed)]"
+                      aria-label="View node error details"
+                      title="View node error details"
+                    >
+                      <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    align="end"
+                    sideOffset={6}
+                    className="max-w-[360px] whitespace-pre-wrap break-words text-left leading-relaxed"
+                  >
+                    <p>{errorMessage}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
 

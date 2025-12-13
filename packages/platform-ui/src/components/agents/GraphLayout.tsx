@@ -51,6 +51,24 @@ const ACTION_GUARD_INTERVAL_MS = 600;
 const SECRET_SUGGESTION_TTL_MS = 5 * 60 * 1000;
 const VARIABLE_SUGGESTION_TTL_MS = 5 * 60 * 1000;
 
+function normalizeErrorDetail(detail: unknown): string | undefined {
+  if (detail === null || detail === undefined) {
+    return undefined;
+  }
+  if (typeof detail === 'string') {
+    const trimmed = detail.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (typeof detail === 'object') {
+    try {
+      return JSON.stringify(detail, null, 2);
+    } catch {
+      return '[error detail unavailable]';
+    }
+  }
+  return String(detail);
+}
+
 export interface GraphLayoutServices {
   searchNixPackages: (query: string) => Promise<Array<{ name: string }>>;
   listNixPackageVersions: (name: string) => Promise<Array<{ version: string }>>;
@@ -95,6 +113,7 @@ function resolveDisplayTitle(node: GraphNodeConfig): string {
 }
 
 function toFlowNode(node: GraphNodeConfig): FlowNode {
+  const errorDetail = normalizeErrorDetail(node.runtime?.provisionStatus?.details);
   return {
     id: node.id,
     type: 'graphNode',
@@ -105,6 +124,8 @@ function toFlowNode(node: GraphNodeConfig): FlowNode {
       inputs: node.ports.inputs,
       outputs: node.ports.outputs,
       avatarSeed: node.avatarSeed,
+      status: node.status,
+      errorDetail,
     },
     selected: false,
   } satisfies FlowNode;
@@ -466,26 +487,31 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     setFlowNodes((prev) => {
       const prevById = new Map(prev.map((item) => [item.id, item] as const));
       let changed = prev.length !== nodes.length;
-      const next: FlowNode[] = nodes.map((node, index) => {
-        const existing = prevById.get(node.id);
-        const nextData = {
-          kind: node.kind,
-          title: resolveDisplayTitle(node),
-          inputs: node.ports.inputs,
-          outputs: node.ports.outputs,
-          avatarSeed: node.avatarSeed,
-        } satisfies FlowNode['data'];
-        if (!existing) {
-          changed = true;
-          return toFlowNode(node);
-        }
+    const next: FlowNode[] = nodes.map((node, index) => {
+      const existing = prevById.get(node.id);
+      const errorDetail = normalizeErrorDetail(node.runtime?.provisionStatus?.details);
+      const nextData = {
+        kind: node.kind,
+        title: resolveDisplayTitle(node),
+        inputs: node.ports.inputs,
+        outputs: node.ports.outputs,
+        avatarSeed: node.avatarSeed,
+        status: node.status,
+        errorDetail,
+      } satisfies FlowNode['data'];
+      if (!existing) {
+        changed = true;
+        return toFlowNode(node);
+      }
         const basePosition = existing.position ?? { x: node.x, y: node.y };
         const dataMatches =
           existing.data.kind === nextData.kind &&
           existing.data.title === nextData.title &&
           existing.data.avatarSeed === nextData.avatarSeed &&
           existing.data.inputs === nextData.inputs &&
-          existing.data.outputs === nextData.outputs;
+          existing.data.outputs === nextData.outputs &&
+          existing.data.status === nextData.status &&
+          existing.data.errorDetail === nextData.errorDetail;
         const positionMatches =
           existing.position?.x === basePosition.x && existing.position?.y === basePosition.y;
         let nextNode = existing;
@@ -759,7 +785,18 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
   const sidebarDisplayTitle = typeof selectedNode?.title === 'string' ? selectedNode.title : '';
 
-  const sidebarState = useMemo(() => ({ status: sidebarStatus }), [sidebarStatus]);
+  const sidebarErrorDetail = useMemo(() => {
+    const fromApi = normalizeErrorDetail(statusQuery.data?.provisionStatus?.details);
+    if (fromApi) {
+      return fromApi;
+    }
+    return normalizeErrorDetail(selectedNode?.runtime?.provisionStatus?.details);
+  }, [selectedNode?.runtime?.provisionStatus?.details, statusQuery.data]);
+
+  const sidebarState = useMemo(
+    () => ({ status: sidebarStatus, errorDetail: sidebarErrorDetail }),
+    [sidebarErrorDetail, sidebarStatus],
+  );
 
   const handleConfigChange = useCallback(
     (nextConfig: Partial<SidebarNodeConfig>) => {

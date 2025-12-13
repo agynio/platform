@@ -18,6 +18,7 @@ export interface NodeConfig extends Record<string, unknown> {
 
 export interface NodeState extends Record<string, unknown> {
   status: NodeStatus;
+  errorDetail?: string;
 }
 
 export type ReferenceConfigValue = string | Record<string, unknown>;

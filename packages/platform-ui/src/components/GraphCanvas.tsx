@@ -21,6 +21,7 @@ import '@xyflow/react/dist/style.css';
 
 import NodeComponent, { type NodeKind } from './Node';
 import { SavingStatusControl, type SavingStatus } from './SavingStatusControl';
+import type { GraphNodeStatus } from '@/features/graph/types';
 
 export type GraphNodeData = {
 	kind: NodeKind;
@@ -29,6 +30,8 @@ export type GraphNodeData = {
 	outputs?: { id: string; title: string }[];
 	avatar?: string;
 	avatarSeed?: string;
+	status?: GraphNodeStatus;
+	errorDetail?: string;
 };
 
 const DRAGGABLE_NODE_KINDS: NodeKind[] = ['Trigger', 'Agent', 'Tool', 'MCP', 'Workspace'];
@@ -103,6 +106,8 @@ export function GraphCanvas({
 					outputs={data.outputs}
 					avatar={data.avatar}
 					avatarSeed={data.avatarSeed}
+					status={data.status}
+					errorDetail={data.errorDetail}
 					selected={selected}
 				/>
 			),
