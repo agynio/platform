@@ -9,8 +9,12 @@ const sanitizeLiteLLMValue = (envKey: 'LITELLM_BASE_URL' | 'LITELLM_MASTER_KEY',
   const trimmed = raw.trim();
   if (trimmed.length === 0) return undefined;
   if (envKey === 'LITELLM_BASE_URL') {
-    const withoutTrailing = trimmed.replace(/\/+$/, '');
-    return withoutTrailing.length > 0 ? withoutTrailing : undefined;
+    const withoutTrailingSlashes = trimmed.replace(/\/+$/, '');
+    const withoutV1 = withoutTrailingSlashes.endsWith('/v1')
+      ? withoutTrailingSlashes.slice(0, -3)
+      : withoutTrailingSlashes;
+    const normalized = withoutV1.replace(/\/+$/, '');
+    return normalized.length > 0 ? normalized : undefined;
   }
   return trimmed;
 };

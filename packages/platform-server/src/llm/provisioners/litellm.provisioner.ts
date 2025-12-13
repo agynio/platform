@@ -65,7 +65,9 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private sanitizeBaseUrl(base: string): string {
-    return base.replace(/\/+$/, '');
+    const withoutTrailing = base.replace(/\/+$/, '');
+    const withoutV1 = withoutTrailing.endsWith('/v1') ? withoutTrailing.slice(0, -3) : withoutTrailing;
+    return withoutV1.replace(/\/+$/, '');
   }
 
   private toErrorMessage(error: unknown): string {

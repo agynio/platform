@@ -60,7 +60,7 @@ describe('ConfigService LiteLLM configuration', () => {
       LITELLM_MASTER_KEY: undefined,
     });
 
-    expect(service.litellmBaseUrl).toBe('https://fallback.openai/v1');
+    expect(service.litellmBaseUrl).toBe('https://fallback.openai');
     expect(service.litellmMasterKey).toBe('sk-openai');
   });
 

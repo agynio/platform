@@ -93,6 +93,19 @@ describe('LiteLLMAdminClient', () => {
     vi.restoreAllMocks();
   });
 
+  it('normalizes base URL for admin requests', async () => {
+    const { client, fetchImpl } = createClient({
+      baseUrl: 'https://litellm.example/v1///',
+      responses: [jsonResponse({}, { status: 404 })],
+    });
+
+    await expect(client.validateKey('sk-alias', 1000)).resolves.toBe(false);
+
+    const [url, init] = fetchImpl.mock.calls[0] as FetchCall;
+    expect(url).toBe('https://litellm.example/key/info?key=sk-alias');
+    expect(init?.method).toBe('GET');
+  });
+
   describe('key validation and deletion', () => {
     it('returns true for valid keys', async () => {
       const { client } = createClient({ responses: [jsonResponse({}, { status: 200 })] });

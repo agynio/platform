@@ -51,7 +51,10 @@ export class LiteLLMAdminClient {
   private readonly baseDelayMs: number;
 
   constructor(private readonly masterKey: string, baseUrl: string, options: LiteLLMAdminClientOptions) {
-    this.base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    const normalized = baseUrl.replace(/\/+$/, '');
+    const withoutV1 = normalized.endsWith('/v1') ? normalized.slice(0, -3) : normalized;
+    const sanitized = withoutV1.replace(/\/+$/, '');
+    this.base = sanitized.length > 0 ? `${sanitized}/` : '/';
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.logger = options.logger;
     this.maxAttempts = Math.max(1, options.maxAttempts);

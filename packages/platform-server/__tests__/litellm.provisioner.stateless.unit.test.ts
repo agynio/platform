@@ -25,7 +25,7 @@ describe('LiteLLMProvisioner stateless behavior', () => {
   });
 
   it('sanitizes base URL before provisioning', async () => {
-    const config = createConfigWithDefaults({ litellmBaseUrl: 'https://litellm.example///' });
+    const config = createConfigWithDefaults({ litellmBaseUrl: 'https://litellm.example/v1///' });
     const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = input.toString();
       if (url.endsWith('/key/delete')) {
@@ -40,9 +40,10 @@ describe('LiteLLMProvisioner stateless behavior', () => {
     const provisioner = new LiteLLMProvisioner(config, { fetchImpl: fetchImpl as unknown as typeof fetch });
     const adminSpy = vi.spyOn<any, any>(provisioner, 'createAdminClient');
 
-    await (provisioner as any).provisionLiteLLMToken();
+    const result = await (provisioner as any).provisionLiteLLMToken();
 
     expect(adminSpy).toHaveBeenCalledWith('https://litellm.example', 'master-key');
+    expect(result.baseUrl).toBe('https://litellm.example/v1');
   });
 
   it('parses model list from env and falls back to default', async () => {
