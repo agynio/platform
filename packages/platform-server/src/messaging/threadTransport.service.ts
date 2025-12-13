@@ -87,6 +87,10 @@ export class ThreadTransportService {
         return result;
       }
 
+      if (source === 'auto_response') {
+        return result;
+      }
+
       try {
         await this.persistence.recordTransportAssistantMessage({
           threadId: normalizedThreadId,
@@ -111,7 +115,6 @@ export class ThreadTransportService {
       return { ok: false, error: message };
     }
   }
-
   private format(context?: Record<string, unknown>): string {
     return context ? ` ${JSON.stringify(context)}` : '';
   }
