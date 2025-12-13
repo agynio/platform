@@ -73,7 +73,8 @@ export default function GraphNode({
     ? createAvatar(avataaars, { seed: avatarSeed }).toString()
     : undefined;
   const showAvatar = kind === 'Agent' && (avatar || avatarSvg);
-  const isProvisioningError = status === 'provisioning_error' || status === 'error';
+  const statusString = (status ?? '') as string;
+  const isProvisioningError = statusString === 'provisioning_error' || statusString === 'error';
   const trimmedErrorDetail = typeof errorDetail === 'string' ? errorDetail.trim() : '';
   const errorMessage = trimmedErrorDetail.length > 0 ? trimmedErrorDetail : ERROR_FALLBACK_MESSAGE;
   const baseBoxShadow = selected
