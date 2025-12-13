@@ -45,4 +45,39 @@ describe('computeRequiredKeys', () => {
     const gh = out.filter((k) => k.mount === 'secret' && k.path === 'github' && k.key === 'GH_TOKEN');
     expect(gh.length).toBe(1);
   });
+
+  it('extracts mount/path/key from canonical vault refs', () => {
+    const graph: PersistedGraph = {
+      name: 'c',
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      nodes: [
+        {
+          id: 'c1',
+          template: 'sendSlackMessageTool',
+          config: {
+            bot_token: { kind: 'vault', mount: 'secret', path: 'slack', key: 'BOT_TOKEN' },
+          },
+        },
+        {
+          id: 'c2',
+          template: 'workspace',
+          config: {
+            env: [
+              {
+                name: 'API_KEY',
+                source: 'vault',
+                value: { kind: 'vault', mount: 'kv', path: 'prod/app', key: 'TOKEN' },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    };
+
+    const out = computeRequiredKeys(graph);
+    expect(out).toContainEqual({ mount: 'secret', path: 'slack', key: 'BOT_TOKEN' });
+    expect(out).toContainEqual({ mount: 'kv', path: 'prod/app', key: 'TOKEN' });
+  });
 });

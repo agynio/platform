@@ -30,4 +30,19 @@ describe('collectVaultRefs', () => {
     const input = { a: { value: 1, source: 'vault' }, b: { value: 'x', source: 'static' } };
     expect(collectVaultRefs(input)).toEqual([]);
   });
+
+  it('collects canonical vault refs', () => {
+    const direct = { kind: 'vault', mount: 'secret', path: 'app', key: 'TOKEN' };
+    const nested = {
+      source: 'vault',
+      value: { kind: 'vault', mount: 'kv', path: 'prod/service', key: 'API_KEY' },
+    };
+    const missingMount = { kind: 'vault', path: 'app', key: 'SKIP' };
+    const missingKey = {
+      source: 'vault',
+      value: { kind: 'vault', mount: 'secret', path: 'app', key: '' },
+    };
+    const out = collectVaultRefs([direct, nested, missingMount, missingKey]);
+    expect(out.sort()).toEqual(['secret/app/TOKEN', 'kv/prod/service/API_KEY'].sort());
+  });
 });
