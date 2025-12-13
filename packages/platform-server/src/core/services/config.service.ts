@@ -5,6 +5,16 @@ dotenv.config();
 
 const TEST_NODE_ENV = 'test';
 
+const sanitizeLiteLLMValue = (envKey: 'LITELLM_BASE_URL' | 'LITELLM_MASTER_KEY', raw: string): string | undefined => {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return undefined;
+  if (envKey === 'LITELLM_BASE_URL') {
+    const withoutTrailing = trimmed.replace(/\/+$/, '');
+    return withoutTrailing.length > 0 ? withoutTrailing : undefined;
+  }
+  return trimmed;
+};
+
 const createRequiredLiteLLMField = (
   envKey: 'LITELLM_BASE_URL' | 'LITELLM_MASTER_KEY',
   message: string,
@@ -13,18 +23,32 @@ const createRequiredLiteLLMField = (
   z
     .union([z.string(), z.undefined(), z.null()])
     .transform((value, ctx) => {
-      const direct = typeof value === 'string' ? value.trim() : undefined;
-      if (direct && direct.length > 0) {
+      const sanitize = (input?: string | null): string | undefined => {
+        if (typeof input !== 'string') return undefined;
+        return sanitizeLiteLLMValue(envKey, input);
+      };
+
+      const direct = sanitize(value);
+      if (direct) {
         return direct;
       }
 
-      const fromEnv = process.env[envKey];
-      if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
-        return fromEnv.trim();
+      const fromEnv = sanitize(process.env[envKey]);
+      if (fromEnv) {
+        return fromEnv;
+      }
+
+      const legacyKey = envKey === 'LITELLM_BASE_URL' ? 'OPENAI_BASE_URL' : 'OPENAI_API_KEY';
+      const legacyValue = sanitize(process.env[legacyKey as keyof NodeJS.ProcessEnv]);
+      if (legacyValue) {
+        return legacyValue;
       }
 
       if (process.env.NODE_ENV === TEST_NODE_ENV) {
-        return testFallback;
+        const fallback = sanitize(testFallback);
+        if (fallback) {
+          return fallback;
+        }
       }
 
       ctx.addIssue({ code: z.ZodIssueCode.custom, message });
