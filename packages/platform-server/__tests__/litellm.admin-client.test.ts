@@ -194,19 +194,30 @@ describe('LiteLLMAdminClient', () => {
 
     it('redacts master key from debug logs', async () => {
       process.env.NODE_ENV = 'development';
-      const { client } = createClient({ responses: [jsonResponse({ key: 'sk3' })], masterKey: 'super-secret' });
+      const logger = createLogger();
+      const { client } = createClient({
+        responses: [jsonResponse({ key: 'sk3' })],
+        masterKey: 'super-secret',
+        clientOptions: { logger },
+      });
       await client.generateKey({ alias: 'agents', models: ['m1'] });
-      expect(console.debug).toHaveBeenCalled();
-      for (const call of (console.debug as unknown as vi.Mock).mock.calls) {
-        expect(JSON.stringify(call)).not.toContain('super-secret');
-      }
+      expect(logger.debug).toHaveBeenCalledWith('LiteLLM admin payload POST key/generate', {
+        body: { key_alias: 'agents', models: ['m1'] },
+      });
+      const serializedCalls = logger.debug.mock.calls.map((call) => JSON.stringify(call));
+      expect(serializedCalls.some((entry) => entry.includes('super-secret'))).toBe(false);
+      expect(console.debug).not.toHaveBeenCalled();
     });
 
     it('logs skip message in production', async () => {
       process.env.NODE_ENV = 'production';
-      const { client } = createClient({ responses: [jsonResponse({ key: 'sk' })] });
+      const logger = createLogger();
+      const { client } = createClient({ responses: [jsonResponse({ key: 'sk' })], clientOptions: { logger } });
       await client.generateKey({ alias: 'agents', models: ['m1'] });
-      expect(console.debug).toHaveBeenCalledWith('[LiteLLM admin skipped logging in production]', expect.any(Object));
+      expect(logger.debug).toHaveBeenCalledWith('LiteLLM admin payload POST key/generate', {
+        body: { key_alias: 'agents', models: ['m1'] },
+      });
+      expect(console.debug).not.toHaveBeenCalled();
     });
   });
 

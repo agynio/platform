@@ -39,7 +39,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
 
   private async provisionLiteLLMToken(): Promise<{ apiKey: string; baseUrl: string }> {
     const base = this.sanitizeBaseUrl(this.cfg.litellmBaseUrl as string);
-    const master = this.cfg.litellmMasterKey as string;
+    const master = this.sanitizeMasterKey(this.cfg.litellmMasterKey as string);
     const inferenceBase = `${base}/v1`;
     const admin = this.createAdminClient(base, master);
 
@@ -68,6 +68,14 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     const withoutTrailing = base.replace(/\/+$/, '');
     const withoutV1 = withoutTrailing.endsWith('/v1') ? withoutTrailing.slice(0, -3) : withoutTrailing;
     return withoutV1.replace(/\/+$/, '');
+  }
+
+  private sanitizeMasterKey(masterKey: string): string {
+    const trimmed = masterKey.trim();
+    if (trimmed.length === 0) {
+      throw new Error('LiteLLM master key is required');
+    }
+    return trimmed;
   }
 
   private toErrorMessage(error: unknown): string {

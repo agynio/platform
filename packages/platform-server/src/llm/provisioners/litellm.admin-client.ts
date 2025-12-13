@@ -44,13 +44,19 @@ export interface GeneratedKey {
 }
 
 export class LiteLLMAdminClient {
+  private readonly masterKey: string;
   private readonly base: string;
   private readonly fetchImpl: typeof fetch;
   private readonly logger?: Logger;
   private readonly maxAttempts: number;
   private readonly baseDelayMs: number;
 
-  constructor(private readonly masterKey: string, baseUrl: string, options: LiteLLMAdminClientOptions) {
+  constructor(masterKey: string, baseUrl: string, options: LiteLLMAdminClientOptions) {
+    const sanitizedMasterKey = masterKey.trim();
+    if (sanitizedMasterKey.length === 0) {
+      throw new Error('LiteLLM master key is required');
+    }
+    this.masterKey = sanitizedMasterKey;
     const normalized = baseUrl.replace(/\/+$/, '');
     const withoutV1 = normalized.endsWith('/v1') ? normalized.slice(0, -3) : normalized;
     const sanitized = withoutV1.replace(/\/+$/, '');
@@ -153,17 +159,9 @@ export class LiteLLMAdminClient {
     };
     const sanitizedBody = body !== undefined && method !== 'GET' ? this.sanitizePayload(body) : undefined;
     const payload = sanitizedBody !== undefined ? JSON.stringify(sanitizedBody) : undefined;
-    if (payload) {
+    if (payload && this.logger?.debug) {
       const debugPayload = sanitizedBody ?? body;
-      const environment = process.env.NODE_ENV ?? 'undefined';
-      if (environment !== 'production') {
-        if (this.logger?.debug) {
-          this.logger.debug(`LiteLLM admin payload ${method} ${path}`, { body: debugPayload });
-        }
-        console.debug('[LiteLLM admin]', { method, path, body: debugPayload, env: environment });
-      } else {
-        console.debug('[LiteLLM admin skipped logging in production]', { method, path });
-      }
+      this.logger.debug(`LiteLLM admin payload ${method} ${path}`, { body: debugPayload });
     }
     if (payload) headers['content-type'] = 'application/json';
 
