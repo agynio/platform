@@ -1,5 +1,7 @@
-// Collect vault references from node config objects. A reference is any object
-// with shape { value: string, source: 'vault' } (including env arrays).
+// Collect vault references from node config objects. Supports legacy references
+// { value: string, source: 'vault' } and canonical vault objects
+// { kind: 'vault', mount, path, key }, including canonical values nested under
+// { source: 'vault', value }.
 
 export function collectVaultRefs(input: unknown): string[] {
   const out = new Set<string>();
