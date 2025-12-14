@@ -11,6 +11,8 @@ type VirtualKeyState = { key: string; expiresAt: Date | null };
 
 const MIN_REFRESH_DELAY_MS = 60_000;
 const REFRESH_GRACE_MS = 5 * 60_000;
+const REFRESH_RETRY_BASE_DELAY_MS = 15_000;
+const REFRESH_RETRY_MAX_DELAY_MS = 5 * 60_000;
 
 @Injectable()
 export class LiteLLMProvisioner extends LLMProvisioner {
@@ -50,7 +52,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   async teardown(): Promise<void> {
-    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.clearRefreshTimer();
     this.removeShutdownHooks();
   }
 
@@ -173,17 +175,33 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private scheduleRefresh(expiresAt: Date | null): void {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+    this.clearRefreshTimer();
     if (!expiresAt) return;
 
     const msUntilExpiry = expiresAt.getTime() - Date.now();
     const delay = Math.max(MIN_REFRESH_DELAY_MS, msUntilExpiry - REFRESH_GRACE_MS);
     this.refreshTimer = setTimeout(() => {
-      void this.refreshKey('refresh');
+      this.refreshTimer = undefined;
+      void this.runScheduledRefresh('refresh', 0);
     }, delay);
+  }
+
+  private async runScheduledRefresh(trigger: ProvisionContext, attempt: number): Promise<void> {
+    try {
+      await this.refreshKey(trigger);
+    } catch (error) {
+      this.logger.error(
+        `LiteLLM scheduled refresh failed ${JSON.stringify({ attempt, trigger, error: this.describeError(error) })}`,
+      );
+      const nextDelay = Math.min(
+        REFRESH_RETRY_MAX_DELAY_MS,
+        REFRESH_RETRY_BASE_DELAY_MS * Math.pow(2, attempt),
+      );
+      this.refreshTimer = setTimeout(() => {
+        this.refreshTimer = undefined;
+        void this.runScheduledRefresh(trigger, attempt + 1);
+      }, nextDelay);
+    }
   }
 
   private async generateAndPersistKey(context: ProvisionContext): Promise<VirtualKeyState> {
@@ -324,6 +342,13 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   private removeShutdownHooks(): void {
     for (const { signal, handler } of this.shutdownHandlers.splice(0)) {
       process.off(signal, handler);
+    }
+  }
+
+  private clearRefreshTimer(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
     }
   }
 

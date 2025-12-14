@@ -192,4 +192,45 @@ describe('LiteLLMProvisioner', () => {
     expect(store.current?.key).toBe('sk-refreshed');
     await provisioner.teardown();
   });
+
+  it('keeps retrying scheduled refresh when LiteLLM is unavailable', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2025-01-01T00:00:00.000Z');
+    vi.setSystemTime(now);
+    const store = new InMemoryKeyStore();
+    const generateResponses = [
+      respondJson({ key: 'sk-first', expires: new Date(now.getTime() + 10 * 60 * 1000).toISOString() }),
+      respondStatus(500, 'down'),
+      respondStatus(500, 'down'),
+      respondStatus(500, 'down'),
+      respondJson({ key: 'sk-recovered', expires: new Date(now.getTime() + 20 * 60 * 1000).toISOString() }),
+    ];
+    const deleteResponses = [respondJson({ deleted_keys: ['sk-first'] })];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getUrl(input);
+      if (url.endsWith('/key/generate')) {
+        const next = generateResponses.shift();
+        if (!next) throw new Error('Missing generate response');
+        return next;
+      }
+      if (url.endsWith('/key/delete')) {
+        const next = deleteResponses.shift();
+        if (!next) throw new Error('Missing delete response');
+        return next;
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    const provisioner = new LiteLLMProvisioner(baseConfig(), store, fetchMock as unknown as typeof fetch);
+    await provisioner.init();
+
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1000);
+    expect(store.current?.key).toBe('sk-first');
+
+    await vi.advanceTimersByTimeAsync(15_000 + 10);
+
+    expect(store.current?.key).toBe('sk-recovered');
+    await provisioner.teardown();
+  });
 });
