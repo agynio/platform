@@ -41,6 +41,22 @@ model LiteLLMVirtualKey {
   @@map("litellm_virtual_keys")
 }
 
+model OnboardingState {
+  id               Int      @id @default(1)
+  profileFirstName String?
+  profileLastName  String?
+  profileEmail     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model OnboardingStepCompletion {
+  id          Int      @id @default(autoincrement())
+  stepId      String   @unique
+  completedAt DateTime @default(now())
+  data        Json?
+}
+
 enum MemoryScope {
   global
   perThread

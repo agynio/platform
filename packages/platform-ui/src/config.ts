@@ -41,10 +41,12 @@ const rawApiBase = requireEnv('VITE_API_BASE_URL');
 
 const apiBaseUrl = deriveBase(rawApiBase, { stripApi: true });
 const socketBaseUrl = deriveBase(rawApiBase, { stripApi: true });
+const appVersion = resolveAppVersion();
 
 export const config = {
   apiBaseUrl,
   socketBaseUrl,
+  appVersion,
 };
 
 let cachedSocketBaseUrl: string | null = null;
@@ -52,4 +54,13 @@ let cachedSocketBaseUrl: string | null = null;
 export function getSocketBaseUrl(): string {
   if (!cachedSocketBaseUrl) cachedSocketBaseUrl = socketBaseUrl;
   return cachedSocketBaseUrl;
+}
+
+function resolveAppVersion(): string {
+  const fromEnv = typeof import.meta.env?.VITE_APP_VERSION === 'string' ? import.meta.env?.VITE_APP_VERSION?.trim() : '';
+  if (fromEnv) return fromEnv;
+  if (typeof __APP_VERSION__ === 'string' && __APP_VERSION__.trim()) {
+    return __APP_VERSION__.trim();
+  }
+  return '0.0.0';
 }
