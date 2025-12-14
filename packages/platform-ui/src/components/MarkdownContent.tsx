@@ -78,11 +78,18 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
     ),
 
     // Inline code
-    code: ({ inline, className: codeClassName, children, style, node: _node, ...props }: MarkdownCodeProps) => {
+    code: ({ inline, className: codeClassName, children, style, node, ...props }: MarkdownCodeProps) => {
       const match = /language-(\w+)/.exec(codeClassName || '');
       const text = String(children).replace(/\n$/, '');
+      const position = (node as { position?: { start?: { line?: number }; end?: { line?: number } } })?.position;
+      const spansMultipleLines = Boolean(
+        position?.start?.line !== undefined &&
+          position?.end?.line !== undefined &&
+          position.start.line !== position.end.line
+      );
+      const isInlineCode = (inline ?? !spansMultipleLines) && !match;
 
-      if (!inline && match) {
+      if (!isInlineCode && match) {
         return (
           <SyntaxHighlighter
             style={oneDark}
@@ -112,7 +119,7 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
         );
       }
 
-      if (!inline) {
+      if (!isInlineCode) {
         return (
           <code
             className={[
@@ -130,7 +137,7 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
 
       return (
         <code
-          className="bg-[var(--agyn-bg-light)] text-[var(--agyn-purple)] px-1.5 py-0.5 rounded text-sm break-all"
+          className="bg-[var(--agyn-bg-light)] text-[var(--agyn-purple)] px-1.5 py-0.5 rounded text-sm break-words max-w-full whitespace-pre-wrap"
           style={style}
           {...props}
         >

@@ -42,7 +42,7 @@ const sanitizedHtmlCodeBlock = '<pre><code>alpha\nbeta\ngamma</code></pre>';
 
 describe('MarkdownContent rendering', () => {
   it('renders expected markdown primitives including underline and lists', () => {
-    render(<MarkdownContent content={richMarkdown} className="prose" />);
+    const { container } = render(<MarkdownContent content={richMarkdown} className="prose" />);
 
     expect(screen.getByRole('heading', { name: 'Heading' })).toBeInTheDocument();
     expect(screen.getByText('Bold').tagName).toBe('STRONG');
@@ -56,8 +56,11 @@ describe('MarkdownContent rendering', () => {
     const blockquote = screen.getByText('Blockquote').closest('blockquote');
     expect(blockquote).not.toBeNull();
 
-    const inlineCode = screen.getByText('code');
-    expect(inlineCode.tagName).toBe('CODE');
+    const inlineCode = container.querySelector('p code');
+    expect(inlineCode?.tagName).toBe('CODE');
+    expect(inlineCode).toHaveTextContent('code');
+    expect(inlineCode).toHaveClass('break-words');
+    expect(inlineCode).not.toHaveClass('break-all');
 
     const codeElements = screen.getAllByText((_, element) => element?.tagName === 'CODE');
     const blockCode = codeElements.find((element) => element.textContent?.includes('const'));

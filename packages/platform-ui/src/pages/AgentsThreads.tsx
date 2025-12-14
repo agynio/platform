@@ -14,7 +14,6 @@ import type { AutocompleteOption } from '@/components/AutocompleteInput';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
 import { LruCache } from '@/lib/lru/LruCache.ts';
-import { normalizeEscapedNewlines } from '@/lib/utils';
 import { graphSocket } from '@/lib/graph/socket';
 import { threads, type ThreadTreeItem } from '@/api/modules/threads';
 import { runs as runsApi } from '@/api/modules/runs';
@@ -419,7 +418,7 @@ function mapApiMessages(items: RunMessageItem[]): ConversationMessageWithMeta[] 
   return items.map((item) => ({
     id: item.id,
     role: item.kind,
-    content: normalizeEscapedNewlines(item.text ?? ''),
+    content: item.text ?? '',
     timestamp: formatDate(item.createdAt),
     createdAtRaw: item.createdAt,
   }));
@@ -440,7 +439,7 @@ function mapSocketMessage(message: SocketMessage): ConversationMessageWithMeta {
   return {
     id: message.id,
     role: message.kind,
-    content: normalizeEscapedNewlines(message.text ?? ''),
+    content: message.text ?? '',
     timestamp: formatDate(message.createdAt),
     createdAtRaw: message.createdAt,
   };
