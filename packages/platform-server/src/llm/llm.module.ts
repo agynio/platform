@@ -14,20 +14,28 @@ import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
 import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { CoreModule } from '../core/core.module';
 import { EventsModule } from '../events/events.module';
+import { PrismaService } from '../core/services/prisma.service';
+import { LiteLLMKeyStore } from './provisioners/litellm.key.store';
 
 @Module({
   imports: [CoreModule, EventsModule],
   providers: [
     {
       provide: LLMProvisioner,
-      useFactory: (cfg: ConfigService) => {
+      useFactory: async (cfg: ConfigService, prisma: PrismaService) => {
         const provider = (cfg.llmProvider || 'auto') as 'openai' | 'litellm' | 'auto';
         if (provider === 'openai') return new OpenAILLMProvisioner(cfg);
-        if (provider === 'litellm') return new LiteLLMProvisioner(cfg);
+        if (provider === 'litellm') {
+          const provisioner = new LiteLLMProvisioner(cfg, new LiteLLMKeyStore(prisma));
+          await provisioner.init();
+          return provisioner;
+        }
         if (cfg.openaiApiKey) return new OpenAILLMProvisioner(cfg);
-        return new LiteLLMProvisioner(cfg);
+        const provisioner = new LiteLLMProvisioner(cfg, new LiteLLMKeyStore(prisma));
+        await provisioner.init();
+        return provisioner;
       },
-      inject: [ConfigService],
+      inject: [ConfigService, PrismaService],
     },
     ConversationStateRepository,
     LoadLLMReducer,

@@ -30,6 +30,17 @@ model VariableLocal {
   updatedAt DateTime @updatedAt
 }
 
+model LiteLLMVirtualKey {
+  id        Int      @id @default(autoincrement())
+  alias     String   @unique
+  key       String
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("litellm_virtual_keys")
+}
+
 enum MemoryScope {
   global
   perThread

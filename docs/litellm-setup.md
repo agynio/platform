@@ -34,9 +34,13 @@ App configuration: auto-provision virtual key
   - Optional overrides:
     - LITELLM_MODELS=gpt-5 (comma-separated list)
     - LITELLM_KEY_DURATION=30d
-    - LITELLM_KEY_ALIAS=agents-${process.pid}
+    - LITELLM_KEY_ALIAS=agents/<env>/<deployment> (defaults to NODE_ENV + hostname when unset)
     - Limits: LITELLM_MAX_BUDGET, LITELLM_RPM_LIMIT, LITELLM_TPM_LIMIT, LITELLM_TEAM_ID
 - On success, the server sets OPENAI_API_KEY and OPENAI_BASE_URL automatically (defaults to `${LITELLM_BASE_URL}/v1` if not provided).
+- Lifecycle safeguards:
+  - The server persists the most recently issued virtual key + expiry in Postgres and revokes it on the next startup before minting a replacement.
+  - Keys refresh automatically ~5 minutes before expiry and the previous key is revoked once the new key is active.
+  - 401/403 responses from LiteLLM trigger a single reprovision + retry, and the shutdown path (SIGINT/SIGTERM) attempts a best-effort revoke.
 
 Model naming guidance
 - Use the exact LiteLLM model name as configured in the LiteLLM UI. For OpenAI via LiteLLM, provider prefixes may be required (e.g., openai/gpt-4o-mini).
