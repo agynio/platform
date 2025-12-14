@@ -1139,6 +1139,20 @@ export class RunEventsService {
     });
   }
 
+  async getLLMCallContextCounterState(eventId: string): Promise<{ count: number; ids: string[] } | null> {
+    if (!eventId) return null;
+    const record = await this.prisma.lLMCall.findUnique({
+      where: { eventId },
+      select: { newContextItemCount: true, newContextItemIds: true },
+    });
+    if (!record) return null;
+    const ids = Array.isArray(record.newContextItemIds) ? [...record.newContextItemIds] : [];
+    return {
+      count: record.newContextItemCount ?? 0,
+      ids,
+    };
+  }
+
   async completeLLMCall(args: LLMCallCompleteArgs): Promise<void> {
     const tx = args.tx ?? this.prisma;
     const endedAt = args.endedAt ?? new Date();

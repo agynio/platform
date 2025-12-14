@@ -9,6 +9,7 @@ import { toPrismaJsonValue } from '../services/messages.serialization';
 import type { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
 import { contextItemInputFromMessage } from '../services/context-items.utils';
 import { persistContextItemsWithCounting } from '../services/context-items.append';
+import { LLMCallContextItemCounter } from '../services/llm-call-context-item-counter';
 import { ShellCommandTool } from '../../nodes/tools/shell_command/shell_command.tool';
 
 type ToolCallErrorCode =
@@ -143,6 +144,18 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     const context = this.cloneContext(state.context);
     if (results.length > 0) {
       const appended: string[] = [];
+      if (!llmEventId) {
+        throw new Error('CallToolsLLMReducer missing LLM event id while persisting tool outputs');
+      }
+      let contextCounter: LLMCallContextItemCounter | undefined;
+      if (llmEventId) {
+        const existingCounter = await this.runEvents.getLLMCallContextCounterState(llmEventId);
+        contextCounter = new LLMCallContextItemCounter(this.runEvents, {
+          eventId: llmEventId,
+          count: existingCounter?.count ?? 0,
+          ids: existingCounter?.ids ?? [],
+        });
+      }
       await persistContextItemsWithCounting({
         runEvents: this.runEvents,
         entries: results.map((msg) => ({
@@ -150,8 +163,9 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           assign: (id: string) => {
             appended.push(id);
           },
-          countable: false,
+          countable: true,
         })),
+        counter: contextCounter,
       });
       if (appended.length > 0) {
         context.messageIds = [...context.messageIds, ...appended];

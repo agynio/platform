@@ -166,7 +166,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
             assign: (id) => {
               assistantContextId = id;
             },
-            countable: false,
+            countable: true,
           },
         ],
         counter: contextCounter,

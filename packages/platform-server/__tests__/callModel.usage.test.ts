@@ -99,11 +99,16 @@ describe('CallModelLLMReducer usage metrics', () => {
       callerAgent: { getAgentNodeId: () => 'agent-context' } as any,
     });
 
-    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledTimes(1);
-    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledWith({
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledTimes(2);
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenNthCalledWith(1, {
       eventId: 'evt-context-1',
       newContextItemCount: 1,
       newContextItemIds: ['ctx-user-new'],
+    });
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenNthCalledWith(2, {
+      eventId: 'evt-context-1',
+      newContextItemCount: 2,
+      newContextItemIds: ['ctx-user-new', 'ctx-assistant'],
     });
   });
 
@@ -157,11 +162,16 @@ describe('CallModelLLMReducer usage metrics', () => {
       callerAgent: { getAgentNodeId: () => 'agent-context-tail' } as any,
     });
 
-    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledTimes(1);
-    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledWith({
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenCalledTimes(2);
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenNthCalledWith(1, {
       eventId: 'evt-context-2',
       newContextItemCount: 1,
       newContextItemIds: ['ctx-user-tail'],
+    });
+    expect(runEvents.updateLLMCallNewContextItemCount).toHaveBeenNthCalledWith(2, {
+      eventId: 'evt-context-2',
+      newContextItemCount: 2,
+      newContextItemIds: ['ctx-user-tail', 'ctx-assistant-latest'],
     });
   });
 });
