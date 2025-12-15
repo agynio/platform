@@ -355,6 +355,12 @@ html {
   margin: 1rem 0;
 }
 
+.markdown-preview pre,
+.markdown-preview pre * {
+  text-shadow: none !important;
+  filter: none !important;
+}
+
 .markdown-preview pre code {
   background: transparent;
   color: inherit;
