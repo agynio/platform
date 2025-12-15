@@ -194,11 +194,11 @@ describe('MarkdownContent rendering', () => {
     const pre = container.querySelector('pre');
     expect(pre).not.toBeNull();
     expect(pre?.querySelectorAll('pre').length).toBe(0);
+    expect(pre).toHaveStyle({ padding: '1rem' });
 
-    const syntaxWrapper = pre?.querySelector(':scope > div');
-    expect(syntaxWrapper).not.toBeNull();
-    const wrapperStyle = syntaxWrapper?.getAttribute('style') ?? '';
-    expect(wrapperStyle).toMatch(/padding:\s*0px/);
+    const directChild = pre?.querySelector(':scope > *:first-child');
+    expect(directChild?.tagName).toBe('CODE');
+    expect(pre?.querySelector(':scope > div')).toBeNull();
 
     const highlightedTokens = container.querySelectorAll('pre [style*="text-shadow"]');
     expect(highlightedTokens.length).toBe(0);
