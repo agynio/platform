@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode, type CSSProperties } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
@@ -31,6 +31,17 @@ type ReactMarkdownListInternals = {
 type MarkdownOrderedListProps = ComponentPropsWithoutRef<'ol'> & ReactMarkdownListInternals;
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<'ul'> & ReactMarkdownListInternals;
 type MarkdownListItemProps = ComponentPropsWithoutRef<'li'> & ReactMarkdownListInternals;
+
+const stripTextShadowFromTheme = <T extends Record<string, CSSProperties>>(theme: T): T => {
+  return Object.fromEntries(
+    Object.entries(theme).map(([selector, styles]) => {
+      const { textShadow: _removedTextShadow, ...rest } = styles;
+      return [selector, rest];
+    }),
+  ) as T;
+};
+
+const oneDarkWithoutTextShadow = stripTextShadowFromTheme(oneDark);
 
 export function MarkdownContent({ content, className = '' }: MarkdownContentProps) {
   const markdownComponents: Components = {
@@ -111,7 +122,7 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
       if (!isInlineCode && match) {
         return (
           <SyntaxHighlighter
-            style={oneDark}
+            style={oneDarkWithoutTextShadow}
             language={match[1]}
             PreTag="pre"
             customStyle={{
