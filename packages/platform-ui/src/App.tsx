@@ -18,6 +18,8 @@ import { SettingsVariables } from './pages/SettingsVariables';
 import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
 import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
 
 const queryClient = new QueryClient();
 
@@ -26,49 +28,51 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <RuntimeTemplatesProvider>
         <Routes>
-          {/* Index and 404 fallback redirect */}
           <Route path="/" element={<Navigate to="/agents/graph" replace />} />
-          <Route path="*" element={<Navigate to="/agents/graph" replace />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
 
-          {/* Root layout wraps all primary routes */}
-          <Route element={<RootLayout />}>
-            {/* Agents */}
-            <Route path="/agents/graph" element={<AgentsGraphContainer />} />
-            <Route path="/agents/chat" element={<AgentsChat />} />
-            <Route path="/agents/threads" element={<AgentsThreads />} />
-            <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
-            <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunScreen />} />
-            <Route path="/agents/reminders" element={<AgentsReminders />} />
-            <Route path="/agents/memory" element={<AgentsMemoryManager />} />
+          <Route element={<OnboardingGate />}>
+            <Route element={<RootLayout />}>
+              {/* Agents */}
+              <Route path="/agents/graph" element={<AgentsGraphContainer />} />
+              <Route path="/agents/chat" element={<AgentsChat />} />
+              <Route path="/agents/threads" element={<AgentsThreads />} />
+              <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
+              <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunScreen />} />
+              <Route path="/agents/reminders" element={<AgentsReminders />} />
+              <Route path="/agents/memory" element={<AgentsMemoryManager />} />
 
-            {/* Tracing */}
-            <Route path="/tracing/traces" element={<TracingTraces />} />
-            <Route path="/tracing/errors" element={<TracingErrors />} />
-            <Route
-              path="/tracing/trace/:traceId"
-              element={<TracingDisabledPage title="Tracing removed" message="Trace details are no longer available." />}
-            />
-            <Route
-              path="/tracing/thread/:threadId"
-              element={<TracingDisabledPage title="Tracing removed" message="Thread trace views are no longer available." />}
-            />
-            <Route
-              path="/tracing/errors/tools/:label"
-              element={<TracingDisabledPage title="Tracing removed" message="Tool error analytics are no longer available." />}
-            />
+              {/* Tracing */}
+              <Route path="/tracing/traces" element={<TracingTraces />} />
+              <Route path="/tracing/errors" element={<TracingErrors />} />
+              <Route
+                path="/tracing/trace/:traceId"
+                element={<TracingDisabledPage title="Tracing removed" message="Trace details are no longer available." />}
+              />
+              <Route
+                path="/tracing/thread/:threadId"
+                element={<TracingDisabledPage title="Tracing removed" message="Thread trace views are no longer available." />}
+              />
+              <Route
+                path="/tracing/errors/tools/:label"
+                element={<TracingDisabledPage title="Tracing removed" message="Tool error analytics are no longer available." />}
+              />
 
-            {/* Monitoring */}
-            <Route path="/monitoring/containers" element={<MonitoringContainers />} />
-            <Route path="/monitoring/resources" element={<MonitoringResources />} />
+              {/* Monitoring */}
+              <Route path="/monitoring/containers" element={<MonitoringContainers />} />
+              <Route path="/monitoring/resources" element={<MonitoringResources />} />
 
-            {/* Memory */}
-            <Route path="/memory" element={<MemoryNodesListPage />} />
-            <Route path="/memory/:nodeId" element={<MemoryNodeDetailPage />} />
+              {/* Memory */}
+              <Route path="/memory" element={<MemoryNodesListPage />} />
+              <Route path="/memory/:nodeId" element={<MemoryNodeDetailPage />} />
 
-            {/* Settings */}
-            <Route path="/settings/secrets" element={<SettingsSecrets />} />
-            <Route path="/settings/variables" element={<SettingsVariables />} />
+              {/* Settings */}
+              <Route path="/settings/secrets" element={<SettingsSecrets />} />
+              <Route path="/settings/variables" element={<SettingsVariables />} />
+            </Route>
           </Route>
+
+          <Route path="*" element={<Navigate to="/agents/graph" replace />} />
         </Routes>
       </RuntimeTemplatesProvider>
     </QueryClientProvider>

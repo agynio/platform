@@ -41,6 +41,15 @@ model LiteLLMVirtualKey {
   @@map("litellm_virtual_keys")
 }
 
+model UserProfile {
+  id        Int      @id @default(1)
+  firstName String
+  lastName  String
+  email     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum MemoryScope {
   global
   perThread

@@ -41,7 +41,6 @@ const rawApiBase = requireEnv('VITE_API_BASE_URL');
 
 const apiBaseUrl = deriveBase(rawApiBase, { stripApi: true });
 const socketBaseUrl = deriveBase(rawApiBase, { stripApi: true });
-
 export const config = {
   apiBaseUrl,
   socketBaseUrl,
