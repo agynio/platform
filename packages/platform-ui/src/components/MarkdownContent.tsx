@@ -1,6 +1,14 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode, type CSSProperties } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ComponentPropsWithoutRef,
+  type ReactElement,
+  type ReactNode,
+  type CSSProperties,
+} from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
@@ -124,18 +132,17 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
           <SyntaxHighlighter
             style={oneDarkWithoutTextShadow}
             language={match[1]}
-            PreTag="pre"
+            PreTag="div"
             customStyle={{
-              margin: '16px 0',
-              borderRadius: '10px',
-              padding: '1rem',
-              fontSize: '13px',
-              lineHeight: '1.6',
+              margin: 0,
+              padding: 0,
+              background: 'transparent',
+              fontSize: 'inherit',
+              lineHeight: 'inherit',
               maxWidth: '100%',
               minWidth: 0,
               overflowX: 'auto',
-              background: 'var(--agyn-bg-light)',
-              color: 'var(--agyn-dark)',
+              color: 'inherit',
             }}
             codeTagProps={{
               style: {
@@ -182,7 +189,11 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
       const firstElement = childArray.find((node): node is ReactElement => isValidElement(node));
 
       if (firstElement && firstElement.type === SyntaxHighlighter) {
-        return firstElement;
+        return (
+          <pre className={mergedClassName} style={mergedStyle} {...props}>
+            {firstElement}
+          </pre>
+        );
       }
 
       if (firstElement && firstElement.type === 'pre') {

@@ -191,6 +191,15 @@ describe('MarkdownContent rendering', () => {
     const highlighted = ['```ts', 'const example = 42;', '```'].join('\n');
     const { container } = render(<MarkdownContent content={highlighted} />);
 
+    const pre = container.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre?.querySelectorAll('pre').length).toBe(0);
+
+    const syntaxWrapper = pre?.querySelector(':scope > div');
+    expect(syntaxWrapper).not.toBeNull();
+    const wrapperStyle = syntaxWrapper?.getAttribute('style') ?? '';
+    expect(wrapperStyle).toMatch(/padding:\s*0px/);
+
     const highlightedTokens = container.querySelectorAll('pre [style*="text-shadow"]');
     expect(highlightedTokens.length).toBe(0);
   });
