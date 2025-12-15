@@ -14,14 +14,11 @@ export type OnboardingStatusResponse = {
 };
 
 export type OnboardingStepContext = {
-  appVersion: string;
   data: OnboardingDataSnapshot;
-  completedSteps: Set<string>;
 };
 
 export type OnboardingStepDefinition = {
   stepId: string;
-  introducedIn: string;
   isRequired(ctx: OnboardingStepContext): boolean;
   isFulfilled(ctx: OnboardingStepContext): boolean;
 };

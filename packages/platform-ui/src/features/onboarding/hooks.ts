@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { config } from '@/config';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import {
   fetchOnboardingStatus,
@@ -8,12 +7,12 @@ import {
   type OnboardingStatusResponse,
 } from './api';
 
-const ONBOARDING_QUERY_KEY = ['onboarding-status', config.appVersion];
+const ONBOARDING_QUERY_KEY = ['onboarding-status'];
 
 export function useOnboardingStatus(options?: { enabled?: boolean }) {
   return useQuery<OnboardingStatusResponse, Error>({
     queryKey: ONBOARDING_QUERY_KEY,
-    queryFn: () => fetchOnboardingStatus(config.appVersion),
+    queryFn: () => fetchOnboardingStatus(),
     staleTime: 60_000,
     enabled: options?.enabled ?? true,
   });

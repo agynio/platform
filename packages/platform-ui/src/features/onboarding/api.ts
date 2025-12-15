@@ -17,12 +17,8 @@ export type OnboardingStatusResponse = {
   data: OnboardingDataSnapshot;
 };
 
-export async function fetchOnboardingStatus(appVersion: string): Promise<OnboardingStatusResponse> {
-  return asData(
-    http.get<OnboardingStatusResponse>('/api/onboarding/status', {
-      params: { appVersion },
-    }),
-  );
+export async function fetchOnboardingStatus(): Promise<OnboardingStatusResponse> {
+  return asData(http.get<OnboardingStatusResponse>('/api/onboarding/status'));
 }
 
 export async function submitOnboardingProfile(payload: OnboardingProfilePayload): Promise<OnboardingDataSnapshot> {

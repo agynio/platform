@@ -11,7 +11,6 @@ function hasCompleteProfile(ctx: OnboardingStepContext): boolean {
 
 const profileBasicStep: OnboardingStepDefinition = {
   stepId: PROFILE_BASIC_STEP_ID,
-  introducedIn: '1.0.0',
   isRequired: () => true,
   isFulfilled: (ctx) => hasCompleteProfile(ctx),
 };

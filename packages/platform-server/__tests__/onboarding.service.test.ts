@@ -25,23 +25,16 @@ describe('OnboardingService', () => {
   });
 
   it('requires profile step when no data exists', async () => {
-    const status = await service.getStatus('1.0.0');
+    const status = await service.getStatus();
     expect(status.isComplete).toBe(false);
     expect(status.requiredSteps).toEqual(['profile.basic_v1']);
     expect(status.completedSteps).toEqual([]);
     expect(status.data.profile).toBeNull();
   });
 
-  it('skips steps introduced after current app version', async () => {
-    const status = await service.getStatus('0.9.0');
-    expect(status.isComplete).toBe(true);
-    expect(status.requiredSteps).toEqual([]);
-    expect(status.completedSteps).toEqual([]);
-  });
-
   it('marks profile step complete when profile data exists', async () => {
     profileService.setProfile({ firstName: 'Casey', lastName: 'Brooks', email: 'casey@example.com' });
-    const status = await service.getStatus('1.2.0');
+    const status = await service.getStatus();
     expect(status.isComplete).toBe(true);
     expect(status.completedSteps).toEqual(['profile.basic_v1']);
     expect(status.requiredSteps).toEqual([]);
