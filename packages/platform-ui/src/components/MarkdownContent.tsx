@@ -128,7 +128,7 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
             customStyle={{
               margin: '16px 0',
               borderRadius: '10px',
-              padding: '16px',
+              padding: '1rem',
               fontSize: '13px',
               lineHeight: '1.6',
               maxWidth: '100%',

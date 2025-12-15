@@ -22,7 +22,7 @@ function ScreenDialogOverlay({ className, ...props }: React.ComponentProps<typeo
     <DialogPrimitive.Overlay
       data-slot="screen-dialog-overlay"
       className={cn(
-        'fixed inset-0 z-50 bg-[rgba(15,23,42,0.55)] transition-opacity duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
+        'fixed inset-0 z-50 bg-[rgba(15,23,42,0.55)] backdrop-blur-[2px] transition-opacity duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         className,
       )}
       {...props}

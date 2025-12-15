@@ -515,7 +515,7 @@ export default function ThreadsScreen({
 
         {renderComposer(!onSendMessage || !selectedThreadId || isSendMessagePending)}
         {isLoading ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
             <Loader2 className="mr-2 h-4 w-4 animate-spin text-[var(--agyn-gray)]" />
             <span className="text-sm text-[var(--agyn-gray)]">Loading thread…</span>
           </div>
