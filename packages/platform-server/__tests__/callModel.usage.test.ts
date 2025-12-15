@@ -10,6 +10,7 @@ describe('CallModelLLMReducer usage metrics', () => {
       publishEvent: vi.fn(async () => {}),
       completeLLMCall: vi.fn(async () => {}),
       createContextItems: vi.fn(async () => ['ctx-assistant']),
+      appendLLMCallContextItems: vi.fn(async () => {}),
       updateLLMCallNewContextItemCount: vi.fn(async () => {}),
       connectContextItemsToRun: vi.fn(async () => {}),
       createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
@@ -70,6 +71,7 @@ describe('CallModelLLMReducer usage metrics', () => {
       publishEvent: vi.fn(async () => {}),
       completeLLMCall: vi.fn(async () => {}),
       createContextItems: vi.fn().mockResolvedValueOnce(['ctx-user-new']).mockResolvedValueOnce(['ctx-assistant']),
+      appendLLMCallContextItems: vi.fn(async () => {}),
       updateLLMCallNewContextItemCount: vi.fn(async () => {}),
       connectContextItemsToRun: vi.fn(async () => {}),
       createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
@@ -121,6 +123,7 @@ describe('CallModelLLMReducer usage metrics', () => {
         .fn()
         .mockResolvedValueOnce(['ctx-summary-new', 'ctx-memory-new', 'ctx-user-tail'])
         .mockResolvedValueOnce(['ctx-assistant-latest']),
+      appendLLMCallContextItems: vi.fn(async () => {}),
       updateLLMCallNewContextItemCount: vi.fn(async () => {}),
       connectContextItemsToRun: vi.fn(async () => {}),
       createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),

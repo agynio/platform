@@ -240,6 +240,32 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+type ContextSource = {
+  ids: string[];
+  highlightIds: string[];
+};
+
+function buildContextSource(llmCall?: RunTimelineEvent['llmCall']): ContextSource {
+  if (!llmCall) return { ids: [], highlightIds: [] };
+  const rows = Array.isArray(llmCall.contextItemsV2) ? llmCall.contextItemsV2 : [];
+  if (rows.length > 0) {
+    const sorted = [...rows].sort((a, b) => a.idx - b.idx);
+    const ids = sorted
+      .filter((row) => row.purpose === 'prompt_input')
+      .map((row) => row.contextItemId)
+      .filter(isNonEmptyString);
+    const highlightIds = sorted
+      .filter((row) => row.isNew && isNonEmptyString(row.contextItemId))
+      .map((row) => row.contextItemId);
+    return { ids, highlightIds };
+  }
+  const fallbackIds = Array.isArray(llmCall.contextItemIds) ? llmCall.contextItemIds.filter(isNonEmptyString) : [];
+  const fallbackHighlight = Array.isArray(llmCall.newContextItemIds)
+    ? llmCall.newContextItemIds.filter(isNonEmptyString)
+    : [];
+  return { ids: fallbackIds, highlightIds: fallbackHighlight };
+}
+
 type LinkTargets = {
   threadId?: string;
   subthreadId?: string;
@@ -1163,7 +1189,7 @@ export function AgentsRunScreen() {
     const ids = new Set<string>();
     for (const event of allEvents) {
       if (event.type !== 'llm_call') continue;
-      const contextIds = event.llmCall?.contextItemIds ?? [];
+      const { ids: contextIds } = buildContextSource(event.llmCall);
       for (const id of contextIds) {
         if (!isNonEmptyString(id)) continue;
         if (lookup.has(id)) continue;
@@ -1613,10 +1639,11 @@ export function AgentsRunScreen() {
     const lookup = contextItemsRef.current;
     void contextItemsVersion;
     return events.map((event) => {
+      const contextSource = event.type === 'llm_call' ? buildContextSource(event.llmCall) : { ids: [], highlightIds: [] };
       const contextRecords =
         event.type === 'llm_call'
-          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [], {
-              highlightIds: event.llmCall?.newContextItemIds ?? [],
+          ? resolveContextRecords(contextSource.ids, lookup, event.llmCall?.toolCalls ?? [], {
+              highlightIds: contextSource.highlightIds,
               includeAssistant: false,
             })
           : [];

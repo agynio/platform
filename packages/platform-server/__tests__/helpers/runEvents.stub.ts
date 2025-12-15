@@ -42,6 +42,7 @@ export function createRunEventsStub() {
     completeLLMCall: vi.fn(async () => {}),
     updateLLMCallNewContextItemCount: vi.fn(async () => {}),
     getLLMCallContextCounterState: vi.fn(async () => ({ count: 0, ids: [] })),
+    appendLLMCallContextItems: vi.fn(async () => {}),
     startToolExecution: vi.fn(async () => makeEvent()),
     completeToolExecution: vi.fn(async () => {}),
     recordSummarization: vi.fn(async () => makeEvent()),

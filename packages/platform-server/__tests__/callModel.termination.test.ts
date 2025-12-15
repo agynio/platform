@@ -14,6 +14,7 @@ const createRunEventsStub = () => {
       return items.map((item) => item?.id ?? `ctx-${++ctxCounter}`);
     }),
     updateLLMCallNewContextItemCount: vi.fn(async () => {}),
+    appendLLMCallContextItems: vi.fn(async () => {}),
     connectContextItemsToRun: vi.fn(async () => {}),
     createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
   };

@@ -81,6 +81,7 @@ describe('Agent thread model binding', () => {
             startLLMCall: vi.fn(async () => ({ id: 'llm-event' })),
             completeLLMCall: vi.fn(async () => {}),
             updateLLMCallNewContextItemCount: vi.fn(async () => {}),
+            appendLLMCallContextItems: vi.fn(async () => {}),
           },
         },
         { provide: EventsBusService, useValue: { publishEvent: vi.fn(async () => {}) } },

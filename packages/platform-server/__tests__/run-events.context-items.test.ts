@@ -64,6 +64,12 @@ if (!shouldRunDbTests) {
 
       const callRecord = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: event.id } });
       expect(callRecord.contextItemIds).toEqual([systemId, userId]);
+      const relationRows = await prisma.lLMCallContextItem.findMany({
+        where: { llmCallEventId: event.id },
+        orderBy: { idx: 'asc' },
+      });
+      expect(relationRows.map((row) => row.contextItemId)).toEqual([systemId, userId]);
+      expect(relationRows.every((row) => row.purpose === 'prompt_input')).toBe(true);
 
       const afterCount = await prisma.contextItem.count();
       expect(afterCount).toBe(beforeCount);
@@ -145,7 +151,9 @@ if (!shouldRunDbTests) {
       const summaryEvent = firstPage.items[0]!;
       expect(summaryEvent.llmCall).toBeDefined();
       expect(summaryEvent.llmCall?.contextItemIds).toEqual(callRecord.contextItemIds);
-      expect(summaryEvent.llmCall).not.toHaveProperty('contextItems');
+      const relation = summaryEvent.llmCall?.contextItemsV2 ?? [];
+      expect(relation.map((row) => row.contextItemId)).toEqual(callRecord.contextItemIds);
+      expect(relation.every((row) => row.purpose === 'prompt_input')).toBe(true);
       expect(summaryEvent.llmCall).not.toHaveProperty('prompt');
       expect(summaryEvent.llmCall).not.toHaveProperty('promptPreview');
 

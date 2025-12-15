@@ -99,6 +99,13 @@ export type RunTimelineEvent = {
     contextItemIds: string[];
     newContextItemCount: number;
     newContextItemIds: string[];
+    contextItemsV2?: Array<{
+      idx: number;
+      contextItemId: string;
+      purpose: 'prompt_input' | 'produced_tail';
+      isNew: boolean;
+      createdAt: string;
+    }>;
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
