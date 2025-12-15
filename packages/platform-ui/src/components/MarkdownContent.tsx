@@ -1,6 +1,14 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { Children, cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ComponentPropsWithoutRef,
+  type ReactElement,
+  type ReactNode,
+  type CSSProperties,
+} from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
@@ -32,7 +40,92 @@ type MarkdownOrderedListProps = ComponentPropsWithoutRef<'ol'> & ReactMarkdownLi
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<'ul'> & ReactMarkdownListInternals;
 type MarkdownListItemProps = ComponentPropsWithoutRef<'li'> & ReactMarkdownListInternals;
 
+const getCodeRenderMeta = ({ inline, className, node }: MarkdownCodeProps) => {
+  const match = /language-(\w+)/.exec(className || '');
+  const position = (node as { position?: { start?: { line?: number }; end?: { line?: number } } })?.position;
+  const spansMultipleLines = Boolean(
+    position?.start?.line !== undefined &&
+      position?.end?.line !== undefined &&
+      position.start.line !== position.end.line
+  );
+  const isInlineCode = (inline ?? !spansMultipleLines) && !match;
+
+  return { match, isInlineCode } as const;
+};
+
+const stripTextShadowFromTheme = <T extends Record<string, CSSProperties>>(theme: T): T => {
+  return Object.fromEntries(
+    Object.entries(theme).map(([selector, styles]) => {
+      const { textShadow: _removedTextShadow, ...rest } = styles;
+      return [selector, rest];
+    }),
+  ) as T;
+};
+
+const oneDarkWithoutTextShadow = stripTextShadowFromTheme(oneDark);
+
 export function MarkdownContent({ content, className = '' }: MarkdownContentProps) {
+  const renderCode = ({ inline, className: codeClassName, children, style, node, ...props }: MarkdownCodeProps) => {
+    const { match, isInlineCode } = getCodeRenderMeta({ inline, className: codeClassName, node });
+    const text = String(children).replace(/\n$/, '');
+
+    if (!isInlineCode && match) {
+      return (
+        <SyntaxHighlighter
+          style={oneDarkWithoutTextShadow}
+          language={match[1]}
+          PreTag="pre"
+          customStyle={{
+            margin: '16px 0',
+            borderRadius: '10px',
+            padding: '1rem',
+            fontSize: '13px',
+            lineHeight: '1.6',
+            maxWidth: '100%',
+            minWidth: 0,
+            overflowX: 'auto',
+            background: 'var(--agyn-bg-light)',
+            color: 'var(--agyn-dark)',
+          }}
+          codeTagProps={{
+            style: {
+              whiteSpace: 'pre',
+            },
+          }}
+          {...props}
+        >
+          {text}
+        </SyntaxHighlighter>
+      );
+    }
+
+    if (!isInlineCode) {
+      return (
+        <code
+          className={[
+            'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
+            codeClassName,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          {...props}
+        >
+          {text}
+        </code>
+      );
+    }
+
+    return (
+      <code
+        className="bg-[var(--agyn-bg-light)] text-[var(--agyn-purple)] px-1.5 py-0.5 rounded text-sm break-words max-w-full whitespace-pre-wrap"
+        style={{ overflowWrap: 'break-word', wordBreak: 'break-word', ...style }}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  };
+
   const markdownComponents: Components = {
     // Headings
     h1: ({ children }) => (
@@ -97,78 +190,19 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
     ),
 
     // Inline code
-    code: ({ inline, className: codeClassName, children, style, node, ...props }: MarkdownCodeProps) => {
-      const match = /language-(\w+)/.exec(codeClassName || '');
-      const text = String(children).replace(/\n$/, '');
-      const position = (node as { position?: { start?: { line?: number }; end?: { line?: number } } })?.position;
-      const spansMultipleLines = Boolean(
-        position?.start?.line !== undefined &&
-          position?.end?.line !== undefined &&
-          position.start.line !== position.end.line
-      );
-      const isInlineCode = (inline ?? !spansMultipleLines) && !match;
-
-      if (!isInlineCode && match) {
-        return (
-          <SyntaxHighlighter
-            style={oneDark}
-            language={match[1]}
-            PreTag="pre"
-            customStyle={{
-              margin: '16px 0',
-              borderRadius: '10px',
-              padding: '16px',
-              fontSize: '13px',
-              lineHeight: '1.6',
-              maxWidth: '100%',
-              minWidth: 0,
-              overflowX: 'auto',
-              background: 'var(--agyn-bg-light)',
-              color: 'var(--agyn-dark)',
-            }}
-            codeTagProps={{
-              style: {
-                whiteSpace: 'pre',
-              },
-            }}
-            {...props}
-          >
-            {text}
-          </SyntaxHighlighter>
-        );
-      }
-
-      if (!isInlineCode) {
-        return (
-          <code
-            className={[
-              'block whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--agyn-dark)]',
-              codeClassName,
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            {...props}
-          >
-            {text}
-          </code>
-        );
-      }
-
-      return (
-        <code
-          className="bg-[var(--agyn-bg-light)] text-[var(--agyn-purple)] px-1.5 py-0.5 rounded text-sm break-words max-w-full whitespace-pre-wrap"
-          style={{ overflowWrap: 'break-word', wordBreak: 'break-word', ...style }}
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    },
+    code: renderCode,
 
     // Code blocks
     pre: ({ children, className: preClassName, style: preStyle, node: _node, ...props }: MarkdownPreProps) => {
       const childArray = Children.toArray(children);
       const firstElement = childArray.find((node): node is ReactElement => isValidElement(node));
+
+      if (firstElement && firstElement.type === renderCode) {
+        const { match, isInlineCode } = getCodeRenderMeta(firstElement.props as MarkdownCodeProps);
+        if (!isInlineCode && match) {
+          return firstElement;
+        }
+      }
 
       if (firstElement && firstElement.type === SyntaxHighlighter) {
         return firstElement;

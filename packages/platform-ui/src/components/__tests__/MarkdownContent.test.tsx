@@ -186,4 +186,21 @@ describe('MarkdownContent rendering', () => {
     expect(secondList).toHaveAttribute('start', '2');
     expect(screen.getByText('Extra context between items.').tagName).toBe('P');
   });
+
+  it('renders syntax highlighted code blocks without inline text shadows', () => {
+    const highlighted = ['```ts', 'const example = 42;', '```'].join('\n');
+    const { container } = render(<MarkdownContent content={highlighted} />);
+
+    const pre = container.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre?.querySelectorAll('pre').length).toBe(0);
+    expect(pre).toHaveStyle({ padding: '1rem' });
+
+    const directChild = pre?.querySelector(':scope > *:first-child');
+    expect(directChild?.tagName).toBe('CODE');
+    expect(pre?.querySelector(':scope > div')).toBeNull();
+
+    const highlightedTokens = container.querySelectorAll('pre [style*="text-shadow"]');
+    expect(highlightedTokens.length).toBe(0);
+  });
 });
