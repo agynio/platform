@@ -16,8 +16,7 @@ export class LLMSettingsController {
 
   @Get('providers')
   async listProviders() {
-    const providers = await this.llmSettings.listProviders();
-    return { providers };
+    return this.llmSettings.listProviders();
   }
 
   @Get('admin-status')
@@ -27,8 +26,7 @@ export class LLMSettingsController {
 
   @Get('credentials')
   async listCredentials() {
-    const credentials = await this.llmSettings.listCredentials();
-    return { credentials };
+    return this.llmSettings.listCredentials();
   }
 
   @Get('health-check-modes')

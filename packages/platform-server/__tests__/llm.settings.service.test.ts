@@ -53,9 +53,8 @@ describe.sequential('LLMSettingsService', () => {
 
     const service = new LLMSettingsService(createConfig());
     const result = await service.listProviders();
-    expect(result.readOnly).toBe(false);
-    expect(result.providers).toHaveLength(1);
-    expect(result.providers[0]?.provider).toBe('openai');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.provider).toBe('openai');
     scope.done();
   });
 
@@ -76,9 +75,8 @@ describe.sequential('LLMSettingsService', () => {
 
     const service = new LLMSettingsService(createConfig());
     const result = await service.listProviders();
-    expect(result.readOnly).toBe(false);
-    expect(result.providers).toHaveLength(1);
-    expect(result.providers[0]?.provider_display_name).toBe('Anthropic');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.provider_display_name).toBe('Anthropic');
     scope.done();
   });
 
@@ -99,9 +97,8 @@ describe.sequential('LLMSettingsService', () => {
 
     const service = new LLMSettingsService(createConfig());
     const result = await service.listCredentials();
-    expect(result.readOnly).toBe(false);
-    expect(result.credentials).toHaveLength(1);
-    expect(result.credentials[0]?.credential_name).toBe('openai-dev');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.credential_name).toBe('openai-dev');
     scope.done();
   });
 
@@ -277,11 +274,9 @@ describe.sequential('LLMSettingsService', () => {
     const service = new LLMSettingsService({
       isInitialized: () => true,
     } as unknown as ConfigService);
-    const result = await service.listProviders();
-    expect(result).toMatchObject({
-      providers: [],
-      readOnly: true,
-      reason: 'missing_env',
+    await expect(service.listProviders()).rejects.toMatchObject({
+      response: { error: 'litellm_admin_auth_required', reason: 'missing_env' },
+      status: 503,
     });
   });
 
@@ -293,11 +288,9 @@ describe.sequential('LLMSettingsService', () => {
     } as unknown as ConfigService;
     const service = new LLMSettingsService(config);
 
-    const result = await service.listProviders();
-    expect(result).toMatchObject({
-      providers: [],
-      readOnly: true,
-      reason: 'missing_env',
+    await expect(service.listProviders()).rejects.toMatchObject({
+      response: { error: 'litellm_admin_auth_required', reason: 'missing_env' },
+      status: 503,
     });
   });
 

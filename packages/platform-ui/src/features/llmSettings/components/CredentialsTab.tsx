@@ -71,26 +71,44 @@ export function CredentialsTab({
         </Alert>
       ) : (
         <Tooltip.Provider delayDuration={tooltipDelay}>
-          <div className="overflow-hidden rounded-[18px] border border-[var(--agyn-border-subtle)] bg-white">
-            <table className="w-full border-collapse text-sm">
+          <div
+            data-testid="llm-credentials-table-container"
+            className="overflow-auto rounded-[18px] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
+          >
+            <table className="w-full border-collapse text-sm" data-testid="llm-credentials-table">
               <colgroup>
                 <col className="w-[32%]" />
                 <col className="w-[24%]" />
                 <col />
                 <col className="w-[140px]" />
               </colgroup>
-              <thead className="bg-[var(--agyn-bg-light)]/70 text-[var(--agyn-text-subtle)]">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+              <thead
+                data-testid="llm-credentials-table-header"
+                className="sticky top-0 z-10 text-[var(--agyn-text-subtle)]"
+              >
+                <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Name
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Provider
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Tags
                   </th>
-                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide"
+                  >
                     Actions
                   </th>
                 </tr>
@@ -109,11 +127,13 @@ export function CredentialsTab({
                     </td>
                   </tr>
                 ) : (
-                  credentials.map((credential) => (
+                  credentials.map((credential, index) => (
                     <tr
                       key={credential.name}
                       data-testid={`llm-credential-row-${credential.name}`}
-                      className="border-t border-[var(--agyn-border-subtle)] bg-white transition-colors hover:bg-[var(--agyn-bg-light)]/40"
+                      className={`bg-white transition-colors hover:bg-[var(--agyn-bg-light)]/40 border-b border-[var(--agyn-border-subtle)] ${
+                        index === credentials.length - 1 ? 'last:border-b-0' : ''
+                      }`}
                     >
                       <td className="px-6 py-4 align-top text-[var(--agyn-dark)]">
                         <div className="space-y-1">

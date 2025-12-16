@@ -74,8 +74,8 @@ export async function listHealthCheckModes(): Promise<string[]> {
 }
 
 export async function listProviders(): Promise<LiteLLMProviderInfo[]> {
-  const res = await http.get<{ providers?: LiteLLMProviderInfo[] }>('/api/settings/llm/providers');
-  return Array.isArray(res?.providers) ? res.providers : [];
+  const res = await http.get<LiteLLMProviderInfo[]>('/api/settings/llm/providers');
+  return Array.isArray(res) ? res : [];
 }
 
 export async function getAdminStatus(): Promise<LiteLLMAdminStatus> {
@@ -83,8 +83,8 @@ export async function getAdminStatus(): Promise<LiteLLMAdminStatus> {
 }
 
 export async function listCredentials(): Promise<LiteLLMCredential[]> {
-  const res = await http.get<{ credentials?: LiteLLMCredential[] }>('/api/settings/llm/credentials');
-  return Array.isArray(res?.credentials) ? res.credentials : [];
+  const res = await http.get<LiteLLMCredential[]>('/api/settings/llm/credentials');
+  return Array.isArray(res) ? res : [];
 }
 
 export async function createCredential(body: {

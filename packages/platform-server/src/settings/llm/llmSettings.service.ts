@@ -171,28 +171,12 @@ export class LLMSettingsService {
     ConfigService.assertInitialized(config);
   }
 
-  async listProviders(): Promise<{ providers: LiteLLMProviderInfo[]; readOnly: boolean; reason?: string }> {
-    try {
-      const providers = await this.fetchProviders();
-      return { providers, readOnly: false };
-    } catch (err) {
-      if (err instanceof LiteLLMAdminAuthRequiredError) {
-        return { providers: [], readOnly: true, reason: this.extractAdminErrorReason(err) };
-      }
-      throw err;
-    }
+  async listProviders(): Promise<LiteLLMProviderInfo[]> {
+    return this.fetchProviders();
   }
 
-  async listCredentials(): Promise<{ credentials: LiteLLMCredentialSummary[]; readOnly: boolean; reason?: string }> {
-    try {
-      const credentials = await this.fetchCredentials();
-      return { credentials, readOnly: false };
-    } catch (err) {
-      if (err instanceof LiteLLMAdminAuthRequiredError) {
-        return { credentials: [], readOnly: true, reason: this.extractAdminErrorReason(err) };
-      }
-      throw err;
-    }
+  async listCredentials(): Promise<LiteLLMCredentialSummary[]> {
+    return this.fetchCredentials();
   }
 
   async createCredential(input: CreateCredentialInput): Promise<LiteLLMGenericResponse> {
@@ -479,17 +463,6 @@ export class LLMSettingsService {
         const infoId = typeof model.model_info?.id === 'string' ? (model.model_info.id as string) : null;
         return infoId ?? 'unknown-model';
       });
-  }
-
-  private extractAdminErrorReason(err: unknown): 'missing_env' | 'unauthorized' | 'unreachable' | undefined {
-    if (err instanceof LiteLLMAdminAuthRequiredError) {
-      return err.reason;
-    }
-    if (err instanceof LiteLLMAdminError) {
-      if (err.code === 'litellm_admin_unauthorized') return 'unauthorized';
-      if (err.code === 'litellm_unreachable') return 'unreachable';
-    }
-    return undefined;
   }
 
   private async fetchProviders(): Promise<LiteLLMProviderInfo[]> {

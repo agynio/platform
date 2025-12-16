@@ -34,6 +34,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     fetchImpl?: typeof fetch,
   ) {
     super();
+    ConfigService.assertInitialized(cfg);
     this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.keyAlias = this.resolveAlias();
   }

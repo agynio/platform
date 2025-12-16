@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 
 export type PersistedLiteLLMKey = {
@@ -6,6 +7,7 @@ export type PersistedLiteLLMKey = {
   expiresAt: Date | null;
 };
 
+@Injectable()
 export class LiteLLMKeyStore {
   constructor(private readonly prismaService: PrismaService) {}
 

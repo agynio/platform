@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiteLLMProvisioner } from '../src/llm/provisioners/litellm.provisioner';
-import type { ConfigService } from '../src/core/services/config.service';
+import { ConfigService, configSchema, type Config } from '../src/core/services/config.service';
 import type { LiteLLMKeyStore, PersistedLiteLLMKey } from '../src/llm/provisioners/litellm.key.store';
 import { HumanMessage } from '@agyn/llm';
 
@@ -38,14 +38,15 @@ const respondJson = (payload: unknown, init?: ResponseInit) =>
 
 const respondStatus = (status: number, body = '') => new Response(body, { status });
 
-const baseConfig = (): ConfigService =>
-  ({
-    openaiApiKey: undefined,
-    openaiBaseUrl: undefined,
+const baseConfig = (): ConfigService => {
+  const params: Partial<Config> = {
+    llmProvider: 'litellm',
     litellmBaseUrl: 'http://litellm.local:4000',
     litellmMasterKey: 'sk-master',
-    llmProvider: 'litellm',
-  } as unknown as ConfigService);
+    agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
+  };
+  return new ConfigService().init(configSchema.parse(params));
+};
 
 const getUrl = (input: RequestInfo | URL): string => {
   if (typeof input === 'string') return input;

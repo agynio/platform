@@ -10,6 +10,8 @@ export const configSchema = z.object({
   githubInstallationId: z.string().min(1).optional(),
   // LLM provider selection: must be explicit; no default
   llmProvider: z.enum(['openai', 'litellm']),
+  openaiApiKey: z.string().optional(),
+  openaiBaseUrl: z.string().optional(),
   // LiteLLM admin configuration (required)
   litellmBaseUrl: z
     .string()
@@ -239,6 +241,12 @@ export class ConfigService implements Config {
 
   get llmProvider(): 'openai' | 'litellm' {
     return this.params.llmProvider;
+  }
+  get openaiApiKey(): string | undefined {
+    return this.params.openaiApiKey;
+  }
+  get openaiBaseUrl(): string | undefined {
+    return this.params.openaiBaseUrl;
   }
   get litellmBaseUrl(): string {
     return this.params.litellmBaseUrl;

@@ -61,8 +61,11 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
         </Alert>
       ) : (
         <Tooltip.Provider delayDuration={tooltipDelay}>
-          <div className="overflow-hidden rounded-[18px] border border-[var(--agyn-border-subtle)] bg-white">
-            <table className="w-full border-collapse text-sm">
+          <div
+            data-testid="llm-models-table-container"
+            className="overflow-auto rounded-[18px] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
+          >
+            <table className="w-full border-collapse text-sm" data-testid="llm-models-table">
               <colgroup>
                 <col className="w-[26%]" />
                 <col className="w-[22%]" />
@@ -71,24 +74,42 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
                 <col className="w-[16%]" />
                 <col className="w-[120px]" />
               </colgroup>
-              <thead className="bg-[var(--agyn-bg-light)]/70 text-[var(--agyn-text-subtle)]">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+              <thead data-testid="llm-models-table-header" className="sticky top-0 z-10 text-[var(--agyn-text-subtle)]">
+                <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Identifier
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Target Model
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Credential
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Mode
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                  >
                     Limits
                   </th>
-                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">
+                  <th
+                    scope="col"
+                    className="bg-white px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide"
+                  >
                     Actions
                   </th>
                 </tr>
@@ -107,11 +128,13 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
                     </td>
                   </tr>
                 ) : (
-                  models.map((model) => (
+                  models.map((model, index) => (
                     <tr
                       key={model.id}
                       data-testid={`llm-model-row-${model.id}`}
-                      className="border-t border-[var(--agyn-border-subtle)] bg-white transition-colors hover:bg-[var(--agyn-bg-light)]/40"
+                      className={`bg-white transition-colors hover:bg-[var(--agyn-bg-light)]/40 border-b border-[var(--agyn-border-subtle)] ${
+                        index === models.length - 1 ? 'last:border-b-0' : ''
+                      }`}
                     >
                       <td className="px-6 py-4 align-top">
                         <div className="space-y-1">

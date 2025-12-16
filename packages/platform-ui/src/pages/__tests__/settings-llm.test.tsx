@@ -114,8 +114,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: modelRecords })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
     );
@@ -130,6 +130,11 @@ describe('Settings/LLM page', () => {
 
     await screen.findByText('openai-prod');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const credentialTableShell = screen.getByTestId('llm-credentials-table-container');
+    expect(credentialTableShell.className).not.toMatch(/border/);
+    const credentialHeader = screen.getByTestId('llm-credentials-table-header');
+    expect(credentialHeader.className).toContain('sticky');
+    expect(credentialHeader.className).toContain('top-0');
     const credentialRow = screen.getByTestId('llm-credential-row-openai-prod');
     expect(within(credentialRow).getByText('OpenAI')).toBeInTheDocument();
     expect(within(credentialRow).getByText('prod')).toBeInTheDocument();
@@ -137,6 +142,11 @@ describe('Settings/LLM page', () => {
     const modelsTab = screen.getByRole('tab', { name: 'Models' });
     await user.click(modelsTab);
     await screen.findByText('assistant-prod');
+    const modelsTableShell = screen.getByTestId('llm-models-table-container');
+    expect(modelsTableShell.className).not.toMatch(/border/);
+    const modelsHeader = screen.getByTestId('llm-models-table-header');
+    expect(modelsHeader.className).toContain('sticky');
+    expect(modelsHeader.className).toContain('top-0');
 
     const modelRow = screen.getByTestId('llm-model-row-assistant-prod');
     expect(within(modelRow).getByText('openai-prod')).toBeInTheDocument();
@@ -154,8 +164,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers: [] })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: [] })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json([])),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json([])),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
     );
@@ -197,7 +207,7 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
       http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ error: 'credential_fetch_failed' }, { status: 500 })),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
@@ -245,8 +255,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ error: 'models_fetch_failed' }, { status: 500 })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
     );
@@ -291,8 +301,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
       http.post(abs('/api/settings/llm/credentials'), async ({ request }) => {
@@ -369,8 +379,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
       http.patch(abs('/api/settings/llm/credentials/openai-prod'), async ({ request }) => {
@@ -438,8 +448,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
       http.delete(abs('/api/settings/llm/credentials/openai-prod'), () => {
@@ -502,8 +512,8 @@ describe('Settings/LLM page', () => {
           adminReachable: true,
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: credentialRecords })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: modeOptions })),
     );
@@ -725,8 +735,8 @@ describe('Settings/LLM page', () => {
           reason: 'provider_mismatch',
         }),
       ),
-      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json({ providers: [] })),
-      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json({ credentials: [] })),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json([])),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json([])),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
     );
