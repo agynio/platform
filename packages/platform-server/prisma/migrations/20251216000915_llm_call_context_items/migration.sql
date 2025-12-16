@@ -1,9 +1,11 @@
--- CreateEnum
 CREATE TYPE "LLMCallContextItemDirection" AS ENUM ('input', 'output');
+
+-- Ensure extension for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- CreateTable
 CREATE TABLE "llm_call_context_items" (
-    "id" UUID NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "llm_call_event_id" UUID NOT NULL,
     "context_item_id" UUID NOT NULL,
     "idx" INTEGER NOT NULL,
