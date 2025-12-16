@@ -201,7 +201,6 @@ if (!shouldRunDbTests) {
 
       const callRecord = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: event.id } });
       expect(callRecord.newContextItemCount).toBe(1);
-      expect(callRecord.newContextItemIds).toEqual([userId]);
 
       const snapshot = await runEvents.getEventSnapshot(event.id);
       expect(snapshot?.llmCall?.newContextItemCount).toBe(1);

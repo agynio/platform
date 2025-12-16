@@ -592,9 +592,8 @@ export class RunEventsService {
     const derivedPromptIds = inputRows.length > 0 ? inputRows.map((row) => row.contextItemId) : [];
     const derivedNewIds = inputRows.length > 0 ? inputRows.filter((row) => row.isNew).map((row) => row.contextItemId) : [];
     const fallbackContextIds = event.llmCall?.contextItemIds ? [...event.llmCall.contextItemIds] : [];
-    const fallbackNewIds = event.llmCall?.newContextItemIds ? [...event.llmCall.newContextItemIds] : [];
     const contextItemIds = derivedPromptIds.length > 0 ? derivedPromptIds : fallbackContextIds;
-    const newContextItemIds = derivedNewIds.length > 0 ? derivedNewIds : fallbackNewIds;
+    const newContextItemIds = derivedNewIds;
     const newContextItemCount = derivedNewIds.length > 0 ? derivedNewIds.length : event.llmCall?.newContextItemCount ?? 0;
     const llmCall = event.llmCall
       ? {
@@ -1202,7 +1201,6 @@ export class RunEventsService {
         stopReason: null,
         contextItemIds,
         newContextItemCount: newContextItemIds.length,
-        newContextItemIds,
         responseText: null,
         rawResponse: Prisma.JsonNull,
       },
