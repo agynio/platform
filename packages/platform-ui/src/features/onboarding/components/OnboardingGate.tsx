@@ -1,45 +1,40 @@
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
+
 import { Button } from '@/components/ui/button';
+
 import { useOnboardingStatus } from '../hooks';
+import { OnboardingModal } from './OnboardingModal';
 
 export function OnboardingGate() {
   const statusQuery = useOnboardingStatus();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const returnTo = useMemo(
-    () => `${location.pathname}${location.search}${location.hash}`,
-    [location.pathname, location.search, location.hash],
-  );
+  const status = statusQuery.data ?? null;
 
-  useEffect(() => {
-    if (!statusQuery.data) return;
-    if (statusQuery.data.isComplete) return;
-    navigate('/onboarding', { replace: true, state: { from: returnTo } });
-  }, [statusQuery.data, navigate, returnTo]);
-
-  if (statusQuery.isLoading) {
+  if (!status) {
+    if (statusQuery.isError) {
+      return <GateMessage variant="error" onRetry={() => statusQuery.refetch()} />;
+    }
     return <GateMessage variant="loading" />;
   }
 
-  if (statusQuery.isError) {
-    return <GateMessage variant="error" onRetry={() => statusQuery.refetch()} />;
-  }
+  const shouldShowModal = !status.isComplete;
 
-  if (!statusQuery.data) {
-    return null;
-  }
-
-  if (!statusQuery.data.isComplete) {
-    return <GateMessage variant="redirecting" />;
-  }
-
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <OnboardingModal
+        open={shouldShowModal}
+        status={status}
+        isLoading={statusQuery.isFetching && !statusQuery.isSuccess}
+        isError={statusQuery.isError && !statusQuery.isSuccess}
+        onRetry={() => statusQuery.refetch()}
+      />
+    </>
+  );
 }
 
 type GateMessageProps = {
-  variant: 'loading' | 'error' | 'redirecting';
+  variant: 'loading' | 'error';
   onRetry?: () => unknown;
 };
 
@@ -52,10 +47,6 @@ function GateMessage({ variant, onRetry }: GateMessageProps) {
     error: {
       title: 'Failed to load onboarding status',
       body: 'Please retry. If this persists, check the server logs.',
-    },
-    redirecting: {
-      title: 'Finish onboarding to continue',
-      body: 'We are redirecting you to the onboarding wizard.',
     },
   };
 
