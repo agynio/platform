@@ -8,34 +8,25 @@ import { OnboardingModal } from './OnboardingModal';
 
 export function OnboardingGate() {
   const statusQuery = useOnboardingStatus();
-  const hasData = Boolean(statusQuery.data);
-  const loadingWithoutData = statusQuery.isFetching && !hasData;
-  const errorWithoutData = statusQuery.isError && !hasData;
-  const initialLoading = !hasData && statusQuery.isLoading;
-  const initialError = !hasData && statusQuery.isError;
+  const status = statusQuery.data ?? null;
 
-  if (initialLoading) {
+  if (!status) {
+    if (statusQuery.isError) {
+      return <GateMessage variant="error" onRetry={() => statusQuery.refetch()} />;
+    }
     return <GateMessage variant="loading" />;
   }
 
-  if (initialError) {
-    return <GateMessage variant="error" onRetry={() => statusQuery.refetch()} />;
-  }
-
-  if (!statusQuery.data) {
-    return null;
-  }
-
-  const shouldShowModal = !statusQuery.data.isComplete;
+  const shouldShowModal = !status.isComplete;
 
   return (
     <>
       <Outlet />
       <OnboardingModal
         open={shouldShowModal}
-        status={statusQuery.data}
-        isLoading={loadingWithoutData}
-        isError={errorWithoutData}
+        status={status}
+        isLoading={statusQuery.isFetching && !statusQuery.isSuccess}
+        isError={statusQuery.isError && !statusQuery.isSuccess}
         onRetry={() => statusQuery.refetch()}
       />
     </>
