@@ -15,7 +15,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
-import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
+import { ContextItemInput, NormalizedContextItem, normalizeContextItems } from '../llm/services/context-items.utils';
+import { upsertNormalizedContextItems } from '../llm/services/context-items.repository';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 

@@ -69,6 +69,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       ncpsAuthHeader: undefined,
       ncpsAuthToken: undefined,
       agentsDatabaseUrl: 'postgres://localhost:5432/test',
+      llmProvider: 'openai',
+      litellmBaseUrl: 'http://localhost:4000',
+      litellmMasterKey: 'sk-test',
       corsOrigins: [],
     };
 

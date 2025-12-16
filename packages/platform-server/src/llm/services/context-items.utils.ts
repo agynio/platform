@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
 import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { toPrismaJsonValue } from './messages.serialization';
@@ -51,12 +50,94 @@ export function coerceContextItemRole(value: unknown): ContextItemRole {
   return ContextItemRole.other;
 }
 
+const NULL_CHAR = '\u0000';
+
+type SanitizeField = 'contentText' | 'contentJson' | 'metadata' | 'payload';
+
+export class ContextItemNullByteGuardError extends Error {
+  constructor(public readonly info: { field: SanitizeField; path?: string }) {
+    super(`context_item.null_byte_guard: ${info.path ?? info.field}`);
+    this.name = 'ContextItemNullByteGuardError';
+  }
+}
+
+function isNullGuardEnabled(): boolean {
+  const raw = process.env.CONTEXT_ITEM_NULL_GUARD ?? process.env.CONTEXT_ITEM_NUL_GUARD;
+  if (!raw) return false;
+  return raw === '1' || raw.toLowerCase() === 'true';
+}
+
+function sanitizeString(
+  value: string,
+  logger?: LoggerLike,
+  context?: { field: SanitizeField; path?: string[] },
+  guardOverride?: boolean,
+): string {
+  if (!value) return value;
+  const guardEnabled = guardOverride ?? isNullGuardEnabled();
+  if (guardEnabled && value.includes(NULL_CHAR)) {
+    throw new ContextItemNullByteGuardError({
+      field: context?.field ?? 'payload',
+      path: context?.path && context.path.length > 0 ? context.path.join('.') : undefined,
+    });
+  }
+  if (!value.includes(NULL_CHAR)) return value;
+  const sanitized = value.split(NULL_CHAR).join('');
+  logger?.warn?.('context_items.null_bytes_stripped', {
+    removedLength: value.length - sanitized.length,
+    field: context?.field,
+    path: context?.path && context.path.length > 0 ? context.path.join('.') : undefined,
+  });
+  return sanitized;
+}
+
+function sanitizePrismaJson(
+  value: unknown,
+  logger: LoggerLike | undefined,
+  field: Exclude<SanitizeField, 'contentText'>,
+  path: string[] = [],
+  guardOverride?: boolean,
+): unknown {
+  if (typeof value === 'string') {
+    return sanitizeString(value, logger, { field, path }, guardOverride);
+  }
+
+  if (Array.isArray(value)) {
+    let mutated = false;
+    const next = value.map((entry, index) => {
+      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(String(index)), guardOverride);
+      if (sanitized !== entry) mutated = true;
+      return sanitized;
+    });
+    return mutated ? next : value;
+  }
+
+  if (value && typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value) as object | null;
+    const isPlain = proto === Object.prototype || proto === null;
+    if (!isPlain) return value;
+
+    let mutated = false;
+    const entries = Object.entries(value as Record<string, unknown>) as Array<[string, unknown]>;
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of entries) {
+      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(key), guardOverride);
+      out[key] = sanitized;
+      if (sanitized !== entry) mutated = true;
+    }
+    return mutated ? out : value;
+  }
+
+  return value;
+}
+
 export function normalizeContextItem(input: ContextItemInput, logger?: LoggerLike): NormalizedContextItem | null {
   const role = coerceContextItemRole(input.role);
 
   let text: string | null = null;
-  if (typeof input.contentText === 'string') text = input.contentText;
-  else if (input.contentText === null) text = null;
+  if (typeof input.contentText === 'string') {
+    text = sanitizeString(input.contentText, logger, { field: 'contentText' });
+  } else if (input.contentText === null) text = null;
 
   const { jsonValue, canonicalJson } = normalizeJsonValue(input.contentJson, logger);
   const metadata = normalizeMetadata(input.metadata, logger);
@@ -84,44 +165,89 @@ export function normalizeContextItems(inputs: ContextItemInput[], logger?: Logge
   return out;
 }
 
-type PrismaContextClient = PrismaClient | Prisma.TransactionClient;
-
-export type UpsertContextItemsResult = {
-  ids: string[];
-  created: number;
-};
-
 export type MemoryPlacement = 'after_system' | 'last_message';
 
-export async function upsertNormalizedContextItems(
-  client: PrismaContextClient,
-  items: NormalizedContextItem[],
-  logger?: LoggerLike,
-): Promise<UpsertContextItemsResult> {
-  const ids: string[] = [];
-  let created = 0;
+type ToolCallPlainRecord = Record<string, unknown> & { output?: unknown };
 
-  for (const item of items) {
-    try {
-      const createdRecord = await client.contextItem.create({
-        data: {
-          role: item.role,
-          contentText: item.contentText,
-          contentJson: item.contentJson,
-          metadata: item.metadata,
-          sizeBytes: item.sizeBytes,
-        },
-        select: { id: true },
-      });
-      ids.push(createdRecord.id);
-      created += 1;
-    } catch (err) {
-      logger?.warn?.('context_items.upsert_failed', { error: err instanceof Error ? err.message : String(err) });
-      throw err;
+function isPrismaJsonNull(value: unknown): value is typeof Prisma.JsonNull | typeof Prisma.DbNull | typeof Prisma.AnyNull {
+  return value === Prisma.JsonNull || value === Prisma.DbNull || value === Prisma.AnyNull;
+}
+
+export function deepSanitizeCreateData(
+  data: Prisma.ContextItemCreateInput,
+  logger?: LoggerLike,
+): Prisma.ContextItemCreateInput {
+  return sanitizeContextItemPayload(data, logger);
+}
+
+type SanitizePayloadOptions = {
+  guard?: boolean;
+};
+
+export function sanitizeContextItemPayload<TPayload>(
+  payload: TPayload,
+  logger?: LoggerLike,
+  options?: SanitizePayloadOptions,
+): TPayload {
+  if (payload === null || typeof payload !== 'object') return payload;
+  const guard = options?.guard;
+  const seen = new WeakMap<object, unknown>();
+
+  const resolveField = (path: string[]): SanitizeField => {
+    const root = path[0];
+    if (root === 'contentText') return 'contentText';
+    if (root === 'contentJson') return 'contentJson';
+    if (root === 'metadata') return 'metadata';
+    return 'payload';
+  };
+
+  function sanitizeValue(value: unknown, path: string[]): unknown {
+    if (typeof value === 'string') {
+      return sanitizeString(value, logger, { field: resolveField(path), path }, guard);
     }
+
+    if (Array.isArray(value)) {
+      if (seen.has(value)) return seen.get(value);
+      let mutated = false;
+      const result: unknown[] = [];
+      seen.set(value, result);
+      for (let index = 0; index < value.length; index += 1) {
+        const entry: unknown = value[index];
+        const sanitized: unknown = sanitizeValue(entry, path.concat(String(index)));
+        result[index] = sanitized;
+        if (sanitized !== entry) mutated = true;
+      }
+      return mutated ? result : value;
+    }
+
+    if (value && typeof value === 'object') {
+      if (seen.has(value as object)) return seen.get(value as object);
+      if (isPrismaJsonNull(value)) return value;
+
+      const proto = Object.getPrototypeOf(value as object) as object | null;
+      const isPlain = proto === Object.prototype || proto === null;
+      if (!isPlain) return value;
+
+      let mutated = false;
+      const record = value as Record<string, unknown>;
+      const keys = Object.keys(record);
+      const out: Record<string, unknown> = {};
+      seen.set(value as object, out);
+      for (const key of keys) {
+        const entry: unknown = record[key];
+        const sanitized: unknown = sanitizeValue(entry, path.concat(key));
+        out[key] = sanitized;
+        if (sanitized !== entry) mutated = true;
+      }
+      return mutated ? (out as typeof value) : value;
+    }
+
+    return value;
   }
 
-  return { ids, created };
+  const source: unknown = payload;
+  const nextValue = sanitizeValue(source as Record<string, unknown>, []);
+  return (nextValue ?? payload) as TPayload;
 }
 
 export function contextItemInputFromSystem(message: SystemMessage): ContextItemInput {
@@ -173,10 +299,33 @@ export function contextItemInputFromMessage(
     };
   }
   if (message instanceof ToolCallOutputMessage) {
+    const plain = safeToPlain(message);
+    const clonedPlain = plain && typeof plain === 'object' ? ({ ...(plain as Record<string, unknown>) } as ToolCallPlainRecord) : null;
+    const rawOutput = typeof clonedPlain?.output === 'string' ? (clonedPlain.output as string) : null;
+
+    if (typeof rawOutput === 'string' && rawOutput.includes(NULL_CHAR)) {
+      const bytes = Buffer.byteLength(rawOutput, 'utf8');
+      const base64 = Buffer.from(rawOutput, 'utf8').toString('base64');
+      const contentJson = {
+        ...(clonedPlain ?? { type: message.type, call_id: message.callId }),
+        output: {
+          encoding: 'base64',
+          data: base64,
+          bytes,
+        },
+      };
+      return {
+        role: ContextItemRole.tool,
+        contentText: null,
+        contentJson,
+        metadata: { type: message.type, callId: message.callId, outputEncoding: 'base64', outputBytes: bytes },
+      };
+    }
+
     return {
       role: ContextItemRole.tool,
       contentText: message.text,
-      contentJson: safeToPlain(message),
+      contentJson: plain,
       metadata: { type: message.type, callId: message.callId },
     };
   }
@@ -201,8 +350,9 @@ function normalizeJsonValue(value: unknown, logger?: LoggerLike): {
   canonicalJson: unknown | null;
 } {
   if (value === undefined || value === null) return { jsonValue: Prisma.JsonNull, canonicalJson: null };
+  const sanitized = sanitizePrismaJson(value, logger, 'contentJson', ['contentJson']);
   try {
-    const jsonValue = toPrismaJsonValue(value);
+    const jsonValue = toPrismaJsonValue(sanitized);
     const canonicalJson = toCanonicalJson(jsonValue);
     return { jsonValue, canonicalJson };
   } catch (err) {
@@ -213,8 +363,9 @@ function normalizeJsonValue(value: unknown, logger?: LoggerLike): {
 
 function normalizeMetadata(value: unknown, logger?: LoggerLike): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   if (value === undefined || value === null) return Prisma.JsonNull;
+  const sanitized = sanitizePrismaJson(value, logger, 'metadata', ['metadata']);
   try {
-    return toPrismaJsonValue(value);
+    return toPrismaJsonValue(sanitized);
   } catch (err) {
     logger?.warn?.('context_items.normalize_metadata_failed', { error: err instanceof Error ? err.message : String(err) });
     return Prisma.JsonNull;

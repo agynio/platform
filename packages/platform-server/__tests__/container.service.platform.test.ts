@@ -8,7 +8,7 @@ import { PLATFORM_LABEL } from '../src/core/constants.js';
 vi.mock('dockerode', () => {
   class MockContainer {
     start = vi.fn(async () => {});
-    inspect = vi.fn(async () => ({ Id: 'deadbeefcafebabe', State: { Status: 'running' } }));
+    inspect = vi.fn(async () => ({ Id: 'deadbeefcafebabe', State: { Status: 'running' }, Name: '/mock-container', Config: { Labels: {} }, Mounts: [] }));
   }
   class MockDocker {
     modem: { followProgress: (stream: NodeJS.ReadableStream, onFinished: (err?: Error) => void) => void; demuxStream: (...args: unknown[]) => void };

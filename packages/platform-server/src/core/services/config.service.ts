@@ -8,15 +8,19 @@ export const configSchema = z.object({
   githubAppId: z.string().min(1).optional(),
   githubAppPrivateKey: z.string().min(1).optional(),
   githubInstallationId: z.string().min(1).optional(),
-  // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
-  openaiApiKey: z.string().min(1).optional(),
   // LLM provider selection: must be explicit; no default
   llmProvider: z.enum(['openai', 'litellm']),
-  // Optional LiteLLM details for auto-provisioning
-  litellmBaseUrl: z.string().optional(),
-  litellmMasterKey: z.string().optional(),
-  // Optional explicit OpenAI base URL passthrough
-  openaiBaseUrl: z.string().optional(),
+  // LiteLLM admin configuration (required)
+  litellmBaseUrl: z
+    .string()
+    .min(1, 'LITELLM_BASE_URL is required')
+    .transform((value) => value.trim())
+    .refine((value) => !value.match(/\/v1\/?$/), 'LITELLM_BASE_URL must be the LiteLLM root without /v1')
+    .transform((value) => value.replace(/\/+$/, '')),
+  litellmMasterKey: z
+    .string()
+    .min(1, 'LITELLM_MASTER_KEY is required')
+    .transform((value) => value.trim()),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
@@ -166,11 +170,49 @@ export type Config = z.infer<typeof configSchema>;
 
 @Injectable()
 export class ConfigService implements Config {
+  private static sharedInstance?: ConfigService;
+
   private _params?: Config;
+
+  static register(instance: ConfigService): ConfigService {
+    if (!instance.isInitialized()) {
+      throw new Error('Cannot register ConfigService before initialization');
+    }
+    ConfigService.sharedInstance = instance;
+    return instance;
+  }
+
+  static getInstance(): ConfigService {
+    if (!ConfigService.sharedInstance) {
+      throw new Error('ConfigService not initialized. Call ConfigService.fromEnv() during bootstrap before resolving ConfigService through DI.');
+    }
+    return ConfigService.sharedInstance;
+  }
+
+  static isRegistered(): boolean {
+    return ConfigService.sharedInstance !== undefined;
+  }
+
+  static clearInstanceForTest(): void {
+    ConfigService.sharedInstance = undefined;
+  }
+
+  static assertInitialized(instance: unknown): asserts instance is ConfigService {
+    if (!instance || typeof instance !== 'object') {
+      throw new Error('ConfigService injected before initialization');
+    }
+    const typed = instance as ConfigService;
+    if (typeof typed.isInitialized !== 'function') {
+      throw new Error('ConfigService injected before initialization');
+    }
+    if (!typed.isInitialized()) {
+      throw new Error('ConfigService injected before initialization');
+    }
+  }
 
   private get params(): Config {
     if (!this._params) {
-      throw new Error('ConfigService not initialized with parameters');
+      throw new Error('ConfigService not initialized. Call ConfigService.fromEnv() before accessing configuration.');
     }
     return this._params;
   }
@@ -178,6 +220,10 @@ export class ConfigService implements Config {
   init(params: Config): this {
     this._params = params;
     return this;
+  }
+
+  isInitialized(): boolean {
+    return this._params !== undefined;
   }
 
   get githubAppId(): string | undefined {
@@ -191,20 +237,14 @@ export class ConfigService implements Config {
     return this.params.githubInstallationId;
   }
 
-  get openaiApiKey(): string | undefined {
-    return this.params.openaiApiKey;
-  }
   get llmProvider(): 'openai' | 'litellm' {
     return this.params.llmProvider;
   }
-  get litellmBaseUrl(): string | undefined {
+  get litellmBaseUrl(): string {
     return this.params.litellmBaseUrl;
   }
-  get litellmMasterKey(): string | undefined {
+  get litellmMasterKey(): string {
     return this.params.litellmMasterKey;
-  }
-  get openaiBaseUrl(): string | undefined {
-    return this.params.openaiBaseUrl;
   }
   get githubToken(): string | undefined {
     return this.params.githubToken;
@@ -333,14 +373,9 @@ export class ConfigService implements Config {
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
-      openaiApiKey: process.env.OPENAI_API_KEY,
       llmProvider: process.env.LLM_PROVIDER,
-      // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
-      litellmBaseUrl:
-        process.env.LITELLM_BASE_URL ||
-        (process.env.OPENAI_BASE_URL ? process.env.OPENAI_BASE_URL.replace(/\/v1$/, '') : undefined),
+      litellmBaseUrl: process.env.LITELLM_BASE_URL,
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
-      openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
       graphRepoPath: process.env.GRAPH_REPO_PATH,
@@ -378,6 +413,8 @@ export class ConfigService implements Config {
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
     });
-    return new ConfigService().init(parsed);
+    const config = new ConfigService().init(parsed);
+    ConfigService.register(config);
+    return config;
   }
 }

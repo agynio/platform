@@ -12,6 +12,7 @@ import {
   Settings,
   Key,
   Variable,
+  Bot,
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
@@ -23,6 +24,7 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   memory: '/agents/memory',
   containers: '/monitoring/containers',
   resources: '/monitoring/resources',
+  llm: '/settings/llm',
   secrets: '/settings/secrets',
   variables: '/settings/variables',
 };
@@ -53,6 +55,7 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Settings',
     icon: <Settings className="w-5 h-5" />,
     items: [
+      { id: 'llm', label: 'LLM', icon: <Bot className="w-4 h-4" /> },
       { id: 'secrets', label: 'Secrets', icon: <Key className="w-4 h-4" /> },
       { id: 'variables', label: 'Variables', icon: <Variable className="w-4 h-4" /> },
     ],

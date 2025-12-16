@@ -57,28 +57,16 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private async initialize(): Promise<void> {
-    if (this.cfg.openaiApiKey) {
-      this.initializeDirectOpenAI();
-      return;
-    }
-
     this.ensureLiteLLMConfig();
     await this.bootstrapVirtualKey();
     this.registerShutdownHooks();
-  }
-
-  private initializeDirectOpenAI(): void {
-    const apiKey = this.cfg.openaiApiKey;
-    if (!apiKey) throw new Error('openai_provider_missing_key');
-    const client = new OpenAI({ apiKey, baseURL: this.cfg.openaiBaseUrl });
-    this.llm = new LLM(client);
   }
 
   private ensureLiteLLMConfig(): void {
     if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) {
       throw new Error('litellm_missing_config');
     }
-    this.baseUrl = (this.cfg.openaiBaseUrl || `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1`).replace(/\/$/, '');
+    this.baseUrl = `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1`;
   }
 
   private async bootstrapVirtualKey(): Promise<void> {

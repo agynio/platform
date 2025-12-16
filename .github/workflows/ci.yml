@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Type-check platform server
+        run: pnpm --filter @agyn/platform-server run typecheck
+
       - name: Lint (recursive where available)
         run: pnpm -r run lint
 

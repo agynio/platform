@@ -1,0 +1,236 @@
+import type { ReactElement } from 'react';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { Play, Pencil, Trash2 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { IconButton } from '@/components/IconButton';
+import { Badge } from '@/components/Badge';
+import type { CredentialRecord, ProviderOption } from '../types';
+
+const tooltipDelay = import.meta.env.MODE === 'test' ? 0 : 300;
+const tooltipContentClass = 'bg-[var(--agyn-dark)] text-white text-xs px-2 py-1 rounded-md shadow-lg';
+
+interface CredentialsTabProps {
+  credentials: CredentialRecord[];
+  providers: ProviderOption[];
+  loading: boolean;
+  readOnly: boolean;
+  showProviderWarning: boolean;
+  error?: string | null;
+  onCreate: () => void;
+  onEdit: (credential: CredentialRecord) => void;
+  onTest: (credential: CredentialRecord) => void;
+  onDelete: (credential: CredentialRecord) => void;
+}
+
+export function CredentialsTab({
+  credentials,
+  providers,
+  loading,
+  readOnly,
+  showProviderWarning,
+  error,
+  onCreate,
+  onEdit,
+  onTest,
+  onDelete,
+}: CredentialsTabProps): ReactElement {
+  const providerCount = providers.length;
+  const allowWrites = !readOnly;
+  const showErrorState = Boolean(error) && credentials.length === 0 && !loading;
+  const showProviderNotice = providerCount === 0 && showProviderWarning;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="max-w-2xl space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--agyn-text-subtle)]">LiteLLM</p>
+          <div>
+            <h2 className="text-2xl font-semibold text-[var(--agyn-dark)]">Credentials</h2>
+            <p className="text-sm text-[var(--agyn-text-subtle)]">
+              Store provider API keys and configuration securely. Credentials remain server-side and never leave Agyn HQ.
+            </p>
+          </div>
+        </div>
+        <Button onClick={onCreate} disabled={providerCount === 0 || !allowWrites}>
+          Add Credential
+        </Button>
+      </div>
+
+      {showProviderNotice ? (
+        <div className="rounded-[14px] border border-dashed border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/60 px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
+          No LiteLLM providers detected. Ensure the LiteLLM admin API is reachable and refresh this page.
+        </div>
+      ) : null}
+
+      {showErrorState ? (
+        <Alert variant="destructive">
+          <AlertTitle>Unable to load credentials</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : (
+        <Tooltip.Provider delayDuration={tooltipDelay}>
+          <div className="overflow-hidden rounded-[18px] border border-[var(--agyn-border-subtle)] bg-white">
+            <table className="w-full border-collapse text-sm">
+              <colgroup>
+                <col className="w-[32%]" />
+                <col className="w-[24%]" />
+                <col />
+                <col className="w-[140px]" />
+              </colgroup>
+              <thead className="bg-[var(--agyn-bg-light)]/70 text-[var(--agyn-text-subtle)]">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                    Name
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                    Provider
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                    Tags
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-6 text-center text-[var(--agyn-text-subtle)]">
+                      Loading credentials…
+                    </td>
+                  </tr>
+                ) : credentials.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-[var(--agyn-text-subtle)]">
+                      No credentials configured yet.
+                    </td>
+                  </tr>
+                ) : (
+                  credentials.map((credential) => (
+                    <tr
+                      key={credential.name}
+                      data-testid={`llm-credential-row-${credential.name}`}
+                      className="border-t border-[var(--agyn-border-subtle)] bg-white transition-colors hover:bg-[var(--agyn-bg-light)]/40"
+                    >
+                      <td className="px-6 py-4 align-top text-[var(--agyn-dark)]">
+                        <div className="space-y-1">
+                          <p className="text-base font-semibold leading-tight">{credential.name}</p>
+                          <p className="text-xs text-[var(--agyn-text-subtle)]">
+                            {credential.maskedFields.size === 0
+                              ? 'No stored secret fields'
+                              : `${credential.maskedFields.size} stored ${credential.maskedFields.size === 1 ? 'field' : 'fields'}`}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        {credential.providerLabel ? (
+                          <Badge variant="neutral" size="sm">
+                            {credential.providerLabel}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--agyn-text-subtle)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        {credential.tags.length === 0 ? (
+                          <span className="text-[var(--agyn-text-subtle)]">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {credential.tags.map((tag) => (
+                              <Badge key={tag} variant="outline" size="sm" className="text-[11px] uppercase tracking-tight">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <IconButton
+                                type="button"
+                                aria-label={`Test credential ${credential.name}`}
+                                variant="ghost"
+                                size="sm"
+                                disabled={!allowWrites}
+                                onClick={() => onTest(credential)}
+                                icon={<Play className="h-4 w-4" />}
+                              />
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content className={tooltipContentClass} sideOffset={6}>
+                                Test
+                                <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <IconButton
+                                type="button"
+                                aria-label={`Edit credential ${credential.name}`}
+                                variant="ghost"
+                                size="sm"
+                                disabled={!allowWrites}
+                                onClick={() => onEdit(credential)}
+                                icon={<Pencil className="h-4 w-4" />}
+                              />
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content className={tooltipContentClass} sideOffset={6}>
+                                Edit
+                                <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <IconButton
+                                type="button"
+                                aria-label={`Delete credential ${credential.name}`}
+                                variant="danger"
+                                size="sm"
+                                disabled={!allowWrites}
+                                onClick={() => onDelete(credential)}
+                                icon={<Trash2 className="h-4 w-4" />}
+                              />
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content className={tooltipContentClass} sideOffset={6}>
+                                Delete
+                                <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Tooltip.Provider>
+      )}
+
+      <div className="text-sm text-[var(--agyn-text-subtle)]">
+        <p>
+          Need help mapping providers? Refer to LiteLLM{' '}
+          <a
+            href="https://docs.litellm.ai/docs/providers"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-[var(--agyn-blue)] underline-offset-4 hover:underline"
+          >
+            provider documentation
+          </a>
+          .
+        </p>
+      </div>
+    </section>
+  );
+}

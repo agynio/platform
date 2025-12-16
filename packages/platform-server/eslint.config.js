@@ -42,6 +42,7 @@ export default [
       '@typescript-eslint/no-empty-object-type': 'error',
       'no-useless-escape': 'error',
       'prefer-const': 'error',
+      'no-redeclare': 'error',
     },
   },
   // Non-src TS files (no project for parser) but same hardened rules
@@ -69,6 +70,7 @@ export default [
       '@typescript-eslint/no-empty-object-type': 'error',
       'no-useless-escape': 'error',
       'prefer-const': 'error',
+      'no-redeclare': 'error',
     },
   },
   {
@@ -98,6 +100,7 @@ export default [
       '@typescript-eslint/no-empty-object-type': 'error',
       'no-useless-escape': 'error',
       'prefer-const': 'error',
+      'no-redeclare': 'error',
     },
   },
 ];

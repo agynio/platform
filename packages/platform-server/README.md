@@ -105,6 +105,29 @@ Persistent conversation state (Prisma)
 - Best-effort: if AGENTS_DATABASE_URL is not set or DB errors occur, reducers fall back to in-memory only.
 - Local dev:
   - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
+  - When `LLM_PROVIDER=litellm`, the server expects `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY`.
+    - In docker-compose development the admin base defaults to `http://127.0.0.1:4000` if unset.
+    - For all other environments, set an explicit `LITELLM_BASE_URL` and master key.
+
+## LiteLLM admin setup
+
+For local administration of LiteLLM credentials and models, configure the following environment variables on the platform server:
+
+```env
+LITELLM_BASE_URL=http://127.0.0.1:4000
+LITELLM_MASTER_KEY=sk-dev-master-1234
+```
+
+Replace `sk-dev-master-1234` with your actual LiteLLM master key if it differs.
+
+## Context item payload guard
+
+LiteLLM call logging, summarization, and tool execution persist context items as JSON blobs inside Postgres. The persistence layer now strips all `\u0000` (null bytes) from `contentText`, `contentJson`, and `metadata` prior to writes so Prisma does not reject the payload.
+
+- Sanitization runs automatically for every `contextItem.create`/`update`.
+- Enable a hard guard during development by setting `CONTEXT_ITEM_NULL_GUARD=1`. When the guard is active the server throws `ContextItemNullByteGuardError` if any unsanitized payload reaches the repository, ensuring new call sites cannot bypass the sanitizer.
+
+Set the flag while running targeted tests or during local debugging to immediately catch regressions that would otherwise surface as Prisma `null byte in string` errors at runtime.
   - GitHub integration is optional. If no GitHub env is provided, the server boots and logs that GitHub is disabled. Any GitHub-dependent feature will error at runtime until credentials are configured.
 - Shell tool streaming persistence:
   - Tool stdout/stderr chunks are stored via Prisma when the `tool_output_*` tables exist.

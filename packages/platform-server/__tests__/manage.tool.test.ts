@@ -69,7 +69,12 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
       {
         provide: ConfigService,
         useValue: new ConfigService().init(
-          configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+          configSchema.parse({
+            llmProvider: 'openai',
+            agentsDatabaseUrl: 'postgres://localhost/agents',
+            litellmBaseUrl: 'http://localhost:4000',
+            litellmMasterKey: 'sk-test',
+          }),
         ),
       },
       { provide: LLMProvisioner, useClass: StubLLMProvisioner },
@@ -359,7 +364,12 @@ describe('ManageTool unit', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+            configSchema.parse({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://localhost/agents',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
+            }),
           ),
         },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
@@ -417,7 +427,12 @@ describe('ManageTool graph wiring', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+            configSchema.parse({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://localhost/agents',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
+            }),
           ),
         },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },

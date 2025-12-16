@@ -25,6 +25,8 @@ describe('templates: memory registration and agent memory port', () => {
       configSchema.parse({
         llmProvider: 'openai',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
+        litellmBaseUrl: 'http://localhost:4000',
+        litellmMasterKey: 'sk-test',
       }),
     );
     const containerService = new ContainerService(undefined as unknown as ContainerRegistry);

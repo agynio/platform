@@ -23,14 +23,8 @@ import { LiteLLMKeyStore } from './provisioners/litellm.key.store';
     {
       provide: LLMProvisioner,
       useFactory: async (cfg: ConfigService, prisma: PrismaService) => {
-        const provider = (cfg.llmProvider || 'auto') as 'openai' | 'litellm' | 'auto';
-        if (provider === 'openai') return new OpenAILLMProvisioner(cfg);
-        if (provider === 'litellm') {
-          const provisioner = new LiteLLMProvisioner(cfg, new LiteLLMKeyStore(prisma));
-          await provisioner.init();
-          return provisioner;
-        }
-        if (cfg.openaiApiKey) return new OpenAILLMProvisioner(cfg);
+        const provider = cfg.llmProvider;
+        if (provider === 'openai') return new OpenAILLMProvisioner();
         const provisioner = new LiteLLMProvisioner(cfg, new LiteLLMKeyStore(prisma));
         await provisioner.init();
         return provisioner;

@@ -7,6 +7,7 @@ import { GatewayModule } from '../gateway/gateway.module';
 import { InfraModule } from '../infra/infra.module';
 import { StartupRecoveryService } from '../core/services/startupRecovery.service';
 import { NodesModule } from '../nodes/nodes.module';
+import { LLMSettingsModule } from '../settings/llm/llmSettings.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { UserProfileModule } from '../user-profile/user-profile.module';
 
@@ -59,6 +60,7 @@ const createLoggerModule = (): DynamicModule => {
     GatewayModule,
     UserProfileModule,
     OnboardingModule,
+    LLMSettingsModule,
   ],
   providers: [StartupRecoveryService],
   exports: [NodesModule],

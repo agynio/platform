@@ -66,6 +66,8 @@ describe.sequential('NixController', () => {
       githubInstallationId: 'x',
       githubToken: 'x',
       agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+      litellmBaseUrl: 'http://localhost:4000',
+      litellmMasterKey: 'sk-test',
       graphRepoPath: './data/graph',
         graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000',
