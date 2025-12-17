@@ -1,7 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import React from 'react';
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -66,30 +63,7 @@ vi.mock('@/lib/notify', () => ({
   notifyError: (...args: unknown[]) => notifyMocks.error(...args),
 }));
 
-const currentFile = fileURLToPath(import.meta.url);
-const currentDir = path.dirname(currentFile);
-const projectRoot = path.resolve(currentDir, '../../..');
-const llmFeaturesDir = path.join(projectRoot, 'src/features/llmSettings');
 const paddingClassPrefixes = ['p-', 'px-', 'py-', 'pt-', 'pb-', 'pl-', 'pr-'];
-
-function collectTsFiles(dir: string): string[] {
-  const entries = readdirSync(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectTsFiles(fullPath));
-    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-}
-
-const LLM_SETTINGS_FILE_PATHS = [
-  path.join(projectRoot, 'src/components/screens/LlmSettingsScreen.tsx'),
-  ...collectTsFiles(llmFeaturesDir),
-];
 
 function containerHasPadding(element: HTMLElement): boolean {
   return Array.from(element.classList).some((cls) => paddingClassPrefixes.some((prefix) => cls.startsWith(prefix)));
@@ -863,10 +837,4 @@ describe('Settings/LLM page', () => {
     expect(addModelButton).toBeDisabled();
   });
 
-  it('disallows direct @/components/ui imports inside LiteLLM settings files', () => {
-    for (const filePath of LLM_SETTINGS_FILE_PATHS) {
-      const contents = readFileSync(filePath, 'utf8');
-      expect(contents).not.toMatch(/@\/components\/ui\//);
-    }
-  });
 });

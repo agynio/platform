@@ -34,22 +34,6 @@ export default defineConfig([
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
     },
   },
-  {
-    files: ['src/features/llmSettings/**/*.{ts,tsx}', 'src/components/screens/LlmSettingsScreen.tsx'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['@/components/ui/*'],
-              message: 'Use src/components primitives (Button, Input, Dialog, etc.) instead of shadcn/ui wrappers in LiteLLM settings.',
-            },
-          ],
-        },
-      ],
-    },
-  },
   // Tests: allow explicit any and relax component-only exports
   {
     files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}'],

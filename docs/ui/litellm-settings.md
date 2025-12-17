@@ -28,4 +28,3 @@ _Context: PR #1164 aligns the LiteLLM settings experience with the Secrets scree
 - Queries target the screen-level `Add Credential` / `Add Model` buttons instead of tab-local buttons.
 - Tests assert sticky header classes, provider warnings, and disabled states when LiteLLM admin is unavailable.
 - When modifying the layout, keep the `data-testid` hooks (`llm-credentials-table-container`, row ids, etc.) intact to avoid brittle selectors.
-- Tests enforce the `no-restricted-imports` guard against `@/components/ui/*` within LiteLLM settings files.
