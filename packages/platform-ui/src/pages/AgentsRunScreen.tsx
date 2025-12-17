@@ -241,25 +241,36 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 type ContextSource = {
-  ids: string[];
+  inputIds: string[];
+  outputIds: string[];
   highlightIds: string[];
 };
 
+const EMPTY_CONTEXT_SOURCE: ContextSource = {
+  inputIds: [],
+  outputIds: [],
+  highlightIds: [],
+};
+
 function buildContextSource(llmCall?: RunTimelineEvent['llmCall']): ContextSource {
-  if (!llmCall) return { ids: [], highlightIds: [] };
+  if (!llmCall) return EMPTY_CONTEXT_SOURCE;
   const rows = Array.isArray(llmCall.contextItemsV2) ? llmCall.contextItemsV2 : [];
   if (rows.length > 0) {
     const sorted = [...rows].sort((a, b) => a.idx - b.idx);
     const inputRows = sorted.filter((row) => row.direction === 'input');
-    const ids = inputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
-    const highlightIds = inputRows.filter((row) => row.isNew && isNonEmptyString(row.contextItemId)).map((row) => row.contextItemId);
-    return { ids, highlightIds };
+    const outputRows = sorted.filter((row) => row.direction === 'output');
+    const inputIds = inputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
+    const outputIds = outputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
+    const highlightIds = inputRows
+      .filter((row) => row.isNew && isNonEmptyString(row.contextItemId))
+      .map((row) => row.contextItemId);
+    return { inputIds, outputIds, highlightIds };
   }
   const fallbackIds = Array.isArray(llmCall.contextItemIds) ? llmCall.contextItemIds.filter(isNonEmptyString) : [];
   const fallbackHighlight = Array.isArray(llmCall.newContextItemIds)
     ? llmCall.newContextItemIds.filter(isNonEmptyString)
     : [];
-  return { ids: fallbackIds, highlightIds: fallbackHighlight };
+  return { inputIds: fallbackIds, outputIds: [], highlightIds: fallbackHighlight };
 }
 
 type LinkTargets = {
@@ -760,6 +771,7 @@ function resolveContextRecords(
 
 type CreateUiEventOptions = {
   context?: Record<string, unknown>[];
+  assistant?: Record<string, unknown>[];
   tool?: ToolLinkData;
 };
 
@@ -806,6 +818,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
     const fallbackContext = toRecordArray(event.metadata);
     const hasCustomContext = options?.context !== undefined;
     const context = hasCustomContext ? options?.context ?? [] : fallbackContext;
+    const assistantContext = options?.assistant ?? [];
     const response = extractLlmResponse(event);
     return {
       id: event.id,
@@ -816,6 +829,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
       data: {
         context,
         response,
+        assistantContext,
         model: event.llmCall?.model ?? undefined,
         tokens: usage
           ? {
@@ -1185,8 +1199,8 @@ export function AgentsRunScreen() {
     const ids = new Set<string>();
     for (const event of allEvents) {
       if (event.type !== 'llm_call') continue;
-      const { ids: contextIds } = buildContextSource(event.llmCall);
-      for (const id of contextIds) {
+      const { inputIds, outputIds } = buildContextSource(event.llmCall);
+      for (const id of [...inputIds, ...outputIds]) {
         if (!isNonEmptyString(id)) continue;
         if (lookup.has(id)) continue;
         ids.add(id);
@@ -1635,16 +1649,22 @@ export function AgentsRunScreen() {
     const lookup = contextItemsRef.current;
     void contextItemsVersion;
     return events.map((event) => {
-      const contextSource = event.type === 'llm_call' ? buildContextSource(event.llmCall) : { ids: [], highlightIds: [] };
+      const contextSource = event.type === 'llm_call' ? buildContextSource(event.llmCall) : EMPTY_CONTEXT_SOURCE;
       const contextRecords =
         event.type === 'llm_call'
-          ? resolveContextRecords(contextSource.ids, lookup, event.llmCall?.toolCalls ?? [], {
+          ? resolveContextRecords(contextSource.inputIds, lookup, event.llmCall?.toolCalls ?? [], {
               highlightIds: contextSource.highlightIds,
               includeAssistant: false,
             })
           : [];
+      const assistantRecords =
+        event.type === 'llm_call'
+          ? resolveContextRecords(contextSource.outputIds, lookup, event.llmCall?.toolCalls ?? [], {
+              includeAssistant: true,
+            }).filter((record) => (typeof record.role === 'string' ? record.role.toLowerCase() === 'assistant' : false))
+          : [];
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
-      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
+      return createUiEvent(event, { context: contextRecords, assistant: assistantRecords, tool: toolLinks });
     });
   }, [events, contextItemsVersion]);
 

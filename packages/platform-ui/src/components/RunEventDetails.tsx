@@ -36,6 +36,7 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
+  assistantContext?: unknown;
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -216,6 +217,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
   const renderLLMEvent = () => {
     const context = asRecordArray(event.data.context);
+    const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
@@ -268,12 +270,10 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                   <span className="text-sm text-[var(--agyn-gray)]">Model</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
                 </div>
-                <div className="text-[var(--agyn-dark)] text-sm font-mono">
-                  {model}
-                </div>
+                <div className="text-[var(--agyn-dark)] text-sm font-mono">{model}</div>
               </div>
             )}
-            
+
             {/* Context */}
             <div className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
@@ -309,6 +309,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
               )}
             </div>
+            {assistantContext.length > 0 && (
+              <div className="mt-4 flex flex-col min-h-0 min-w-0" data-testid="assistant-context-panel">
+                <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
+                  <span className="text-sm text-[var(--agyn-gray)]">Assistant responses for this call</span>
+                </div>
+                <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
+                  {renderContextMessages(assistantContext)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

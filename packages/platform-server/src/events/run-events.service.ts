@@ -588,6 +588,8 @@ export class RunEventsService {
           createdAt: row.createdAt.toISOString(),
         }))
       : undefined;
+    // contextItemsV2 intentionally contains both input (prompt) and output (assistant) rows; only inputs
+    // participate in the deterministic contextItemIds/newContextItemIds derived below.
     const inputRows = contextItemsV2 ? contextItemsV2.filter((row) => row.direction === 'input') : [];
     const derivedPromptIds = inputRows.length > 0 ? inputRows.map((row) => row.contextItemId) : [];
     const derivedNewIds = inputRows.length > 0 ? inputRows.filter((row) => row.isNew).map((row) => row.contextItemId) : [];

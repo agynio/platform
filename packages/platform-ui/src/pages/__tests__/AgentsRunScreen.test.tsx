@@ -437,6 +437,10 @@ describe('AgentsRunScreen', () => {
     const [capturedEvent] = capturedProps.events;
     const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
     expect(context).toEqual([]);
+    const assistantOutputs = (capturedEvent.data.assistantContext as Record<string, unknown>[] | undefined) ?? [];
+    expect(assistantOutputs).toHaveLength(1);
+    expect(assistantOutputs[0]?.role).toBe('assistant');
+    expect(assistantOutputs[0]?.content).toContain('Final response');
   });
 
   it('highlights new user context items when IDs are provided', async () => {
@@ -562,6 +566,11 @@ describe('AgentsRunScreen', () => {
     expect(userEntry.role).toBe('user');
     expect(userEntry.content).toBe('Please finish the draft.');
     expect(userEntry['__agynIsNew']).toBe(true);
+    const assistantOutputs = (capturedEvent.data.assistantContext as Record<string, unknown>[] | undefined) ?? [];
+    expect(assistantOutputs).toHaveLength(1);
+    const [assistantEntry] = assistantOutputs;
+    expect(assistantEntry.role).toBe('assistant');
+    expect(assistantEntry.content).toContain('Working on it.');
   });
 
   it('still excludes assistant contexts that contain only tool data', async () => {
@@ -665,6 +674,11 @@ describe('AgentsRunScreen', () => {
     const [capturedEvent] = capturedProps.events;
     const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
     expect(context).toEqual([]);
+    const assistantOutputs = (capturedEvent.data.assistantContext as Record<string, unknown>[] | undefined) ?? [];
+    expect(assistantOutputs).toHaveLength(1);
+    const [assistantEntry] = assistantOutputs;
+    expect(assistantEntry.role).toBe('assistant');
+    expect(Array.isArray(assistantEntry.tool_calls) || Array.isArray(assistantEntry.toolCalls)).toBe(true);
   });
 });
 
