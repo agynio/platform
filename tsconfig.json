@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["packages/platform-ui/src/*"]
+    }
+  },
+  "include": ["packages/platform-ui/src"]
+}
