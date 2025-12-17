@@ -5,23 +5,22 @@ _Context: PR #1164 aligns the LiteLLM settings experience with the Secrets scree
 ## Screen layout
 
 - **Component**: `packages/platform-ui/src/components/screens/LlmSettingsScreen.tsx`
-- Use the `Screen` shell with `ScreenHeader`, `ScreenActions`, and `ScreenTabs` so the page matches other admin surfaces.
-- Primary actions (`Add Credential`, `Add Model`) sit in `ScreenActions` and are swapped according to the active tab. Disable buttons when writes are blocked (read-only, missing providers, or model creation disabled).
-- Tabs are rendered through `ScreenTabs` and `TabsList`; table content lives in `TabsContent` panels wrapped by `ScreenBody` ➝ `ScreenContent` for consistent spacing and scrolling.
+- The screen mirrors Secrets: a single border-bottom header with the title/description on the left and the context-aware primary button (`Add Credential`/`Add Model`) on the right.
+- Tabs sit directly under the header inside another border-bottom bar. Use the semantic `role="tablist"`/`role="tab"` pattern (see implementation for focus management) but keep the styling primitive: rounded pills with a filled accent state.
+- The active tab renders a `role="tabpanel"` container that wraps `CredentialsTab` or `ModelsTab`. Each panel fills the remaining height and handles its own scroll area.
 
 ## Table styling
 
 - **Components**: `CredentialsTab`, `ModelsTab`
-- Each tab renders inside a flex column container with a `sticky` header row (`data-testid="llm-*-table-header"`).
-- Tables live inside cards with `border border-border/60 rounded-lg` to mirror Secrets tables; body rows use `divide-y` for clarity.
-- Table action buttons (test, edit, delete) belong to the row and no longer appear in the surrounding screen header.
+- Tabs render inside `flex` column containers with top/bottom utility sections (provider warnings, help text) and a scrollable table region.
+- Stick headers to the top of the scroll container (`data-testid="llm-*-table-header"`) and keep tables borderless/flat so they blend with the page like Secrets.
+- Row action buttons (`IconButton`s) stay aligned right inside each row. Delete confirmations use the shared `ScreenDialog` pattern.
 
 ## Dialog primitives
 
 - **Components**: `CredentialFormDialog`, `ModelFormDialog`, `TestCredentialDialog`, `TestModelDialog`
-- All modals now consume the `ScreenDialog` primitives (`ScreenDialogHeader`, `ScreenDialogTitle`, `ScreenDialogDescription`, `ScreenDialogFooter`).
-- Descriptions are required for accessibility; if no copy is necessary, pass a concise sentence describing the action (e.g., "Send a LiteLLM health check call …").
-- Footers use `ScreenDialogFooter` with the primary action button last; secondary dismiss buttons inherit `variant="outline"` to match the Secrets dialogs.
+- Modals use the shared `ScreenDialog` primitives plus `Button`, `Input`, `Textarea`, `SelectInput`, and `SwitchControl` from `src/components` (no shadcn/ui imports).
+- Provide short descriptions for each dialog so `aria-describedby` is populated. Keep the dismiss button first (`variant="outline"`) and primary action last inside `ScreenDialogFooter`.
 
 ## Testing expectations
 
@@ -29,3 +28,4 @@ _Context: PR #1164 aligns the LiteLLM settings experience with the Secrets scree
 - Queries target the screen-level `Add Credential` / `Add Model` buttons instead of tab-local buttons.
 - Tests assert sticky header classes, provider warnings, and disabled states when LiteLLM admin is unavailable.
 - When modifying the layout, keep the `data-testid` hooks (`llm-credentials-table-container`, row ids, etc.) intact to avoid brittle selectors.
+- Tests enforce the `no-restricted-imports` guard against `@/components/ui/*` within LiteLLM settings files.
