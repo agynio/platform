@@ -184,6 +184,27 @@ function buildSummary(): RunTimelineSummary {
   };
 }
 
+type LlmCallContextItem = NonNullable<RunTimelineEvent['llmCall']>['contextItems'][number];
+
+type ContextRowInput = {
+  contextItemId: string;
+  direction: LlmCallContextItem['direction'];
+  isNew?: boolean;
+  index?: number;
+  createdAt: string;
+};
+
+function buildContextItems(rows: ContextRowInput[], prefix = 'rel'): LlmCallContextItem[] {
+  return rows.map((row, idx) => ({
+    id: `${prefix}-${idx + 1}`,
+    contextItemId: row.contextItemId,
+    direction: row.direction,
+    isNew: row.isNew ?? false,
+    index: row.index ?? idx,
+    createdAt: row.createdAt,
+  }));
+}
+
 type AgentsRunScreenWithTesting = typeof AgentsRunScreen & {
   __testing__?: {
     extractLlmResponse: (event: RunTimelineEvent) => string;
@@ -367,25 +388,23 @@ describe('AgentsRunScreen', () => {
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: [userContext.id, assistantContext.id],
-        newContextItemCount: 0,
-        newContextItemIds: [],
-        contextItemsV2: [
-          {
-            idx: 0,
-            contextItemId: userContext.id,
-            direction: 'input',
-            isNew: false,
-            createdAt: userContext.createdAt,
-          },
-          {
-            idx: 1,
-            contextItemId: assistantContext.id,
-            direction: 'output',
-            isNew: false,
-            createdAt: assistantContext.createdAt,
-          },
-        ],
+        contextItems: buildContextItems(
+          [
+            {
+              contextItemId: userContext.id,
+              direction: 'input',
+              isNew: false,
+              createdAt: userContext.createdAt,
+            },
+            {
+              contextItemId: assistantContext.id,
+              direction: 'output',
+              isNew: false,
+              createdAt: assistantContext.createdAt,
+            },
+          ],
+          'ctx-llm-separated',
+        ),
         responseText: 'I am fine, thanks!',
         rawResponse: null,
         toolCalls: [
@@ -488,32 +507,29 @@ describe('AgentsRunScreen', () => {
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: [userContext.id, assistantContext.id],
-        newContextItemCount: 1,
-        newContextItemIds: [userContext.id],
-        contextItemsV2: [
-          {
-            idx: 0,
-            contextItemId: userContext.id,
-            direction: 'input',
-            isNew: true,
-            createdAt: userContext.createdAt,
-          },
-          {
-            idx: 1,
-            contextItemId: assistantContext.id,
-            direction: 'input',
-            isNew: false,
-            createdAt: assistantContext.createdAt,
-          },
-          {
-            idx: 2,
-            contextItemId: assistantContext.id,
-            direction: 'output',
-            isNew: false,
-            createdAt: assistantContext.createdAt,
-          },
-        ],
+        contextItems: buildContextItems(
+          [
+            {
+              contextItemId: userContext.id,
+              direction: 'input',
+              isNew: true,
+              createdAt: userContext.createdAt,
+            },
+            {
+              contextItemId: assistantContext.id,
+              direction: 'input',
+              isNew: false,
+              createdAt: assistantContext.createdAt,
+            },
+            {
+              contextItemId: assistantContext.id,
+              direction: 'output',
+              isNew: false,
+              createdAt: assistantContext.createdAt,
+            },
+          ],
+          'ctx-highlight',
+        ),
         responseText: 'Working on it.',
         rawResponse: null,
         toolCalls: [],
@@ -606,25 +622,23 @@ describe('AgentsRunScreen', () => {
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: [assistantInput.id, toolInput.id],
-        newContextItemCount: 2,
-        newContextItemIds: [assistantInput.id, toolInput.id],
-        contextItemsV2: [
-          {
-            idx: 0,
-            contextItemId: assistantInput.id,
-            direction: 'input',
-            isNew: true,
-            createdAt: assistantInput.createdAt,
-          },
-          {
-            idx: 1,
-            contextItemId: toolInput.id,
-            direction: 'input',
-            isNew: true,
-            createdAt: toolInput.createdAt,
-          },
-        ],
+        contextItems: buildContextItems(
+          [
+            {
+              contextItemId: assistantInput.id,
+              direction: 'input',
+              isNew: true,
+              createdAt: assistantInput.createdAt,
+            },
+            {
+              contextItemId: toolInput.id,
+              direction: 'input',
+              isNew: true,
+              createdAt: toolInput.createdAt,
+            },
+          ],
+          'ctx-assistant-tool',
+        ),
         responseText: null,
         rawResponse: null,
         toolCalls: [],
@@ -716,25 +730,23 @@ describe('AgentsRunScreen', () => {
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: [assistantContext.id],
-        newContextItemCount: 1,
-        newContextItemIds: [assistantContext.id],
-        contextItemsV2: [
-          {
-            idx: 0,
-            contextItemId: assistantContext.id,
-            direction: 'input',
-            isNew: false,
-            createdAt: assistantContext.createdAt,
-          },
-          {
-            idx: 1,
-            contextItemId: assistantContext.id,
-            direction: 'output',
-            isNew: false,
-            createdAt: assistantContext.createdAt,
-          },
-        ],
+        contextItems: buildContextItems(
+          [
+            {
+              contextItemId: assistantContext.id,
+              direction: 'input',
+              createdAt: assistantContext.createdAt,
+              isNew: false,
+            },
+            {
+              contextItemId: assistantContext.id,
+              direction: 'output',
+              createdAt: assistantContext.createdAt,
+              isNew: false,
+            },
+          ],
+          'ctx-structured',
+        ),
         responseText: null,
         rawResponse: null,
         toolCalls: [],
@@ -830,10 +842,7 @@ describe('extractLlmResponse', () => {
         temperature: null,
         topP: null,
         stopReason: null,
-        contextItemIds: [],
-        newContextItemCount: 0,
-        newContextItemIds: [],
-        contextItemsV2: [],
+        contextItems: [],
         responseText: null,
         rawResponse: null,
         toolCalls: [],

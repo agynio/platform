@@ -254,23 +254,17 @@ const EMPTY_CONTEXT_SOURCE: ContextSource = {
 
 function buildContextSource(llmCall?: RunTimelineEvent['llmCall']): ContextSource {
   if (!llmCall) return EMPTY_CONTEXT_SOURCE;
-  const rows = Array.isArray(llmCall.contextItemsV2) ? llmCall.contextItemsV2 : [];
-  if (rows.length > 0) {
-    const sorted = [...rows].sort((a, b) => a.idx - b.idx);
-    const inputRows = sorted.filter((row) => row.direction === 'input');
-    const outputRows = sorted.filter((row) => row.direction === 'output');
-    const ids = inputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
-    const outputIds = outputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
-    const highlightIds = inputRows
-      .filter((row) => row.isNew && isNonEmptyString(row.contextItemId))
-      .map((row) => row.contextItemId);
-    return { ids, highlightIds, outputIds: outputIds.length > 0 ? outputIds : undefined };
-  }
-  const fallbackIds = Array.isArray(llmCall.contextItemIds) ? llmCall.contextItemIds.filter(isNonEmptyString) : [];
-  const fallbackHighlight = Array.isArray(llmCall.newContextItemIds)
-    ? llmCall.newContextItemIds.filter(isNonEmptyString)
-    : [];
-  return { ids: fallbackIds, highlightIds: fallbackHighlight };
+  const rows = Array.isArray(llmCall.contextItems) ? llmCall.contextItems : [];
+  if (rows.length === 0) return EMPTY_CONTEXT_SOURCE;
+  const sorted = [...rows].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  const inputRows = sorted.filter((row) => row.direction === 'input');
+  const outputRows = sorted.filter((row) => row.direction === 'output');
+  const ids = inputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
+  const outputIds = outputRows.map((row) => row.contextItemId).filter(isNonEmptyString);
+  const highlightIds = inputRows
+    .filter((row) => row.isNew && isNonEmptyString(row.contextItemId))
+    .map((row) => row.contextItemId);
+  return { ids, highlightIds, outputIds: outputIds.length > 0 ? outputIds : undefined };
 }
 
 type LinkTargets = {

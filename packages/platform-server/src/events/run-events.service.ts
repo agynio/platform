@@ -38,7 +38,7 @@ const RUN_EVENT_INCLUDE = {
         orderBy: { idx: 'asc' as const },
       },
       contextItems: {
-        select: { contextItemId: true, idx: true, direction: true, isNew: true, createdAt: true },
+        select: { id: true, contextItemId: true, idx: true, direction: true, isNew: true, createdAt: true },
         orderBy: { idx: 'asc' as const },
       },
     },
@@ -62,7 +62,7 @@ export type SerializedContextItem = {
 };
 
 /**
- * Serialized view of the ordered context rows that an LLM call consumed or produced.
+ * Canonical view of the ordered context rows that an LLM call consumed or produced.
  *
  * Direction semantics:
  * - `input` rows are the exact items supplied to the provider when the call started.
@@ -75,11 +75,12 @@ export type SerializedContextItem = {
  *   responses emitted during the same call. These ids are later reused as `input`
  *   rows for the following call, ensuring call N outputs become call N+1 inputs.
  */
-export type SerializedLLMCallContextItem = {
-  idx: number;
+export type CanonicalLLMCallContextItem = {
+  id: string;
   contextItemId: string;
   direction: 'input' | 'output';
   isNew: boolean;
+  index: number;
   createdAt: string;
 };
 
@@ -133,10 +134,7 @@ export type RunTimelineEvent = {
     temperature: number | null;
     topP: number | null;
     stopReason: string | null;
-    contextItemIds: string[];
-    newContextItemIds: string[];
-    newContextItemCount: number;
-    contextItemsV2?: SerializedLLMCallContextItem[];
+    contextItems: CanonicalLLMCallContextItem[];
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
@@ -593,24 +591,19 @@ export class RunEventsService {
       contentText: att.contentText ?? null,
     }));
     const contextItemRows = event.llmCall?.contextItems ?? [];
-    const contextItemsV2 = contextItemRows.length > 0
-      ? contextItemRows.map((row) => ({
-          idx: row.idx,
-          contextItemId: row.contextItemId,
-          direction: row.direction,
-          isNew: row.isNew,
-          createdAt: row.createdAt.toISOString(),
-        }))
-      : undefined;
-    // contextItemsV2 intentionally contains both input (prompt) and output (assistant) rows; only inputs
-    // participate in the deterministic contextItemIds/newContextItemIds derived below.
-    const inputRows = contextItemsV2 ? contextItemsV2.filter((row) => row.direction === 'input') : [];
-    const derivedPromptIds = inputRows.length > 0 ? inputRows.map((row) => row.contextItemId) : [];
-    const derivedNewIds = inputRows.length > 0 ? inputRows.filter((row) => row.isNew).map((row) => row.contextItemId) : [];
-    const fallbackContextIds = event.llmCall?.contextItemIds ? [...event.llmCall.contextItemIds] : [];
-    const contextItemIds = derivedPromptIds.length > 0 ? derivedPromptIds : fallbackContextIds;
-    const newContextItemIds = derivedNewIds;
-    const newContextItemCount = derivedNewIds.length > 0 ? derivedNewIds.length : event.llmCall?.newContextItemCount ?? 0;
+    const contextItems = contextItemRows.length > 0
+      ? contextItemRows
+          .slice()
+          .sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0))
+          .map((row, fallbackIdx) => ({
+            id: row.id,
+            contextItemId: row.contextItemId,
+            direction: row.direction,
+            isNew: row.isNew,
+            index: typeof row.idx === 'number' ? row.idx : fallbackIdx,
+            createdAt: row.createdAt.toISOString(),
+          }))
+      : [];
     const llmCall = event.llmCall
       ? {
           provider: event.llmCall.provider ?? null,
@@ -618,10 +611,7 @@ export class RunEventsService {
           temperature: event.llmCall.temperature ?? null,
           topP: event.llmCall.topP ?? null,
           stopReason: event.llmCall.stopReason ?? null,
-          contextItemIds,
-          newContextItemCount,
-          newContextItemIds,
-          contextItemsV2,
+          contextItems,
           responseText: event.llmCall.responseText ?? null,
           rawResponse: this.toPlainJson(event.llmCall.rawResponse ?? null),
           toolCalls: event.llmCall.toolCalls.map((tc) => ({

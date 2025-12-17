@@ -96,14 +96,12 @@ export type RunTimelineEvent = {
     temperature: number | null;
     topP: number | null;
     stopReason: string | null;
-    contextItemIds: string[];
-    newContextItemCount: number;
-    newContextItemIds: string[];
-    contextItemsV2?: Array<{
-      idx: number;
+    contextItems: Array<{
+      id: string;
       contextItemId: string;
       direction: 'input' | 'output';
       isNew: boolean;
+      index: number;
       createdAt: string;
     }>;
     responseText: string | null;

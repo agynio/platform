@@ -150,8 +150,7 @@ if (!shouldRunDbTests) {
       expect(firstPage.items).toHaveLength(1);
       const summaryEvent = firstPage.items[0]!;
       expect(summaryEvent.llmCall).toBeDefined();
-      expect(summaryEvent.llmCall?.contextItemIds).toEqual(callRecord.contextItemIds);
-      const relation = summaryEvent.llmCall?.contextItemsV2 ?? [];
+      const relation = summaryEvent.llmCall?.contextItems ?? [];
       expect(relation.map((row) => row.contextItemId)).toEqual(callRecord.contextItemIds);
       expect(relation.every((row) => row.direction === 'input')).toBe(true);
       expect(summaryEvent.llmCall).not.toHaveProperty('prompt');
@@ -203,9 +202,7 @@ if (!shouldRunDbTests) {
       expect(callRecord.newContextItemCount).toBe(1);
 
       const snapshot = await runEvents.getEventSnapshot(event.id);
-      expect(snapshot?.llmCall?.newContextItemCount).toBe(1);
-      expect(snapshot?.llmCall?.newContextItemIds).toEqual([userId]);
-      const contextRows = snapshot?.llmCall?.contextItemsV2 ?? [];
+      const contextRows = snapshot?.llmCall?.contextItems ?? [];
       expect(contextRows).toHaveLength(4);
       const inputRows = contextRows.filter((row) => row.direction === 'input');
       expect(inputRows.map((row) => row.contextItemId)).toEqual([systemId, userId, assistantId]);
@@ -288,13 +285,13 @@ if (!shouldRunDbTests) {
       expect(llmEvents).toHaveLength(2);
       const [firstSummary, secondSummary] = llmEvents;
 
-      const firstRows = firstSummary.llmCall?.contextItemsV2 ?? [];
+      const firstRows = firstSummary.llmCall?.contextItems ?? [];
       const firstInputs = firstRows.filter((row) => row.direction === 'input');
       const firstOutputs = firstRows.filter((row) => row.direction === 'output');
       expect(firstInputs.map((row) => row.contextItemId)).toEqual([systemId, userOneId]);
       expect(firstOutputs.map((row) => row.contextItemId)).toEqual([assistantOneId, toolOneId]);
 
-      const secondRows = secondSummary.llmCall?.contextItemsV2 ?? [];
+      const secondRows = secondSummary.llmCall?.contextItems ?? [];
       const secondInputs = secondRows.filter((row) => row.direction === 'input');
       const secondOutputs = secondRows.filter((row) => row.direction === 'output');
       expect(secondInputs.map((row) => row.contextItemId)).toEqual([
@@ -306,14 +303,11 @@ if (!shouldRunDbTests) {
       ]);
       expect(secondOutputs.map((row) => row.contextItemId)).toEqual([assistantTwoId]);
 
-      expect(secondSummary.llmCall?.contextItemIds).toEqual([
-        systemId,
-        userOneId,
+      expect(secondInputs.filter((row) => row.isNew).map((row) => row.contextItemId)).toEqual([
         assistantOneId,
         toolOneId,
         userTwoId,
       ]);
-      expect(secondSummary.llmCall?.newContextItemIds).toEqual([assistantOneId, toolOneId, userTwoId]);
 
       await cleanup(thread.id, run.id, Array.from(createdIds));
     });

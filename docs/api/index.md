@@ -66,8 +66,8 @@ Agent runs timeline
     - Cursor pagination: `cursor[ts]`, `cursor[id]`
   - 200 `{ items: RunTimelineEvent[], nextCursor: { ts, id } | null }`
   - Notes:
-    - Each LLM call item includes `contextItemIds` (ordered).
-    - Fetch full context payloads via the Context items batch endpoint using the IDs returned above.
+    - Each LLM call item includes `contextItems`, an ordered list of both input (`direction: 'input'`) and output (`'output'`) rows. Each row surfaces `{ id, contextItemId, direction, isNew, index, createdAt }`.
+    - Fetch full context payloads via the Context items batch endpoint using the `contextItemId` values returned above.
 
 Context items
 - GET `/api/agents/context-items?ids=<uuid>&ids=<uuid>`
