@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Inject, Module, OnModuleInit } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { CoreModule } from '../core/core.module';
 import { EventsModule } from '../events/events.module';
@@ -7,6 +7,9 @@ import { GatewayModule } from '../gateway/gateway.module';
 import { InfraModule } from '../infra/infra.module';
 import { StartupRecoveryService } from '../core/services/startupRecovery.service';
 import { NodesModule } from '../nodes/nodes.module';
+import { LLMSettingsModule } from '../settings/llm/llmSettings.module';
+import { LLMModule } from '../llm/llm.module';
+import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { UserProfileModule } from '../user-profile/user-profile.module';
 
@@ -59,8 +62,16 @@ const createLoggerModule = (): DynamicModule => {
     GatewayModule,
     UserProfileModule,
     OnboardingModule,
+    LLMSettingsModule,
+    LLMModule,
   ],
   providers: [StartupRecoveryService],
   exports: [NodesModule],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  constructor(@Inject(LLMProvisioner) private readonly llmProvisioner: LLMProvisioner) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.llmProvisioner.init();
+  }
+}

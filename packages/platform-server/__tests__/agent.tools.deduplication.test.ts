@@ -11,9 +11,11 @@ import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
 import type { LocalMCPServerNode } from '../src/nodes/mcp';
 
 class StubProvisioner extends LLMProvisioner {
+  async init(): Promise<void> {}
   async getLLM(): Promise<unknown> {
     throw new Error('getLLM not implemented in tests');
   }
+  async teardown(): Promise<void> {}
 }
 
 class TestFunctionTool extends FunctionTool<z.ZodObject<z.ZodRawShape>> {

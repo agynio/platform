@@ -14,6 +14,7 @@ import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
 
 class StubProvisioner extends LLMProvisioner {
+  async init(): Promise<void> {}
   async getLLM(): Promise<{ call: () => Promise<ResponseMessage> }> {
     return {
       call: async () => ResponseMessage.fromText('ok'),
@@ -23,11 +24,15 @@ class StubProvisioner extends LLMProvisioner {
   async getReducers(): Promise<Record<string, FunctionTool>> {
     return {};
   }
+
+  async teardown(): Promise<void> {}
 }
 
 describe('Agent thread model binding', () => {
   const baseConfig = {
     llmProvider: 'openai',
+    litellmBaseUrl: 'http://localhost:4000',
+    litellmMasterKey: 'sk-test',
   } as Partial<ConfigService>;
 
   let moduleRef: Awaited<ReturnType<typeof Test.createTestingModule>>;

@@ -24,6 +24,8 @@ describe('Agent summarization graph', () => {
             configSchema.parse({
               llmProvider: 'openai',
               agentsDatabaseUrl: 'postgres://localhost/agents',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
             }),
           ),
         },

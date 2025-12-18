@@ -6,6 +6,7 @@ describe('NcpsKeyService', () => {
   const baseEnv = {
     githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x',
     llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents',
+    litellmBaseUrl: 'http://localhost:4000', litellmMasterKey: 'sk-test',
     graphRepoPath: './data/graph', graphBranch: 'graph-state',
     dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
     mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',

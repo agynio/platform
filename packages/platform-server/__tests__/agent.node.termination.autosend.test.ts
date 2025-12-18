@@ -41,7 +41,12 @@ describe('AgentNode termination auto-send', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://user:pass@host/db' }),
+            configSchema.parse({
+              llmProvider: 'litellm',
+              litellmBaseUrl: 'http://127.0.0.1:4000',
+              litellmMasterKey: 'sk-dev-master-1234',
+              agentsDatabaseUrl: 'postgres://user:pass@host/db',
+            }),
           ),
         },
         {

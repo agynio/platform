@@ -1,5 +1,11 @@
 import 'reflect-metadata';
 
+const envName = (process.env.NODE_ENV ?? '').toLowerCase();
+const isProduction = envName === 'production' || (process.env.AGENTS_ENV ?? '').toLowerCase() === 'production';
+if (!isProduction && process.env.CONTEXT_ITEM_NULL_GUARD === undefined) {
+  process.env.CONTEXT_ITEM_NULL_GUARD = '1';
+}
+
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';

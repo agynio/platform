@@ -1,9 +1,9 @@
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { AppModule } from '../src/bootstrap/app.module';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { ContainerService } from '../src/infra/container/container.service';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -18,12 +18,17 @@ import { EventsBusService } from '../src/events/events-bus.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
+process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
+process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
+process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234';
 
 describe('AppModule bootstrap smoke test', () => {
   it('initializes Nest application with stubbed infrastructure', async () => {
+    const { AppModule } = await import('../src/bootstrap/app.module');
     const transactionClientStub = {
       $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
       run: {
@@ -128,8 +133,26 @@ describe('AppModule bootstrap smoke test', () => {
       subscribe: vi.fn(() => () => {}),
     } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
 
+    const configService = new ConfigService().init(
+      configSchema.parse({
+        llmProvider: process.env.LLM_PROVIDER || 'litellm',
+        litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
+        litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
+        agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',
+      }),
+    );
+
+
+    class StubProvisioner extends LLMProvisioner {
+      async init(): Promise<void> {}
+      getLLM = vi.fn(async () => ({} as never));
+      async teardown(): Promise<void> {}
+    }
+    const llmProvisionerStub = new StubProvisioner();
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(ConfigService)
+      .useValue(configService)
       .overrideProvider(PrismaService)
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)
@@ -150,6 +173,8 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(threadsMetricsStub)
       .overrideProvider(VaultService)
       .useValue(vaultStub)
+      .overrideProvider(LLMProvisioner)
+      .useValue(llmProvisionerStub)
       .overrideProvider(SlackAdapter)
       .useValue(slackAdapterStub)
       .overrideProvider(EventsBusService)
@@ -158,7 +183,11 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(startupRecoveryStub)
       .overrideProvider(LiveGraphRuntime)
       .useValue(liveRuntimeStub)
+      .overrideProvider(LLMSettingsService)
+      .useValue({})
       .compile();
+
+    expect(moduleRef.get(ConfigService)).toBe(configService);
 
     const adapter = new FastifyAdapter();
     const fastifyInstance = adapter.getInstance() as unknown as {

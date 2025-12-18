@@ -74,8 +74,8 @@ class StubConfigService extends ConfigService {
       githubInstallationId: 'test',
       openaiApiKey: 'test',
       llmProvider: 'openai',
-      litellmBaseUrl: undefined,
-      litellmMasterKey: undefined,
+      litellmBaseUrl: 'http://localhost:4000',
+      litellmMasterKey: 'sk-test',
       openaiBaseUrl: undefined,
       githubToken: 'test',
       graphRepoPath: './data/graph',
@@ -118,9 +118,11 @@ class StubVaultService extends VaultService {
   }
 }
 class StubLLMProvisioner extends LLMProvisioner {
+  async init(): Promise<void> {}
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
     return { call: async () => ({ text: 'ok', output: [] }) };
   }
+  async teardown(): Promise<void> {}
 }
 
 describe('Boot respects MCP enabledTools from persisted state', () => {

@@ -1,3 +1,4 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 
 export type PersistedLiteLLMKey = {
@@ -6,8 +7,13 @@ export type PersistedLiteLLMKey = {
   expiresAt: Date | null;
 };
 
+@Injectable()
 export class LiteLLMKeyStore {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prismaService: PrismaService) {
+    if (!prismaService) {
+      throw new Error('LiteLLMKeyStore missing PrismaService dependency');
+    }
+  }
 
   async load(alias: string): Promise<PersistedLiteLLMKey | null> {
     const record = await this.prismaService.getClient().liteLLMVirtualKey.findUnique({ where: { alias } });

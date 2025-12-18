@@ -4,7 +4,7 @@ import { PrismaService } from './services/prisma.service';
 
 @Module({
   providers: [
-    { provide: ConfigService, useFactory: () => ConfigService.fromEnv() },
+    { provide: ConfigService, useFactory: () => ConfigService.getInstance() },
     PrismaService,
   ],
   exports: [

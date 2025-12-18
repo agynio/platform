@@ -15,6 +15,7 @@ import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
+import { SettingsLlm } from './pages/SettingsLlm';
 import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
 import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
@@ -65,8 +66,8 @@ function App() {
               {/* Memory */}
               <Route path="/memory" element={<MemoryNodesListPage />} />
               <Route path="/memory/:nodeId" element={<MemoryNodeDetailPage />} />
-
               {/* Settings */}
+              <Route path="/settings/llm" element={<SettingsLlm />} />
               <Route path="/settings/secrets" element={<SettingsSecrets />} />
               <Route path="/settings/variables" element={<SettingsVariables />} />
             </Route>

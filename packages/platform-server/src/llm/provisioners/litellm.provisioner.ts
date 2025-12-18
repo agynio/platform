@@ -18,6 +18,7 @@ const REFRESH_RETRY_MAX_DELAY_MS = 5 * 60_000;
 export class LiteLLMProvisioner extends LLMProvisioner {
   private readonly logger = new Logger(LiteLLMProvisioner.name);
   private readonly fetchImpl: typeof fetch;
+  private readonly keyStore: LiteLLMKeyStore;
   private readonly keyAlias: string;
 
   private llm?: LLM;
@@ -30,10 +31,15 @@ export class LiteLLMProvisioner extends LLMProvisioner {
 
   constructor(
     @Inject(ConfigService) private readonly cfg: ConfigService,
-    private readonly keyStore: LiteLLMKeyStore,
+    @Inject(LiteLLMKeyStore) keyStore: LiteLLMKeyStore,
     fetchImpl?: typeof fetch,
   ) {
     super();
+    ConfigService.assertInitialized(cfg);
+    if (!keyStore) {
+      throw new Error('LiteLLMProvisioner missing LiteLLMKeyStore dependency');
+    }
+    this.keyStore = keyStore;
     this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.keyAlias = this.resolveAlias();
   }
@@ -57,28 +63,16 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private async initialize(): Promise<void> {
-    if (this.cfg.openaiApiKey) {
-      this.initializeDirectOpenAI();
-      return;
-    }
-
     this.ensureLiteLLMConfig();
     await this.bootstrapVirtualKey();
     this.registerShutdownHooks();
-  }
-
-  private initializeDirectOpenAI(): void {
-    const apiKey = this.cfg.openaiApiKey;
-    if (!apiKey) throw new Error('openai_provider_missing_key');
-    const client = new OpenAI({ apiKey, baseURL: this.cfg.openaiBaseUrl });
-    this.llm = new LLM(client);
   }
 
   private ensureLiteLLMConfig(): void {
     if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) {
       throw new Error('litellm_missing_config');
     }
-    this.baseUrl = (this.cfg.openaiBaseUrl || `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1`).replace(/\/$/, '');
+    this.baseUrl = `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1`;
   }
 
   private async bootstrapVirtualKey(): Promise<void> {

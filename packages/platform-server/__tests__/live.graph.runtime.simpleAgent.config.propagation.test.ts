@@ -26,11 +26,13 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       }
     }
     class StubLLMProvisioner extends LLMProvisioner {
+      async init(): Promise<void> {}
       async getLLM() {
         return {
           call: async ({ model }: { model: string }) => ({ text: `model:${model}`, output: [] }),
         };
       }
+      async teardown(): Promise<void> {}
     }
 
     const cfg: Config = {
@@ -69,6 +71,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       ncpsAuthHeader: undefined,
       ncpsAuthToken: undefined,
       agentsDatabaseUrl: 'postgres://localhost:5432/test',
+      llmProvider: 'openai',
+      litellmBaseUrl: 'http://localhost:4000',
+      litellmMasterKey: 'sk-test',
       corsOrigins: [],
     };
 

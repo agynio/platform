@@ -16,6 +16,8 @@ describe('NixController E2E (Fastify)', () => {
         llmProvider: 'openai',
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x',
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        litellmBaseUrl: 'http://localhost:4000',
+        litellmMasterKey: 'sk-test',
         graphRepoPath: './data/graph', graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
         nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
