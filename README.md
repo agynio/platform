@@ -28,3 +28,15 @@ OPENAI_API_KEY=your_key python3 scripts/agents_demo.py
 ```
 
 Set `OPENAI_API_KEY` (or export it beforehand) so the Agents SDK can authenticate with OpenAI. This runs the codex MCP binary via stdio and asks it to write `hello world!` into `hello.txt` in the working directory.
+
+## License
+
+This project is licensed under Apache 2.0 with the Commons Clause and a No‑Hosting rider.
+
+- You may use, modify, and redistribute internally.
+- You may not sell the software or services whose value derives primarily from it.
+- You may not offer the software (or derivatives) as a hosted/managed service, whether free or paid.
+
+See the full terms in the LICENSE file.
+
+Note: This is source‑available and not OSI open source.
