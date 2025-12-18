@@ -82,9 +82,11 @@ import type { HTMLAttributes } from 'react';
 import { IconButton } from './IconButton';
 import { Dropdown } from './Dropdown';
 import { FullscreenMarkdownEditor } from './FullscreenMarkdownEditor';
-import { AutosizeTextarea, type AutosizeTextareaProps } from './AutosizeTextarea';
 import { MARKDOWN_COMPOSER_THEME } from '@/lib/markdown/composerTheme';
 
+import { AutosizeTextarea, type AutosizeTextareaProps } from './AutosizeTextarea';
+
+// Local replacements for the removed lib/markdown/transformers helpers.
 const UNDERLINE_MARKER = '__LEXICAL_UNDERLINE__';
 
 const UNDERLINE_TRANSFORMER: TextFormatTransformer = {
