@@ -91,6 +91,8 @@ model ContextItem {
   sizeBytes   Int              @map("size_bytes") @default(0)
   createdAt   DateTime         @default(now())
 
+  llmCallContextItems LLMCallContextItem[]
+
   @@map("context_items")
   @@index([role], map: "idx_context_items_role")
 }
@@ -186,6 +188,11 @@ enum RunEventStatus {
   success
   error
   cancelled
+}
+
+enum LLMCallContextItemDirection {
+  input
+  output
 }
 
 enum EventSourceKind {
@@ -302,8 +309,27 @@ model LLMCall {
   event          RunEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   toolCalls      ToolCall[]
   toolExecutions ToolExecution[] @relation("LLMCallToolExecutions")
+  contextItems   LLMCallContextItem[]
 
   @@map("llm_calls")
+}
+
+model LLMCallContextItem {
+  id             String                         @id @default(uuid()) @db.Uuid
+  llmCallEventId String                         @map("llm_call_event_id") @db.Uuid
+  contextItemId  String                         @map("context_item_id") @db.Uuid
+  idx            Int
+  direction      LLMCallContextItemDirection
+  isNew          Boolean                        @map("is_new") @default(false)
+  createdAt      DateTime                       @map("created_at") @default(now())
+
+  llmCall     LLMCall     @relation(fields: [llmCallEventId], references: [eventId], onDelete: Cascade)
+  contextItem ContextItem @relation(fields: [contextItemId], references: [id], onDelete: Cascade)
+
+  @@unique([llmCallEventId, idx])
+  @@index([llmCallEventId])
+  @@index([contextItemId])
+  @@map("llm_call_context_items")
 }
 
 model ToolCall {

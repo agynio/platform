@@ -45,6 +45,8 @@ export type RunMessageItem = { id: string; kind: 'user' | 'assistant' | 'system'
 
 export type ContextItemRole = 'system' | 'user' | 'assistant' | 'tool' | 'memory' | 'summary' | 'other';
 
+export type LlmInputContextRole = ContextItemRole | 'developer';
+
 export type ContextItem = {
   id: string;
   role: ContextItemRole;
@@ -96,11 +98,18 @@ export type RunTimelineEvent = {
     temperature: number | null;
     topP: number | null;
     stopReason: string | null;
-    contextItemIds: string[];
-    newContextItemCount: number;
+    inputContextItems: Array<{
+      id: string;
+      contextItemId: string;
+      role: LlmInputContextRole;
+      order: number;
+      createdAt: string;
+      isNew?: boolean;
+    }>;
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
+    linkedToolExecutionIds?: string[];
     usage?: {
       inputTokens: number | null;
       cachedInputTokens: number | null;

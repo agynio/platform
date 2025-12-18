@@ -227,12 +227,15 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private cloneContext(context?: LLMContextState): LLMContextState {
-    if (!context) return { messageIds: [], memory: [] };
+    if (!context) return { messageIds: [], memory: [], pendingNewContextItemIds: [] };
     return {
       messageIds: [...context.messageIds],
       memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
       system: context.system ? { id: context.system.id ?? null } : undefined,
+      pendingNewContextItemIds: context.pendingNewContextItemIds
+        ? [...context.pendingNewContextItemIds]
+        : undefined,
     };
   }
 

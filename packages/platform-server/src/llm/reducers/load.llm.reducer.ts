@@ -57,12 +57,15 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
   }
 
   private ensureContext(context: LLMContextState | undefined): LLMContextState {
-    if (!context) return { messageIds: [], memory: [] };
+    if (!context) return { messageIds: [], memory: [], pendingNewContextItemIds: [] };
     return {
       messageIds: [...(context.messageIds ?? [])],
       memory: [...(context.memory ?? [])],
       summary: context.summary ? { ...context.summary } : undefined,
       system: context.system ? { ...context.system } : undefined,
+      pendingNewContextItemIds: context.pendingNewContextItemIds
+        ? [...context.pendingNewContextItemIds]
+        : undefined,
     };
   }
 }

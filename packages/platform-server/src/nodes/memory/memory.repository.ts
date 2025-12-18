@@ -165,45 +165,39 @@ export class PostgresMemoryEntitiesRepository implements MemoryEntitiesRepositor
     const prisma = await this.getClient();
     const threadId = filter.threadId;
 
-    const rows = entityId
-      ? await prisma.$queryRaw<Array<{ id: string; parent_id: string | null; content: string | null }>>`
-          WITH RECURSIVE tree AS (
-            SELECT id, parent_id, content
-            FROM memory_entities
-            WHERE id = ${entityId}
-              AND node_id = ${filter.nodeId}
-              AND ((thread_id IS NULL AND ${threadId} IS NULL) OR thread_id = ${threadId})
-            UNION ALL
-            SELECT child.id, child.parent_id, child.content
-            FROM memory_entities child
-            INNER JOIN tree ON child.parent_id = tree.id
-            WHERE child.node_id = ${filter.nodeId}
-              AND ((child.thread_id IS NULL AND ${threadId} IS NULL) OR child.thread_id = ${threadId})
-          )
-          SELECT id, parent_id, content FROM tree
-        `
-      : await prisma.$queryRaw<Array<{ id: string; parent_id: string | null; content: string | null }>>`
-          SELECT id, parent_id, content
-          FROM memory_entities
-          WHERE node_id = ${filter.nodeId}
-            AND ((thread_id IS NULL AND ${threadId} IS NULL) OR thread_id = ${threadId})
-        `;
-
-    if (rows.length === 0) {
-      return { removed: 0 };
+    if (!entityId) {
+      const result = await prisma.memoryEntity.deleteMany({ where: { nodeId: filter.nodeId, threadId } });
+      return { removed: result.count };
     }
 
-    if (entityId) {
-      await prisma.memoryEntity.delete({ where: { id: entityId } });
-    } else {
-      await prisma.memoryEntity.deleteMany({
-        where: {
-          nodeId: filter.nodeId,
-          threadId,
-        },
-      });
+    const nodes = await prisma.memoryEntity.findMany({
+      where: { nodeId: filter.nodeId, threadId },
+      select: { id: true, parentId: true },
+    });
+    if (!nodes.length) return { removed: 0 };
+
+    const descendants = new Set<string>();
+    const queue: string[] = [entityId];
+    const childrenByParent = nodes.reduce<Record<string, string[]>>((acc, row) => {
+      if (!row.parentId) return acc;
+      if (!acc[row.parentId]) acc[row.parentId] = [];
+      acc[row.parentId].push(row.id);
+      return acc;
+    }, {});
+
+    while (queue.length) {
+      const current = queue.pop();
+      if (!current || descendants.has(current)) continue;
+      descendants.add(current);
+      const children = childrenByParent[current];
+      if (children && children.length) {
+        for (const child of children) queue.push(child);
+      }
     }
 
-    return { removed: rows.length };
+    if (!descendants.size) return { removed: 0 };
+
+    const result = await prisma.memoryEntity.deleteMany({ where: { id: { in: Array.from(descendants) } } });
+    return { removed: result.count };
   }
 }

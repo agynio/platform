@@ -13,7 +13,7 @@ const buildState = (toolName: string, callId: string, args: string): LLMState =>
   const response = new ResponseMessage({ output: [toolCall.toPlain() as any] } as any);
   return {
     messages: [response],
-    meta: {},
+    meta: { lastLLMEventId: `evt-${callId}` },
     context: { messageIds: [], memory: [] },
   } as unknown as LLMState;
 };

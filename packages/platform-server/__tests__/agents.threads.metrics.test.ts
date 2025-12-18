@@ -17,8 +17,22 @@ describe('Agents threads metrics aggregation', () => {
     // Active reminder on leaf
     await stub.reminder.create({ data: { threadId: leafId, note: 'x', at: new Date(Date.now() + 1000), completedAt: null } });
     // Running containers: one workspace on child, one dind on leaf (excluded)
-    await stub.container.create({ data: { threadId: childId, status: 'running', metadata: { labels: { 'hautech.ai/role': 'workspace' } } } });
-    await stub.container.create({ data: { threadId: leafId, status: 'running', metadata: { labels: { 'hautech.ai/role': 'dind' } } } });
+    await stub.container.create({
+      data: {
+        threadId: childId,
+        status: 'running',
+        name: 'workspace-container',
+        metadata: { labels: { 'hautech.ai/role': 'workspace' } },
+      },
+    });
+    await stub.container.create({
+      data: {
+        threadId: leafId,
+        status: 'running',
+        name: 'din-container',
+        metadata: { labels: { 'hautech.ai/role': 'dind' } },
+      },
+    });
 
     const metrics = await svc.getThreadsMetrics([rootId, childId, leafId]);
     expect(metrics[rootId].activity).toBe('waiting');

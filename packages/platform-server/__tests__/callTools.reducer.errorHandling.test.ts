@@ -15,7 +15,11 @@ const buildState = (name: string, callId: string, args: string) => {
   const response = new ResponseMessage({
     output: [new ToolCallMessage({ type: 'function_call', call_id: callId, name, arguments: args } as any).toPlain() as any] as any,
   });
-  return { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any;
+  return {
+    messages: [response],
+    meta: { lastLLMEventId: `evt-${callId}` },
+    context: { messageIds: [], memory: [] },
+  } as any;
 };
 
 const parseErrorPayload = (result: any) => {

@@ -21,6 +21,7 @@ type PlainContextState = {
   memory: Array<{ id: string | null; place: 'after_system' | 'last_message' }>;
   summary?: { id: string | null; text: string | null };
   system?: { id: string | null };
+  pendingNewContextItemIds?: string[];
 };
 
 export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -39,6 +40,9 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
       memory: (state.context?.memory ?? []).map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: state.context?.summary ? { ...state.context.summary } : undefined,
       system: state.context?.system ? { ...state.context.system } : undefined,
+      pendingNewContextItemIds: state.context?.pendingNewContextItemIds
+        ? [...state.context.pendingNewContextItemIds]
+        : undefined,
     };
     return { messages, summary: state.summary, context };
   }
@@ -78,14 +82,15 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     const memory = context?.memory ? context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })) : [];
     const summary = context?.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined;
     const system = context?.system ? { id: context.system.id ?? null } : undefined;
-    return { messageIds, memory, summary, system };
+    const pending = context?.pendingNewContextItemIds ? [...context.pendingNewContextItemIds] : [];
+    return { messageIds, memory, summary, system, pendingNewContextItemIds: pending };
   }
 
   protected emptyState(): LLMState {
     return {
       messages: [],
       summary: undefined,
-      context: { messageIds: [], memory: [] },
+      context: { messageIds: [], memory: [], pendingNewContextItemIds: [] },
     };
   }
 

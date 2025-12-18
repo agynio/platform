@@ -20,7 +20,7 @@ export function createRunEventsStub() {
   });
 
   const startLLMCall = vi.fn(
-    async (args?: { contextItemIds?: string[]; contextItems?: Array<{ id?: string }>; newContextItemCount?: number }) => {
+    async (args?: { contextItemIds?: string[]; contextItems?: Array<{ id?: string }> }) => {
       const event = {
         ...makeEvent(),
         contextItemIds: [...(args?.contextItemIds ?? [])],
@@ -40,6 +40,7 @@ export function createRunEventsStub() {
     recordInjection: vi.fn(async () => makeEvent()),
     startLLMCall,
     completeLLMCall: vi.fn(async () => {}),
+    appendLLMCallContextItems: vi.fn(async () => {}),
     startToolExecution: vi.fn(async () => makeEvent()),
     completeToolExecution: vi.fn(async () => {}),
     recordSummarization: vi.fn(async () => makeEvent()),

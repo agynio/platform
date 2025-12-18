@@ -19,7 +19,11 @@ describe('CallToolsLLMReducer termination handling', () => {
 
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-1', name: 'noop', arguments: '{}' } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
-    const state = { messages: [HumanMessage.fromText('start'), response], meta: {}, context: { messageIds: [], memory: [] } } as any;
+    const state = {
+      messages: [HumanMessage.fromText('start'), response],
+      meta: { lastLLMEventId: 'evt-tools-terminate' },
+      context: { messageIds: [], memory: [] },
+    } as any;
 
     const terminateSignal = new Signal();
     terminateSignal.activate();
@@ -54,7 +58,11 @@ describe('CallToolsLLMReducer termination handling', () => {
     const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool] as any });
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-slow', name: 'slow-tool', arguments: '{}' } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
-    const state = { messages: [HumanMessage.fromText('start'), response], meta: {}, context: { messageIds: [], memory: [] } } as any;
+    const state = {
+      messages: [HumanMessage.fromText('start'), response],
+      meta: { lastLLMEventId: 'evt-tools-terminate-2' },
+      context: { messageIds: [], memory: [] },
+    } as any;
 
     const result = await reducer.invoke(state, {
       threadId: 'thread',

@@ -1,5 +1,5 @@
 import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 import { Badge } from './Badge';
@@ -36,6 +36,7 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
+  assistantContext?: unknown;
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -216,10 +217,14 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
   const renderLLMEvent = () => {
     const context = asRecordArray(event.data.context);
+    const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
+    const toolCalls = Array.isArray(event.data.toolCalls)
+      ? event.data.toolCalls.filter(isRecord)
+      : [];
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -268,12 +273,10 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                   <span className="text-sm text-[var(--agyn-gray)]">Model</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
                 </div>
-                <div className="text-[var(--agyn-dark)] text-sm font-mono">
-                  {model}
-                </div>
+                <div className="text-[var(--agyn-dark)] text-sm font-mono">{model}</div>
               </div>
             )}
-            
+
             {/* Context */}
             <div className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
@@ -309,6 +312,22 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
               )}
             </div>
+            {toolCalls.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Invoked tools</h3>
+                {renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `llm-${event.id}`)}
+              </div>
+            )}
+            {assistantContext.length > 0 && (
+              <div className="mt-4 flex flex-col min-h-0 min-w-0" data-testid="assistant-context-panel">
+                <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
+                  <span className="text-sm text-[var(--agyn-gray)]">Assistant responses for this call</span>
+                </div>
+                <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
+                  {renderContextMessages(assistantContext)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -319,6 +338,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     contextArray.map((message, index) => {
       const roleValue = asString(message.role).toLowerCase();
       const role = roleValue || 'user';
+      const isNewContext = message['__agynIsNew'] === true;
 
       const getRoleConfig = () => {
         switch (role) {
@@ -410,6 +430,11 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
               {role === 'tool' ? asString(message.name, 'Tool') : role}
             </span>
+            {isNewContext && (
+              <Badge variant="success" size="sm" className="ml-2">
+                New
+              </Badge>
+            )}
             {timestamp && (
               <span className="text-xs text-[var(--agyn-gray)] ml-1">{timestamp}</span>
             )}
@@ -452,49 +477,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             {role === 'assistant' && (
               <div className="space-y-3">
                 {renderAssistantContent()}
-                {hasToolCalls && (
-                  <div className="space-y-1">
-                    {toolCalls.map((toolCall, tcIndex) => {
-                      const toolCallRecord = toolCall;
-                      const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
-                      const toggleKey = `${index}-${tcIndex}`;
-                      const isExpanded = expandedToolCalls.has(toggleKey);
-                      const toolLabel =
-                        asString(toolCallRecord.name) ||
-                        asString(toolFunction?.name) ||
-                        'Tool Call';
-
-                      return (
-                        <div key={toggleKey} className="space-y-1">
-                          <button
-                            onClick={() => toggleToolCall(toggleKey)}
-                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
-                            type="button"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            )}
-                            <Wrench className="w-3.5 h-3.5" />
-                            <span className="font-medium">{toolLabel}</span>
-                          </button>
-                          {isExpanded && (
-                            <div className="ml-5 mt-2">
-                              <JsonViewer
-                                data={
-                                  toolCallRecord.arguments ??
-                                  toolFunction?.arguments ??
-                                  toolCallRecord
-                                }
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {hasToolCalls &&
+                  renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `context-${index}`)}
               </div>
             )}
 
@@ -942,6 +926,48 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
         {event.type === 'tool' && renderToolEvent()}
         {event.type === 'summarization' && renderSummarizationEvent()}
       </div>
+    </div>
+  );
+}
+
+function renderFunctionCalls(
+  calls: Record<string, unknown>[],
+  expandedToolCalls: Set<string>,
+  toggleToolCall: (id: string) => void,
+  indexPrefix: string,
+): ReactElement | null {
+  if (calls.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      {calls.map((toolCallRecord, tcIndex) => {
+        const funcRec = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
+        const toggleKey = `${indexPrefix}-${tcIndex}`;
+        const isExpanded = expandedToolCalls.has(toggleKey);
+        const label = asString(toolCallRecord.name) || asString(funcRec?.name) || 'Tool Call';
+
+        return (
+          <div key={toggleKey} className="space-y-1">
+            <button
+              type="button"
+              onClick={() => toggleToolCall(toggleKey)}
+              className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+              <Wrench className="w-3.5 h-3.5" />
+              <span className="font-medium">{label}</span>
+            </button>
+            {isExpanded && (
+              <div className="ml-5 mt-2">
+                <JsonViewer data={toolCallRecord.arguments ?? funcRec?.arguments ?? toolCallRecord} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

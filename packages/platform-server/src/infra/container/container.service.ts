@@ -218,10 +218,13 @@ export class ContainerService {
         const nodeId = labels['hautech.ai/node_id'] || 'unknown';
         const threadId = labels['hautech.ai/thread_id'] || '';
         const mounts = mapInspectMounts(inspect.Mounts);
-        const inspectName = inspect.Name;
-        if (typeof inspectName !== 'string' || !inspectName.trim()) {
-          throw new Error('Docker inspect missing Name value');
-        }
+        const inspectNameRaw = typeof inspect.Name === 'string' ? inspect.Name : null;
+        const normalizedInspectName = inspectNameRaw?.trim().replace(/^\/+/, '') ?? null;
+        const fallbackName = optsWithDefaults.name?.trim() || inspect.Id.substring(0, 63);
+        const resolvedName = (normalizedInspectName && normalizedInspectName.length > 0
+          ? normalizedInspectName
+          : fallbackName
+        ).slice(0, 63);
         await this.registry.registerStart({
           containerId: inspect.Id,
           nodeId,
@@ -232,7 +235,7 @@ export class ContainerService {
           platform: optsWithDefaults.platform,
           ttlSeconds: optsWithDefaults.ttlSeconds,
           mounts: mounts.length ? mounts : undefined,
-          name: inspectName,
+          name: resolvedName,
         });
       } catch (e) {
         this.error('Failed to register container start', { error: this.errorContext(e) });

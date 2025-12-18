@@ -79,6 +79,7 @@ export type LLMContextState = {
   memory: LLMContextMemoryEntry[];
   summary?: LLMContextSummaryState;
   system?: LLMContextSystemState;
+  pendingNewContextItemIds?: string[];
 };
 
 export type LLMState = {

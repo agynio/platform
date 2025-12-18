@@ -4,14 +4,20 @@ import { Signal } from '../src/signal';
 import { HumanMessage, ResponseMessage, SystemMessage } from '@agyn/llm';
 import { RunEventStatus } from '@prisma/client';
 
-const createRunEventsStub = () => ({
-  startLLMCall: vi.fn(async () => ({ id: 'evt-1' })),
-  publishEvent: vi.fn(async () => {}),
-  completeLLMCall: vi.fn(async () => {}),
-  createContextItems: vi.fn(async () => []),
-  connectContextItemsToRun: vi.fn(async () => {}),
-  createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
-});
+const createRunEventsStub = () => {
+  let ctxCounter = 0;
+  return {
+    startLLMCall: vi.fn(async () => ({ id: 'evt-1' })),
+    publishEvent: vi.fn(async () => {}),
+    completeLLMCall: vi.fn(async () => {}),
+    createContextItems: vi.fn(async (items: Array<{ id?: string }> = []) => {
+      return items.map((item) => item?.id ?? `ctx-${++ctxCounter}`);
+    }),
+    appendLLMCallContextItems: vi.fn(async () => {}),
+    connectContextItemsToRun: vi.fn(async () => {}),
+    createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
+  };
+};
 
 const createEventsBusStub = () => ({
   publishEvent: vi.fn(async () => {}),
@@ -29,7 +35,10 @@ describe('CallModelLLMReducer termination handling', () => {
     const llmCall = vi.fn();
     const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
-    const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('hi')], context: { messageIds: [], memory: [] } } as any;
+    const state = {
+      messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('hi')],
+      context: { messageIds: [], memory: [], pendingNewContextItemIds: [] },
+    } as any;
     const terminateSignal = new Signal();
     terminateSignal.activate();
 
@@ -59,7 +68,10 @@ describe('CallModelLLMReducer termination handling', () => {
 
     const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
-    const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('step')], context: { messageIds: [], memory: [] } } as any;
+    const state = {
+      messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('step')],
+      context: { messageIds: [], memory: [], pendingNewContextItemIds: [] },
+    } as any;
 
     const result = await reducer.invoke(state, {
       threadId: 'thread-2',
@@ -75,5 +87,10 @@ describe('CallModelLLMReducer termination handling', () => {
     const inputs = runEvents.createContextItems.mock.calls[0][0] as Array<{ role?: string }>;
     const roles = inputs.map((item) => item.role);
     expect(roles).not.toContain('assistant');
+    const startArgs = runEvents.startLLMCall.mock.calls.at(-1)?.[0];
+    expect(startArgs?.newContextItemIds?.length).toBeGreaterThan(0);
+    startArgs?.newContextItemIds?.forEach((id: string) => {
+      expect(id).toMatch(/^ctx-/);
+    });
   });
 });

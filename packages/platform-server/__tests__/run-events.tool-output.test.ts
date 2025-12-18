@@ -33,7 +33,6 @@ if (!shouldRunDbTests) {
     beforeEach(async () => {
       await prisma.toolOutputChunk.deleteMany({});
       await prisma.toolOutputTerminal.deleteMany({});
-      await prisma.runEvent.deleteMany({});
     });
 
     afterAll(async () => {

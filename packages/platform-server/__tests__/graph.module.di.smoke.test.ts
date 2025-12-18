@@ -27,7 +27,7 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
+process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 process.env.NCPS_ENABLED = process.env.NCPS_ENABLED || 'false';
 process.env.CONTAINERS_CLEANUP_ENABLED = process.env.CONTAINERS_CLEANUP_ENABLED || 'false';
@@ -72,6 +72,10 @@ if (!shouldRunDbTests) {
           update: vi.fn(),
           updateMany: vi.fn().mockResolvedValue({ count: 0 }),
           findMany: vi.fn().mockResolvedValue([]),
+        },
+        liteLLMVirtualKey: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          upsert: vi.fn().mockResolvedValue({ alias: 'default', key: 'sk-test', provider: 'openai' }),
         },
         conversationState: {
           findUnique: vi.fn().mockResolvedValue(null),
@@ -123,10 +127,12 @@ if (!shouldRunDbTests) {
         recordInjection: vi.fn(),
         startLLMCall: vi.fn(),
         completeLLMCall: vi.fn(),
+        appendLLMCallContextItems: vi.fn(),
         startToolExecution: vi.fn(),
         completeToolExecution: vi.fn(),
         recordSummarization: vi.fn(),
         publishEvent: vi.fn(),
+        createContextItems: vi.fn(),
         listRunEvents: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
         getRunSummary: vi.fn().mockResolvedValue(null),
         getEventSnapshot: vi.fn().mockResolvedValue(null),
@@ -165,8 +171,6 @@ if (!shouldRunDbTests) {
         configSchema.parse({
           llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
-          litellmBaseUrl: 'http://localhost:4000',
-          litellmMasterKey: 'sk-test',
         }),
       );
 

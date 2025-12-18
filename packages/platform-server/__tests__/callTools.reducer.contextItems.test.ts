@@ -36,8 +36,8 @@ describe('CallToolsLLMReducer context items', () => {
     const response = new ResponseMessage({ output: toolCalls.map((call) => call.toPlain() as any) as any });
     const initialState = {
       messages: [HumanMessage.fromText('hello'), response],
-      meta: {},
-      context: { messageIds: ['existing-1', 'assistant-existing'], memory: [] },
+      meta: { lastLLMEventId: 'evt-tools' },
+      context: { messageIds: ['existing-1', 'assistant-existing'], memory: [], pendingNewContextItemIds: [] },
     } as any;
     const ctx = {
       threadId: 'thread-1',
@@ -89,8 +89,8 @@ describe('CallToolsLLMReducer context items', () => {
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
     const state = {
       messages: [HumanMessage.fromText('hi'), response],
-      meta: {},
-      context: { messageIds: ['existing-ctx', 'assistant-ctx'], memory: [] },
+      meta: { lastLLMEventId: 'evt-tools-fail' },
+      context: { messageIds: ['existing-ctx', 'assistant-ctx'], memory: [], pendingNewContextItemIds: [] },
     } as any;
     const ctx = {
       threadId: 'thread',
@@ -110,6 +110,35 @@ describe('CallToolsLLMReducer context items', () => {
     const resultIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
     expect(result.context.messageIds).toEqual(['existing-ctx', 'assistant-ctx', ...resultIds]);
     expect(result.messages.at(-1)?.text).toContain('Tool failing execution failed');
+  });
+
+  it('throws when tool outputs exist without an llm event id', async () => {
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const tool = {
+      name: 'alpha',
+      description: 'Alpha tool',
+      schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+      execute: vi.fn(async () => 'alpha-output'),
+    };
+
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool] });
+    const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-alpha', name: 'alpha', arguments: '{}' } as any);
+    const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
+    const state = {
+      messages: [HumanMessage.fromText('hello'), response],
+      meta: {},
+      context: { messageIds: ['ctx-user', 'ctx-assistant'], memory: [], pendingNewContextItemIds: [] },
+    } as any;
+    const ctx = {
+      threadId: 'thread-missing',
+      runId: 'run-missing',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-node' },
+    } as any;
+
+    await expect(reducer.invoke(state, ctx)).rejects.toThrow('missing LLM event id');
   });
 
   it('aligns context ordering for grouped responses with tool output results', async () => {
@@ -163,7 +192,12 @@ describe('CallToolsLLMReducer context items', () => {
     const initialState = {
       messages: [HumanMessage.fromText('what is the plan?')],
       meta: {},
-      context: { messageIds: ['ctx-user-1'], memory: [], system: { id: 'ctx-system-1' } },
+      context: {
+        messageIds: ['ctx-user-1'],
+        memory: [],
+        system: { id: 'ctx-system-1' },
+        pendingNewContextItemIds: [],
+      },
     } as any;
 
     const afterFirstModel = await callModel.invoke(initialState, ctx);
@@ -214,5 +248,95 @@ describe('CallToolsLLMReducer context items', () => {
     expect(secondAssistantItem.role).toBe('assistant');
     expect(secondAssistantItem.contentText).toBe('done');
     expect(Array.isArray(secondAssistantItem.contentJson?.output)).toBe(true);
+  });
+
+  it('appends tool outputs and defers new flags to next call', async () => {
+    const runEvents = createRunEventsStub();
+    const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
+    const appendMock = runEvents.appendLLMCallContextItems as unknown as MockFn;
+    const eventsBus = createEventsBusStub();
+
+    const tool = {
+      name: 'alpha',
+      description: 'Alpha tool',
+      schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+      execute: vi.fn(async () => 'alpha-output'),
+    };
+
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool as any] });
+    const call = new ToolCallMessage({
+      type: 'function_call',
+      call_id: 'call-alpha',
+      name: 'alpha',
+      arguments: JSON.stringify({ foo: 'bar' }),
+    } as any);
+    const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
+
+    const state = {
+      messages: [HumanMessage.fromText('ping'), response],
+      meta: { lastLLMEventId: 'evt-last' },
+      context: { messageIds: ['ctx-user', 'ctx-assistant'], memory: [], pendingNewContextItemIds: [] },
+    } as any;
+    const ctx = {
+      threadId: 'thread-count',
+      runId: 'run-count',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-node' },
+    } as any;
+
+    const result = await reducer.invoke(state, ctx);
+
+    const appendedIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(appendMock).not.toHaveBeenCalled();
+    expect(result.context.messageIds).toHaveLength(3);
+    expect(result.context.pendingNewContextItemIds).toEqual(appendedIds);
+    expect(result.messages.at(-1)?.text).toBe('alpha-output');
+  });
+
+  it('handles batched tool outputs with deferred new tracking', async () => {
+    const runEvents = createRunEventsStub();
+    const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
+    const appendMock = runEvents.appendLLMCallContextItems as unknown as MockFn;
+    const eventsBus = createEventsBusStub();
+
+    const tool = {
+      name: 'alpha',
+      description: 'Alpha tool',
+      schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce('alpha-output-1')
+        .mockResolvedValueOnce('alpha-output-2'),
+    };
+
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool as any] });
+    const calls = [
+      new ToolCallMessage({ type: 'function_call', call_id: 'call-alpha-1', name: 'alpha', arguments: '{}' } as any),
+      new ToolCallMessage({ type: 'function_call', call_id: 'call-alpha-2', name: 'alpha', arguments: '{}' } as any),
+    ];
+    const response = new ResponseMessage({ output: calls.map((call) => call.toPlain() as any) as any });
+
+    const state = {
+      messages: [HumanMessage.fromText('ping'), response],
+      meta: { lastLLMEventId: 'evt-last' },
+      context: { messageIds: ['ctx-user', 'ctx-assistant'], memory: [], pendingNewContextItemIds: [] },
+    } as any;
+    const ctx = {
+      threadId: 'thread-batch',
+      runId: 'run-batch',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-node' },
+    } as any;
+
+    const result = await reducer.invoke(state, ctx);
+
+    expect(tool.execute).toHaveBeenCalledTimes(2);
+    const appendedIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(appendMock).not.toHaveBeenCalled();
+    expect(result.context.messageIds).toHaveLength(4);
+    expect(result.context.pendingNewContextItemIds).toEqual(appendedIds);
+    expect(result.messages.slice(-2).map((msg) => msg.text)).toEqual(['alpha-output-1', 'alpha-output-2']);
   });
 });

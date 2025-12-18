@@ -8,6 +8,7 @@ import { ToolExecStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import type { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
 import { contextItemInputFromMessage } from '../services/context-items.utils';
+import { persistContextItems } from '../services/context-items.append';
 import { ShellCommandTool } from '../../nodes/tools/shell_command/shell_command.tool';
 
 type ToolCallErrorCode =
@@ -109,6 +110,9 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     const toolsMap = this.createToolsMap();
     const nodeId = ctx?.callerAgent?.getAgentNodeId?.() ?? null;
     const llmEventId = state.meta?.lastLLMEventId ?? null;
+    if (toolsToCall.length > 0 && !llmEventId) {
+      throw new Error('CallToolsLLMReducer missing LLM event id for tool outputs');
+    }
 
     const results = await Promise.all(
       toolsToCall.map(async (toolCall) => {
@@ -138,9 +142,24 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
 
     const context = this.cloneContext(state.context);
     if (results.length > 0) {
-      const inputs = results.map((msg) => contextItemInputFromMessage(msg));
-      const created = await this.runEvents.createContextItems(inputs);
-      context.messageIds = [...context.messageIds, ...created];
+      const appended: string[] = [];
+      if (!llmEventId) {
+        throw new Error('CallToolsLLMReducer missing LLM event id while persisting tool outputs');
+      }
+      await persistContextItems({
+        runEvents: this.runEvents,
+        entries: results.map((msg) => ({
+          input: contextItemInputFromMessage(msg),
+          assign: (id: string) => {
+            appended.push(id);
+          },
+          countable: true,
+        })),
+      });
+      if (appended.length > 0) {
+        context.messageIds = [...context.messageIds, ...appended];
+        this.appendPendingContextItems(context, appended);
+      }
     }
 
     return { ...state, messages: [...state.messages, ...results], meta, context };
@@ -393,13 +412,31 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private cloneContext(context?: LLMContextState): LLMContextState {
-    if (!context) return { messageIds: [], memory: [] };
+    if (!context) return { messageIds: [], memory: [], pendingNewContextItemIds: [] };
     return {
       messageIds: [...context.messageIds],
       memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
       system: context.system ? { id: context.system.id ?? null } : undefined,
+      pendingNewContextItemIds: context.pendingNewContextItemIds
+        ? [...context.pendingNewContextItemIds]
+        : undefined,
     };
+  }
+
+  private appendPendingContextItems(context: LLMContextState, ids: string[]): void {
+    if (!ids.length) return;
+    const existing = new Set(context.pendingNewContextItemIds ?? []);
+    let mutated = false;
+    for (const id of ids) {
+      if (typeof id !== 'string' || id.length === 0) continue;
+      if (existing.has(id)) continue;
+      existing.add(id);
+      mutated = true;
+    }
+    if (mutated) {
+      context.pendingNewContextItemIds = Array.from(existing);
+    }
   }
 
   private async finalizeToolExecutionEvent(

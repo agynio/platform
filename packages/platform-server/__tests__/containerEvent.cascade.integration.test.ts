@@ -33,6 +33,7 @@ if (!shouldRunDbTests) {
           nodeId: 'cascade-node',
           image: 'hautech/test-image:latest',
           lastUsedAt: new Date(),
+          name: containerId.slice(0, 63),
         },
       });
 

@@ -15,13 +15,6 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
   const prismaService = { getClient: () => prisma } as unknown as PrismaService;
-  const logger = {
-    info: () => undefined,
-    debug: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  };
-
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
     const run = await prisma.run.create({ data: { threadId: thread.id } });
@@ -44,7 +37,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     const runtime = { subscribe: vi.fn() } as any;
     const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
     const prismaStub = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
-    gateway = new GraphSocketGateway(logger, runtime, metrics, prismaStub, eventsBus);
+    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus);
     emitRunEventSpy = vi.spyOn(gateway, 'emitRunEvent');
     await gateway.onModuleInit();
   });

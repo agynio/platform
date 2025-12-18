@@ -64,6 +64,12 @@ if (!shouldRunDbTests) {
 
       const callRecord = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: event.id } });
       expect(callRecord.contextItemIds).toEqual([systemId, userId]);
+      const relationRows = await prisma.lLMCallContextItem.findMany({
+        where: { llmCallEventId: event.id },
+        orderBy: { idx: 'asc' },
+      });
+      expect(relationRows.map((row) => row.contextItemId)).toEqual([systemId, userId]);
+      expect(relationRows.every((row) => row.direction === 'input')).toBe(true);
 
       const afterCount = await prisma.contextItem.count();
       expect(afterCount).toBe(beforeCount);
@@ -144,8 +150,8 @@ if (!shouldRunDbTests) {
       expect(firstPage.items).toHaveLength(1);
       const summaryEvent = firstPage.items[0]!;
       expect(summaryEvent.llmCall).toBeDefined();
-      expect(summaryEvent.llmCall?.contextItemIds).toEqual(callRecord.contextItemIds);
-      expect(summaryEvent.llmCall).not.toHaveProperty('contextItems');
+      const relation = summaryEvent.llmCall?.inputContextItems ?? [];
+      expect(relation.map((row) => row.contextItemId)).toEqual(callRecord.contextItemIds);
       expect(summaryEvent.llmCall).not.toHaveProperty('prompt');
       expect(summaryEvent.llmCall).not.toHaveProperty('promptPreview');
 
@@ -159,30 +165,95 @@ if (!shouldRunDbTests) {
       await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
     });
 
-    it('persists new context item count on llm call events', async () => {
+    it('marks only new prompt entries when serializing input context items', async () => {
       const { thread, run } = await createThreadAndRun();
-      const contextInputs: ContextItemInput[] = [
-        { role: ContextItemRole.user, contentText: 'fresh question' },
-        { role: ContextItemRole.assistant, contentText: 'previous assistant reply' },
-      ];
+      const ids = await createContextItems([
+        { role: ContextItemRole.system, contentText: 'sys prompt' },
+        { role: ContextItemRole.user, contentText: 'latest user input' },
+        { role: ContextItemRole.assistant, contentText: 'prior assistant output' },
+      ]);
 
+      const [systemId, userId, assistantId] = ids;
       const event = await runEvents.startLLMCall({
         runId: run.id,
         threadId: thread.id,
-        contextItems: contextInputs,
-        newContextItemCount: contextInputs.length,
+        contextItemIds: [systemId, userId, assistantId],
+        newContextItemIds: [userId],
       });
 
       const callRecord = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: event.id } });
-      expect(callRecord.newContextItemCount).toBe(contextInputs.length);
+      expect(callRecord.newContextItemCount).toBe(1);
 
       const snapshot = await runEvents.getEventSnapshot(event.id);
-      expect(snapshot?.llmCall?.newContextItemCount).toBe(contextInputs.length);
+      const contextRows = snapshot?.llmCall?.inputContextItems ?? [];
+      expect(contextRows).toHaveLength(3);
+      expect(contextRows.map((row) => row.contextItemId)).toEqual([systemId, userId, assistantId]);
+      expect(contextRows.filter((row) => row.isNew).map((row) => row.contextItemId)).toEqual([userId]);
 
-      const page = await runEvents.listRunEvents({ runId: run.id, limit: 10, order: 'asc' });
-      expect(page.items[0]?.llmCall?.newContextItemCount).toBe(contextInputs.length);
+      await cleanup(thread.id, run.id, Array.from(new Set(ids)));
+    });
 
-      await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
+    it('promotes outputs from call N into call N+1 inputs', async () => {
+      const { thread, run } = await createThreadAndRun();
+      const createdIds = new Set<string>();
+
+      const [systemId, userOneId] = await createContextItems([
+        { role: ContextItemRole.system, contentText: 'system guardrails' },
+        { role: ContextItemRole.user, contentText: 'question #1' },
+      ]);
+      [systemId, userOneId].forEach((id) => createdIds.add(id));
+
+      const firstEvent = await runEvents.startLLMCall({
+        runId: run.id,
+        threadId: thread.id,
+        contextItemIds: [systemId, userOneId],
+        newContextItemIds: [userOneId],
+      });
+
+      const [assistantOneId, toolOneId] = await createContextItems([
+        { role: ContextItemRole.assistant, contentText: 'answer #1' },
+        { role: ContextItemRole.tool, contentText: 'tool output #1' },
+      ]);
+      [assistantOneId, toolOneId].forEach((id) => createdIds.add(id));
+
+      const [userTwoId] = await createContextItems([{ role: ContextItemRole.user, contentText: 'question #2' }]);
+      createdIds.add(userTwoId);
+
+      const secondEvent = await runEvents.startLLMCall({
+        runId: run.id,
+        threadId: thread.id,
+        contextItemIds: [systemId, userOneId, assistantOneId, toolOneId, userTwoId],
+        newContextItemIds: [assistantOneId, toolOneId, userTwoId],
+      });
+
+      const [assistantTwoId] = await createContextItems([{ role: ContextItemRole.assistant, contentText: 'answer #2' }]);
+      createdIds.add(assistantTwoId);
+
+      const timeline = await runEvents.listRunEvents({ runId: run.id, limit: 10, order: 'asc' });
+      const llmEvents = timeline.items.filter((item) => item.llmCall);
+      expect(llmEvents).toHaveLength(2);
+      const [firstSummary, secondSummary] = llmEvents;
+
+      const firstInputs = firstSummary.llmCall?.inputContextItems ?? [];
+      const secondInputs = secondSummary.llmCall?.inputContextItems ?? [];
+      expect(firstInputs.map((row) => row.contextItemId)).toEqual([systemId, userOneId]);
+      expect(secondInputs.map((row) => row.contextItemId)).toEqual([
+        systemId,
+        userOneId,
+        assistantOneId,
+        toolOneId,
+        userTwoId,
+      ]);
+
+      expect(secondInputs.find((row) => row.contextItemId === assistantTwoId)).toBeUndefined();
+
+      expect(secondInputs.filter((row) => row.isNew).map((row) => row.contextItemId)).toEqual([
+        assistantOneId,
+        toolOneId,
+        userTwoId,
+      ]);
+
+      await cleanup(thread.id, run.id, Array.from(createdIds));
     });
   });
 }
