@@ -20,9 +20,19 @@ const config: StorybookConfig = {
     name: '@storybook/react-vite',
     options: {},
   },
+  env: (existing) => ({
+    ...existing,
+    VITE_API_BASE_URL: process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api',
+  }),
   async viteFinal(config) {
+    const apiBase = process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api';
     return {
       ...config,
+      define: {
+        ...(config.define ?? {}),
+        'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBase),
+      },
+      envPrefix: Array.from(new Set(['VITE_', 'STORYBOOK_', ...(config.envPrefix ?? [])])),
       resolve: {
         ...config.resolve,
         alias: {

@@ -36,8 +36,11 @@ const meta: Meta<typeof ThreadsList> = {
   component: ThreadsList,
   parameters: {
     layout: 'centered',
-    tags: ['autodocs'],
+    test: {
+      readySelector: '[data-testid="threads-list"]',
+    },
   },
+  tags: ['!autodocs', 'smoke'],
 };
 
 export default meta;

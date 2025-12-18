@@ -4,6 +4,8 @@ import type { Thread } from '@/components/ThreadItem';
 import type { Run, ReminderData as ConversationReminderData, QueuedMessageData } from '@/components/Conversation';
 import { withMainLayout } from './decorators/withMainLayout';
 
+const FIXED_TEST_DATE = '2024-11-06T12:00:00Z';
+
 const sampleThreads: Thread[] = [
   {
     id: 'thread-alpha',
@@ -128,6 +130,7 @@ const baseArgs = {
   draftMode: false,
   isToggleThreadStatusPending: false,
   isSendMessagePending: false,
+  disableDraftAutofocus: true,
 };
 
 const meta: Meta<typeof ThreadsScreen> = {
@@ -141,9 +144,13 @@ const meta: Meta<typeof ThreadsScreen> = {
       initialEntry: '/agents/threads',
     },
     selectedMenuItem: 'threads',
+    test: {
+      fixedDate: FIXED_TEST_DATE,
+      readySelector: '[data-testid="threads-list"]',
+    },
   },
   args: baseArgs,
-  tags: ['!autodocs'],
+  tags: ['!autodocs', 'smoke'],
 };
 
 export default meta;
