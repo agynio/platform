@@ -292,6 +292,122 @@ describe('AgentsRunScreen', () => {
     expect(normalizedOutput.subthreadId).toBe('child-subthread');
   });
 
+  it('extracts Anthropic style function_call output entries as tool calls', async () => {
+    const anthropicAssistant: ContextItem = {
+      id: 'ctx-anthropic-assistant',
+      role: 'assistant',
+      contentText: null,
+      contentJson: {
+        usage: {
+          input_tokens: 100,
+          total_tokens: 140,
+          output_tokens: 40,
+        },
+        output: [
+          {
+            id: 'rs_123',
+            type: 'reasoning',
+            text: 'Thinking...',
+          },
+          {
+            id: 'fc_456',
+            type: 'function_call',
+            name: 'send_message',
+            status: 'completed',
+            call_id: 'call_quFYL',
+            arguments: '{"message":"Hi! I’m Rowan, Engineering Manager at Agyn..."}',
+          },
+        ],
+      },
+      metadata: null,
+      sizeBytes: 512,
+      createdAt: '2024-01-01T00:00:07.000Z',
+    };
+
+    const event = buildEvent({
+      type: 'llm_call',
+      toolExecution: undefined,
+      llmCall: {
+        provider: 'anthropic',
+        model: 'claude-3-5',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        inputContextItems: buildContextItems(
+          [
+            {
+              contextItemId: anthropicAssistant.id,
+              role: 'assistant',
+              createdAt: anthropicAssistant.createdAt,
+              isNew: false,
+            },
+          ],
+          'ctx-anthropic-tool-call',
+        ),
+        responseText: 'Done with delegate message.',
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      metadata: {},
+      attachments: [],
+    });
+
+    runsHookMocks.summary.mockReturnValue({
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 1,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 1,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 1,
+    });
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    contextItemsMocks.getMany.mockResolvedValue([anthropicAssistant]);
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([anthropicAssistant.id]));
+    await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
+
+    const capturedProps = runScreenMocks.props.mock.calls.at(-1)?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
+    if (!capturedProps) throw new Error('RunScreen props were not captured.');
+
+    const [capturedEvent] = capturedProps.events;
+    const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+    const assistantRecord = context.find((entry) => entry.role === 'assistant');
+    expect(assistantRecord).toBeDefined();
+    const toolCalls = Array.isArray(assistantRecord?.tool_calls)
+      ? (assistantRecord?.tool_calls as Record<string, unknown>[])
+      : Array.isArray(assistantRecord?.toolCalls)
+        ? (assistantRecord?.toolCalls as Record<string, unknown>[])
+        : [];
+    expect(toolCalls).toHaveLength(1);
+    const [toolCall] = toolCalls;
+    expect(toolCall?.name ?? (toolCall?.function as Record<string, unknown> | undefined)?.name).toBe('send_message');
+    expect(toolCall?.callId ?? toolCall?.call_id ?? (toolCall?.function as Record<string, unknown> | undefined)?.callId).toBe('call_quFYL');
+    expect(toolCall?.arguments).toEqual({ message: 'Hi! I’m Rowan, Engineering Manager at Agyn...' });
+  });
+
   it('prioritizes metadata link targets over payload data', async () => {
     const toolInput = JSON.stringify({
       threadId: 'input-thread',

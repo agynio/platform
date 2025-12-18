@@ -450,6 +450,50 @@ function collectToolCalls(
     addRecords(metadataAdditionalKwargs.toolCalls);
   }
 
+  const synthesizeFromOutput = (container?: Record<string, unknown> | null) => {
+    if (!container) return;
+    const outputEntries = Array.isArray(container.output) ? (container.output as unknown[]) : [];
+    for (const entry of outputEntries) {
+      const rec = coerceRecord(entry);
+      if (!rec) continue;
+      if (rec.type !== 'function_call') continue;
+
+      const funcRec = coerceRecord(rec.function);
+      const rawArgs = rec.arguments ?? funcRec?.arguments;
+      const normArgs = typeof rawArgs === 'string' ? parseMaybeJson(rawArgs) : rawArgs;
+
+      const synthesized: Record<string, unknown> = {
+        callId: isNonEmptyString(rec.call_id)
+          ? rec.call_id
+          : isNonEmptyString(rec.id)
+            ? rec.id
+            : undefined,
+        name: isNonEmptyString(rec.name)
+          ? rec.name
+          : isNonEmptyString(funcRec?.name)
+            ? funcRec.name
+            : undefined,
+        arguments: normArgs,
+      };
+
+      const key = (() => {
+        try {
+          return JSON.stringify(synthesized);
+        } catch (_err) {
+          return undefined;
+        }
+      })();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      result.push(synthesized);
+    }
+  };
+
+  synthesizeFromOutput(primary);
+  synthesizeFromOutput(primaryAdditionalKwargs);
+  synthesizeFromOutput(metadata);
+  synthesizeFromOutput(metadataAdditionalKwargs);
+
   return result;
 }
 

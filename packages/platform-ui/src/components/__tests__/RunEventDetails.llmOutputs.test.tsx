@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { RunEventDetails, type RunEvent } from '../RunEventDetails';
 
@@ -42,7 +42,7 @@ describe('RunEventDetails – LLM outputs', () => {
     expect(screen.getByText('Only show me in the prompt context')).toBeInTheDocument();
   });
 
-  it('shows invoked tool calls for llm events', () => {
+  it('shows invoked tool calls for llm events using the shared function-call UI', () => {
     const event: RunEvent = {
       id: 'evt-llm-tools',
       type: 'llm',
@@ -67,7 +67,10 @@ describe('RunEventDetails – LLM outputs', () => {
     );
 
     expect(screen.getByText('Invoked tools')).toBeInTheDocument();
-    expect(screen.getByText('shell_command')).toBeInTheDocument();
-    expect(screen.getByText(/"command": "echo 1"/)).toBeInTheDocument();
+    const toggleButton = screen.getByRole('button', { name: /shell_command/i });
+    expect(toggleButton).toBeInTheDocument();
+    fireEvent.click(toggleButton);
+    expect(screen.getByText(/command:/i)).toBeInTheDocument();
+    expect(screen.getByText(/"echo 1"/)).toBeInTheDocument();
   });
 });

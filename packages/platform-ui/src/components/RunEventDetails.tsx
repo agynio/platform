@@ -64,13 +64,6 @@ export type ToolSubtype = 'generic' | 'shell' | 'manage' | string;
 export type MessageSubtype = 'source' | 'intermediate' | 'result';
 export type OutputViewMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
 
-type ToolCall = {
-  callId?: string;
-  name?: string;
-  arguments?: unknown;
-  [key: string]: unknown;
-};
-
 export interface RunEventDetailsProps {
   event: RunEvent;
   runId?: string;
@@ -229,8 +222,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
-    const toolCalls: ToolCall[] = Array.isArray(event.data.toolCalls)
-      ? event.data.toolCalls.filter(isRecord).map((call) => call as ToolCall)
+    const toolCalls = Array.isArray(event.data.toolCalls)
+      ? event.data.toolCalls.filter(isRecord)
       : [];
 
     return (
@@ -322,11 +315,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             {toolCalls.length > 0 && (
               <div className="mt-4">
                 <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Invoked tools</h3>
-                <div className="space-y-2">
-                  {toolCalls.map((call, index) => (
-                    <ToolCallPreview key={call.callId ?? index} call={call} />
-                  ))}
-                </div>
+                {renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `llm-${event.id}`)}
               </div>
             )}
             {assistantContext.length > 0 && (
@@ -488,49 +477,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             {role === 'assistant' && (
               <div className="space-y-3">
                 {renderAssistantContent()}
-                {hasToolCalls && (
-                  <div className="space-y-1">
-                    {toolCalls.map((toolCall, tcIndex) => {
-                      const toolCallRecord = toolCall;
-                      const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
-                      const toggleKey = `${index}-${tcIndex}`;
-                      const isExpanded = expandedToolCalls.has(toggleKey);
-                      const toolLabel =
-                        asString(toolCallRecord.name) ||
-                        asString(toolFunction?.name) ||
-                        'Tool Call';
-
-                      return (
-                        <div key={toggleKey} className="space-y-1">
-                          <button
-                            onClick={() => toggleToolCall(toggleKey)}
-                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
-                            type="button"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            )}
-                            <Wrench className="w-3.5 h-3.5" />
-                            <span className="font-medium">{toolLabel}</span>
-                          </button>
-                          {isExpanded && (
-                            <div className="ml-5 mt-2">
-                              <JsonViewer
-                                data={
-                                  toolCallRecord.arguments ??
-                                  toolFunction?.arguments ??
-                                  toolCallRecord
-                                }
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {hasToolCalls &&
+                  renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `context-${index}`)}
               </div>
             )}
 
@@ -982,14 +930,44 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   );
 }
 
-function ToolCallPreview({ call }: { call: ToolCall }) {
-  const name = typeof call.name === 'string' ? call.name : 'tool_call';
+function renderFunctionCalls(
+  calls: Record<string, unknown>[],
+  expandedToolCalls: Set<string>,
+  toggleToolCall: (id: string) => void,
+  indexPrefix: string,
+): JSX.Element | null {
+  if (calls.length === 0) return null;
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
-      <div className="font-medium text-slate-700 mb-1">{name}</div>
-      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-slate-700">
-        {JSON.stringify(call.arguments ?? {}, null, 2)}
-      </pre>
+    <div className="space-y-1">
+      {calls.map((toolCallRecord, tcIndex) => {
+        const funcRec = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
+        const toggleKey = `${indexPrefix}-${tcIndex}`;
+        const isExpanded = expandedToolCalls.has(toggleKey);
+        const label = asString(toolCallRecord.name) || asString(funcRec?.name) || 'Tool Call';
+
+        return (
+          <div key={toggleKey} className="space-y-1">
+            <button
+              type="button"
+              onClick={() => toggleToolCall(toggleKey)}
+              className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+              <Wrench className="w-3.5 h-3.5" />
+              <span className="font-medium">{label}</span>
+            </button>
+            {isExpanded && (
+              <div className="ml-5 mt-2">
+                <JsonViewer data={toolCallRecord.arguments ?? funcRec?.arguments ?? toolCallRecord} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
