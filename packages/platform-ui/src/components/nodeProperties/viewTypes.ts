@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+
 import type { NodeConfig, NodeKind, NodePropertiesSidebarProps, NodeState } from './types';
 
 type CommonViewProps<K extends NodeKind> = Pick<
@@ -37,7 +39,7 @@ export type NodePropertiesViewProps<K extends NodeKind> = NodePropertiesViewProp
 
 export type NodePropertiesViewComponent<K extends NodeKind> = (
   props: NodePropertiesViewProps<K>,
-) => JSX.Element | null;
+) => ReactElement | null;
 
 export type NodePropertiesViewRegistry = {
   [K in NodeKind]: NodePropertiesViewComponent<K>;

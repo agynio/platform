@@ -88,8 +88,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
     switch (config.kind) {
       case 'Tool': {
         const View = NODE_VIEW_REGISTRY.Tool;
+        const toolConfig = config as NodePropertiesViewProps<'Tool'>['config'];
         const toolViewProps: NodePropertiesViewProps<'Tool'> = {
-          config,
+          config: toolConfig,
           state,
           displayTitle,
           onConfigChange: handleConfigChange,
@@ -107,8 +108,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
       }
       case 'Workspace': {
         const View = NODE_VIEW_REGISTRY.Workspace;
+        const workspaceConfig = config as NodePropertiesViewProps<'Workspace'>['config'];
         const workspaceViewProps: NodePropertiesViewProps<'Workspace'> = {
-          config,
+          config: workspaceConfig,
           state,
           displayTitle,
           onConfigChange: handleConfigChange,
@@ -129,8 +131,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
       }
       case 'MCP': {
         const View = NODE_VIEW_REGISTRY.MCP;
+        const mcpConfig = config as NodePropertiesViewProps<'MCP'>['config'];
         const mcpViewProps: NodePropertiesViewProps<'MCP'> = {
-          config,
+          config: mcpConfig,
           state,
           displayTitle,
           onConfigChange: handleConfigChange,
@@ -152,8 +155,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
       }
       case 'Agent': {
         const View = NODE_VIEW_REGISTRY.Agent;
+        const agentConfig = config as NodePropertiesViewProps<'Agent'>['config'];
         const agentViewProps: NodePropertiesViewProps<'Agent'> = {
-          config,
+          config: agentConfig,
           state,
           displayTitle,
           onConfigChange: handleConfigChange,
@@ -167,8 +171,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
       }
       case 'Trigger': {
         const View = NODE_VIEW_REGISTRY.Trigger;
+        const triggerConfig = config as NodePropertiesViewProps<'Trigger'>['config'];
         const triggerViewProps: NodePropertiesViewProps<'Trigger'> = {
-          config,
+          config: triggerConfig,
           state,
           displayTitle,
           onConfigChange: handleConfigChange,
