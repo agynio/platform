@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AgentSection } from '../AgentSection';
-import type { AgentQueueConfig, AgentSummarizationConfig, NodeConfig } from '../types';
+import type { AgentQueueConfig, AgentSummarizationConfig } from '../types';
 import type { NodePropertiesViewProps } from '../viewTypes';
 import {
   applyQueueUpdate,
@@ -10,9 +10,7 @@ import {
   readSummarizationConfig,
 } from '../utils';
 
-type AgentNodeProps = NodePropertiesViewProps & {
-  config: NodeConfig & { kind: 'Agent' };
-};
+type AgentNodeProps = NodePropertiesViewProps<'Agent'>;
 
 function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
   const configRecord = config as Record<string, unknown>;
@@ -188,12 +186,8 @@ function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
   );
 }
 
-export function AgentNodeConfigView(props: NodePropertiesViewProps) {
-  if (props.config.kind !== 'Agent') {
-    return null;
-  }
-
-  return <AgentNodeConfigContent {...(props as AgentNodeProps)} />;
+export function AgentNodeConfigView(props: NodePropertiesViewProps<'Agent'>) {
+  return <AgentNodeConfigContent {...props} />;
 }
 
 export default AgentNodeConfigView;

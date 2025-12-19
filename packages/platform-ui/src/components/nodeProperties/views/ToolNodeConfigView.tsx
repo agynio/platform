@@ -20,9 +20,7 @@ type ToolLimitKey =
   | 'chunkSizeBytes'
   | 'clientBufferLimitBytes';
 
-type ToolNodeProps = NodePropertiesViewProps & {
-  config: NodeConfig & { kind: 'Tool' };
-};
+type ToolNodeProps = NodePropertiesViewProps<'Tool'>;
 
 function ToolNodeConfigContent({
   config,
@@ -214,12 +212,8 @@ function ToolNodeConfigContent({
   );
 }
 
-export function ToolNodeConfigView(props: NodePropertiesViewProps) {
-  if (props.config.kind !== 'Tool') {
-    return null;
-  }
-
-  return <ToolNodeConfigContent {...(props as ToolNodeProps)} />;
+export function ToolNodeConfigView(props: NodePropertiesViewProps<'Tool'>) {
+  return <ToolNodeConfigContent {...props} />;
 }
 
 export default ToolNodeConfigView;

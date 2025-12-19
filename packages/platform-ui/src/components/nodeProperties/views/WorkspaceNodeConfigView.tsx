@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AutocompleteOption } from '../../AutocompleteInput';
 
 import { WorkspaceSection } from '../WorkspaceSection';
-import type { NodeConfig, WorkspaceFlakeRepo, WorkspaceNixPackage } from '../types';
+import type { WorkspaceFlakeRepo, WorkspaceNixPackage } from '../types';
 import type { NodePropertiesViewProps } from '../viewTypes';
 import { useEnvEditorState } from '../hooks/useEnvEditorState';
 import {
@@ -17,9 +17,7 @@ import {
 
 type VersionOptionsMap = Record<string, string[]>;
 
-type WorkspaceNodeProps = NodePropertiesViewProps & {
-  config: NodeConfig & { kind: 'Workspace' };
-};
+type WorkspaceNodeProps = NodePropertiesViewProps<'Workspace'>;
 
 function WorkspaceNodeConfigContent({
   config,
@@ -323,12 +321,8 @@ function WorkspaceNodeConfigContent({
   );
 }
 
-export function WorkspaceNodeConfigView(props: NodePropertiesViewProps) {
-  if (props.config.kind !== 'Workspace') {
-    return null;
-  }
-
-  return <WorkspaceNodeConfigContent {...(props as WorkspaceNodeProps)} />;
+export function WorkspaceNodeConfigView(props: NodePropertiesViewProps<'Workspace'>) {
+  return <WorkspaceNodeConfigContent {...props} />;
 }
 
 export default WorkspaceNodeConfigView;

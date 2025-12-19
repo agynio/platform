@@ -15,9 +15,7 @@ type McpLimitKey =
   | 'restartMaxAttempts'
   | 'restartBackoffMs';
 
-type McpNodeProps = NodePropertiesViewProps & {
-  config: NodeConfig & { kind: 'MCP' };
-};
+type McpNodeProps = NodePropertiesViewProps<'MCP'>;
 
 function McpNodeConfigContent({
   config,
@@ -147,12 +145,8 @@ function McpNodeConfigContent({
   );
 }
 
-export function McpNodeConfigView(props: NodePropertiesViewProps) {
-  if (props.config.kind !== 'MCP') {
-    return null;
-  }
-
-  return <McpNodeConfigContent {...(props as McpNodeProps)} />;
+export function McpNodeConfigView(props: NodePropertiesViewProps<'MCP'>) {
+  return <McpNodeConfigContent {...props} />;
 }
 
 export default McpNodeConfigView;

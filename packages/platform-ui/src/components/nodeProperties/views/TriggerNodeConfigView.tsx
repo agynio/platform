@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
 import { TriggerSection } from '../TriggerSection';
-import type { NodeConfig } from '../types';
 import type { NodePropertiesViewProps } from '../viewTypes';
 import {
   encodeReferenceValue,
@@ -11,9 +10,7 @@ import {
 } from '../utils';
 import type { ReferenceSourceType } from '../utils';
 
-type TriggerNodeProps = NodePropertiesViewProps & {
-  config: NodeConfig & { kind: 'Trigger' };
-};
+type TriggerNodeProps = NodePropertiesViewProps<'Trigger'>;
 
 function TriggerNodeConfigContent({
   config,
@@ -107,12 +104,8 @@ function TriggerNodeConfigContent({
   );
 }
 
-export function TriggerNodeConfigView(props: NodePropertiesViewProps) {
-  if (props.config.kind !== 'Trigger') {
-    return null;
-  }
-
-  return <TriggerNodeConfigContent {...(props as TriggerNodeProps)} />;
+export function TriggerNodeConfigView(props: NodePropertiesViewProps<'Trigger'>) {
+  return <TriggerNodeConfigContent {...props} />;
 }
 
 export default TriggerNodeConfigView;
