@@ -683,6 +683,99 @@ describe('AgentsRunScreen', () => {
     expect(assistantEntry['__agynIsNew']).toBeUndefined();
   });
 
+  it('retains highlight when duplicate context IDs mark later entries as new', async () => {
+    const userContext: ContextItem = {
+      id: 'ctx-duplicate',
+      role: 'user',
+      contentText: 'Please review the report.',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 96,
+      createdAt: '2024-01-01T00:00:05.000Z',
+    };
+
+    const event = buildEvent({
+      type: 'llm_call',
+      toolExecution: undefined,
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        inputContextItems: buildContextItems(
+          [
+            {
+              contextItemId: userContext.id,
+              role: 'user',
+              isNew: false,
+              createdAt: userContext.createdAt,
+            },
+            {
+              contextItemId: userContext.id,
+              role: 'user',
+              isNew: true,
+              createdAt: userContext.createdAt,
+            },
+          ],
+          'ctx-llm-duplicate-new',
+        ),
+        responseText: 'Report acknowledged.',
+        rawResponse: null,
+        toolCalls: [],
+        usage: undefined,
+      },
+      metadata: {},
+    });
+
+    runsHookMocks.summary.mockReturnValue({
+      ...buildSummary(),
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 1,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 1,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 1,
+    });
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    contextItemsMocks.getMany.mockResolvedValue([userContext]);
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([userContext.id]));
+
+    await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
+    const lastCall = runScreenMocks.props.mock.calls.at(-1);
+    const capturedProps = lastCall?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
+    if (!capturedProps) throw new Error('RunScreen props were not captured.');
+
+    const [capturedEvent] = capturedProps.events;
+    const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+    expect(context).toHaveLength(1);
+    const [entry] = context;
+    expect(entry.id).toBe(userContext.id);
+    expect(entry['__agynIsNew']).toBe(true);
+  });
+
   it('renders assistant and tool inputs together when both are new', async () => {
     const assistantInput: ContextItem = {
       id: 'ctx-assistant-input',

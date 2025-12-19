@@ -1,11 +1,11 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { RunEventDetails, type RunEvent } from '../RunEventDetails';
 
 describe('RunEventDetails – LLM outputs', () => {
-  it('renders assistant context entries separately from prompt inputs', () => {
+  it('renders assistant context entries separately from prompt inputs', async () => {
     const event: RunEvent = {
       id: 'evt-llm-outputs',
       type: 'llm',
@@ -39,7 +39,14 @@ describe('RunEventDetails – LLM outputs', () => {
     expect(screen.getByText('Assistant responses for this call')).toBeInTheDocument();
     const assistantPanel = screen.getByTestId('assistant-context-panel');
     expect(within(assistantPanel).getByText('Persisted assistant output')).toBeInTheDocument();
-    expect(screen.getByText('Only show me in the prompt context')).toBeInTheDocument();
+    expect(screen.getByText('No new context for this call.')).toBeInTheDocument();
+
+    const loadMoreButton = screen.getByRole('button', { name: 'Load more' });
+    fireEvent.click(loadMoreButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Only show me in the prompt context')).toBeInTheDocument();
+    });
   });
 
   it('shows invoked tool calls for llm events using the shared function-call UI', () => {

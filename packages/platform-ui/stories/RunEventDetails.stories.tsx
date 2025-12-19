@@ -48,12 +48,14 @@ const mockEvents: RunEvent[] = [
           timestamp: '2024-11-20T14:34:13.000Z',
           content:
             'You are a helpful AI assistant specialized in software development. You have access to file system tools and can help users write, read, and modify code.',
+          __agynIsNew: true,
         },
         {
           role: 'user',
           timestamp: '2024-11-20T14:34:15.000Z',
           content:
             'Can you help me implement a user authentication system with JWT tokens and OAuth 2.0 integration?',
+          __agynIsNew: true,
         },
         {
           role: 'assistant',

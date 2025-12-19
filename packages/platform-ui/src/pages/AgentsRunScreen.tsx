@@ -255,10 +255,27 @@ function buildContextSource(llmCall?: RunTimelineEvent['llmCall']): ContextSourc
   const rows = Array.isArray(llmCall.inputContextItems) ? llmCall.inputContextItems : [];
   if (rows.length === 0) return EMPTY_CONTEXT_SOURCE;
   const sorted = [...rows].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const ids = sorted.map((row) => row.contextItemId).filter(isNonEmptyString);
-  const highlightIds = sorted
-    .filter((row) => row.isNew && isNonEmptyString(row.contextItemId))
-    .map((row) => row.contextItemId);
+  const highlightCandidates = new Set<string>();
+  for (const row of sorted) {
+    const id = row.contextItemId;
+    if (!isNonEmptyString(id)) continue;
+    if (row.isNew === true) {
+      highlightCandidates.add(id);
+    }
+  }
+  const ids: string[] = [];
+  const highlightIds: string[] = [];
+  const seen = new Set<string>();
+  for (const row of sorted) {
+    const id = row.contextItemId;
+    if (!isNonEmptyString(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (highlightCandidates.has(id)) {
+      highlightIds.push(id);
+    }
+  }
   return { ids, highlightIds };
 }
 
@@ -774,8 +791,11 @@ function resolveContextRecords(
   const highlightIds = Array.isArray(options?.highlightIds) ? options?.highlightIds.filter(isNonEmptyString) : [];
   const highlightSet = highlightIds.length > 0 ? new Set(highlightIds) : null;
   const records: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
   for (const id of ids) {
     if (!isNonEmptyString(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
     const item = lookup.get(id);
     if (!item) continue;
     const record = toContextRecord(item);

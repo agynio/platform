@@ -1,5 +1,5 @@
 import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 import { Badge } from './Badge';
@@ -28,6 +28,8 @@ const safeJsonParse = (value: string): unknown => {
     return value;
   }
 };
+
+const CONTEXT_PAGINATION_PAGE_SIZE = 20;
 
 export interface RunEventData extends Record<string, unknown> {
   messageSubtype?: MessageSubtype;
@@ -81,6 +83,145 @@ export interface RunEvent {
 export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+  const [contextOlderVisibleCount, setContextOlderVisibleCount] = useState(0);
+  const [contextOlderLoading, setContextOlderLoading] = useState(false);
+  const [contextOlderError, setContextOlderError] = useState<string | null>(null);
+  const loadMoreResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contextScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollAnchor = useRef<{ previousHeight: number; previousScrollTop: number } | null>(null);
+
+  const contextRecordsOrdered = useMemo(() => {
+    if (event.type !== 'llm') return [] as Record<string, unknown>[];
+    return asRecordArray(event.data.context);
+  }, [event]);
+
+  const contextRecordEntries = useMemo(
+    () =>
+      contextRecordsOrdered.map((record, index) => ({
+        record,
+        index,
+        isNew: record['__agynIsNew'] === true,
+      })),
+    [contextRecordsOrdered],
+  );
+
+  const newContextEntries = useMemo(
+    () => contextRecordEntries.filter((entry) => entry.isNew),
+    [contextRecordEntries],
+  );
+
+  const olderContextEntries = useMemo(
+    () => contextRecordEntries.filter((entry) => !entry.isNew),
+    [contextRecordEntries],
+  );
+
+  const visibleContextEntries = useMemo(() => {
+    const olderSlice = olderContextEntries.slice(0, contextOlderVisibleCount);
+    const combined = [...newContextEntries, ...olderSlice];
+    if (combined.length === 0) return [] as typeof combined;
+    const byIndex = new Map<number, (typeof combined)[number]>();
+    for (const entry of combined) {
+      byIndex.set(entry.index, entry);
+    }
+    return Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
+  }, [newContextEntries, olderContextEntries, contextOlderVisibleCount]);
+
+  const visibleContextRecords = useMemo(() => visibleContextEntries.map((entry) => entry.record), [visibleContextEntries]);
+
+  const hasOlderContextRemaining = contextOlderVisibleCount < olderContextEntries.length;
+
+  useEffect(() => {
+    setContextOlderVisibleCount(0);
+    setContextOlderLoading(false);
+    setContextOlderError(null);
+    if (loadMoreResetTimeout.current !== null) {
+      clearTimeout(loadMoreResetTimeout.current);
+      loadMoreResetTimeout.current = null;
+    }
+    pendingScrollAnchor.current = null;
+  }, [event.id]);
+
+  useEffect(() => {
+    setContextOlderVisibleCount((current) => Math.min(current, olderContextEntries.length));
+  }, [olderContextEntries.length]);
+
+  useEffect(() => {
+    return () => {
+      if (loadMoreResetTimeout.current !== null) {
+        clearTimeout(loadMoreResetTimeout.current);
+      }
+    };
+  }, []);
+
+  const handleLoadMoreContext = useCallback(() => {
+    if (contextOlderLoading) return;
+    if (olderContextEntries.length === 0) {
+      setContextOlderError('Failed to load older context.');
+      return;
+    }
+    const container = contextScrollRef.current;
+    if (container) {
+      pendingScrollAnchor.current = {
+        previousHeight: container.scrollHeight,
+        previousScrollTop: container.scrollTop,
+      };
+    } else {
+      pendingScrollAnchor.current = null;
+    }
+    setContextOlderLoading(true);
+    setContextOlderError(null);
+    try {
+      const nextCount = Math.min(contextOlderVisibleCount + CONTEXT_PAGINATION_PAGE_SIZE, olderContextEntries.length);
+      if (nextCount <= contextOlderVisibleCount) {
+        throw new Error('No additional context available');
+      }
+      setContextOlderVisibleCount(nextCount);
+      if (loadMoreResetTimeout.current !== null) {
+        clearTimeout(loadMoreResetTimeout.current);
+      }
+      loadMoreResetTimeout.current = setTimeout(() => {
+        setContextOlderLoading(false);
+        loadMoreResetTimeout.current = null;
+      }, 0);
+    } catch (error) {
+      console.error('Failed to load older context', error);
+      setContextOlderError('Failed to load older context.');
+      pendingScrollAnchor.current = null;
+      if (loadMoreResetTimeout.current !== null) {
+        clearTimeout(loadMoreResetTimeout.current);
+      }
+      loadMoreResetTimeout.current = setTimeout(() => {
+        setContextOlderLoading(false);
+        loadMoreResetTimeout.current = null;
+      }, 0);
+    }
+  }, [contextOlderLoading, olderContextEntries.length, contextOlderVisibleCount]);
+
+  useLayoutEffect(() => {
+    const container = contextScrollRef.current;
+    const anchor = pendingScrollAnchor.current;
+    if (!container || !anchor) return;
+    const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: FrameRequestCallback) => window.setTimeout(cb, 0);
+    const cancel = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : (handle: number) => window.clearTimeout(handle);
+    const frame = schedule(() => {
+      const newHeight = container.scrollHeight;
+      const delta = newHeight - anchor.previousHeight;
+      if (delta !== 0) {
+        container.scrollTop = anchor.previousScrollTop + delta;
+      }
+      pendingScrollAnchor.current = null;
+    });
+
+    return () => {
+      cancel(frame);
+    };
+  }, [visibleContextRecords]);
+
+  const handleRetryLoadMore = useCallback(() => {
+    if (contextOlderLoading) return;
+    setContextOlderError(null);
+    handleLoadMoreContext();
+  }, [contextOlderLoading, handleLoadMoreContext]);
 
   const isShellToolEvent =
     event.type === 'tool' &&
@@ -216,7 +357,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   };
 
   const renderLLMEvent = () => {
-    const context = asRecordArray(event.data.context);
+    const context = visibleContextRecords;
     const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
@@ -225,6 +366,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const toolCalls = Array.isArray(event.data.toolCalls)
       ? event.data.toolCalls.filter(isRecord)
       : [];
+    const showEmptyContext = context.length === 0;
+    const showLoadMoreButton = hasOlderContextRemaining && !contextOlderError;
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -282,16 +425,39 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
               <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
                 <span className="text-sm text-[var(--agyn-gray)]">Context</span>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                {context.length > 0 ? (
-                  <div>
-                    <button className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors">
-                      Load older context
-                    </button>
+              <div
+                className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4"
+                ref={contextScrollRef}
+                data-testid="context-scroll-container"
+              >
+                {showLoadMoreButton && (
+                  <button
+                    type="button"
+                    onClick={handleLoadMoreContext}
+                    disabled={contextOlderLoading}
+                    className="mb-4 w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {contextOlderLoading ? 'Loading…' : 'Load more'}
+                  </button>
+                )}
+                {showEmptyContext ? (
+                  <div className="text-sm text-[var(--agyn-gray)]">No new context for this call.</div>
+                ) : (
+                  <div className="flex flex-col">
                     {renderContextMessages(context)}
                   </div>
-                ) : (
-                  <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
+                )}
+                {contextOlderError && (
+                  <div className="mt-4 border border-[var(--agyn-border-subtle)] rounded-[6px] p-3 bg-[var(--agyn-bg-light)]">
+                    <p className="text-sm text-[var(--agyn-dark)]">Failed to load older context.</p>
+                    <button
+                      type="button"
+                      onClick={handleRetryLoadMore}
+                      className="mt-2 text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -338,8 +504,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     contextArray.map((message, index) => {
       const roleValue = asString(message.role).toLowerCase();
       const role = roleValue || 'user';
-      const isNewContext = message['__agynIsNew'] === true;
-
       const getRoleConfig = () => {
         switch (role) {
           case 'system':
@@ -430,11 +594,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
               {role === 'tool' ? asString(message.name, 'Tool') : role}
             </span>
-            {isNewContext && (
-              <Badge variant="success" size="sm" className="ml-2">
-                New
-              </Badge>
-            )}
             {timestamp && (
               <span className="text-xs text-[var(--agyn-gray)] ml-1">{timestamp}</span>
             )}
