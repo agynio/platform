@@ -61,6 +61,19 @@ const FIELD_TYPE_MAP: Record<string, ProviderFieldType> = {
   upload: 'textarea',
 };
 
+function resolveCredentialProvider(info?: Record<string, unknown>): string {
+  if (!info) return '';
+  const litellm = info['litellm_provider'];
+  if (typeof litellm === 'string' && litellm.trim().length > 0) {
+    return litellm.trim();
+  }
+  const legacy = info['custom_llm_provider'];
+  if (typeof legacy === 'string' && legacy.trim().length > 0) {
+    return legacy.trim();
+  }
+  return '';
+}
+
 export function mapProviders(items: LiteLLMProviderInfo[] | undefined): ProviderOption[] {
   if (!Array.isArray(items)) return [];
   return items.map((item) => {
@@ -97,7 +110,7 @@ export function mapCredentials(
     const tags = Array.isArray(tagsRaw)
       ? tagsRaw.map((t) => (typeof t === 'string' ? t : String(t))).filter((t) => t.length > 0)
       : [];
-    const providerKey = typeof info?.litellm_provider === 'string' ? (info.litellm_provider as string) : '';
+    const providerKey = resolveCredentialProvider(info);
     const provider = providers.get(providerKey);
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 
@@ -116,7 +129,7 @@ export function mapCredentials(
 
     const metadata: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(info)) {
-      if (key === 'litellm_provider' || key === 'tags') continue;
+      if (key === 'litellm_provider' || key === 'custom_llm_provider' || key === 'tags') continue;
       metadata[key] = value;
     }
 

@@ -18,7 +18,6 @@ import type { CredentialRecord, ModelRecord, ProviderOption } from '../types';
 
 type ModelFormValues = FieldValues & {
   name: string;
-  providerKey: string;
   model: string;
   credentialName: string;
   mode: string;
@@ -69,13 +68,11 @@ function toInputString(value: number | undefined): string {
 
 function buildDefaultValues(
   mode: 'create' | 'edit',
-  providers: ProviderOption[],
   model?: ModelRecord,
 ): ModelFormValues {
   if (mode === 'edit' && model) {
     return {
       name: model.id,
-      providerKey: model.providerKey,
       model: model.model,
       credentialName: model.credentialName,
       mode: model.mode ?? 'chat',
@@ -91,10 +88,8 @@ function buildDefaultValues(
     } satisfies ModelFormValues;
   }
 
-  const firstProvider = providers[0];
   return {
     name: '',
-    providerKey: firstProvider?.litellmProvider ?? '',
     model: '',
     credentialName: '',
     mode: 'chat',
@@ -137,41 +132,43 @@ export function ModelFormDialog({
   onSubmit,
 }: ModelFormDialogProps): ReactElement {
   const providerMap = useMemo(() => new Map(providers.map((p) => [p.litellmProvider, p])), [providers]);
-  const form = useForm<ModelFormValues>({ defaultValues: buildDefaultValues(mode, providers, model) });
+  const form = useForm<ModelFormValues>({ defaultValues: buildDefaultValues(mode, model) });
 
   useEffect(() => {
-    form.reset(buildDefaultValues(mode, providers, model));
-  }, [mode, providers, model, form]);
+    form.reset(buildDefaultValues(mode, model));
+  }, [mode, model, form]);
 
-  const providerKey = useWatch({ control: form.control, name: 'providerKey' });
+  const credentialName = useWatch({ control: form.control, name: 'credentialName' });
+  const selectedCredential = useMemo(
+    () => credentials.find((credential) => credential.name === credentialName),
+    [credentials, credentialName],
+  );
+  const providerKey = selectedCredential?.providerKey ?? (mode === 'edit' ? model?.providerKey ?? '' : '');
   const selectedProvider = providerKey ? providerMap.get(providerKey) : undefined;
-
-  const availableCredentials = useMemo(() => {
-    if (!providerKey) return credentials;
-    const filtered = credentials.filter((credential) => credential.providerKey === providerKey);
-    return filtered.length > 0 ? filtered : credentials;
-  }, [credentials, providerKey]);
 
   useEffect(() => {
     const current = form.getValues('credentialName');
     if (!current) {
-      const fallback = availableCredentials[0]?.name ?? '';
+      const fallback = credentials[0]?.name ?? '';
       if (fallback) form.setValue('credentialName', fallback, { shouldDirty: false });
       return;
     }
-    if (!availableCredentials.some((credential) => credential.name === current)) {
-      const fallback = availableCredentials[0]?.name ?? '';
+    if (!credentials.some((credential) => credential.name === current)) {
+      const fallback = credentials[0]?.name ?? '';
       form.setValue('credentialName', fallback, { shouldDirty: false });
     }
-  }, [availableCredentials, form]);
+  }, [credentials, form]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
-    if (!values.providerKey) {
-      form.setError('providerKey', { message: 'Select provider' });
-      return;
-    }
     if (!values.credentialName) {
       form.setError('credentialName', { message: 'Select credential' });
+      return;
+    }
+
+    const credential = credentials.find((item) => item.name === values.credentialName);
+    const credentialProviderKey = credential?.providerKey ?? '';
+    if (!credentialProviderKey) {
+      form.setError('credentialName', { message: 'Selected credential is missing provider metadata' });
       return;
     }
 
@@ -179,7 +176,7 @@ export function ModelFormDialog({
       const params = parseParams(values.paramsJson);
       await onSubmit({
         name: values.name.trim(),
-        providerKey: values.providerKey,
+        providerKey: credentialProviderKey,
         model: values.model.trim(),
         credentialName: values.credentialName,
         mode: values.mode?.trim() || undefined,
@@ -229,30 +226,6 @@ export function ModelFormDialog({
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="providerKey"
-              rules={{ required: 'Provider is required' }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provider</FormLabel>
-                  <FormControl>
-                    <SelectInput
-                      value={field.value ?? ''}
-                      onChange={(event) => field.onChange(event.target.value)}
-                      placeholder="Select provider"
-                      options={providers.map((provider) => ({
-                        value: provider.litellmProvider,
-                        label: provider.label,
-                      }))}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="model"
@@ -281,14 +254,16 @@ export function ModelFormDialog({
                       value={field.value ?? ''}
                       onChange={(event) => field.onChange(event.target.value)}
                       placeholder="Select credential"
-                      options={availableCredentials.map((credentialOption) => ({
+                      options={credentials.map((credentialOption) => ({
                         value: credentialOption.name,
                         label: credentialOption.name,
                       }))}
                     />
                   </FormControl>
                   <FormDescription>
-                    Credentials filtered by provider when available.
+                    {selectedProvider
+                      ? `Provider derived from credential: ${selectedProvider.label}.`
+                      : 'Select a credential to derive provider.'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

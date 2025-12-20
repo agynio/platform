@@ -162,6 +162,19 @@ function redactBaseUrl(value?: string): string | undefined {
   }
 }
 
+function extractCredentialProvider(info?: Record<string, unknown>): string | undefined {
+  if (!info) return undefined;
+  const litellm = info['litellm_provider'];
+  if (typeof litellm === 'string' && litellm.trim().length > 0) {
+    return litellm.trim();
+  }
+  const legacy = info['custom_llm_provider'];
+  if (typeof legacy === 'string' && legacy.trim().length > 0) {
+    return legacy.trim();
+  }
+  return undefined;
+}
+
 @Injectable()
 export class LLMSettingsService {
   private readonly logger = new Logger(LLMSettingsService.name);
@@ -235,9 +248,7 @@ export class LLMSettingsService {
       throw new BadRequestException('model is required to test credential');
     }
     const detail = await this.getCredentialDetail(input.name);
-    const provider = typeof (detail?.credential_info as Record<string, unknown> | undefined)?.litellm_provider === 'string'
-      ? ((detail.credential_info as Record<string, unknown>).litellm_provider as string)
-      : undefined;
+    const provider = extractCredentialProvider(detail?.credential_info as Record<string, unknown> | undefined);
     if (!provider) {
       throw new BadRequestException('credential is missing provider metadata');
     }

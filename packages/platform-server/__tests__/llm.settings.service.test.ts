@@ -209,6 +209,36 @@ describe.sequential('LLMSettingsService', () => {
     testScope.done();
   });
 
+  it('tests credential using legacy provider metadata fallback', async () => {
+    const detailScope = nock(BASE_URL)
+      .get('/credentials/by_name/legacy-openai')
+      .reply(200, {
+        credential_name: 'legacy-openai',
+        credential_info: { custom_llm_provider: 'openai' },
+        credential_values: { api_key: 'sk***' },
+      });
+
+    const testScope = nock(BASE_URL)
+      .post('/health/test_connection', (body) => {
+        expect(body).toMatchObject({
+          mode: 'chat',
+          litellm_params: {
+            model: 'gpt-4o-mini',
+            custom_llm_provider: 'openai',
+            litellm_credential_name: 'legacy-openai',
+          },
+        });
+        return true;
+      })
+      .reply(200, { success: true });
+
+    const service = new LLMSettingsService(createConfig());
+    const res = await service.testCredential({ name: 'legacy-openai', model: 'gpt-4o-mini' });
+    expect(res).toMatchObject({ success: true });
+    detailScope.done();
+    testScope.done();
+  });
+
   it('updates model by merging existing configuration', async () => {
     const modelsScope = nock(BASE_URL)
       .get('/model/info')
