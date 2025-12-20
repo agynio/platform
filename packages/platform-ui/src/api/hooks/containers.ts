@@ -12,8 +12,13 @@ type ContainerStatusFilter = 'running' | 'stopped' | 'terminating' | 'failed' | 
 
 export function useContainers(status: ContainerStatusFilter = 'running', sortBy = 'lastUsedAt', sortDir: 'asc' | 'desc' = 'desc', threadId?: string) {
   const parameters = useMemo(() => {
+    const toApiStatus = (value: ContainerStatusFilter | undefined): ContainerStatusFilter | undefined => {
+      if (!value) return undefined;
+      if (value === 'all') return 'all';
+      return value;
+    };
     return {
-      status: status === 'all' ? undefined : status,
+      status: toApiStatus(status),
       sortBy,
       sortDir,
       threadId: threadId || undefined,

@@ -251,6 +251,16 @@ describe('ContainersController routes', () => {
     expect(typeof stopped?.lastEventAt).toBe('string');
   });
 
+  it('returns only stopped containers when status is stopped', async () => {
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers?status=stopped' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ containerId: string; status: string; autoRemoved: boolean; health: string | null; lastEventAt: string | null }> };
+    const items = body.items;
+    expect(items.length).toBe(1);
+    expect(items[0]).toMatchObject({ containerId: 'cid-3', status: 'stopped', autoRemoved: true, health: 'unhealthy' });
+    expect(typeof items[0].lastEventAt).toBe('string');
+  });
+
   it('returns all containers when status is all', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers?status=all' });
     expect(res.statusCode).toBe(200);
