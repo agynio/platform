@@ -47,7 +47,10 @@ type ContainerWhereInput = {
 };
 type ContainerEventWhereInput = {
   containerId?: string;
-  createdAt?: { gte?: Date; lt?: Date };
+  createdAt?: Date | { gte?: Date; gt?: Date; lt?: Date };
+  id?: string | { gt?: string; lt?: string };
+  AND?: ContainerEventWhereInput[];
+  OR?: ContainerEventWhereInput[];
 };
 type ContainerOrderByInput = { createdAt?: SortOrder; lastUsedAt?: SortOrder; killAfterAt?: SortOrder };
 type ContainerSelect = {
@@ -66,7 +69,7 @@ type FindManyArgs = { where?: ContainerWhereInput; orderBy?: ContainerOrderByInp
 type SelectedRow = { containerId: string; threadId: string | null; image: string; name: string; status: Row['status']; createdAt: Date; lastUsedAt: Date; killAfterAt: Date | null; updatedAt: Date };
 type SelectedRowWithMeta = SelectedRow & { metadata?: RowMetadata };
 type ContainerEventSelect = { [K in keyof ContainerEventRow]?: boolean };
-type ContainerEventOrderBy = { createdAt?: SortOrder };
+type ContainerEventOrderBy = Array<{ createdAt?: SortOrder } | { id?: SortOrder }> | { createdAt?: SortOrder } | { id?: SortOrder };
 type ContainerEventFindManyArgs = {
   where?: ContainerEventWhereInput;
   orderBy?: ContainerEventOrderBy;
@@ -120,19 +123,68 @@ class InMemoryPrismaClient {
   containerEvent = {
     rows: [] as ContainerEventRow[],
     async findMany(args: ContainerEventFindManyArgs = {}): Promise<Array<Partial<ContainerEventRow>>> {
-      const where = args.where ?? {};
-      let items = this.rows.slice();
-      if (where.containerId) items = items.filter((row) => row.containerId === where.containerId);
-      const since = where.createdAt?.gte;
-      const before = where.createdAt?.lt;
-      if (since) items = items.filter((row) => row.createdAt.getTime() >= since.getTime());
-      if (before) items = items.filter((row) => row.createdAt.getTime() < before.getTime());
+      const matches = (row: ContainerEventRow, condition?: ContainerEventWhereInput): boolean => {
+        if (!condition) return true;
+        const { AND, OR, ...scalar } = condition;
+        if (AND && !AND.every((clause) => matches(row, clause))) return false;
+        if (OR && !OR.some((clause) => matches(row, clause))) return false;
 
-      const orderDir = args.orderBy?.createdAt === 'asc' ? 'asc' : 'desc';
+        if (scalar.containerId && row.containerId !== scalar.containerId) {
+          return false;
+        }
+
+        if (typeof scalar.createdAt !== 'undefined') {
+          const value = scalar.createdAt;
+          const time = row.createdAt.getTime();
+          if (value instanceof Date) {
+            if (time !== value.getTime()) return false;
+          } else {
+            if (value.gte && time < value.gte.getTime()) return false;
+            if (value.gt && time <= value.gt.getTime()) return false;
+            if (value.lt && time >= value.lt.getTime()) return false;
+          }
+        }
+
+        if (typeof scalar.id !== 'undefined') {
+          const value = scalar.id;
+          if (typeof value === 'string') {
+            if (row.id !== value) return false;
+          } else {
+            if (value.gt && !(row.id > value.gt)) return false;
+            if (value.lt && !(row.id < value.lt)) return false;
+          }
+        }
+
+        return true;
+      };
+
+      const where = args.where ?? {};
+      const items = this.rows.slice().filter((row) => matches(row, where));
+
+      const orderings = Array.isArray(args.orderBy)
+        ? args.orderBy
+        : args.orderBy
+          ? [args.orderBy]
+          : [{ createdAt: 'desc' as SortOrder }];
+
       items.sort((a, b) => {
-        const aTime = a.createdAt.getTime();
-        const bTime = b.createdAt.getTime();
-        return orderDir === 'asc' ? aTime - bTime : bTime - aTime;
+        for (const ordering of orderings) {
+          const entries = Object.entries(ordering) as [keyof ContainerEventRow, SortOrder][];
+          if (entries.length === 0) {
+            continue;
+          }
+          const [field, dir] = entries[0];
+          let comparison = 0;
+          if (field === 'createdAt') {
+            comparison = a.createdAt.getTime() - b.createdAt.getTime();
+          } else if (field === 'id') {
+            comparison = a.id.localeCompare(b.id);
+          }
+          if (comparison !== 0) {
+            return dir === 'asc' ? comparison : -comparison;
+          }
+        }
+        return 0;
       });
 
       const take = typeof args.take === 'number' ? args.take : items.length;
@@ -219,7 +271,7 @@ describe('ContainersController routes', () => {
         limit: typeof q.limit === 'string' ? Number(q.limit) : typeof q.limit === 'number' ? q.limit : undefined,
         order: typeof q.order === 'string' && (q.order === 'asc' || q.order === 'desc') ? q.order : undefined,
         since: typeof q.since === 'string' ? q.since : undefined,
-        before: typeof q.before === 'string' ? q.before : undefined,
+        cursor: typeof q.cursor === 'string' ? q.cursor : undefined,
       };
       return res.send(await controller.listEvents(containerId ?? '', dto));
     });
@@ -425,6 +477,17 @@ describe('ContainersController routes', () => {
         createdAt: new Date(base.getTime() + 1000),
       },
       {
+        id: 'evt-9',
+        containerId: 'cid-1',
+        eventType: 'stop',
+        exitCode: 0,
+        signal: null,
+        reason: 'ContainerStopped',
+        message: 'stop-late',
+        health: null,
+        createdAt: new Date(base.getTime() + 1000),
+      },
+      {
         id: 'evt-3',
         containerId: 'cid-1',
         eventType: 'start',
@@ -454,18 +517,43 @@ describe('ContainersController routes', () => {
       items: Array<{ id: string; eventType: string; health: string | null; createdAt: string }>;
       page: { order: string; limit: number; nextBefore: string | null; nextAfter: string | null };
     };
-    expect(body.items.map((item) => item.id)).toEqual(['evt-3', 'evt-2']);
+    expect(body.items.map((item) => item.id)).toEqual(['evt-3', 'evt-9']);
     expect(body.items[0]).toMatchObject({ eventType: 'start', health: 'healthy' });
     expect(body.page).toMatchObject({ order: 'desc', limit: 2, nextAfter: null });
-    expect(typeof body.page.nextBefore === 'string').toBe(true);
+    expect(body.page.nextBefore).toMatch(/^2024-01-01T00:00:01\.000Z\|evt-9$/);
 
     if (!body.page.nextBefore) throw new Error('Expected nextBefore cursor');
     const resNext = await fastify.inject({
       method: 'GET',
-      url: `/api/containers/cid-1/events?before=${encodeURIComponent(body.page.nextBefore)}`,
+      url: `/api/containers/cid-1/events?cursor=${encodeURIComponent(body.page.nextBefore)}&limit=2`,
     });
     expect(resNext.statusCode).toBe(200);
-    const nextBody = resNext.json() as { items: Array<{ id: string }> };
-    expect(nextBody.items.map((item) => item.id)).toEqual(['evt-1']);
+    const nextBody = resNext.json() as {
+      items: Array<{ id: string }>;
+      page: { nextBefore: string | null };
+    };
+    expect(nextBody.items.map((item) => item.id)).toEqual(['evt-2', 'evt-1']);
+    expect(nextBody.page.nextBefore).toBeNull();
+  });
+
+  it('rejects invalid cursor format for container events', async () => {
+    prismaSvc.client.containerEvent.rows = [
+      {
+        id: 'evt-invalid-test',
+        containerId: 'cid-1',
+        eventType: 'start',
+        exitCode: null,
+        signal: null,
+        reason: 'ContainerStarted',
+        message: 'started',
+        health: 'healthy',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      },
+    ];
+
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers/cid-1/events?cursor=not-a-cursor' });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { message: string };
+    expect(body.message).toMatch(/cursor/i);
   });
 });

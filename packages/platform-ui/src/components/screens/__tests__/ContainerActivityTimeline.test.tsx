@@ -34,7 +34,7 @@ describe('ContainerActivityTimeline', () => {
                 createdAt: '2024-01-01T00:00:00.000Z',
               },
             ],
-            page: { limit: 50, order: 'desc', nextBefore: 'cursor-1', nextAfter: null },
+            page: { limit: 50, order: 'desc', nextBefore: '2024-01-01T00:00:00.000Z|evt-1', nextAfter: null },
           },
         ],
       },

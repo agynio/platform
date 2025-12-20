@@ -32,6 +32,32 @@ type RawContainerEvent = {
   createdAt: Date;
 };
 
+const EVENT_CURSOR_SEPARATOR = '|';
+
+const encodeEventCursor = ({ createdAt, id }: { createdAt: Date; id: string }): string => {
+  return `${createdAt.toISOString()}${EVENT_CURSOR_SEPARATOR}${id}`;
+};
+
+const decodeEventCursor = (value: string): { createdAt: Date; id: string } => {
+  if (!value) {
+    throw new Error('Empty cursor');
+  }
+  const separatorIndex = value.indexOf(EVENT_CURSOR_SEPARATOR);
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    throw new Error('Cursor must include timestamp and id');
+  }
+  const timestampRaw = value.slice(0, separatorIndex);
+  const id = value.slice(separatorIndex + 1);
+  const createdAt = new Date(timestampRaw);
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new Error('Cursor timestamp is invalid');
+  }
+  if (!id.trim()) {
+    throw new Error('Cursor id is invalid');
+  }
+  return { createdAt, id };
+};
+
 const isHealth = (value: unknown): value is ContainerHealth =>
   value === 'healthy' || value === 'unhealthy' || value === 'starting';
 
@@ -101,8 +127,8 @@ export class ListContainerEventsQueryDto {
   since?: string;
 
   @IsOptional()
-  @IsISO8601()
-  before?: string;
+  @IsString()
+  cursor?: string;
 }
 
 @Controller('api/containers')
@@ -375,32 +401,54 @@ export class ContainersController {
     }
 
     const limit = typeof query.limit === 'number' && Number.isFinite(query.limit) ? query.limit : 50;
-    const order = query.order === 'asc' ? 'asc' : 'desc';
-    const before = query.before ? new Date(query.before) : undefined;
+    const order: 'asc' | 'desc' = query.order === 'asc' ? 'asc' : 'desc';
     const since = query.since ? new Date(query.since) : undefined;
-
-    if (before && Number.isNaN(before.getTime())) {
-      throw new BadRequestException('Invalid before timestamp');
-    }
     if (since && Number.isNaN(since.getTime())) {
       throw new BadRequestException('Invalid since timestamp');
+    }
+
+    let cursor: { createdAt: Date; id: string } | null = null;
+    if (query.cursor) {
+      try {
+        cursor = decodeEventCursor(query.cursor);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid cursor';
+        throw new BadRequestException(message);
+      }
     }
 
     const clampedLimit = Math.max(1, Math.min(200, limit));
     const take = clampedLimit + 1;
 
-    const createdAt: Prisma.DateTimeFilter = {};
-    if (since) createdAt.gte = since;
-    if (before) createdAt.lt = before;
+    const where: Prisma.ContainerEventWhereInput = { containerId };
+    const andFilters: Prisma.ContainerEventWhereInput[] = [];
+    if (since) {
+      andFilters.push({ createdAt: { gte: since } });
+    }
+    if (cursor) {
+      const comparator = order === 'asc' ? 'gt' : 'lt';
+      andFilters.push({
+        OR: [
+          { createdAt: { [comparator]: cursor.createdAt } },
+          {
+            createdAt: cursor.createdAt,
+            id: { [comparator]: cursor.id },
+          },
+        ],
+      });
+    }
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
+    }
 
-    const where: Prisma.ContainerEventWhereInput = {
-      containerId,
-      ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
-    };
+    const orderBy: Prisma.Enumerable<Prisma.ContainerEventOrderByWithRelationInput> = [
+      { createdAt: order },
+      { id: order },
+    ];
 
     const rows = (await this.prisma.containerEvent.findMany({
       where,
-      orderBy: { createdAt: order },
+      orderBy,
       take,
       select: {
         id: true,
@@ -430,9 +478,10 @@ export class ContainersController {
       createdAt: row.createdAt.toISOString(),
     }));
 
-    const cursorSource = items[items.length - 1];
-    const nextBefore = hasMore && order === 'desc' && cursorSource ? cursorSource.createdAt : null;
-    const nextAfter = hasMore && order === 'asc' && cursorSource ? cursorSource.createdAt : null;
+    const nextCursorSource = hasMore ? trimmed[trimmed.length - 1] : null;
+    const encodedCursor = nextCursorSource ? encodeEventCursor(nextCursorSource) : null;
+    const nextBefore = order === 'desc' ? encodedCursor : null;
+    const nextAfter = order === 'asc' ? encodedCursor : null;
 
     return {
       items,

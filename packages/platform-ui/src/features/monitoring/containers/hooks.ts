@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useContainers, containersQueryKey, type ContainerStatusFilter } from '@/api/hooks/containers';
-import { listContainers } from '@/api/modules/containers';
+import { useCallback, useMemo, useState } from 'react';
+import { useContainers, type ContainerStatusFilter } from '@/api/hooks/containers';
 import { toContainersView } from './mappers';
 
 type StatusCounts = {
@@ -16,35 +14,25 @@ const INITIAL_COUNTS: StatusCounts = { running: 0, stopped: 0, starting: 0, stop
 
 export function useMonitoringContainers() {
   const [status, setStatus] = useState<ContainerStatusFilter>('running');
-  const queryClient = useQueryClient();
   const query = useContainers(status, 'lastUsedAt', 'desc');
-  const hasPrefetchedAllRef = useRef(false);
+  const countsQuery = useContainers('all', 'lastUsedAt', 'desc');
 
-  useEffect(() => {
-    if (status === 'all') return;
-    if (!query.data || hasPrefetchedAllRef.current) return;
-    hasPrefetchedAllRef.current = true;
-    queryClient
-      .prefetchQuery(
-        containersQueryKey('all', 'lastUsedAt', 'desc'),
-        () => listContainers({ status: 'all', sortBy: 'lastUsedAt', sortDir: 'desc' }),
-      )
-      .catch(() => {
-        hasPrefetchedAllRef.current = false;
-      });
-  }, [status, query.data, queryClient]);
+  const { data: listData, isLoading: listIsLoading, isFetching: listIsFetching, error: listError, refetch: listRefetch } = query;
+  const {
+    data: countsData,
+    isLoading: countsIsLoading,
+    isFetching: countsIsFetching,
+    error: countsError,
+    refetch: countsRefetch,
+  } = countsQuery;
 
   const view = useMemo(() => {
-    const items = query.data?.items ?? [];
+    const items = listData?.items ?? [];
     return toContainersView(items);
-  }, [query.data]);
-
-  const allData = queryClient.getQueryData<{ items: Parameters<typeof toContainersView>[0] }>(
-    containersQueryKey('all', 'lastUsedAt', 'desc'),
-  );
+  }, [listData]);
 
   const counts = useMemo(() => {
-    const sourceItems = allData?.items ?? query.data?.items ?? [];
+    const sourceItems = countsData?.items ?? listData?.items ?? [];
     if (!sourceItems.length) return INITIAL_COUNTS;
     const aggregate = toContainersView(sourceItems).containers.reduce<StatusCounts>((acc, item) => {
       acc.all += 1;
@@ -67,7 +55,12 @@ export function useMonitoringContainers() {
       return acc;
     }, { ...INITIAL_COUNTS });
     return aggregate;
-  }, [allData, query.data]);
+  }, [countsData, listData]);
+
+  const refetch = useCallback(() => {
+    countsRefetch();
+    return listRefetch();
+  }, [countsRefetch, listRefetch]);
 
   return {
     status,
@@ -75,9 +68,9 @@ export function useMonitoringContainers() {
     containers: view.containers,
     itemById: view.itemById,
     counts,
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
-    error: query.error ?? null,
-    refetch: query.refetch,
+    isLoading: listIsLoading || (!countsData && countsIsLoading),
+    isFetching: listIsFetching || countsIsFetching,
+    error: listError ?? countsError ?? null,
+    refetch,
   } as const;
 }

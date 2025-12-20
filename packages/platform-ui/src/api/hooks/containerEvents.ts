@@ -5,7 +5,7 @@ type QueryParams = {
   limit?: number;
   order?: 'asc' | 'desc';
   since?: string;
-  before?: string;
+  cursor?: string;
 };
 
 const DEFAULT_PARAMS: QueryParams = { limit: 50, order: 'desc' };
@@ -26,10 +26,15 @@ export function useContainerEvents(containerId: string | null, enabled: boolean,
     queryKey: eventsQueryKey(containerId, params),
     queryFn: async ({ pageParam }) => {
       const mergedParams: QueryParams = { ...params };
-      if (pageParam) mergedParams.before = pageParam;
+      if (pageParam) mergedParams.cursor = pageParam;
       return listContainerEvents(containerId as string, mergedParams);
     },
-    getNextPageParam: (lastPage) => lastPage.page.nextBefore ?? undefined,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.page.order === 'asc') {
+        return lastPage.page.nextAfter ?? undefined;
+      }
+      return lastPage.page.nextBefore ?? undefined;
+    },
     staleTime: 10_000,
   });
 }

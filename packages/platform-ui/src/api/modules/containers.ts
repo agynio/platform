@@ -44,7 +44,7 @@ export function listContainers(params: { status?: string; sortBy?: string; sortD
 
 export function listContainerEvents(
   containerId: string,
-  params: { limit?: number; order?: 'asc' | 'desc'; since?: string; before?: string } = {},
+  params: { limit?: number; order?: 'asc' | 'desc'; since?: string; cursor?: string } = {},
 ) {
   return asData<ContainerEventsResponse>(
     http.get<ContainerEventsResponse>(`/api/containers/${containerId}/events`, { params }),
