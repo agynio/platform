@@ -2,11 +2,13 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { memoryApi } from '@/api/modules/memory';
+import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
 
 type NodeSummary = {
   nodeId: string;
   scope: 'global' | 'perThread';
   threadCount: number;
+  displayName: string;
 };
 
 export function MemoryNodesListPage() {
@@ -15,6 +17,7 @@ export function MemoryNodesListPage() {
     queryFn: () => memoryApi.listDocs(),
     staleTime: 30_000,
   });
+  const { titleMap } = useNodeTitleMap();
 
   const summaries = useMemo<NodeSummary[]>(() => {
     const items = docsQuery.data?.items ?? [];
@@ -30,9 +33,17 @@ export function MemoryNodesListPage() {
       map.set(item.nodeId, existing);
     }
     return Array.from(map.entries())
-      .map(([nodeId, info]) => ({ nodeId, scope: info.scope, threadCount: info.threads.size }))
-      .sort((a, b) => a.nodeId.localeCompare(b.nodeId));
-  }, [docsQuery.data]);
+      .map(([nodeId, info]) => {
+        const displayName = titleMap.get(nodeId) ?? nodeId;
+        return {
+          nodeId,
+          scope: info.scope,
+          threadCount: info.threads.size,
+          displayName,
+        } satisfies NodeSummary;
+      })
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [docsQuery.data, titleMap]);
 
   return (
     <div className="absolute inset-0 flex min-h-0 flex-col overflow-hidden">
@@ -57,7 +68,12 @@ export function MemoryNodesListPage() {
                 className="flex flex-col gap-2 rounded border p-3 transition hover:border-primary"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{node.nodeId}</span>
+                  <div className="min-w-0">
+                    <span className="block truncate font-medium">{node.displayName}</span>
+                    {node.displayName !== node.nodeId ? (
+                      <span className="block text-xs text-muted-foreground break-all">{node.nodeId}</span>
+                    ) : null}
+                  </div>
                   <span
                     className={`rounded px-2 py-0.5 text-xs uppercase ${
                       node.scope === 'perThread'

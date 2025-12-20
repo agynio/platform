@@ -5,6 +5,7 @@ import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
 import { MemoryManager } from '@/components/screens/memoryManager/MemoryManager';
 import type { MemoryTree, MemoryNode } from '@/components/screens/memoryManager/utils';
 import { getParentPath, joinPath, normalizePath } from '@/components/screens/memoryManager/utils';
+import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
 
 const ROOT_PATH = '/' as const;
 
@@ -14,6 +15,7 @@ type MemoryNodeOption = {
   scope: 'global' | 'perThread';
   threadId?: string;
   label: string;
+  displayName: string;
 };
 
 type DumpResponse = {
@@ -37,12 +39,12 @@ function buildNodeKey(item: MemoryDocItem): string {
   return `${item.nodeId}::global`;
 }
 
-function buildNodeLabel(item: MemoryDocItem): string {
+function buildNodeLabel(item: MemoryDocItem, displayName: string): string {
   if (item.scope === 'perThread') {
     const thread = item.threadId ?? 'unknown';
-    return `${item.nodeId} (thread: ${thread})`;
+    return `${displayName} (thread: ${thread})`;
   }
-  return `${item.nodeId} (global)`;
+  return `${displayName} (global)`;
 }
 
 function ensureNode(map: Map<string, MemoryNode>, root: MemoryTree, path: string): MemoryNode {
@@ -106,6 +108,7 @@ function buildTreeFromDump(label: string, dump?: DumpResponse): MemoryTree {
 
 export function AgentsMemoryManager() {
   const queryClient = useQueryClient();
+  const { titleMap } = useNodeTitleMap();
 
   const docsQuery = useQuery({
     queryKey: ['memory/docs'],
@@ -117,15 +120,19 @@ export function AgentsMemoryManager() {
     const items = docsQuery.data?.items ?? [];
     return items
       .filter((item) => item.scope === 'global' || Boolean(item.threadId))
-      .map((item) => ({
-        key: buildNodeKey(item),
-        nodeId: item.nodeId,
-        scope: item.scope,
-        threadId: item.threadId,
-        label: buildNodeLabel(item),
-      }))
+      .map((item) => {
+        const displayName = titleMap.get(item.nodeId) ?? item.nodeId;
+        return {
+          key: buildNodeKey(item),
+          nodeId: item.nodeId,
+          scope: item.scope,
+          threadId: item.threadId,
+          displayName,
+          label: buildNodeLabel(item, displayName),
+        } satisfies MemoryNodeOption;
+      })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [docsQuery.data]);
+  }, [docsQuery.data, titleMap]);
 
   const nodeByKey = useMemo(() => new Map(nodes.map((node) => [node.key, node] as const)), [nodes]);
 

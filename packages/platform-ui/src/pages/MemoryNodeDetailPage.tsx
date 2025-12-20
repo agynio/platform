@@ -6,6 +6,7 @@ import { MemoryTree } from '@/components/memory/MemoryTree';
 import { MemoryEditor } from '@/components/memory/MemoryEditor';
 import { ThreadSelector } from '@/components/memory/ThreadSelector';
 import { normalizeMemoryPath } from '@/components/memory/path';
+import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
 
 const THREAD_STORAGE_PREFIX = 'ui.memory.selectedThread.';
 
@@ -13,6 +14,8 @@ export function MemoryNodeDetailPage() {
   const params = useParams();
   const nodeIdParam = params.nodeId ?? '';
   const nodeId = decodeURIComponent(nodeIdParam);
+  const { titleMap } = useNodeTitleMap();
+  const displayName = titleMap.get(nodeId) ?? nodeId;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const docsQuery = useQuery({
@@ -169,7 +172,12 @@ export function MemoryNodeDetailPage() {
             <Link to="/memory" className="text-xs text-primary hover:underline">
               &larr; Back to nodes
             </Link>
-            <h1 className="text-xl font-semibold break-all">{nodeId}</h1>
+            <div className="space-y-1">
+              <h1 className="text-xl font-semibold break-all">{displayName}</h1>
+              {displayName !== nodeId ? (
+                <p className="text-xs text-muted-foreground break-all">{nodeId}</p>
+              ) : null}
+            </div>
             <span className={`inline-block rounded px-2 py-0.5 text-xs uppercase ${scopeBadgeClass}`}>
               {scope}
             </span>
