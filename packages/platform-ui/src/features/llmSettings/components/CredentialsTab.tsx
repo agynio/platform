@@ -57,7 +57,6 @@ export function CredentialsTab({
               <colgroup>
                 <col className="w-[32%]" />
                 <col className="w-[24%]" />
-                <col />
                 <col className="w-[140px]" />
               </colgroup>
               <thead
