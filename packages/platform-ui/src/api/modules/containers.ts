@@ -16,8 +16,39 @@ export type ContainerItem = {
   mounts?: Array<{ source: string; destination: string }>;
 };
 
+export type ContainerEventItem = {
+  id: string;
+  containerId: string;
+  eventType: string;
+  exitCode: number | null;
+  signal: string | null;
+  health: string | null;
+  reason: string | null;
+  message: string | null;
+  createdAt: string;
+};
+
+export type ContainerEventsResponse = {
+  items: ContainerEventItem[];
+  page: {
+    limit: number;
+    order: 'asc' | 'desc';
+    nextBefore: string | null;
+    nextAfter: string | null;
+  };
+};
+
 export function listContainers(params: { status?: string; sortBy?: string; sortDir?: string; threadId?: string }) {
   return asData<{ items: ContainerItem[] }>(http.get<{ items: ContainerItem[] }>(`/api/containers`, { params }));
+}
+
+export function listContainerEvents(
+  containerId: string,
+  params: { limit?: number; order?: 'asc' | 'desc'; since?: string; before?: string } = {},
+) {
+  return asData<ContainerEventsResponse>(
+    http.get<ContainerEventsResponse>(`/api/containers/${containerId}/events`, { params }),
+  );
 }
 
 export type ContainerTerminalSessionResponse = {

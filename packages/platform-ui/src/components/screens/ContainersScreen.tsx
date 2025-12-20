@@ -3,6 +3,7 @@ import { ArrowLeft, Trash2, Terminal, ChevronDown, ChevronRight, ExternalLink } 
 import { IconButton } from '../IconButton';
 import { Badge } from '../Badge';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { ContainerActivityTimeline } from './ContainerActivityTimeline';
 
 export type ContainerStatus = 'running' | 'stopped' | 'starting' | 'stopping';
 export type ContainerRole = 'workspace' | 'dind';
@@ -24,6 +25,15 @@ export interface Container {
 
 interface ContainersScreenProps {
   containers: Container[];
+  statusFilter: ContainerStatus | 'all';
+  counts: {
+    running: number;
+    stopped: number;
+    starting: number;
+    stopping: number;
+    all: number;
+  };
+  onStatusFilterChange: (status: ContainerStatus | 'all') => void;
   onOpenTerminal?: (containerId: string) => void;
   onDeleteContainer?: (containerId: string) => void;
   onViewThread?: (threadId: string) => void;
@@ -34,14 +44,17 @@ const ITEMS_PER_PAGE = 20;
 
 export default function ContainersScreen({
   containers,
+  statusFilter,
+  counts,
+  onStatusFilterChange,
   onOpenTerminal,
   onDeleteContainer,
   onViewThread,
   onBack,
 }: ContainersScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<ContainerStatus | 'all'>('all');
-  const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set());
+  const [sidecarsExpanded, setSidecarsExpanded] = useState<Set<string>>(new Set());
+  const [activityExpanded, setActivityExpanded] = useState<Set<string>>(new Set());
 
   // Filter containers
   const filteredContainers = containers.filter((container) => {
@@ -143,12 +156,6 @@ export default function ContainersScreen({
     return `${diffMins}m`;
   };
 
-  // Count by status
-  const runningCount = containers.filter((c) => c.status === 'running').length;
-  const stoppedCount = containers.filter((c) => c.status === 'stopped').length;
-  const startingCount = containers.filter((c) => c.status === 'starting').length;
-  const stoppingCount = containers.filter((c) => c.status === 'stopping').length;
-
   return (
     <div className="h-screen flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
@@ -175,54 +182,54 @@ export default function ContainersScreen({
           <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                  statusFilter === 'all'
-                    ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
-                    : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
-                }`}
-              >
-                All ({containers.length})
-              </button>
-              <button
-                onClick={() => setStatusFilter('running')}
+                onClick={() => onStatusFilterChange('running')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'running'
                     ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
                     : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                 }`}
               >
-                Running ({runningCount})
+                Running ({counts.running})
               </button>
               <button
-                onClick={() => setStatusFilter('stopped')}
+                onClick={() => onStatusFilterChange('stopped')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'stopped'
                     ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
                     : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                 }`}
               >
-                Stopped ({stoppedCount})
+                Stopped ({counts.stopped})
               </button>
               <button
-                onClick={() => setStatusFilter('starting')}
+                onClick={() => onStatusFilterChange('starting')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'starting'
                     ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
                     : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                 }`}
               >
-                Starting ({startingCount})
+                Starting ({counts.starting})
               </button>
               <button
-                onClick={() => setStatusFilter('stopping')}
+                onClick={() => onStatusFilterChange('stopping')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'stopping'
                     ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
                     : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                 }`}
               >
-                Stopping ({stoppingCount})
+                Stopping ({counts.stopping})
+              </button>
+              <button
+                onClick={() => onStatusFilterChange('all')}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                  statusFilter === 'all'
+                    ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
+                    : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
+                }`}
+              >
+                All ({counts.all})
               </button>
             </div>
           </div>
@@ -239,18 +246,27 @@ export default function ContainersScreen({
                   const isGroup = Array.isArray(item);
                   const mainContainer = isGroup ? item[0] : item;
                   const dinds = isGroup ? item.slice(1) : [];
-                  const isExpanded = expandedContainers.has(mainContainer.id);
+                  const sidecarsOpen = sidecarsExpanded.has(mainContainer.id);
+                  const activityOpen = activityExpanded.has(mainContainer.id);
                   const hasDinds = dinds.length > 0;
                   const threadLabel = mainContainer.threadId ? mainContainer.threadId.slice(0, 6) : null;
 
-                  const toggleExpanded = () => {
-                    const newExpanded = new Set(expandedContainers);
-                    if (isExpanded) {
-                      newExpanded.delete(mainContainer.id);
-                    } else {
-                      newExpanded.add(mainContainer.id);
-                    }
-                    setExpandedContainers(newExpanded);
+                  const toggleSidecars = () => {
+                    setSidecarsExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(mainContainer.id)) next.delete(mainContainer.id);
+                      else next.add(mainContainer.id);
+                      return next;
+                    });
+                  };
+
+                  const toggleActivity = () => {
+                    setActivityExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(mainContainer.id)) next.delete(mainContainer.id);
+                      else next.add(mainContainer.id);
+                      return next;
+                    });
                   };
 
                   return (
@@ -428,31 +444,54 @@ export default function ContainersScreen({
                               )}
                             </div>
                             
-                            {/* Show Sidecars Button */}
-                            {hasDinds && (
+                            <div className="flex flex-wrap items-center gap-3 mt-3">
                               <button
-                                onClick={toggleExpanded}
-                                className="flex items-center gap-2 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-dark)] transition-colors mt-3"
+                                onClick={toggleActivity}
+                                className="flex items-center gap-2 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-dark)] transition-colors"
                               >
-                                {isExpanded ? (
+                                {activityOpen ? (
                                   <>
                                     <ChevronDown className="w-3.5 h-3.5" />
-                                    <span>Hide sidecars</span>
+                                    <span>Hide activity</span>
                                   </>
                                 ) : (
                                   <>
                                     <ChevronRight className="w-3.5 h-3.5" />
-                                    <span>Show sidecars</span>
+                                    <span>Show activity</span>
                                   </>
                                 )}
                               </button>
-                            )}
+                              {hasDinds && (
+                                <button
+                                  onClick={toggleSidecars}
+                                  className="flex items-center gap-2 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-dark)] transition-colors"
+                                >
+                                  {sidecarsOpen ? (
+                                    <>
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                      <span>Hide sidecars</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                      <span>Show sidecars</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
                       </div>
+                    </div>
+
+                      {activityOpen && (
+                        <div className="ml-8 mt-3 max-w-[calc(700px-2rem)]">
+                          <ContainerActivityTimeline containerId={mainContainer.containerId} />
+                        </div>
+                      )}
 
                       {/* DinD Containers (Expanded) */}
-                      {hasDinds && isExpanded && (
+                      {hasDinds && sidecarsOpen && (
                         <div className="ml-8 mt-2 space-y-2">
                           {dinds.map((dind) => (
                             <div

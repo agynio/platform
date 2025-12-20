@@ -7,7 +7,7 @@ import { useMonitoringContainers } from '@/features/monitoring/containers/hooks'
 
 export function MonitoringContainers() {
   const navigate = useNavigate();
-  const { containers, itemById, isLoading, error, refetch } = useMonitoringContainers();
+  const { containers, itemById, status, setStatus, counts, isLoading, error, refetch } = useMonitoringContainers();
   const [terminalContainer, setTerminalContainer] = useState<ContainerItem | null>(null);
 
   const loading = isLoading && containers.length === 0;
@@ -58,6 +58,9 @@ export function MonitoringContainers() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--agyn-bg-light)]">
       <ContainersPageContent
         containers={pageContainers}
+        status={status}
+        counts={counts}
+        onStatusChange={setStatus}
         isLoading={loading}
         error={displayError}
         onRetry={refetch}

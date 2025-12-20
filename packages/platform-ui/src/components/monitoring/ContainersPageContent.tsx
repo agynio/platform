@@ -1,9 +1,21 @@
+import type { ContainerStatus } from '@/components/screens/ContainersScreen';
 import type { ContainerViewModel } from '@/features/monitoring/containers/types';
 import ContainersScreen from '../screens/ContainersScreen';
+
+type StatusCounts = {
+  running: number;
+  stopped: number;
+  starting: number;
+  stopping: number;
+  all: number;
+};
 
 type ContainersPageContentProps = {
   containers: ContainerViewModel[];
   isLoading: boolean;
+  status: ContainerStatus | 'all';
+  counts: StatusCounts;
+  onStatusChange: (status: ContainerStatus | 'all') => void;
   error: Error | null;
   onRetry?: () => void;
   onOpenTerminal?: (containerId: string) => void;
@@ -14,6 +26,9 @@ type ContainersPageContentProps = {
 export function ContainersPageContent({
   containers,
   isLoading,
+  status,
+  counts,
+  onStatusChange,
   error,
   onRetry,
   onOpenTerminal,
@@ -56,6 +71,9 @@ export function ContainersPageContent({
   return (
     <ContainersScreen
       containers={containers}
+      statusFilter={status}
+      counts={counts}
+      onStatusFilterChange={onStatusChange}
       onOpenTerminal={onOpenTerminal}
       onDeleteContainer={onDeleteContainer}
       onViewThread={onViewThread}

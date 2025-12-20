@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MonitoringContainers } from '../MonitoringContainers';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ContainerItem } from '@/api/modules/containers';
@@ -12,6 +13,8 @@ let latestContainersScreenProps: ContainersScreenProps | null = null;
 let lastUseContainersArgs: { status: unknown; sortBy: unknown; sortDir: unknown; threadId: unknown } | null = null;
 
 const navigateMock = vi.fn();
+
+let queryClient: QueryClient;
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -42,6 +45,10 @@ const terminalOpenMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalWriteMock = vi.fn();
 const terminalWritelnMock = vi.fn();
+
+const { listContainersMock } = vi.hoisted(() => ({
+  listContainersMock: vi.fn(async () => ({ items: [] })),
+}));
 
 vi.mock('@xterm/xterm', () => {
   class FakeDisposable {
@@ -84,22 +91,39 @@ vi.mock('@xterm/addon-webgl', () => {
   return { WebglAddon: FakeWebglAddon };
 });
 
+vi.mock('@/api/modules/containers', async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    listContainers: listContainersMock,
+  };
+});
+
 const useContainersMock = vi.fn();
 const mutateSessionMock = vi.fn();
 const resetSessionMock = vi.fn();
 const createSessionHookMock = vi.fn(() => ({ mutateAsync: mutateSessionMock, status: 'idle', reset: resetSessionMock }));
 
-vi.mock('@/api/hooks/containers', () => ({
-  useContainers: (...args: unknown[]) => useContainersMock(...args),
-  useCreateContainerTerminalSession: (...args: unknown[]) => createSessionHookMock(...args),
-}));
+vi.mock('@/api/hooks/containers', async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    useContainers: (...args: unknown[]) => useContainersMock(...args),
+    useCreateContainerTerminalSession: (...args: unknown[]) => createSessionHookMock(...args),
+  };
+});
 
 function renderPage() {
-  return render(<MonitoringContainers />);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MonitoringContainers />
+    </QueryClientProvider>,
+  );
 }
 
 describe('MonitoringContainers page', () => {
   beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     containersScreenMock = vi.fn((props: ContainersScreenProps) => {
       latestContainersScreenProps = props;
       return <div data-testid="containers-screen-mock" />;
@@ -116,6 +140,7 @@ describe('MonitoringContainers page', () => {
     createSessionHookMock.mockReturnValue({ mutateAsync: mutateSessionMock, status: 'idle', reset: resetSessionMock });
     latestContainersScreenProps = null;
     lastUseContainersArgs = null;
+    listContainersMock.mockResolvedValue({ items: [] });
 
     const timestamp = '2024-01-01T00:00:00.000Z';
     const baseData = {
@@ -179,17 +204,21 @@ describe('MonitoringContainers page', () => {
     vi.useRealTimers();
     useContainersMock.mockReset();
     createSessionHookMock.mockReset();
+    listContainersMock.mockReset();
+    queryClient?.clear();
     vi.unstubAllGlobals();
   });
 
   it('maps API data and renders ContainersScreen', () => {
     renderPage();
 
-    expect(lastUseContainersArgs).toEqual({ status: 'all', sortBy: 'lastUsedAt', sortDir: 'desc', threadId: undefined });
+    expect(lastUseContainersArgs).toEqual({ status: 'running', sortBy: 'lastUsedAt', sortDir: 'desc', threadId: undefined });
     expect(getContainersScreenMock()).toHaveBeenCalledTimes(1);
     expect(latestContainersScreenProps).not.toBeNull();
 
     const props = latestContainersScreenProps as ContainersScreenProps;
+    expect(props.statusFilter).toBe('running');
+    expect(props.counts).toMatchObject({ running: 1, stopping: 1, starting: 0, stopped: 0, all: 2 });
     expect(props.containers).toHaveLength(2);
 
     const [workspace, sidecar] = props.containers as ScreenContainer[];
@@ -220,6 +249,18 @@ describe('MonitoringContainers page', () => {
       props.onViewThread?.('11111111-1111-1111-1111-111111111111');
     });
     expect(navigateMock).toHaveBeenCalledWith('/agents/threads/11111111-1111-1111-1111-111111111111');
+  });
+
+  it('switches status filter and refetches data', () => {
+    renderPage();
+    const props = latestContainersScreenProps as ContainersScreenProps;
+    expect(props.statusFilter).toBe('running');
+
+    act(() => {
+      props.onStatusFilterChange?.('stopped');
+    });
+
+    expect(useContainersMock).toHaveBeenLastCalledWith('stopped', 'lastUsedAt', 'desc');
   });
 
   it('opens terminal dialog and requests session creation', async () => {

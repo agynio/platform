@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
-import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
-import type { PrismaClient } from '@prisma/client';
+import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryDto } from '../src/infra/container/containers.controller';
+import type { PrismaClient, ContainerEventType } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
@@ -27,12 +27,27 @@ type Row = {
 };
 
 type SortOrder = 'asc' | 'desc';
+type ContainerEventRow = {
+  id: string;
+  containerId: string;
+  eventType: ContainerEventType;
+  exitCode: number | null;
+  signal: string | null;
+  reason: string | null;
+  message: string | null;
+  health: string | null;
+  createdAt: Date;
+};
 type ContainerWhereInput = {
   status?: Row['status'] | { in: Row['status'][] };
   threadId?: string | null;
   image?: string;
   nodeId?: string;
   updatedAt?: { gte?: Date };
+};
+type ContainerEventWhereInput = {
+  containerId?: string;
+  createdAt?: { gte?: Date; lt?: Date };
 };
 type ContainerOrderByInput = { createdAt?: SortOrder; lastUsedAt?: SortOrder; killAfterAt?: SortOrder };
 type ContainerSelect = {
@@ -50,6 +65,14 @@ type ContainerSelect = {
 type FindManyArgs = { where?: ContainerWhereInput; orderBy?: ContainerOrderByInput; select?: ContainerSelect; take?: number };
 type SelectedRow = { containerId: string; threadId: string | null; image: string; name: string; status: Row['status']; createdAt: Date; lastUsedAt: Date; killAfterAt: Date | null; updatedAt: Date };
 type SelectedRowWithMeta = SelectedRow & { metadata?: RowMetadata };
+type ContainerEventSelect = { [K in keyof ContainerEventRow]?: boolean };
+type ContainerEventOrderBy = { createdAt?: SortOrder };
+type ContainerEventFindManyArgs = {
+  where?: ContainerEventWhereInput;
+  orderBy?: ContainerEventOrderBy;
+  select?: ContainerEventSelect;
+  take?: number;
+};
 
 class InMemoryPrismaClient {
   container = {
@@ -94,9 +117,44 @@ class InMemoryPrismaClient {
       }));
     },
   };
+  containerEvent = {
+    rows: [] as ContainerEventRow[],
+    async findMany(args: ContainerEventFindManyArgs = {}): Promise<Array<Partial<ContainerEventRow>>> {
+      const where = args.where ?? {};
+      let items = this.rows.slice();
+      if (where.containerId) items = items.filter((row) => row.containerId === where.containerId);
+      const since = where.createdAt?.gte;
+      const before = where.createdAt?.lt;
+      if (since) items = items.filter((row) => row.createdAt.getTime() >= since.getTime());
+      if (before) items = items.filter((row) => row.createdAt.getTime() < before.getTime());
+
+      const orderDir = args.orderBy?.createdAt === 'asc' ? 'asc' : 'desc';
+      items.sort((a, b) => {
+        const aTime = a.createdAt.getTime();
+        const bTime = b.createdAt.getTime();
+        return orderDir === 'asc' ? aTime - bTime : bTime - aTime;
+      });
+
+      const take = typeof args.take === 'number' ? args.take : items.length;
+      const sliced = items.slice(0, take);
+      if (!args.select) return sliced;
+      return sliced.map((row) => {
+        const picked: Partial<ContainerEventRow> = {};
+        for (const [key, value] of Object.entries(args.select)) {
+          if (value) {
+            picked[key as keyof ContainerEventRow] = row[key as keyof ContainerEventRow];
+          }
+        }
+        return picked;
+      });
+    },
+  };
 }
 
-type MinimalPrismaClient = { container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] } };
+type MinimalPrismaClient = {
+  container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] };
+  containerEvent: { findMany(args: ContainerEventFindManyArgs): Promise<Array<Partial<ContainerEventRow>>>; rows: ContainerEventRow[] };
+};
 class PrismaStub {
   client: MinimalPrismaClient = new InMemoryPrismaClient();
   // Strict typing to match controller signature; cast internally
@@ -153,6 +211,18 @@ describe('ContainersController routes', () => {
       };
       return res.send(await controller.list(dto));
     });
+    fastify.get('/api/containers/:containerId/events', async (req, res) => {
+      const params = (req as { params?: Record<string, unknown> }).params ?? {};
+      const { containerId } = params as { containerId?: string };
+      const q: Record<string, unknown> = (req as ReqWithQuery).query || {};
+      const dto: ListContainerEventsQueryDto = {
+        limit: typeof q.limit === 'string' ? Number(q.limit) : typeof q.limit === 'number' ? q.limit : undefined,
+        order: typeof q.order === 'string' && (q.order === 'asc' || q.order === 'desc') ? q.order : undefined,
+        since: typeof q.since === 'string' ? q.since : undefined,
+        before: typeof q.before === 'string' ? q.before : undefined,
+      };
+      return res.send(await controller.listEvents(containerId ?? '', dto));
+    });
     // seed data
     const now = Date.now();
     const mk = (i: number, status: Row['status'], threadId: string | null): Row => ({
@@ -190,6 +260,7 @@ describe('ContainersController routes', () => {
       },
     ];
     prismaSvc.client.container.rows = rows;
+    prismaSvc.client.containerEvent.rows = [];
   });
 
   it('lists running containers by default and maps startedAt', async () => {
@@ -326,5 +397,75 @@ describe('ContainersController routes', () => {
     const result = await rawController.list({} as ListContainersQueryDto);
     expect(result.items).toEqual([]);
     expect(prismaSvcWithRaw.queryRawCalls.length).toBe(0);
+  });
+
+  it('returns container events with pagination cursors', async () => {
+    const base = new Date('2024-01-01T00:00:00.000Z');
+    prismaSvc.client.containerEvent.rows = [
+      {
+        id: 'evt-1',
+        containerId: 'cid-1',
+        eventType: 'die',
+        exitCode: 137,
+        signal: null,
+        reason: 'OOMKilled',
+        message: 'OOMKilled',
+        health: null,
+        createdAt: new Date(base.getTime()),
+      },
+      {
+        id: 'evt-2',
+        containerId: 'cid-1',
+        eventType: 'stop',
+        exitCode: 0,
+        signal: null,
+        reason: 'ContainerStopped',
+        message: 'stop',
+        health: null,
+        createdAt: new Date(base.getTime() + 1000),
+      },
+      {
+        id: 'evt-3',
+        containerId: 'cid-1',
+        eventType: 'start',
+        exitCode: null,
+        signal: null,
+        reason: 'ContainerStarted',
+        message: 'start',
+        health: 'healthy',
+        createdAt: new Date(base.getTime() + 2000),
+      },
+      {
+        id: 'evt-x',
+        containerId: 'cid-2',
+        eventType: 'die',
+        exitCode: 1,
+        signal: null,
+        reason: 'OtherContainer',
+        message: 'irrelevant',
+        health: null,
+        createdAt: new Date(base.getTime() + 3000),
+      },
+    ];
+
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers/cid-1/events?limit=2' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ id: string; eventType: string; health: string | null; createdAt: string }>;
+      page: { order: string; limit: number; nextBefore: string | null; nextAfter: string | null };
+    };
+    expect(body.items.map((item) => item.id)).toEqual(['evt-3', 'evt-2']);
+    expect(body.items[0]).toMatchObject({ eventType: 'start', health: 'healthy' });
+    expect(body.page).toMatchObject({ order: 'desc', limit: 2, nextAfter: null });
+    expect(typeof body.page.nextBefore === 'string').toBe(true);
+
+    if (!body.page.nextBefore) throw new Error('Expected nextBefore cursor');
+    const resNext = await fastify.inject({
+      method: 'GET',
+      url: `/api/containers/cid-1/events?before=${encodeURIComponent(body.page.nextBefore)}`,
+    });
+    expect(resNext.statusCode).toBe(200);
+    const nextBody = resNext.json() as { items: Array<{ id: string }> };
+    expect(nextBody.items.map((item) => item.id)).toEqual(['evt-1']);
   });
 });

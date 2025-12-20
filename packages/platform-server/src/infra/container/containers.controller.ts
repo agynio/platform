@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Inject, Query, Logger } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Inject, Query, Logger, Param } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
@@ -19,6 +19,18 @@ enum SortDir {
 
 type ContainerStatusFilter = ContainerStatus | 'all';
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
+
+type RawContainerEvent = {
+  id: string;
+  containerId: string;
+  eventType: string;
+  exitCode: number | null;
+  signal: string | null;
+  health: string | null;
+  reason: string | null;
+  message: string | null;
+  createdAt: Date;
+};
 
 const isHealth = (value: unknown): value is ContainerHealth =>
   value === 'healthy' || value === 'unhealthy' || value === 'starting';
@@ -70,6 +82,27 @@ export class ListContainersQueryDto {
   @IsOptional()
   @IsISO8601()
   since?: string;
+}
+
+export class ListContainerEventsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsISO8601()
+  since?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  before?: string;
 }
 
 @Controller('api/containers')
@@ -312,5 +345,103 @@ export class ContainersController {
     this.logger.error(`ContainersController.list error: ${msg}`);
     throw e;
   }
+}
+
+  @Get(':containerId/events')
+  async listEvents(
+    @Param('containerId') containerId: string,
+    @Query() query: ListContainerEventsQueryDto,
+  ): Promise<{
+    items: Array<{
+      id: string;
+      containerId: string;
+      eventType: string;
+      exitCode: number | null;
+      signal: string | null;
+      health: string | null;
+      reason: string | null;
+      message: string | null;
+      createdAt: string;
+    }>;
+    page: {
+      limit: number;
+      order: 'asc' | 'desc';
+      nextBefore: string | null;
+      nextAfter: string | null;
+    };
+  }> {
+    if (typeof containerId !== 'string' || !containerId.trim()) {
+      throw new BadRequestException('containerId is required');
+    }
+
+    const limit = typeof query.limit === 'number' && Number.isFinite(query.limit) ? query.limit : 50;
+    const order = query.order === 'asc' ? 'asc' : 'desc';
+    const before = query.before ? new Date(query.before) : undefined;
+    const since = query.since ? new Date(query.since) : undefined;
+
+    if (before && Number.isNaN(before.getTime())) {
+      throw new BadRequestException('Invalid before timestamp');
+    }
+    if (since && Number.isNaN(since.getTime())) {
+      throw new BadRequestException('Invalid since timestamp');
+    }
+
+    const clampedLimit = Math.max(1, Math.min(200, limit));
+    const take = clampedLimit + 1;
+
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (since) createdAt.gte = since;
+    if (before) createdAt.lt = before;
+
+    const where: Prisma.ContainerEventWhereInput = {
+      containerId,
+      ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
+    };
+
+    const rows = (await this.prisma.containerEvent.findMany({
+      where,
+      orderBy: { createdAt: order },
+      take,
+      select: {
+        id: true,
+        containerId: true,
+        eventType: true,
+        exitCode: true,
+        signal: true,
+        health: true,
+        reason: true,
+        message: true,
+        createdAt: true,
+      },
+    })) as RawContainerEvent[];
+
+    const hasMore = rows.length > clampedLimit;
+    const trimmed: RawContainerEvent[] = hasMore ? rows.slice(0, clampedLimit) : rows;
+
+    const items = trimmed.map((row) => ({
+      id: row.id,
+      containerId: row.containerId,
+      eventType: row.eventType,
+      exitCode: row.exitCode ?? null,
+      signal: row.signal ?? null,
+      health: row.health ?? null,
+      reason: row.reason ?? null,
+      message: row.message ?? null,
+      createdAt: row.createdAt.toISOString(),
+    }));
+
+    const cursorSource = items[items.length - 1];
+    const nextBefore = hasMore && order === 'desc' && cursorSource ? cursorSource.createdAt : null;
+    const nextAfter = hasMore && order === 'asc' && cursorSource ? cursorSource.createdAt : null;
+
+    return {
+      items,
+      page: {
+        limit: clampedLimit,
+        order,
+        nextBefore,
+        nextAfter,
+      },
+    };
   }
 }
