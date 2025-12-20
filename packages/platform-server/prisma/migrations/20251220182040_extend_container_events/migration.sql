@@ -15,6 +15,3 @@ ALTER TYPE "ContainerEventType" ADD VALUE 'health_status';
 
 -- AlterTable
 ALTER TABLE "ContainerEvent" ADD COLUMN     "health" TEXT;
-
--- AlterTable
-ALTER TABLE "llm_call_context_items" ALTER COLUMN "id" DROP DEFAULT;
