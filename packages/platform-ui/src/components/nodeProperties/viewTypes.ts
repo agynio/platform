@@ -51,6 +51,9 @@ export const NODE_TEMPLATE_KIND_MAP = {
   shellTool: 'Tool',
   manageTool: 'Tool',
   memoryTool: 'Tool',
+  githubCloneRepoTool: 'Tool',
+  sendSlackMessageTool: 'Tool',
+  callAgentTool: 'Tool',
   remindMeTool: 'Tool',
 } as const;
 

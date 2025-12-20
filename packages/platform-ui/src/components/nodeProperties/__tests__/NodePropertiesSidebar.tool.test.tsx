@@ -8,6 +8,17 @@ import type { NodeConfig, NodeState } from '../types';
 
 const latestReferenceProps: { current: any } = { current: null };
 
+const latestUpdate = (mockFn: ReturnType<typeof vi.fn>, key: string) => {
+  const calls = mockFn.mock.calls;
+  for (let index = calls.length - 1; index >= 0; index -= 1) {
+    const payload = calls[index]?.[0];
+    if (payload && Object.prototype.hasOwnProperty.call(payload, key)) {
+      return payload[key];
+    }
+  }
+  return undefined;
+};
+
 vi.mock('../../ReferenceInput', () => ({
   ReferenceInput: (props: any) => {
     latestReferenceProps.current = props;
@@ -18,6 +29,26 @@ vi.mock('../../ReferenceInput', () => ({
         onChange={(event) => props.onChange?.({ target: { value: event.target.value } })}
         onFocus={() => props.onFocus?.()}
       />
+    );
+  },
+}));
+
+vi.mock('../../Dropdown', () => ({
+  Dropdown: (props: any) => {
+    const options = Array.isArray(props.options) ? props.options : [];
+    return (
+      <select
+        data-testid={props['data-testid'] ?? 'dropdown'}
+        value={props.value ?? ''}
+        onChange={(event) => props.onValueChange?.(event.target.value)}
+        aria-label={props.label ?? props.placeholder ?? 'dropdown'}
+      >
+        {options.map((option: any) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     );
   },
 }));
@@ -84,5 +115,275 @@ describe('NodePropertiesSidebar - shell tool', () => {
     const logToggle = screen.getByLabelText(/log to pid 1/i);
     await user.click(logToggle);
     expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ logToPid1: false }));
+  });
+});
+
+describe('NodePropertiesSidebar - manage tool', () => {
+  beforeEach(() => {
+    latestReferenceProps.current = null;
+  });
+
+  it('updates manage tool mode and timeout', () => {
+    const onConfigChange = vi.fn();
+
+    const config: NodeConfig = {
+      kind: 'Tool',
+      title: 'Manage Tool',
+      template: 'manageTool',
+      mode: 'sync',
+      timeoutMs: 1500,
+    } satisfies NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
+    fireEvent.change(dropdown, { target: { value: 'async' } });
+    expect(latestUpdate(onConfigChange, 'mode')).toBe('async');
+
+    const timeoutInput = screen.getByPlaceholderText('0') as HTMLInputElement;
+    fireEvent.change(timeoutInput, { target: { value: '5000' } });
+    expect(latestUpdate(onConfigChange, 'timeoutMs')).toBe(5000);
+  });
+});
+
+describe('NodePropertiesSidebar - call agent tool', () => {
+  beforeEach(() => {
+    latestReferenceProps.current = null;
+  });
+
+  it('updates description and response mode', () => {
+    const onConfigChange = vi.fn();
+
+    const config: NodeConfig = {
+      kind: 'Tool',
+      title: 'Call Agent Tool',
+      template: 'callAgentTool',
+      response: 'sync',
+      description: 'Call another agent.',
+    } satisfies NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const descriptionTextarea = screen
+      .getAllByRole('textbox')
+      .find((element) => element.tagName.toLowerCase() === 'textarea') as HTMLTextAreaElement;
+    fireEvent.change(descriptionTextarea, { target: { value: 'New description' } });
+    expect(latestUpdate(onConfigChange, 'description')).toBe('New description');
+
+    const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
+    fireEvent.change(dropdown, { target: { value: 'ignore' } });
+    expect(latestUpdate(onConfigChange, 'response')).toBe('ignore');
+  });
+});
+
+describe('NodePropertiesSidebar - send slack message tool', () => {
+  beforeEach(() => {
+    latestReferenceProps.current = null;
+  });
+
+  it('updates bot token and ensures secret suggestions are loaded', () => {
+    const onConfigChange = vi.fn();
+    const ensureSecretKeys = vi.fn();
+    const ensureVariableKeys = vi.fn();
+
+    const config: NodeConfig = {
+      kind: 'Tool',
+      title: 'Slack Tool',
+      template: 'sendSlackMessageTool',
+      bot_token: { kind: 'vault', mount: 'secret', path: 'slack', key: 'BOT_TOKEN' },
+    } satisfies NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+        ensureSecretKeys={ensureSecretKeys}
+        ensureVariableKeys={ensureVariableKeys}
+        secretKeys={['secret/slack/BOT_TOKEN']}
+        variableKeys={[]}
+      />,
+    );
+
+    const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
+    fireEvent.focus(tokenInput);
+    expect(ensureSecretKeys).toHaveBeenCalled();
+
+    fireEvent.change(tokenInput, { target: { value: 'secret/slack/OVERRIDE' } });
+    expect(latestUpdate(onConfigChange, 'bot_token')).toEqual({ kind: 'vault', mount: 'secret', path: 'slack', key: 'OVERRIDE' });
+  });
+});
+
+describe('NodePropertiesSidebar - github clone repo tool', () => {
+  beforeEach(() => {
+    latestReferenceProps.current = null;
+  });
+
+  it('updates token and auth override configuration', () => {
+    const onConfigChange = vi.fn();
+
+    const config: NodeConfig = {
+      kind: 'Tool',
+      title: 'Clone Repo',
+      template: 'githubCloneRepoTool',
+    } satisfies NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    let currentConfig: NodeConfig = config;
+
+    const { rerender } = render(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
+    fireEvent.change(tokenInput, { target: { value: 'ghp_123' } });
+    const latestToken = latestUpdate(onConfigChange, 'token') as string;
+    expect(latestToken).toBe('ghp_123');
+    currentConfig = { ...currentConfig, token: latestToken };
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
+    fireEvent.change(dropdown, { target: { value: 'env' } });
+    const firstAuthUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(firstAuthUpdate).toEqual({ source: 'env' });
+    currentConfig = { ...currentConfig, authRef: firstAuthUpdate } as NodeConfig;
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const envInput = screen.getByPlaceholderText('GH_TOKEN') as HTMLInputElement;
+    fireEvent.change(envInput, { target: { value: 'MY_GH_TOKEN' } });
+    const envAuthUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(envAuthUpdate).toEqual({ source: 'env', envVar: 'MY_GH_TOKEN' });
+    currentConfig = { ...currentConfig, authRef: envAuthUpdate } as NodeConfig;
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    fireEvent.change(dropdown, { target: { value: 'vault' } });
+    const vaultAuthUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(vaultAuthUpdate).toEqual({ source: 'vault' });
+    currentConfig = { ...currentConfig, authRef: vaultAuthUpdate } as NodeConfig;
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const mountInput = screen.getByPlaceholderText('secret') as HTMLInputElement;
+    const pathInput = screen.getByPlaceholderText('github/token') as HTMLInputElement;
+    const keyInput = screen.getByPlaceholderText('GH_TOKEN') as HTMLInputElement;
+    fireEvent.change(mountInput, { target: { value: 'kv' } });
+    const mountUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(mountUpdate).toEqual({ source: 'vault', mount: 'kv' });
+    currentConfig = { ...currentConfig, authRef: mountUpdate } as NodeConfig;
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    fireEvent.change(pathInput, { target: { value: 'github/ci' } });
+    const pathUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(pathUpdate).toEqual({ source: 'vault', mount: 'kv', path: 'github/ci' });
+    currentConfig = { ...currentConfig, authRef: pathUpdate } as NodeConfig;
+    rerender(
+      <NodePropertiesSidebar
+        config={currentConfig}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    fireEvent.change(keyInput, { target: { value: 'TOKEN' } });
+    const keyUpdate = latestUpdate(onConfigChange, 'authRef') as Record<string, unknown>;
+    expect(keyUpdate).toEqual({ source: 'vault', mount: 'kv', path: 'github/ci', key: 'TOKEN' });
   });
 });
