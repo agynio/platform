@@ -99,7 +99,8 @@ export function useThreadSoundNotifications({ threads, delayMs = DEFAULT_DELAY_M
     const controller = controllerRef.current;
     if (!controller) return;
 
-    const unsubscribe = graphSocket.onMessageCreated(({ threadId }) => {
+    const unsubscribe = graphSocket.onMessageCreated(({ threadId, message }) => {
+      if (message.kind === 'user') return;
       controller.handleMessageCreated(threadId);
     });
 
