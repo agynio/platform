@@ -1,14 +1,15 @@
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { Button } from '@/components/Button';
+import { Button } from '@/components/ui/button';
 
 import { useOnboardingStatus } from '../hooks';
-import { OnboardingModal } from './OnboardingModal';
 
 export function OnboardingGate() {
   const statusQuery = useOnboardingStatus();
   const status = statusQuery.data ?? null;
+  const location = useLocation();
+  const attemptedPath = `${location.pathname}${location.search}${location.hash}`;
 
   if (!status) {
     if (statusQuery.isError) {
@@ -17,20 +18,17 @@ export function OnboardingGate() {
     return <GateMessage variant="loading" />;
   }
 
-  const shouldShowModal = !status.isComplete;
-
-  return (
-    <>
-      <Outlet />
-      <OnboardingModal
-        open={shouldShowModal}
-        status={status}
-        isLoading={statusQuery.isFetching && !statusQuery.isSuccess}
-        isError={statusQuery.isError && !statusQuery.isSuccess}
-        onRetry={() => statusQuery.refetch()}
+  if (!status.isComplete) {
+    return (
+      <Navigate
+        to="/onboarding"
+        replace
+        state={{ from: attemptedPath }}
       />
-    </>
-  );
+    );
+  }
+
+  return <Outlet />;
 }
 
 type GateMessageProps = {
@@ -63,11 +61,11 @@ function GateMessage({ variant, onRetry }: GateMessageProps) {
         <p className="text-lg font-semibold">{content.title}</p>
         <p className="text-muted-foreground text-sm max-w-md">{content.body}</p>
       </div>
-      {variant === 'error' && (
-        <Button onClick={() => void onRetry?.()}>
+      {variant === 'error' ? (
+        <Button type="button" variant="outline" onClick={() => onRetry?.()}>
           Retry
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
