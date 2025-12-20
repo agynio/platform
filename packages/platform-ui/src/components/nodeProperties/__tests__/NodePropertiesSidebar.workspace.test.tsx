@@ -6,6 +6,26 @@ import { describe, it, expect, vi } from 'vitest';
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodePropertiesSidebarProps, NodeState } from '../types';
 
+vi.mock('../../Dropdown', () => ({
+  Dropdown: (props: any) => {
+    const options = Array.isArray(props.options) ? props.options : [];
+    return (
+      <select
+        data-testid={props['data-testid'] ?? 'dropdown'}
+        value={props.value ?? ''}
+        onChange={(event) => props.onValueChange?.(event.target.value)}
+        aria-label={props.label ?? props.placeholder ?? 'dropdown'}
+      >
+        {options.map((option: any) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  },
+}));
+
 function WorkspaceSidebarHarness({
   initialConfig,
   stateOverride,
@@ -80,6 +100,17 @@ function renderWorkspaceSidebar(overrides?: Partial<NodePropertiesSidebarProps>)
   return { onConfigChange, cpuInput, memoryInput };
 }
 
+function renderWorkspaceTemplateSidebar(template: string, overrides?: Partial<NodeConfig>) {
+  const onConfigChange = vi.fn();
+  render(
+    <WorkspaceSidebarHarness
+      initialConfig={{ template, ...(overrides ?? {}) } as Partial<NodeConfig>}
+      onConfigChange={onConfigChange}
+    />,
+  );
+  return { onConfigChange };
+}
+
 describe('NodePropertiesSidebar workspace limits', () => {
   it('renders persisted workspace limit values', () => {
     const { cpuInput, memoryInput } = renderWorkspaceSidebar({
@@ -136,5 +167,56 @@ describe('NodePropertiesSidebar workspace limits', () => {
       );
       expect(memoryCalls.at(-1)?.[0]).toEqual({ memory_limit: undefined });
     });
+  });
+});
+
+describe('NodePropertiesSidebar workspace template overrides', () => {
+  it('renders the memory template view with scope control and persists changes', async () => {
+    const user = userEvent.setup();
+    const { onConfigChange } = renderWorkspaceTemplateSidebar('memory', {
+      scope: 'global',
+      staticConfig: {
+        scope: 'perThread',
+      },
+    } as Partial<NodeConfig>);
+
+    expect(screen.queryByText('Memory workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText(/static configuration/i)).not.toBeInTheDocument();
+
+    const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
+    expect(dropdown.value).toBe('global');
+
+    await user.selectOptions(dropdown, 'perThread');
+
+    expect(onConfigChange).toHaveBeenCalledWith({ scope: 'perThread' });
+    await waitFor(() => {
+      expect(dropdown.value).toBe('perThread');
+    });
+  });
+
+  it('falls back to static config scope when node config omits scope', () => {
+    renderWorkspaceTemplateSidebar('memory', {
+      staticConfig: {
+        scope: 'perThread',
+      },
+    } as Partial<NodeConfig>);
+
+    const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
+    expect(dropdown.value).toBe('perThread');
+  });
+
+  it('renders the memory connector template view with static config values', () => {
+    renderWorkspaceTemplateSidebar('memoryConnector', {
+      staticConfig: {
+        placement: 'after_system',
+        content: 'tree',
+        maxChars: 4096,
+      },
+    } as Partial<NodeConfig>);
+
+    expect(screen.getByText('Memory connector')).toBeInTheDocument();
+    expect(screen.getByText('after_system')).toBeInTheDocument();
+    expect(screen.getByText('tree')).toBeInTheDocument();
+    expect(screen.getByText('4,096')).toBeInTheDocument();
   });
 });
