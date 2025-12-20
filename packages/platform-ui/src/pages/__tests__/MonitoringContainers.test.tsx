@@ -295,6 +295,28 @@ describe('MonitoringContainers page', () => {
     expect(stoppedCall).toEqual({ status: 'stopped', sortBy: 'lastUsedAt', sortDir: 'desc', threadId: undefined });
   });
 
+  it('keeps layout visible when active filter yields no containers', () => {
+    useContainersCalls = [];
+    useContainersMock.mockImplementation((status?: string, sortBy?: string, sortDir?: 'asc' | 'desc', threadId?: string) => {
+      useContainersCalls.push({ status, sortBy, sortDir, threadId });
+      const result = {
+        data: { items: [] },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+      } satisfies Partial<UseQueryResult<{ items: ContainerItem[] }, Error>>;
+      return result as UseQueryResult<{ items: ContainerItem[] }, Error>;
+    });
+
+    renderPage();
+
+    expect(getContainersScreenMock()).toHaveBeenCalledTimes(1);
+    const props = latestContainersScreenProps as ContainersScreenProps;
+    expect(props.containers).toEqual([]);
+    expect(screen.getByTestId('containers-screen-mock')).toBeInTheDocument();
+  });
+
   it('opens terminal dialog and requests session creation', async () => {
     mutateSessionMock.mockResolvedValue({
       sessionId: 'session-1',

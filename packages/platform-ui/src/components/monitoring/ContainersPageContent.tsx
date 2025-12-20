@@ -60,14 +60,6 @@ export function ContainersPageContent({
     );
   }
 
-  if (containers.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[var(--agyn-bg-light)]">
-        <span className="text-sm text-[var(--agyn-text-subtle)]">No containers found</span>
-      </div>
-    );
-  }
-
   return (
     <ContainersScreen
       containers={containers}
