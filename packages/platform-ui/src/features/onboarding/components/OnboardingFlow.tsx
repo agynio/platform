@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactElement } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -266,7 +267,7 @@ function FullScreenState({
   onRetry?: () => void;
   onContinue?: () => void;
 }) {
-  const copy: Record<FullScreenVariant, { title: string; body: string; icon: JSX.Element }> = {
+  const copy: Record<FullScreenVariant, { title: string; body: string; icon: ReactElement }> = {
     loading: {
       title: 'Preparing onboarding…',
       body: 'Fetching the latest onboarding requirements.',

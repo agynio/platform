@@ -1,6 +1,10 @@
 import type { ComponentType } from 'react';
 
-import type { OnboardingProfilePayload, OnboardingStatusResponse } from './api';
+import type {
+  OnboardingDataSnapshot,
+  OnboardingProfilePayload,
+  OnboardingStatusResponse,
+} from './api';
 import { buildProfilePayload, EMPTY_PROFILE, type ProfileFormValues } from './lib/profile';
 import { ProfileStep } from './steps/profile-step';
 
@@ -21,7 +25,7 @@ export type OnboardingStepComponentProps<TValues> = {
 
 export type OnboardingStepSubmitHelpers = {
   mutations: {
-    saveProfile: (payload: OnboardingProfilePayload) => Promise<void>;
+    saveProfile: (payload: OnboardingProfilePayload) => Promise<OnboardingDataSnapshot>;
   };
 };
 
