@@ -10,11 +10,18 @@ import { useNodeTitleMap } from '../useNodeTitleMap';
 
 const serviceMocks = vi.hoisted(() => ({
   fetchGraph: vi.fn(),
-  fetchTemplates: vi.fn(),
 }));
 
 vi.mock('../../services/api', () => ({
   graphApiService: serviceMocks,
+}));
+
+const templateHookMocks = vi.hoisted(() => ({
+  useTemplates: vi.fn(),
+}));
+
+vi.mock('@/lib/graph/hooks', () => ({
+  useTemplates: templateHookMocks.useTemplates,
 }));
 
 function createWrapper() {
@@ -28,7 +35,7 @@ function createWrapper() {
 describe('useNodeTitleMap', () => {
   beforeEach(() => {
     serviceMocks.fetchGraph.mockReset();
-    serviceMocks.fetchTemplates.mockReset();
+    templateHookMocks.useTemplates.mockReset();
   });
 
   it('builds a title map from graph nodes and templates', async () => {
@@ -68,9 +75,17 @@ describe('useNodeTitleMap', () => {
         targetPorts: {},
       },
     ];
+    const templatesQuery = {
+      data: templatesResponse,
+      status: 'success' as const,
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    };
 
     serviceMocks.fetchGraph.mockResolvedValue(graphResponse);
-    serviceMocks.fetchTemplates.mockResolvedValue(templatesResponse);
+    templateHookMocks.useTemplates.mockReturnValue(templatesQuery);
 
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useNodeTitleMap(), { wrapper });
@@ -80,7 +95,7 @@ describe('useNodeTitleMap', () => {
     });
 
     expect(serviceMocks.fetchGraph).toHaveBeenCalledTimes(1);
-    expect(serviceMocks.fetchTemplates).toHaveBeenCalledTimes(1);
+    expect(templateHookMocks.useTemplates).toHaveBeenCalled();
     expect(result.current.titleMap.get('alpha-node')).toBe('Agent Alpha');
     expect(result.current.titleMap.get('beta-node')).toBe('Tool Template');
   });
