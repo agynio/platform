@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { useContainerEvents } from '@/api/hooks/containerEvents';
+import type { InfiniteData } from '@tanstack/react-query';
+import type { ContainerEventItem, ContainerEventsResponse } from '@/api/modules/containers';
 
 type ContainerActivityTimelineProps = {
   containerId: string;
@@ -32,10 +34,11 @@ const formatMetadata = (event: {
 export function ContainerActivityTimeline({ containerId }: ContainerActivityTimelineProps) {
   const query = useContainerEvents(containerId, true);
 
-  const events = useMemo(
-    () => query.data?.pages.flatMap((page) => page.items) ?? [],
-    [query.data],
-  );
+  const events = useMemo<ContainerEventItem[]>(() => {
+    const data: InfiniteData<ContainerEventsResponse> | undefined = query.data;
+    if (!data) return [];
+    return data.pages.flatMap((page: ContainerEventsResponse) => page.items);
+  }, [query.data]);
 
   if (query.isLoading) {
     return <div className="text-xs text-[var(--agyn-text-subtle)]">Loading activity…</div>;
@@ -69,7 +72,7 @@ export function ContainerActivityTimeline({ containerId }: ContainerActivityTime
         ) : null}
       </div>
       <ul className="space-y-3">
-        {events.map((event) => {
+        {events.map((event: ContainerEventItem) => {
           const timestamp = formatTimestamp(event.createdAt);
           const label = formatLabel(event);
           const metadata = formatMetadata(event);

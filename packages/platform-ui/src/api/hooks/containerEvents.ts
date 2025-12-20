@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { listContainerEvents, type ContainerEventsResponse } from '@/api/modules/containers';
 
 type QueryParams = {
@@ -20,7 +20,13 @@ export const eventsQueryKey = (containerId: string | null, params: QueryParams) 
 ] as const;
 
 export function useContainerEvents(containerId: string | null, enabled: boolean, params: QueryParams = DEFAULT_PARAMS) {
-  return useInfiniteQuery<ContainerEventsResponse, Error, ContainerEventsResponse, ReturnType<typeof eventsQueryKey>, string | undefined>({
+  return useInfiniteQuery<
+    ContainerEventsResponse,
+    Error,
+    InfiniteData<ContainerEventsResponse>,
+    ReturnType<typeof eventsQueryKey>,
+    string | undefined
+  >({
     enabled: Boolean(containerId) && enabled,
     initialPageParam: undefined,
     queryKey: eventsQueryKey(containerId, params),

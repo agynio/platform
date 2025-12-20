@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useContainers, type ContainerStatusFilter } from '@/api/hooks/containers';
 import { toContainersView } from './mappers';
+import type { ContainerStatus } from './types';
 
 type StatusCounts = {
   running: number;
@@ -12,9 +13,23 @@ type StatusCounts = {
 
 const INITIAL_COUNTS: StatusCounts = { running: 0, stopped: 0, starting: 0, stopping: 0, all: 0 };
 
+type MonitoringStatus = ContainerStatus | 'all';
+
+const toApiStatus = (status: MonitoringStatus): ContainerStatusFilter => {
+  switch (status) {
+    case 'stopping':
+      return 'terminating';
+    case 'starting':
+      return 'running';
+    default:
+      return status;
+  }
+};
+
 export function useMonitoringContainers() {
-  const [status, setStatus] = useState<ContainerStatusFilter>('running');
-  const query = useContainers(status, 'lastUsedAt', 'desc');
+  const [status, setStatusState] = useState<MonitoringStatus>('running');
+  const apiStatus = useMemo<ContainerStatusFilter>(() => toApiStatus(status), [status]);
+  const query = useContainers(apiStatus, 'lastUsedAt', 'desc');
   const countsQuery = useContainers('all', 'lastUsedAt', 'desc');
 
   const { data: listData, isLoading: listIsLoading, isFetching: listIsFetching, error: listError, refetch: listRefetch } = query;
@@ -61,6 +76,10 @@ export function useMonitoringContainers() {
     countsRefetch();
     return listRefetch();
   }, [countsRefetch, listRefetch]);
+
+  const setStatus = useCallback((next: MonitoringStatus) => {
+    setStatusState(next);
+  }, []);
 
   return {
     status,
