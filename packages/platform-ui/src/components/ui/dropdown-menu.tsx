@@ -5,15 +5,11 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
-
-const dropdownItemBaseClasses =
-  "group relative flex cursor-default select-none items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-[var(--agyn-dark)] outline-hidden transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 dark:text-[var(--agyn-white)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground";
-
-const dropdownItemInteractiveClasses =
-  "hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)] data-[highlighted]:bg-[var(--agyn-bg-light)] data-[state=checked]:bg-[var(--agyn-bg-light)] data-[state=open]:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-dark)] focus:text-[var(--agyn-dark)] data-[highlighted]:text-[var(--agyn-dark)] data-[state=checked]:text-[var(--agyn-dark)] data-[state=open]:text-[var(--agyn-dark)] dark:hover:bg-white/10 dark:focus:bg-white/10 dark:data-[highlighted]:bg-white/10 dark:data-[state=checked]:bg-white/10 dark:data-[state=open]:bg-white/10 dark:hover:text-[var(--agyn-white)] dark:focus:text-[var(--agyn-white)] dark:data-[highlighted]:text-[var(--agyn-white)] dark:data-[state=checked]:text-[var(--agyn-white)] dark:data-[state=open]:text-[var(--agyn-white)]";
-
-const dropdownItemDestructiveClasses =
-  "data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:data-[highlighted]:text-destructive data-[variant=destructive]:data-[state=checked]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:*:[svg]:!text-destructive";
+import {
+  menuItemBaseClasses as dropdownItemBaseClasses,
+  menuItemInteractiveClasses as dropdownItemInteractiveClasses,
+  menuItemDestructiveClasses as dropdownItemDestructiveClasses,
+} from "./menu-item-classes";
 
 function DropdownMenu({
   ...props

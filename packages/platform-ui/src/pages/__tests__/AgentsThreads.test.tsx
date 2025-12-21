@@ -98,6 +98,18 @@ type ReminderMock = {
   completedAt: string | null;
 };
 
+type ContainerMock = {
+  containerId: string;
+  threadId: string | null;
+  name: string;
+  image: string;
+  status: 'running' | 'stopped' | 'terminating' | 'failed';
+  startedAt: string;
+  lastUsedAt: string;
+  killAfterAt: string | null;
+  role: 'workspace' | 'dind' | string;
+};
+
 
 function makeThread(overrides: Partial<ThreadMock> = {}): ThreadMock {
   return {
@@ -137,6 +149,21 @@ function makeReminder(overrides: Partial<ReminderMock> = {}): ReminderMock {
   };
 }
 
+function makeContainer(overrides: Partial<ContainerMock> = {}): ContainerMock {
+  return {
+    containerId: 'container-1',
+    threadId: 'thread-1',
+    name: 'Thread container',
+    image: 'image:latest',
+    status: 'running',
+    startedAt: t(4),
+    lastUsedAt: t(5),
+    killAfterAt: null,
+    role: 'workspace',
+    ...overrides,
+  };
+}
+
 function buildTreeResponse(threads: ThreadMock[], childrenByParent: Map<string, ThreadMock[]> = new Map()) {
   return {
     items: threads.map((thread) => {
@@ -155,17 +182,20 @@ function registerThreadScenario({
   runs,
   children = [],
   reminders = [],
+  containers = [],
   queuedMessages = [],
 }: {
   thread: ThreadMock;
   runs: RunMock[];
   children?: ThreadMock[];
   reminders?: ReminderMock[];
+  containers?: ContainerMock[];
   queuedMessages?: Array<{ id: string; text: string; enqueuedAt?: string }>;
 }) {
+  const runningContainers = containers.filter((container) => container.status === 'running').length;
   const threadPayload: ThreadMock = {
     ...thread,
-    metrics: { ...thread.metrics, runsCount: runs.length },
+    metrics: { ...thread.metrics, runsCount: runs.length, containersCount: runningContainers },
   };
   const childMap = new Map<string, ThreadMock[]>([[threadPayload.id, children]]);
   server.use(
@@ -215,7 +245,8 @@ function registerThreadScenario({
     http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: reminders })),
     http.options('*/api/agents/reminders', () => new HttpResponse(null, { status: 200 })),
     http.options(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 200 })),
-    http.get('*/api/containers', () => HttpResponse.json({ items: [] })),
+    http.get('*/api/containers', () => HttpResponse.json({ items: containers })),
+    http.get(abs('/api/containers'), () => HttpResponse.json({ items: containers })),
   );
 }
 
@@ -381,6 +412,76 @@ describe('AgentsThreads page', () => {
     expect(
       await screen.findByText('Thread not found. The link might be invalid or the thread was removed.'),
     ).toBeInTheDocument();
+  });
+
+  it('disables containers popover when there are no containers', async () => {
+    const thread = makeThread();
+    registerThreadScenario({ thread, runs: [] });
+    registerGraphAgents([]);
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const containersButton = await screen.findByRole('button', { name: /containers$/i });
+    expect(containersButton).toBeDisabled();
+    expect(screen.queryByText('No containers available.')).not.toBeInTheDocument();
+  });
+
+  it('lists running containers in the popover when available', async () => {
+    const user = userEvent.setup();
+    const threadId = '11111111-1111-4111-8111-111111111111';
+    const thread = makeThread({ id: threadId });
+    const container = makeContainer({ containerId: 'container-1', threadId, name: 'Container Alpha' });
+    registerThreadScenario({ thread, runs: [], containers: [container] });
+    registerGraphAgents([]);
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const containersButton = await screen.findByRole('button', { name: /containers$/i });
+    expect(containersButton).toBeEnabled();
+    expect(containersButton).toHaveTextContent('1');
+    const containersPopoverId = containersButton.getAttribute('aria-controls');
+    expect(containersPopoverId).toBeTruthy();
+    await user.click(containersButton);
+    await waitFor(() => expect(containersButton).toHaveAttribute('aria-expanded', 'true'));
+    await waitFor(() => expect(document.getElementById(containersPopoverId!)).not.toBeNull());
+    const containersPopover = document.getElementById(containersPopoverId!) as HTMLElement;
+    expect(within(containersPopover).getByText('Container Alpha')).toBeInTheDocument();
+    expect(screen.queryByText('Containers')).not.toBeInTheDocument();
+  });
+
+  it('disables reminders popover when there are no reminders', async () => {
+    const thread = makeThread();
+    registerThreadScenario({ thread, runs: [] });
+    registerGraphAgents([]);
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const remindersButton = await screen.findByRole('button', { name: /reminders$/i });
+    expect(remindersButton).toBeDisabled();
+    expect(screen.queryByText('Reminders')).not.toBeInTheDocument();
+  });
+
+  it('lists reminders in the popover when available', async () => {
+    const user = userEvent.setup();
+    const threadId = '22222222-2222-4222-8222-222222222222';
+    const thread = makeThread({ id: threadId });
+    const reminder = makeReminder({ id: 'rem-1', threadId, note: 'Reminder popover check' });
+    registerThreadScenario({ thread, runs: [], reminders: [reminder] });
+    registerGraphAgents([]);
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const remindersButton = await screen.findByRole('button', { name: /reminders$/i });
+    expect(remindersButton).toBeEnabled();
+    expect(remindersButton).toHaveTextContent('1');
+    const remindersPopoverId = remindersButton.getAttribute('aria-controls');
+    expect(remindersPopoverId).toBeTruthy();
+    await user.click(remindersButton);
+    await waitFor(() => expect(remindersButton).toHaveAttribute('aria-expanded', 'true'));
+    await waitFor(() => expect(document.getElementById(remindersPopoverId!)).not.toBeNull());
+    const remindersPopover = document.getElementById(remindersPopoverId!) as HTMLElement;
+    expect(within(remindersPopover).getByText('Reminder popover check')).toBeInTheDocument();
+    expect(screen.queryByText('Reminders')).not.toBeInTheDocument();
   });
 
   it('sends a message and clears the composer input', async () => {

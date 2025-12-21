@@ -30,6 +30,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { menuItemBaseClasses, menuItemInteractiveClasses } from '../ui/menu-item-classes';
+import { cn } from '../ui/utils';
 import { THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { useThreadSoundNotifications } from '@/hooks/useThreadSoundNotifications';
 
@@ -134,6 +136,16 @@ export default function ThreadsScreen({
   const [draftRecipientQuery, setDraftRecipientQuery] = useState('');
   const draftRecipientInputRef = useRef<AutocompleteInputHandle | null>(null);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+  const [isContainersPopoverOpen, setIsContainersPopoverOpen] = useState(false);
+  const [isRemindersPopoverOpen, setIsRemindersPopoverOpen] = useState(false);
+
+  const hasContainers = containers.length > 0;
+  const hasReminders = reminders.length > 0;
+
+  const runningContainersCount = useMemo(
+    () => containers.reduce((count, container) => count + (container.status === 'running' ? 1 : 0), 0),
+    [containers],
+  );
 
   const resolvedDraftFetchOptions = useCallback(
     async (query: string) => {
@@ -146,6 +158,23 @@ export default function ThreadsScreen({
   useEffect(() => {
     setIsStatusMenuOpen(false);
   }, [resolvedSelectedThread?.id]);
+
+  useEffect(() => {
+    setIsContainersPopoverOpen(false);
+    setIsRemindersPopoverOpen(false);
+  }, [resolvedSelectedThread?.id]);
+
+  useEffect(() => {
+    if (!hasContainers) {
+      setIsContainersPopoverOpen(false);
+    }
+  }, [hasContainers]);
+
+  useEffect(() => {
+    if (!hasReminders) {
+      setIsRemindersPopoverOpen(false);
+    }
+  }, [hasReminders]);
 
   useEffect(() => {
     if (!draftMode) {
@@ -418,33 +447,45 @@ export default function ThreadsScreen({
                 <span className="text-xs text-[var(--agyn-gray)]">runs</span>
               </div>
 
-              <Popover>
+              <Popover
+                open={isContainersPopoverOpen}
+                onOpenChange={(open) => {
+                  if (!hasContainers) return;
+                  setIsContainersPopoverOpen(open);
+                }}
+              >
                 <PopoverTrigger asChild>
-                  <button className="flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-[var(--agyn-bg-light)]">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-[var(--agyn-bg-light)] disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-haspopup="dialog"
+                    aria-expanded={isContainersPopoverOpen}
+                    disabled={!hasContainers}
+                  >
                     <Container className="h-4 w-4 text-[var(--agyn-gray)]" />
-                    <span className="text-sm text-[var(--agyn-dark)]">
-                      {containers.filter((container) => container.status === 'running').length}
-                    </span>
+                    <span className="text-sm text-[var(--agyn-dark)]">{runningContainersCount}</span>
                     <span className="text-xs text-[var(--agyn-gray)]">containers</span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[280px]">
-                  <div className="space-y-2">
-                    <h4 className="mb-3 text-sm text-[var(--agyn-dark)]">Containers</h4>
-                    {containers.length === 0 ? (
-                      <div className="rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm text-[var(--agyn-text-subtle)]">
-                        No containers available.
-                      </div>
-                    ) : (
-                      containers.map((container) => {
+                {hasContainers ? (
+                  <PopoverContent
+                    className="w-[280px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-1 shadow-lg"
+                    align="end"
+                  >
+                    <ul className="flex flex-col gap-1">
+                      {containers.map((container) => {
                         const isRunning = container.status === 'running';
                         return (
-                          <div
+                          <li
                             key={container.id}
-                            className="rounded-[10px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-3 py-2"
+                            className={cn(
+                              menuItemBaseClasses,
+                              menuItemInteractiveClasses,
+                              'justify-between',
+                            )}
                           >
+                            <span className="min-w-0 flex-1 truncate">{container.name}</span>
                             <div className="flex items-center gap-2">
-                              <span className="truncate text-sm text-[var(--agyn-dark)]">{container.name}</span>
                               <IconButton
                                 variant="ghost"
                                 size="sm"
@@ -456,36 +497,56 @@ export default function ThreadsScreen({
                               />
                               <StatusIndicator status={container.status} size="sm" showTooltip={false} />
                             </div>
-                          </div>
+                          </li>
                         );
-                      })
-                    )}
-                  </div>
-                </PopoverContent>
+                      })}
+                    </ul>
+                  </PopoverContent>
+                ) : null}
               </Popover>
 
-              <Popover>
+              <Popover
+                open={isRemindersPopoverOpen}
+                onOpenChange={(open) => {
+                  if (!hasReminders) return;
+                  setIsRemindersPopoverOpen(open);
+                }}
+              >
                 <PopoverTrigger asChild>
-                  <button className="flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-[var(--agyn-bg-light)]">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-[var(--agyn-bg-light)] disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-haspopup="dialog"
+                    aria-expanded={isRemindersPopoverOpen}
+                    disabled={!hasReminders}
+                  >
                     <Bell className="h-4 w-4 text-[var(--agyn-gray)]" />
                     <span className="text-sm text-[var(--agyn-dark)]">{reminders.length}</span>
                     <span className="text-xs text-[var(--agyn-gray)]">reminders</span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[280px]">
-                  <div className="space-y-2">
-                    <h4 className="mb-3 text-sm text-[var(--agyn-dark)]">Reminders</h4>
-                    {reminders.map((reminder) => (
-                      <div
-                        key={reminder.id}
-                        className="rounded-[6px] bg-[var(--agyn-bg-light)] px-3 py-2"
-                      >
-                        <p className="mb-1 text-sm text-[var(--agyn-dark)]">{reminder.title}</p>
-                        <p className="text-xs text-[var(--agyn-gray)]">{reminder.time}</p>
-                      </div>
-                    ))}
-                  </div>
-                </PopoverContent>
+                {hasReminders ? (
+                  <PopoverContent
+                    className="w-[280px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-1 shadow-lg"
+                    align="end"
+                  >
+                    <ul className="flex flex-col gap-1">
+                      {reminders.map((reminder) => (
+                        <li
+                          key={reminder.id}
+                          className={cn(
+                            menuItemBaseClasses,
+                            menuItemInteractiveClasses,
+                            'flex-col items-start gap-1',
+                          )}
+                        >
+                          <p className="w-full truncate text-sm text-[var(--agyn-dark)]">{reminder.title}</p>
+                          <p className="text-xs text-[var(--agyn-gray)]">{reminder.time}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                ) : null}
               </Popover>
             </div>
 
