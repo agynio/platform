@@ -204,18 +204,21 @@ function aggregateTokens(events: RunTimelineEvent[]): TokenTotals {
 
 function inferToolSubtype(toolName: string | undefined, input: unknown): 'shell' | 'manage' | 'generic' {
   const normalized = (toolName ?? '').toLowerCase();
-  if (normalized.includes('shell') || normalized.includes('command') || normalized.includes('exec')) {
-    return 'shell';
+  if (normalized.includes('memory')) {
+    return 'generic';
   }
   if (normalized.includes('manage') || normalized.includes('delegate') || normalized.includes('call_agent')) {
     return 'manage';
+  }
+  if (normalized.includes('shell') || normalized.includes('exec')) {
+    return 'shell';
   }
   if (typeof input === 'object' && input !== null) {
     const candidate = input as Record<string, unknown>;
     if (typeof candidate.command === 'string' && typeof candidate.worker === 'string') {
       return 'manage';
     }
-    if (typeof candidate.command === 'string' || typeof candidate.cwd === 'string') {
+    if (typeof candidate.command === 'string' && typeof candidate.cwd === 'string') {
       return 'shell';
     }
   }

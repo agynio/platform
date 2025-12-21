@@ -292,6 +292,160 @@ describe('AgentsRunScreen', () => {
     expect(normalizedOutput.subthreadId).toBe('child-subthread');
   });
 
+  it('treats memory tool executions as generic even when inputs include command data', async () => {
+    const event = buildEvent({
+      toolExecution: {
+        toolName: 'memory_write',
+        toolCallId: 'call-memory',
+        execStatus: 'success',
+        input: JSON.stringify({
+          command: 'store',
+          key: 'workspace-state',
+          payload: { value: 'snapshot' },
+        }),
+        output: '{}',
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const latest = latestRunScreenProps<{ events: Array<{ data: { toolSubtype?: string } }> }>();
+      expect(latest).toBeDefined();
+      expect(latest?.events).toHaveLength(1);
+      expect(latest?.events[0].data.toolSubtype).toBe('generic');
+    });
+  });
+
+  it('does not infer shell subtype from tool names containing "command" alone', async () => {
+    const event = buildEvent({
+      toolExecution: {
+        toolName: 'run_command',
+        toolCallId: 'call-generic',
+        execStatus: 'success',
+        input: '{}',
+        output: '{}',
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const latest = latestRunScreenProps<{ events: Array<{ data: { toolSubtype?: string } }> }>();
+      expect(latest).toBeDefined();
+      expect(latest?.events).toHaveLength(1);
+      expect(latest?.events[0].data.toolSubtype).toBe('generic');
+    });
+  });
+
+  it('infers manage subtype when tool input includes worker and command fields', async () => {
+    const event = buildEvent({
+      toolExecution: {
+        toolName: 'workflow_dispatch',
+        toolCallId: 'call-manage',
+        execStatus: 'success',
+        input: JSON.stringify({
+          worker: 'agent-007',
+          command: 'fetch_reports',
+        }),
+        output: '{}',
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const latest = latestRunScreenProps<{ events: Array<{ data: { toolSubtype?: string } }> }>();
+      expect(latest).toBeDefined();
+      expect(latest?.events).toHaveLength(1);
+      expect(latest?.events[0].data.toolSubtype).toBe('manage');
+    });
+  });
+
+  it('infers shell subtype from cwd and command pairing when tool name is ambiguous', async () => {
+    const event = buildEvent({
+      toolExecution: {
+        toolName: 'executor',
+        toolCallId: 'call-shell',
+        execStatus: 'success',
+        input: JSON.stringify({
+          command: 'ls -la',
+          cwd: '/tmp',
+        }),
+        output: '{}',
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const latest = latestRunScreenProps<{ events: Array<{ data: { toolSubtype?: string } }> }>();
+      expect(latest).toBeDefined();
+      expect(latest?.events).toHaveLength(1);
+      expect(latest?.events[0].data.toolSubtype).toBe('shell');
+    });
+  });
+
   it('extracts Anthropic style function_call output entries as tool calls', async () => {
     const anthropicAssistant: ContextItem = {
       id: 'ctx-anthropic-assistant',
