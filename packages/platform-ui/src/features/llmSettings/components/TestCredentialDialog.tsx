@@ -1,4 +1,5 @@
 import { useEffect, type ReactElement } from 'react';
+import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import {
   ScreenDialog,
@@ -9,9 +10,10 @@ import {
   ScreenDialogTitle,
 } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
-import { SelectInput } from '@/components/SelectInput';
+import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 
 interface TestCredentialFormValues {
@@ -69,15 +71,27 @@ export function TestCredentialDialog({
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
-      <ScreenDialogContent className="sm:max-w-lg">
-        <ScreenDialogHeader>
-          <ScreenDialogTitle>Test Credential — {credentialName}</ScreenDialogTitle>
-          <ScreenDialogDescription>
-            Send a LiteLLM health check call using this credential and optional sample input.
-          </ScreenDialogDescription>
-        </ScreenDialogHeader>
+      <ScreenDialogContent className="sm:max-w-lg" hideCloseButton>
+        <div className="flex items-start justify-between gap-4">
+          <ScreenDialogHeader className="flex-1 gap-2">
+            <ScreenDialogTitle>Test Credential — {credentialName}</ScreenDialogTitle>
+            <ScreenDialogDescription>
+              Send a LiteLLM health check call using this credential and optional sample input.
+            </ScreenDialogDescription>
+          </ScreenDialogHeader>
+          <IconButton
+            icon={<X className="h-4 w-4" />}
+            variant="ghost"
+            size="sm"
+            rounded={false}
+            aria-label="Close dialog"
+            title="Close"
+            className="shrink-0"
+            onClick={() => onOpenChange(false)}
+          />
+        </div>
         <Form {...form}>
-          <form id="llm-credential-test-form" onSubmit={handleSubmit} className="space-y-4">
+          <form id="llm-credential-test-form" onSubmit={handleSubmit} className="mt-4 space-y-4">
             <FormField
               control={form.control}
               name="model"
@@ -100,9 +114,9 @@ export function TestCredentialDialog({
                 <FormItem>
                   <FormLabel>Mode</FormLabel>
                   <FormControl>
-                    <SelectInput
-                      value={field.value}
-                      onChange={(event) => field.onChange(event.target.value)}
+                    <Dropdown
+                      value={field.value || undefined}
+                      onValueChange={(value) => field.onChange(value)}
                       disabled={healthCheckModesLoading}
                       placeholder="Select mode"
                       options={healthCheckModes.map((modeOption) => ({ value: modeOption, label: modeOption }))}
@@ -129,11 +143,11 @@ export function TestCredentialDialog({
             />
           </form>
         </Form>
-        <ScreenDialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <ScreenDialogFooter className="mt-6">
+          <Button variant="ghost" size="md" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" form="llm-credential-test-form" disabled={submitting}>
+          <Button type="submit" form="llm-credential-test-form" variant="primary" size="md" disabled={submitting}>
             {submitting ? 'Testing…' : 'Run Test'}
           </Button>
         </ScreenDialogFooter>

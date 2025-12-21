@@ -1,3 +1,4 @@
+import type { ComponentPropsWithoutRef } from 'react';
 import {
   Select,
   SelectContent,
@@ -7,6 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+
+type SelectTriggerProps = ComponentPropsWithoutRef<typeof SelectTrigger>;
 
 interface DropdownOption {
   value: string;
@@ -18,7 +21,7 @@ interface DropdownGroup {
   options: DropdownOption[];
 }
 
-interface DropdownProps {
+interface DropdownProps extends Omit<SelectTriggerProps, 'children' | 'className' | 'size' | 'disabled'> {
   label?: string;
   placeholder?: string;
   value?: string;
@@ -32,6 +35,7 @@ interface DropdownProps {
   variant?: 'default' | 'flat';
   disabled?: boolean;
   className?: string;
+  triggerClassName?: string;
 }
 
 export function Dropdown({
@@ -48,6 +52,8 @@ export function Dropdown({
   variant = 'default',
   disabled = false,
   className = '',
+  triggerClassName = '',
+  ...triggerProps
 }: DropdownProps) {
   return (
     <div className={`w-full ${className}`}>
@@ -65,6 +71,7 @@ export function Dropdown({
       >
         <SelectTrigger
           size={size}
+          disabled={disabled}
           className={`
             w-full
             ${variant === 'flat' 
@@ -80,7 +87,9 @@ export function Dropdown({
                 ${size === 'sm' ? 'px-3 !h-10' : 'px-4 py-3'}
               `
             }
+          ${triggerClassName}
           `}
+          {...triggerProps}
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>

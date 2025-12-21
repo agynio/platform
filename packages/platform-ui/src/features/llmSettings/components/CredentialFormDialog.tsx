@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type ReactElement } from 'react';
+import { X } from 'lucide-react';
 import { useForm, useWatch, type FieldValues } from 'react-hook-form';
 import {
   ScreenDialog,
@@ -9,9 +10,10 @@ import {
   ScreenDialogTitle,
 } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
-import { SelectInput } from '@/components/SelectInput';
+import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import type { CredentialRecord, ProviderField, ProviderOption } from '../types';
 
@@ -158,15 +160,29 @@ export function CredentialFormDialog({
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
-      <ScreenDialogContent className="max-h-[90vh] p-0 sm:max-w-2xl">
+      <ScreenDialogContent className="max-h-[90vh] p-0 sm:max-w-2xl" hideCloseButton>
         <div className="flex max-h-[inherit] flex-col">
           <div className="border-b border-[var(--agyn-border-subtle)] px-6 pb-4 pt-6">
-            <ScreenDialogHeader>
-              <ScreenDialogTitle>{mode === 'create' ? 'Create Credential' : `Edit Credential — ${credential?.name}`}</ScreenDialogTitle>
-              <ScreenDialogDescription>
-                Provide LiteLLM credential details. All values are stored securely on the server.
-              </ScreenDialogDescription>
-            </ScreenDialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <ScreenDialogHeader className="flex-1 gap-2">
+                <ScreenDialogTitle>
+                  {mode === 'create' ? 'Create Credential' : `Edit Credential — ${credential?.name}`}
+                </ScreenDialogTitle>
+                <ScreenDialogDescription>
+                  Provide LiteLLM credential details. All values are stored securely on the server.
+                </ScreenDialogDescription>
+              </ScreenDialogHeader>
+              <IconButton
+                icon={<X className="h-4 w-4" />}
+                variant="ghost"
+                size="sm"
+                rounded={false}
+                aria-label="Close dialog"
+                title="Close"
+                className="shrink-0"
+                onClick={() => onOpenChange(false)}
+              />
+            </div>
           </div>
 
           <Form {...form}>
@@ -200,9 +216,9 @@ export function CredentialFormDialog({
                     <FormItem>
                       <FormLabel>Provider</FormLabel>
                       <FormControl>
-                        <SelectInput
-                          value={field.value ?? ''}
-                          onChange={(event) => field.onChange(event.target.value)}
+                        <Dropdown
+                          value={field.value || undefined}
+                          onValueChange={(value) => field.onChange(value)}
                           disabled={providers.length === 0}
                           placeholder="Select provider"
                           options={providers.map((provider) => ({
@@ -251,12 +267,12 @@ export function CredentialFormDialog({
             </div>
           </Form>
 
-          <div className="border-t border-[var(--agyn-border-subtle)] px-6 pb-6 pt-4">
-            <ScreenDialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <div className="border-t border-[var(--agyn-border-subtle)] px-6 pb-6">
+            <ScreenDialogFooter className="mt-6">
+              <Button variant="ghost" size="md" onClick={() => onOpenChange(false)} disabled={submitting}>
                 Cancel
               </Button>
-              <Button type="submit" form="llm-credential-form" disabled={submitting}>
+              <Button type="submit" form="llm-credential-form" variant="primary" size="md" disabled={submitting}>
                 {submitting ? 'Saving…' : mode === 'create' ? 'Create Credential' : 'Save Changes'}
               </Button>
             </ScreenDialogFooter>
@@ -277,9 +293,9 @@ function renderFieldInput(field: ProviderField, value: string, onChange: FieldCh
 
   if (field.type === 'select' && field.options) {
     return (
-      <SelectInput
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+      <Dropdown
+        value={value || undefined}
+        onValueChange={onChange}
         placeholder="Select option"
         options={field.options.map((option) => ({ value: option, label: option }))}
       />

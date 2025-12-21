@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import {
   ScreenDialog,
   ScreenDialogContent,
@@ -10,6 +11,7 @@ import {
   ScreenDialogTitle,
 } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import {
   createCredential,
@@ -538,20 +540,35 @@ export function SettingsLlmContainer(): ReactElement {
       ) : null}
 
       <ScreenDialog open={deleteState !== null} onOpenChange={(open) => !open && setDeleteState(null)}>
-        <ScreenDialogContent className="sm:max-w-md">
-          <ScreenDialogHeader>
-            <ScreenDialogTitle>Delete {deleteState?.type === 'credential' ? 'Credential' : 'Model'}?</ScreenDialogTitle>
-            <ScreenDialogDescription>
-              This action cannot be undone. References to the {deleteState?.type ?? 'item'} will fail once removed.
-            </ScreenDialogDescription>
-          </ScreenDialogHeader>
-          <ScreenDialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteState(null)} disabled={deleteSubmitting}>
+        <ScreenDialogContent className="sm:max-w-md" hideCloseButton>
+          <div className="flex items-start justify-between gap-4">
+            <ScreenDialogHeader className="flex-1 gap-2">
+              <ScreenDialogTitle>
+                Delete {deleteState?.type === 'credential' ? 'Credential' : 'Model'}?
+              </ScreenDialogTitle>
+              <ScreenDialogDescription>
+                This action cannot be undone. References to the {deleteState?.type ?? 'item'} will fail once removed.
+              </ScreenDialogDescription>
+            </ScreenDialogHeader>
+            <IconButton
+              icon={<X className="h-4 w-4" />}
+              variant="ghost"
+              size="sm"
+              rounded={false}
+              aria-label="Close dialog"
+              title="Close"
+              className="shrink-0"
+              onClick={() => setDeleteState(null)}
+            />
+          </div>
+          <ScreenDialogFooter className="mt-6">
+            <Button type="button" variant="ghost" size="md" onClick={() => setDeleteState(null)} disabled={deleteSubmitting}>
               Cancel
             </Button>
             <Button
               type="button"
               variant="danger"
+              size="md"
               disabled={deleteSubmitting}
               onClick={() => {
                 if (!ensureWritable()) return;

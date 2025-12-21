@@ -666,8 +666,10 @@ describe('Settings/LLM page', () => {
     const modelInput = within(dialog).getByLabelText('Provider Model Identifier') as HTMLInputElement;
     expect(modelInput.getAttribute('placeholder')).toBe('gpt-4o-mini');
 
-    const credentialSelect = within(dialog).getByLabelText('Credential') as HTMLSelectElement;
-    await user.selectOptions(credentialSelect, 'zz-anthropic-legacy');
+    const credentialCombobox = within(dialog).getByRole('combobox', { name: 'Credential' });
+    await user.click(credentialCombobox);
+    const credentialOption = await screen.findByRole('option', { name: 'zz-anthropic-legacy' });
+    await user.click(credentialOption);
 
     await waitFor(() => expect(modelInput.getAttribute('placeholder')).toBe('claude-3-opus'));
     expect(
@@ -746,9 +748,12 @@ describe('Settings/LLM page', () => {
     const dialog = await screen.findByRole('dialog', { name: /Test Credential/i });
     const modeCombobox = within(dialog).getByRole('combobox');
     await waitFor(() => expect(modeCombobox).toBeEnabled());
-    const renderedOptions = Array.from(modeCombobox.querySelectorAll('option:not([hidden])')) as HTMLOptionElement[];
+    await user.click(modeCombobox);
+    const listbox = await screen.findByRole('listbox');
+    const renderedOptions = within(listbox).getAllByRole('option');
     const optionLabels = renderedOptions.map((option) => option.textContent?.trim());
     expect(optionLabels).toEqual(modeOptions);
+    await user.keyboard('{Escape}');
   });
 
   it('disables admin actions and shows banner when LiteLLM admin auth is missing', async () => {
