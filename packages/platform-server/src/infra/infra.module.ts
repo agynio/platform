@@ -20,6 +20,8 @@ import { ContainerTerminalGateway } from './container/terminal.gateway';
 import { ContainerTerminalController } from './container/containerTerminal.controller';
 import { ContainerEventProcessor } from './container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
+import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
+import { DockerWorkspaceProvider } from '../workspace/providers/docker.workspace.provider';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -60,6 +62,11 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
         return new ContainerService(containerRegistry);
       },
       inject: [ContainerRegistry],
+    },
+    {
+      provide: WorkspaceProvider,
+      useFactory: (containerService: ContainerService) => new DockerWorkspaceProvider(containerService),
+      inject: [ContainerService],
     },
     TerminalSessionsService,
     ContainerTerminalGateway,
@@ -106,6 +113,7 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
     PRService,
     ContainerRegistry,
     ArchiveService,
+    WorkspaceProvider,
   ],
 })
 export class InfraModule {}

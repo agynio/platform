@@ -1,35 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceNode, type ContainerProviderStaticConfig } from '../src/nodes/workspace/workspace.node';
-import type { ContainerService } from '../src/infra/container/container.service';
 import type { ConfigService } from '../src/core/services/config.service';
 import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import type { EnvService } from '../src/env/env.service';
-import type { ContainerHandle } from '../src/infra/container/container.handle';
+import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
 
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
-  containerService: ContainerService;
+  provider: WorkspaceProviderStub;
   logger: { warn: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
-  startMock: ReturnType<typeof vi.fn>;
 };
 
 async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig>): Promise<WorkspaceNodeContext> {
-  const fakeHandle = {
-    id: 'cid123',
-    exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
-  } as unknown as ContainerHandle;
-
-  const startMock = vi.fn().mockResolvedValue(fakeHandle);
-  const touchLastUsedMock = vi.fn().mockResolvedValue(undefined);
-
-  const containerService = {
-    findContainerByLabels: vi.fn().mockResolvedValue(undefined),
-    findContainersByLabels: vi.fn().mockResolvedValue([]),
-    getContainerLabels: vi.fn(),
-    start: startMock,
-    touchLastUsed: touchLastUsedMock,
-  } as unknown as ContainerService;
-
+  const provider = new WorkspaceProviderStub();
   const envService = {
     resolveProviderEnv: vi.fn().mockResolvedValue({}),
   } as unknown as EnvService;
@@ -53,84 +36,54 @@ async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig
     log: vi.fn(),
   };
 
-  const node = new WorkspaceNode(containerService, configService, ncpsKeyService, envService);
+  const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
   node.init({ nodeId: 'workspace-node' });
   (node as any).logger = logger;
   await node.setConfig(config as ContainerProviderStaticConfig);
 
-  return { node, containerService, logger, startMock };
+  return { node, provider, logger };
 }
 
 describe('WorkspaceNode resource limits', () => {
   it('applies numeric cpu_limit and string memory_limit when starting a container', async () => {
-    const { node, startMock, logger } = await createWorkspaceNode({
+    const { node, provider, logger } = await createWorkspaceNode({
       cpu_limit: 0.5,
       memory_limit: '512Mi',
     });
 
     await node.provide('thread-1');
 
-    expect(startMock).toHaveBeenCalledTimes(1);
-    const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras).toMatchObject({
-      HostConfig: {
-        NanoCPUs: 500_000_000,
-        Memory: 536_870_912,
-      },
-      NetworkingConfig: {
-        EndpointsConfig: {
-          agents_net: {
-            Aliases: ['thread-1'],
-          },
-        },
-      },
-    });
+    expect(provider.ensureCalls.length).toBeGreaterThan(0);
+    const spec = provider.ensureCalls[0].spec;
+    expect(spec.resources).toEqual({ cpuNano: 500_000_000, memoryBytes: 536_870_912 });
+    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-1'] });
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('supports millicore strings and numeric byte memory limits', async () => {
-    const { node, startMock } = await createWorkspaceNode({
+    const { node, provider } = await createWorkspaceNode({
       cpu_limit: '750m',
       memory_limit: 1_073_741_824,
     });
 
     await node.provide('thread-2');
 
-    const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras).toMatchObject({
-      HostConfig: {
-        NanoCPUs: 750_000_000,
-        Memory: 1_073_741_824,
-      },
-      NetworkingConfig: {
-        EndpointsConfig: {
-          agents_net: {
-            Aliases: ['thread-2'],
-          },
-        },
-      },
-    });
+    const spec = provider.ensureCalls[0].spec;
+    expect(spec.resources).toEqual({ cpuNano: 750_000_000, memoryBytes: 1_073_741_824 });
+    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-2'] });
   });
 
   it('logs and ignores invalid limits', async () => {
-    const { node, startMock, logger } = await createWorkspaceNode({
+    const { node, provider, logger } = await createWorkspaceNode({
       cpu_limit: 'not-a-value',
       memory_limit: '42XB',
     });
 
     await node.provide('thread-3');
 
-    const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras?.HostConfig).toBeUndefined();
-    expect(startArgs.createExtras).toMatchObject({
-      NetworkingConfig: {
-        EndpointsConfig: {
-          agents_net: {
-            Aliases: ['thread-3'],
-          },
-        },
-      },
-    });
+    const spec = provider.ensureCalls[0].spec;
+    expect(spec.resources).toBeUndefined();
+    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-3'] });
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 });

@@ -43,12 +43,12 @@ Related behavior
 - Container lifecycle, registry, and cleanup services manage provisioning, reuse, and TTL/backoff policies.
 
 Terminal WebSocket
-- Endpoint: `GET /api/containers/:containerId/terminal/ws` upgraded to a WebSocket. Requires `sessionId` and `token` query params issued by the terminal sessions service.
+- Endpoint: `GET /api/containers/:workspaceId/terminal/ws` upgraded to a WebSocket. Requires `sessionId` and `token` query params issued by the terminal sessions service.
 - Message flow:
   - Initial status frames (`{ type: 'status', phase: 'starting' | 'running' }`) indicate session bootstrap and exec readiness.
   - Shell output is streamed as `{ type: 'output', data }` frames; client keystrokes are relayed via `{ type: 'input', data }`.
   - Terminal shutdown emits `{ type: 'status', phase: 'exited', exitCode }` or `{ type: 'status', phase: 'error', reason }` prior to socket close.
 - Close semantics:
-  - The gateway closes with code `1000` for normal termination (e.g., client request or exec exit) and `1008` when the request is invalid or the session cannot be validated (`container_id_required`, `invalid_query`, `container_mismatch`, etc.).
+  - The gateway closes with code `1000` for normal termination (e.g., client request or exec exit) and `1008` when the request is invalid or the session cannot be validated (`workspace_id_required`, `invalid_query`, `workspace_mismatch`, etc.).
   - Before issuing close frames the server always sends the corresponding `error` or `status` payload so clients can surface user-facing feedback.
   - Socket shutdown attempts `ws.close(code, reason)` first, then falls back to `ws.terminate()` and finally invokes `ws.end()` to guarantee transport teardown even when Fastify exposes only a `SocketStream` façade.

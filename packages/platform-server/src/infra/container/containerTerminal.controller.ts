@@ -23,18 +23,18 @@ class CreateTerminalSessionDto {
   shell?: string;
 }
 
-@Controller('api/containers/:containerId/terminal')
+@Controller('api/containers/:workspaceId/terminal')
 export class ContainerTerminalController {
   constructor(@Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService) {}
 
   @Post('sessions')
   async createSession(
-    @Param('containerId') containerId: string,
+    @Param('workspaceId') workspaceId: string,
     @Body() body: CreateTerminalSessionDto,
   ) {
-    if (!containerId) throw new BadRequestException('container_id_required');
+    if (!workspaceId) throw new BadRequestException('workspace_id_required');
     try {
-      return await this.sessions.createSession(containerId, body ?? {});
+      return await this.sessions.createSession(workspaceId, body ?? {});
     } catch (err) {
       throw new BadRequestException(err instanceof Error ? err.message : String(err));
     }

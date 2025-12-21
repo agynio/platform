@@ -2,23 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
 import { createModuleRefStub } from './helpers/module-ref.stub';
+import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 
 class MockLogger {
   info = vi.fn();
   debug = vi.fn();
   error = vi.fn();
 }
-class MockContainerService {
-  getDocker() {
-    return {};
-  }
-}
-
-// Minimal mock provider
-const mockProvider = {
-  provide: async (id: string) => ({ id: `c-${id}`, stop: async () => {}, remove: async () => {} })
-};
-
 describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => {
   let server: LocalMCPServerNode;
   let logger: MockLogger;
@@ -29,9 +19,11 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
       resolveEnvItems: vi.fn(async () => ({})),
       resolveProviderEnv: vi.fn(async () => ({})),
     } as any;
-    server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, createModuleRefStub());
+    server = new LocalMCPServerNode(envStub, {} as any, createModuleRefStub());
     (server as any).logger = logger;
-    (server as any).setContainerProvider(mockProvider as any);
+    const provider = new WorkspaceProviderStub();
+    const workspaceNode = new WorkspaceNodeStub(provider);
+    (server as any).setContainerProvider(workspaceNode);
   });
 
   it('provision transitions and listener notifications (success)', async () => {

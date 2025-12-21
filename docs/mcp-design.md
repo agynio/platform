@@ -4,7 +4,7 @@
 We integrate a Model Context Protocol (MCP) server that runs *inside a Docker container* and expose its tools to LangChain / LangGraph agents as dynamic tools. The MCP process communicates using newline-delimited JSON-RPC 2.0 messages over stdio.
 
 ## Key Decisions
-1. **Custom Transport (DockerExecTransport)**: The SDK's `StdioClientTransport` always spawns a local process. We need to connect to a process created by `docker exec`, so we implemented a minimal transport that:
+1. **Custom Transport (WorkspaceExecTransport)**: The SDK's `StdioClientTransport` always spawns a local process. We need to connect to a process created by the workspace provider, so we implemented a minimal transport that:
    - Starts a docker exec session with `AttachStdin/Stdout/Stderr` and `Tty:false`.
    - Demultiplexes stdout/stderr (Docker multiplex) when `Tty:false`.
    - Parses newline-delimited JSON using an inline `ReadBuffer` (mirroring SDK logic) and forwards messages to the SDK `Client` instance.
@@ -14,14 +14,14 @@ We integrate a Model Context Protocol (MCP) server that runs *inside a Docker co
 5. **Heartbeat & Resilience (Implemented)**: The client maintains liveness with periodic `ping` and enforces timeouts. On failure it triggers a controlled restart with backoff per config.
 
 ## Components
-- `ContainerService.openInteractiveExec(...)` (added): Creates a long-lived interactive exec suitable for protocols.
-- `DockerExecTransport`: Adapts docker exec stream -> SDK Client transport interface (start/send/close + events).
+- `WorkspaceProvider.openInteractiveExec(...)`: Creates a long-lived interactive exec suitable for protocols.
+- `WorkspaceExecTransport`: Adapts workspace interactive exec streams -> SDK Client transport interface (start/send/close + events).
 - `LocalMCPServer`: Manages container lifecycle (ensure container, create exec, connect client, list and call tools).
 - `Agent.addMcpServer` (planned): Fetch tools from `LocalMCPServer` and expose as LangChain dynamic tools.
 
 ## Data Flow
 1. Agent loads configuration (namespace, image/command/env).
-2. `LocalMCPServer.start()` ensures container, opens exec, starts `DockerExecTransport`, creates `Client`, performs `initialize` handshake.
+2. `LocalMCPServer.start()` ensures workspace, opens exec, starts `WorkspaceExecTransport`, creates `Client`, performs `initialize` handshake.
 3. Agent calls `listTools()` -> caches tool metadata.
 4. When the model calls a tool, the dynamic wrapper invokes `server.callTool()` which issues `tools/call` via JSON-RPC.
 5. Responses are validated by SDK (output schema) and returned to the tool wrapper, then to the agent graph.
@@ -61,7 +61,7 @@ We integrate a Model Context Protocol (MCP) server that runs *inside a Docker co
 | Hot Reload | Detect updated tool list and refresh dynamically at runtime. |
 
 ## Migration Notes
-If the upstream SDK later exposes a generic transport interface accepting arbitrary duplex streams, we can replace `DockerExecTransport` with that and remove inline serialization logic.
+If the upstream SDK later exposes a generic transport interface accepting arbitrary duplex streams, we can replace `WorkspaceExecTransport` with that and remove inline serialization logic.
 
 ---
 *Last updated: 2025-10-17*

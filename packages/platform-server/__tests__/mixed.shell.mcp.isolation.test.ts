@@ -1,32 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { PassThrough } from 'node:stream';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { EnvService } from '../src/env/env.service';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { Signal } from '../src/signal';
 import { createModuleRefStub } from './helpers/module-ref.stub';
-
-class FakeContainer {
-  last: unknown;
-  constructor(public id: string, private baseEnv: Record<string,string>) {}
-  async exec(cmd: string, options?: { env?: Record<string,string>; workdir?: string }) {
-    this.last = { cmd, options };
-    // Return visible env for assertions
-    const eff = { ...this.baseEnv, ...(options?.env || {}) } as Record<string,string>;
-    const out = Object.entries(eff).map(([k,v]) => `${k}=${v}`).join('\n');
-    return { stdout: out, stderr: '', exitCode: 0 };
-  }
-}
-
-class SharedProvider {
-  c = new FakeContainer('cid', { BASE: '1', SHELL_ONLY: 'S', MCP_ONLY: 'M' });
-  async provide(_: string) { return this.c; }
-}
+import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 
 describe('Mixed Shell + MCP overlay isolation', () => {
   it('does not leak env between Shell and MCP nodes', async () => {
-    const provider = new SharedProvider();
+    const provider = new WorkspaceProviderStub({ BASE: '1', SHELL_ONLY: 'S', MCP_ONLY: 'M' });
+    const workspaceNode = new WorkspaceNodeStub(provider);
     const cfg = new ConfigService().init(
       configSchema.parse({
         llmProvider: 'openai',
@@ -66,21 +50,12 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       prismaStub as any,
     );
     shell.init({ nodeId: 'shell' });
-    shell.setContainerProvider(provider);
+    shell.setContainerProvider(workspaceNode as unknown as ShellCommandNode['provider']);
     await shell.setConfig({ env: [ { name: 'S_VAR', value: 's' } ] });
 
-    // Mock docker for MCP
-    const captured: Array<Record<string, unknown>> = [];
-    const docker = {
-      modem: { demuxStream: (_s: unknown, _o: unknown, _e: unknown) => {} },
-      getContainer: () => ({
-        exec: async (opts: Record<string, unknown>) => { captured.push(opts); return { start: (_: unknown, cb: (err: unknown, stream: NodeJS.ReadableStream) => void) => { const s = new PassThrough(); setTimeout(()=>s.end(),1); cb(undefined, s); }, inspect: async () => ({ ExitCode: 0 }) }; },
-      }),
-    } as const;
-    const cs = { getDocker: () => docker };
-    const mcp = new LocalMCPServerNode(cs as any, envService as any, cfg as any, createModuleRefStub());
+    const mcp = new LocalMCPServerNode(envService as any, cfg as any, createModuleRefStub());
     mcp.init({ nodeId: 'mcp' });
-    (mcp as any).setContainerProvider(provider);
+    (mcp as any).setContainerProvider(workspaceNode);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { name: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 });
 
     // Shell exec
@@ -93,8 +68,13 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     try { await mcp.discoverTools(); } catch {
       // ignore discovery errors in test
     }
-    expect(captured.length).toBeGreaterThan(0);
-    const env: string[] = captured[0].Env || [];
-    expect(env).toEqual(expect.arrayContaining(['M_VAR=m']));
+    expect(provider.interactiveRequests.length).toBeGreaterThan(0);
+    const interactiveEnv = provider.interactiveRequests[0].env;
+    const envEntries = Array.isArray(interactiveEnv)
+      ? interactiveEnv
+      : interactiveEnv
+        ? Object.entries(interactiveEnv).map(([key, value]) => `${key}=${value}`)
+        : [];
+    expect(envEntries).toEqual(expect.arrayContaining(['M_VAR=m']));
   });
 });

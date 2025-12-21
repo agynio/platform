@@ -1,12 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { createModuleRefStub } from './helpers/module-ref.stub';
-
-class MockContainerService {
-  getDocker() {
-    return {};
-  }
-}
+import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 
 const makeEnvService = () => ({ resolveEnvItems: vi.fn(async () => ({})), resolveProviderEnv: vi.fn(async () => ({})) });
 
@@ -18,8 +13,11 @@ describe('LocalMCPServerNode listTools: snapshot-first, fallback-to-setState, na
     logger = { log: vi.fn(), error: vi.fn(), debug: vi.fn() };
     const nodeStateService = { getSnapshot: vi.fn((_id: string) => undefined) } as any; // snapshot not ready
     const moduleRef = createModuleRefStub({ get: () => nodeStateService });
-    server = new LocalMCPServerNode(new MockContainerService() as any, makeEnvService() as any, {} as any, moduleRef);
+    server = new LocalMCPServerNode(makeEnvService() as any, {} as any, moduleRef);
     (server as any).init({ nodeId: 'node-x' });
+    const provider = new WorkspaceProviderStub();
+    const workspaceNode = new WorkspaceNodeStub(provider);
+    (server as any).setContainerProvider(workspaceNode);
     await server.setConfig({ namespace: 'ns' } as any);
     (server as any).preloadCachedTools(
       [

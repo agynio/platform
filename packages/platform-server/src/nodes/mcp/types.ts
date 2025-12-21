@@ -45,16 +45,8 @@ export interface McpServerConfig {
   restart?: { maxAttempts: number; backoffMs: number };
 }
 
-export interface DockerExecStreams {
-  stdin: NodeJS.WritableStream;
-  stdout: NodeJS.ReadableStream;
-  stderr?: NodeJS.ReadableStream;
-  close: () => Promise<{ exitCode: number }>;
-  execId: string;
-}
-
 /**
- * Internal transport interface mirroring what SDK Client expects. We implement a custom DockerExecTransport.
+ * Internal transport interface mirroring what SDK Client expects. We implement a custom WorkspaceExecTransport.
  */
 export interface JsonRpcTransport {
   onmessage?: (msg: JSONRPCMessage) => void;

@@ -5,9 +5,8 @@ import { z } from 'zod';
 import { WorkspaceNode } from '../workspace/workspace.node';
 // Legacy capabilities removed; rely on Node lifecycle/state
 import { ConfigService } from '../../core/services/config.service';
-import { ContainerService } from '../../infra/container/container.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
-import { DockerExecTransport } from './dockerExecTransport';
+import { WorkspaceExecTransport } from './workspaceExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
 import { NodeStateService } from '../../graph/nodeState.service';
@@ -102,7 +101,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   private _lastEnabledTools?: string[];
 
   constructor(
-    @Inject(ContainerService) protected containerService: ContainerService,
     @Inject(EnvService) protected envService: EnvService,
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
@@ -209,49 +207,24 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     this.logger.log(`[MCP:${this.config.namespace}] Starting tool discovery (toolsDiscovered=${this.toolsDiscovered})`);
 
     // Use temporary container for tool discovery
-    const tempContainer = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
-    const tempContainerId = tempContainer.id;
+    const tempWorkspace = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
 
     if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const command = this.config.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
     const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
-    const docker = this.containerService.getDocker();
-
-    let tempTransport: DockerExecTransport | undefined;
+    let tempTransport: WorkspaceExecTransport | undefined;
     let tempClient: Client | undefined;
 
     try {
       // Create temporary transport and client for discovery
-      tempTransport = new DockerExecTransport(
-        docker,
-        async () => {
-          this.logger.debug(`[MCP:${this.config.namespace}] launching docker exec`);
-          const exec = await docker.getContainer(tempContainerId).exec({
-            Cmd: ['sh', '-lc', cmdToRun],
-            AttachStdout: true,
-            AttachStderr: true,
-            AttachStdin: true,
-            Tty: false,
-            WorkingDir: workdir,
-            Env: envArr,
-          });
-          const stream: unknown = await new Promise((resolve, reject) => {
-            exec.start({ hijack: true, stdin: true }, (err, s) => {
-              if (err) return reject(err);
-              if (!s) return reject(new Error('No stream from exec.start'));
-              resolve(s);
-            });
-          });
-          return {
-            stream,
-            inspect: async () => {
-              const r = await exec.inspect();
-              return { ExitCode: r.ExitCode ?? undefined };
-            },
-          };
-        },
-        { demux: true },
+      tempTransport = new WorkspaceExecTransport(async () =>
+        tempWorkspace.openInteractiveExec(['sh', '-lc', cmdToRun], {
+          tty: false,
+          env: envArr,
+          workdir,
+          demuxStderr: true,
+        }),
       );
 
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
@@ -312,24 +285,18 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
           this.logger.error(`[MCP:${this.config.namespace}] Error closing temp transport error=${this.formatError(e)}`);
         }
       }
-      // Stop the temporary container
+      // Destroy the temporary workspace after discovery
       try {
-        await tempContainer.stop(5);
-        await tempContainer.remove(true);
+        await tempWorkspace.destroy({ force: true });
         const ms = Date.now() - t0;
         this.logger.log(
-          `[MCP:${this.config.namespace}] Temporary discovery container stopped and removed (duration=${ms}ms)`,
+          `[MCP:${this.config.namespace}] Temporary discovery workspace cleaned up (duration=${ms}ms)`,
         );
       } catch (e) {
         this.logger.error(
-          `[MCP:${this.config.namespace}] Error cleaning up temp container error=${this.formatError(e)}`,
+          `[MCP:${this.config.namespace}] Error cleaning up temp workspace error=${this.formatError(e)}`,
         );
       }
-      await this.cleanTempDinDSidecars(tempContainerId).catch((e) => {
-        this.logger.error(
-          `[MCP:${this.config.namespace}] Error cleaning DinD sidecars for temp container error=${this.formatError(e)}`,
-        );
-      });
     }
 
     return this.toolsCache ?? [];
@@ -405,52 +372,28 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     const container = await this.containerProvider.provide(threadId);
     // Touch last-used when starting a tool call (defensive; provider already updates on provide)
     try {
-      await this.containerService.touchLastUsed(container.id);
+      await container.touch();
     } catch {
       // ignore last-used update errors
     }
-    const containerId = container.id;
 
     if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const command = this.config.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
     const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
-    const docker = this.containerService.getDocker();
-
-    let transport: DockerExecTransport | undefined;
+    let transport: WorkspaceExecTransport | undefined;
     let client: Client | undefined;
     let hbTimer: NodeJS.Timeout | undefined;
 
     try {
       // Create transport and client for this tool call
-      transport = new DockerExecTransport(
-        docker,
-        async () => {
-          const exec = await docker.getContainer(containerId).exec({
-            Cmd: ['sh', '-lc', cmdToRun],
-            AttachStdout: true,
-            AttachStderr: true,
-            AttachStdin: true,
-            Tty: false,
-            WorkingDir: workdir,
-            Env: envArr,
-          });
-          const stream: unknown = await new Promise((resolve, reject) => {
-            exec.start({ hijack: true, stdin: true }, (err, s) => {
-              if (err) return reject(err);
-              if (!s) return reject(new Error('No stream from exec.start'));
-              resolve(s);
-            });
-          });
-          return {
-            stream,
-            inspect: async () => {
-              const r = await exec.inspect();
-              return { ExitCode: r.ExitCode ?? undefined };
-            },
-          };
-        },
-        { demux: true },
+      transport = new WorkspaceExecTransport(async () =>
+        container.openInteractiveExec(['sh', '-lc', cmdToRun], {
+          tty: false,
+          env: envArr,
+          workdir,
+          demuxStderr: true,
+        }),
       );
 
       await transport.start();
@@ -460,7 +403,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       // Heartbeat: keep last_used_at fresh during the session
       const hbInterval = Math.max(60_000, this.config.heartbeatIntervalMs ?? 300_000);
       hbTimer = setInterval(() => {
-        this.containerService.touchLastUsed(containerId).catch(() => {});
+        container.touch().catch(() => {});
       }, hbInterval);
 
       // Call the tool
@@ -622,66 +565,5 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     } catch (e: unknown) {
       this.logger.error(`[MCP:${this.config.namespace}] Start attempt failed error=${this.formatError(e)}`);
     }
-  }
-  private async cleanTempDinDSidecars(tempContainerId: string): Promise<void> {
-    type DindLike = {
-      id?: string;
-      stop?: (timeout?: number) => Promise<void>;
-      remove?: (force?: boolean) => Promise<void>;
-    };
-    let dinds: DindLike[] = [];
-    try {
-      const found = await this.containerService.findContainersByLabels(
-        { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
-        { all: true },
-      );
-      dinds = Array.isArray(found) ? found : [];
-    } catch (e) {
-      // In tests, ContainerService may be a minimal stub; guard TypeErrors
-      this.logger.warn(`[MCP:${this.config.namespace}] DinD cleanup: findContainersByLabels failed: ${String(e)}`);
-      return;
-    }
-    if (!Array.isArray(dinds) || dinds.length === 0) return;
-    const results = await Promise.allSettled(
-      dinds.map(async (d: DindLike) => {
-        const id: string | undefined = typeof d.id === 'string' ? d.id : undefined;
-        // Stop
-        try {
-          if (typeof d.stop === 'function') await d.stop(5);
-          else if (id) {
-            const docker = this.containerService.getDocker();
-            await docker.getContainer(id).stop({ t: 5 } as { t?: number });
-          }
-        } catch (e: unknown) {
-          const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-          if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-        }
-        // Remove
-        try {
-          if (typeof d.remove === 'function') await d.remove(true);
-          else if (id) {
-            const docker = this.containerService.getDocker();
-            await docker.getContainer(id).remove({ force: true } as { force?: boolean });
-          }
-          return true as const;
-        } catch (e: unknown) {
-          const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-          if (sc !== 404 && sc !== 409) throw e;
-          return false as const;
-        }
-      }),
-    );
-    const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-    if (cleaned > 0) {
-      this.logger.log(
-        `[MCP:${this.config.namespace}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
-      );
-    }
-    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-    if (rejected.length)
-      throw new AggregateError(
-        rejected.map((r) => r.reason),
-        'One or more temp DinD cleanup tasks failed',
-      );
   }
 }

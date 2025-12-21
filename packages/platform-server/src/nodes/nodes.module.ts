@@ -24,13 +24,13 @@ import { ShellCommandNode } from './tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './tools/github_clone_repo/github_clone_repo.node';
 import { RemindMeNode } from './tools/remind_me/remind_me.node';
 import { WorkspaceNode } from './workspace/workspace.node';
-import { ContainerService } from '../infra/container/container.service';
 import { ConfigService } from '../core/services/config.service';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { EnvService } from '../env/env.service';
 import { GraphCoreModule } from '../graph-core/graph-core.module';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { registerDefaultTemplates } from '../templates';
+import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 
 @Injectable()
 class NodesTemplateRegistrar implements OnModuleInit {
@@ -68,12 +68,12 @@ class NodesTemplateRegistrar implements OnModuleInit {
     {
       provide: WorkspaceNode,
       useFactory: (
-        containerService: ContainerService,
+        workspaceProvider: WorkspaceProvider,
         configService: ConfigService,
         ncpsKeyService: NcpsKeyService,
         envService: EnvService,
-      ) => new WorkspaceNode(containerService, configService, ncpsKeyService, envService),
-      inject: [ContainerService, ConfigService, NcpsKeyService, EnvService],
+      ) => new WorkspaceNode(workspaceProvider, configService, ncpsKeyService, envService),
+      inject: [WorkspaceProvider, ConfigService, NcpsKeyService, EnvService],
     },
   ],
   exports: [

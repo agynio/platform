@@ -5,6 +5,7 @@ import { LLMContext } from '../../../llm/types';
 import { Logger } from '@nestjs/common';
 import { GithubCloneRepoNode } from './github_clone_repo.node';
 import { Injectable, Scope } from '@nestjs/common';
+import type { WorkspaceHandle } from '../../../workspace/workspace.handle';
 
 export const githubCloneSchema = z
   .object({
@@ -43,7 +44,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
     if (!provider)
       throw new Error('GithubCloneRepoTool: containerProvider not set. Connect via graph edge before use.');
 
-    const container = await provider.provide(ctx.threadId);
+    const container: WorkspaceHandle = await provider.provide(ctx.threadId);
     this.logger.log(`github_clone_repo invoked owner=${owner} repo=${repo} path=${path} branch=${branch ?? 'none'} depth=${depth ?? 'full'}`);
     const token = await this.resolveToken();
     const username = 'oauth2';
