@@ -30,7 +30,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { menuItemBaseClasses, menuItemInteractiveClasses } from '../ui/menu-item-classes';
+import { menuItemBaseClasses } from '../ui/menu-item-classes';
 import { cn } from '../ui/utils';
 import { THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { useThreadSoundNotifications } from '@/hooks/useThreadSoundNotifications';
@@ -477,11 +477,7 @@ export default function ThreadsScreen({
                         return (
                           <li
                             key={container.id}
-                            className={cn(
-                              menuItemBaseClasses,
-                              menuItemInteractiveClasses,
-                              'justify-between',
-                            )}
+                          className={cn(menuItemBaseClasses, 'justify-between')}
                           >
                             <span className="min-w-0 flex-1 truncate">{container.name}</span>
                             <div className="flex items-center gap-2">
@@ -532,11 +528,7 @@ export default function ThreadsScreen({
                       {reminders.map((reminder) => (
                         <li
                           key={reminder.id}
-                          className={cn(
-                            menuItemBaseClasses,
-                            menuItemInteractiveClasses,
-                            'flex-col items-start gap-1',
-                          )}
+                          className={cn(menuItemBaseClasses, 'flex-col items-start gap-1')}
                         >
                           <p className="w-full truncate text-sm text-[var(--agyn-dark)]">{reminder.title}</p>
                           <p className="text-xs text-[var(--agyn-gray)]">{reminder.time}</p>
