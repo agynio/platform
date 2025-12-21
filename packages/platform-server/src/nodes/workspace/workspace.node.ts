@@ -11,7 +11,7 @@ import {
   type WorkspaceProvider,
   type WorkspaceSpec,
 } from '../../workspace/providers/workspace.provider';
-import { SUPPORTED_PLATFORMS } from '../../core/constants';
+import { SUPPORTED_PLATFORMS, type Platform } from '../../core/constants';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -76,7 +76,7 @@ export const ContainerProviderStaticConfigSchema = z
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 type VolumeConfig = z.infer<typeof VolumeConfigSchema>;
 
-const DEFAULT_PLATFORM = 'linux/arm64';
+const DEFAULT_PLATFORM: Platform = 'linux/arm64';
 const DEFAULT_WORKDIR = '/workspace';
 const DEFAULT_TTL_SECONDS = 86_400;
 const DOCKER_HOST_ENV = 'tcp://localhost:2375';
@@ -102,7 +102,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   async provide(threadId: string): Promise<WorkspaceHandle> {
-    const platform = this.config?.platform ?? DEFAULT_PLATFORM;
+    const platform: Platform = this.config?.platform ?? DEFAULT_PLATFORM;
     const networkName = this.configService.workspaceNetworkName;
 
     const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);

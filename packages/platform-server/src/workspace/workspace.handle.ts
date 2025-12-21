@@ -1,5 +1,10 @@
-import type { Readable, Writable } from 'node:stream';
-import type { WorkspaceProvider, ExecRequest, ExecResult, InteractiveExecRequest, InteractiveExecSession } from './providers/workspace.provider';
+import type {
+  WorkspaceProvider,
+  ExecRequest,
+  ExecResult,
+  InteractiveExecRequest,
+  InteractiveExecSession,
+} from './providers/workspace.provider';
 
 export class WorkspaceHandle {
   constructor(
@@ -35,7 +40,7 @@ export class WorkspaceHandle {
     await this.provider.destroyWorkspace(this.workspaceId, options);
   }
 
-  async putArchive(data: Buffer | Readable, options: { path?: string } = { path: '/tmp' }): Promise<void> {
+  async putArchive(data: Buffer | NodeJS.ReadableStream, options: { path?: string } = { path: '/tmp' }): Promise<void> {
     if (!this.provider.putArchive) throw new Error('Workspace provider does not support putArchive');
     await this.provider.putArchive(this.workspaceId, data, options);
   }
@@ -46,11 +51,14 @@ export class WorkspaceHandle {
     }
   }
 
-  async openInteractive(command: string | string[], options: Omit<InteractiveExecRequest, 'command'> = {}): Promise<{
+  async openInteractive(
+    command: string | string[],
+    options: Omit<InteractiveExecRequest, 'command'> = {},
+  ): Promise<{
     execId: string;
-    stdin: Writable;
-    stdout: Readable;
-    stderr?: Readable;
+    stdin: NodeJS.WritableStream;
+    stdout: NodeJS.ReadableStream;
+    stderr?: NodeJS.ReadableStream;
     close: () => Promise<{ exitCode: number }>;
   }> {
     return this.openInteractiveExec(command, options);

@@ -1,9 +1,9 @@
-import type { Readable, Writable } from 'node:stream';
+import type { Platform } from '../../core/constants';
 
 export type WorkspaceKey = {
   threadId: string;
   role: 'workspace';
-  platform?: string;
+  platform?: Platform;
   nodeId?: string;
 };
 
@@ -69,9 +69,9 @@ export type InteractiveExecRequest = {
 
 export type InteractiveExecSession = {
   execId: string;
-  stdin: Writable;
-  stdout: Readable;
-  stderr?: Readable;
+  stdin: NodeJS.WritableStream;
+  stdout: NodeJS.ReadableStream;
+  stderr?: NodeJS.ReadableStream;
   close: () => Promise<{ exitCode: number }>;
 };
 
@@ -86,7 +86,7 @@ export interface WorkspaceProvider {
   exec(workspaceId: string, request: ExecRequest): Promise<ExecResult>;
   openInteractiveExec(workspaceId: string, request: InteractiveExecRequest): Promise<InteractiveExecSession>;
   resize?(execId: string, size: { cols: number; rows: number }): Promise<void>;
-  putArchive?(workspaceId: string, data: Buffer | Readable, options?: { path?: string }): Promise<void>;
+  putArchive?(workspaceId: string, data: Buffer | NodeJS.ReadableStream, options?: { path?: string }): Promise<void>;
   touchWorkspace?(workspaceId: string): Promise<void>;
   destroyWorkspace(workspaceId: string, options?: DestroyWorkspaceOptions): Promise<void>;
 }

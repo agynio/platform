@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Readable } from 'node:stream';
 import { ContainerHandle } from '../../infra/container/container.handle';
 import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
 import { PLATFORM_LABEL } from '../../core/constants';
@@ -128,7 +127,11 @@ export class DockerWorkspaceProvider implements WorkspaceProvider {
     await this.containers.resizeExec(execId, size);
   }
 
-  async putArchive(workspaceId: string, data: Buffer | Readable, options: { path?: string } = { path: '/tmp' }): Promise<void> {
+  async putArchive(
+    workspaceId: string,
+    data: Buffer | NodeJS.ReadableStream,
+    options: { path?: string } = { path: '/tmp' },
+  ): Promise<void> {
     const path = options?.path ?? '/tmp';
     await this.containers.putArchive(workspaceId, data, { path });
   }
