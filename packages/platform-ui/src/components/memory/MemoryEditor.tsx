@@ -147,13 +147,13 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   }, [contentLength, docExists, hasSubdocs, statQuery.error, statQuery.isLoading]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="memory-editor-root">
+      <div className="shrink-0 border-b px-4 py-3" data-testid="memory-editor-header">
         <h2 className="text-lg font-semibold">Memory editor</h2>
         <div className="mt-1 text-xs text-muted-foreground break-all">{normalizedPath}</div>
         <div className="mt-1 text-xs uppercase text-muted-foreground">{derivedInfo}</div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4" data-testid="memory-editor-body">
         {statQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">Loading path…</div>
         ) : statQuery.error ? (
