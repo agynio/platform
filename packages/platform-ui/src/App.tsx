@@ -17,8 +17,6 @@ import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
 import { SettingsLlm } from './pages/SettingsLlm';
-import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
-import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
@@ -64,11 +62,6 @@ function App() {
                 {/* Monitoring */}
                 <Route path="/monitoring/containers" element={<MonitoringContainers />} />
                 <Route path="/monitoring/resources" element={<MonitoringResources />} />
-
-                {/* Memory */}
-                <Route path="/memory" element={<MemoryNodesListPage />} />
-                <Route path="/memory/:nodeId" element={<MemoryNodeDetailPage />} />
-
                 {/* Settings */}
                 <Route path="/settings/llm" element={<SettingsLlm />} />
                 <Route path="/settings/secrets" element={<SettingsSecrets />} />

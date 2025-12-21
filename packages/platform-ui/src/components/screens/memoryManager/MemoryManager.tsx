@@ -325,7 +325,7 @@ export function MemoryManager({
           className="relative w-px bg-[var(--agyn-border-subtle)] after:w-6 after:-translate-x-1/2 after:bg-transparent data-[panel-group-direction=horizontal]:cursor-col-resize"
         />
         <ResizablePanel defaultSize={68} minSize={40} className="bg-white">
-          <div className="flex h-full flex-col bg-white">
+          <div className="flex h-full min-h-0 flex-col bg-white">
             <div className="flex h-[66px] items-center justify-between border-b border-[var(--agyn-border-subtle)] bg-white px-6">
               <div className="min-w-0">
                 <h2 id={editorLabelId} className="text-sm font-semibold text-[var(--agyn-dark)]">
@@ -362,7 +362,7 @@ export function MemoryManager({
                 </Tooltip>
               </div>
             </div>
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-h-0">
               <div className="h-full overflow-auto px-6 py-5">
                 {editorMessage ? (
                   <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
