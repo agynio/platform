@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { ContainerService } from './container.service';
+import { WORKSPACE_PROVIDER, type WorkspaceProvider } from '../../workspace/providers/workspace.provider';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000; // 30 minutes
@@ -14,7 +14,7 @@ type SessionState = 'pending' | 'connected';
 export type TerminalSessionRecord = {
   sessionId: string;
   token: string;
-  containerId: string;
+  workspaceId: string;
   shell: string;
   cols: number;
   rows: number;
@@ -37,9 +37,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
   private readonly cleanupTimer: NodeJS.Timeout;
   private readonly logger = new Logger(TerminalSessionsService.name);
 
-  constructor(
-    @Inject(ContainerService) private readonly containers: ContainerService,
-  ) {
+  constructor(@Inject(WORKSPACE_PROVIDER) private readonly workspaceProvider: WorkspaceProvider) {
     this.cleanupTimer = setInterval(() => {
       try {
         this.prune();
@@ -53,7 +51,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
   }
 
   async createSession(
-    containerId: string,
+    workspaceId: string,
     options: CreateSessionOptions = {},
   ): Promise<{
     sessionId: string;
@@ -65,7 +63,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
     const cols = clamp(Math.trunc(options.cols ?? 120), MIN_COLS, MAX_COLS);
     const rows = clamp(Math.trunc(options.rows ?? 32), MIN_ROWS, MAX_ROWS);
 
-    const shell = (await this.determineShell(containerId, options.shell)).trim();
+    const shell = (await this.determineShell(workspaceId, options.shell)).trim();
     if (!shell) throw new Error('shell_detection_failed');
 
     const sessionId = randomUUID();
@@ -74,7 +72,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
     const record: TerminalSessionRecord = {
       sessionId,
       token,
-      containerId,
+      workspaceId,
       shell,
       cols,
       rows,
@@ -87,7 +85,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
 
     this.sessions.set(sessionId, record);
 
-    const wsUrl = `/api/containers/${containerId}/terminal/ws?sessionId=${sessionId}&token=${token}`;
+    const wsUrl = `/api/containers/${workspaceId}/terminal/ws?sessionId=${sessionId}&token=${token}`;
     const expiresAt = new Date(now + record.maxDurationMs).toISOString();
     return {
       sessionId,
@@ -151,7 +149,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
       if (expired || idle) {
         this.logger.log('pruning terminal session', {
           sessionId,
-          containerId: record.containerId.substring(0, 12),
+          workspaceId: record.workspaceId.substring(0, 12),
           reason: expired ? 'max_duration' : 'idle_timeout',
         });
         this.sessions.delete(sessionId);
@@ -159,7 +157,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
     }
   }
 
-  private async determineShell(containerId: string, preferred?: string): Promise<string> {
+  private async determineShell(workspaceId: string, preferred?: string): Promise<string> {
     const trimmed = preferred?.trim();
     if (trimmed) return trimmed;
     const fallback = '/bin/sh';
@@ -168,14 +166,15 @@ export class TerminalSessionsService implements OnModuleDestroy {
       `elif command -v sh >/dev/null 2>&1; then command -v sh; ` +
       `else echo ${fallback}; fi`;
     try {
-      const { stdout } = await this.containers.execContainer(containerId, ['/bin/sh', '-lc', detectScript], {
+      const { stdout } = await this.workspaceProvider.exec(workspaceId, {
+        command: ['/bin/sh', '-lc', detectScript],
         timeoutMs: 5_000,
       });
       const detected = stdout.split('\n').map((line) => line.trim()).filter(Boolean)[0];
       return detected || fallback;
     } catch (err) {
       this.logger.warn('terminal shell detection failed', {
-        containerId: containerId.substring(0, 12),
+        workspaceId: workspaceId.substring(0, 12),
         error: err instanceof Error ? err.message : String(err),
       });
       if (err instanceof Error && err.message.includes('not running')) throw err;

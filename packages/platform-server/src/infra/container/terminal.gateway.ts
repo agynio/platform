@@ -5,7 +5,8 @@ import type { Duplex } from 'stream';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
 import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.sessions.service';
-import { ContainerService } from './container.service';
+import { WORKSPACE_PROVIDER, type WorkspaceProvider } from '../../workspace/providers/workspace.provider';
+import { WorkspaceHandle } from '../../workspace/workspace.handle';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -138,7 +139,7 @@ export class ContainerTerminalGateway {
   private readonly logger = new Logger(ContainerTerminalGateway.name);
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
-    @Inject(ContainerService) private readonly containers: ContainerService,
+    @Inject(WORKSPACE_PROVIDER) private readonly workspaceProvider: WorkspaceProvider,
   ) {}
 
   private wss: WebSocketServer | null = null;
@@ -159,14 +160,14 @@ export class ContainerTerminalGateway {
       const match = TERMINAL_PATH_REGEX.exec(parsedUrl.pathname);
       if (!match) return;
 
-      const containerId = match[1] ?? match[2] ?? '';
+      const workspaceId = match[1] ?? match[2] ?? '';
       const wss = this.wss;
       if (!wss) return;
 
       socket.on('error', (err) => {
         this.logger.warn('Terminal WS upgrade socket error', {
           path: parsedUrl.pathname,
-          containerId,
+          workspaceId,
           error: err instanceof Error ? err.message : String(err),
         });
       });
@@ -174,7 +175,7 @@ export class ContainerTerminalGateway {
       wss.handleUpgrade(req, socket, head, (ws) => {
         const stream: SocketStream = { socket: ws };
         const fakeReq = {
-          params: { containerId },
+          params: { workspaceId },
           query: Object.fromEntries(parsedUrl.searchParams.entries()),
         } as unknown as FastifyRequest;
         void this.handleConnection(stream, fakeReq);
@@ -235,7 +236,7 @@ export class ContainerTerminalGateway {
 
     let sessionId: string | null = null;
     let session: TerminalSessionRecord | null = null;
-    let containerId: string | null = null;
+    let workspaceId: string | null = null;
     let idleTimer: NodeJS.Timeout | null = null;
     let maxTimer: NodeJS.Timeout | null = null;
     let execId: string | null = null;
@@ -250,12 +251,13 @@ export class ContainerTerminalGateway {
     let onMessage: ((raw: RawDataLike) => void) | null = null;
     let onClose: (() => void) | null = null;
     let onError: ((err: Error) => void) | null = null;
+    let workspaceHandle: WorkspaceHandle | null = null;
 
-    const params = request.params as { containerId?: string };
-    const containerIdParam = params?.containerId;
-    if (!containerIdParam) {
-      send({ type: 'error', code: 'container_id_required', message: 'Container id missing in route' });
-      close(1008, 'container_id_required');
+    const params = request.params as { workspaceId?: string };
+    const workspaceIdParam = params?.workspaceId;
+    if (!workspaceIdParam) {
+      send({ type: 'error', code: 'workspace_id_required', message: 'Workspace id missing in route' });
+      close(1008, 'workspace_id_required');
       return;
     }
 
@@ -271,7 +273,7 @@ export class ContainerTerminalGateway {
     const logStatus = (phase: string, extra: Record<string, unknown> = {}) => {
       const context = {
         sessionId: session?.sessionId ?? sessionId ?? 'unknown',
-        containerId: containerId ?? containerIdParam ?? 'unknown',
+        workspaceId: workspaceId ?? workspaceIdParam ?? 'unknown',
         phase,
         ...extra,
       };
@@ -319,9 +321,9 @@ export class ContainerTerminalGateway {
     };
 
     onError = (err) => {
-      const containerPrefix = String(containerId ?? containerIdParam ?? '').slice(0, 12);
+      const workspacePrefix = String(workspaceId ?? workspaceIdParam ?? '').slice(0, 12);
       this.logger.warn('terminal socket error', {
-        containerId: containerPrefix,
+        workspaceId: workspacePrefix,
         sessionId,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -497,7 +499,7 @@ export class ContainerTerminalGateway {
         const code = err instanceof Error ? err.message : 'session_error';
         this.logger.warn('Terminal session markConnected failed after exec start', {
           sessionId,
-          containerId,
+          workspaceId,
           execId,
           error: code,
         });
@@ -514,7 +516,7 @@ export class ContainerTerminalGateway {
     if (started) {
       this.logger.warn('Terminal session start already handled, ignoring duplicate invocation', {
         sessionId,
-        containerId: containerIdParam ?? 'unknown',
+        workspaceId: workspaceIdParam ?? 'unknown',
       });
       return;
     }
@@ -530,13 +532,14 @@ export class ContainerTerminalGateway {
       return;
     }
 
-    containerId = session.containerId;
-    const containerShortId = containerId.substring(0, 12);
+    workspaceId = session.workspaceId;
+    workspaceHandle = new WorkspaceHandle(this.workspaceProvider, workspaceId);
+    const workspaceShortId = workspaceId.substring(0, 12);
 
-    if (containerIdParam && containerIdParam !== containerId) {
-      send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
-      close(1008, 'container_mismatch');
-      await cleanup('container_mismatch');
+    if (workspaceIdParam && workspaceIdParam !== workspaceId) {
+      send({ type: 'error', code: 'workspace_mismatch', message: 'Terminal session belongs to different workspace' });
+      close(1008, 'workspace_mismatch');
+      await cleanup('workspace_mismatch');
       return;
     }
 
@@ -575,7 +578,9 @@ export class ContainerTerminalGateway {
     if (maxTimer?.unref) maxTimer.unref();
 
     try {
-      const exec = await this.containers.openInteractiveExec(containerId, `exec ${session.shell}`, {
+      const handle = workspaceHandle;
+      if (!handle) throw new Error('workspace_handle_unavailable');
+      const exec = await handle.openInteractiveExec(`exec ${session.shell}`, {
         tty: true,
         demuxStderr: false,
       });
@@ -592,7 +597,7 @@ export class ContainerTerminalGateway {
           this.logger.warn('terminal stdin error', {
             execId,
             sessionId,
-            containerId: containerId.substring(0, 12),
+            workspaceId: workspaceShortId,
             error: err instanceof Error ? err.message : String(err),
           });
         });
@@ -611,12 +616,12 @@ export class ContainerTerminalGateway {
 
       if (execId) {
         try {
-          await this.containers.resizeExec(execId, { cols: session.cols, rows: session.rows });
+          await handle.resizeExec(execId, { cols: session.cols, rows: session.rows });
         } catch (err) {
           this.logger.warn('initial terminal resize failed', {
             execId,
             sessionId,
-            containerId: containerId.substring(0, 12),
+            workspaceId: workspaceShortId,
             error: err instanceof Error ? err.message : String(err),
           });
         }
@@ -707,7 +712,7 @@ export class ContainerTerminalGateway {
           this.logger.warn('docker multiplex headers stripped from stdout', {
             execId,
             sessionId,
-            containerId: containerShortId,
+            workspaceId: workspaceShortId,
           });
         }
 
@@ -768,7 +773,7 @@ export class ContainerTerminalGateway {
             this.logger.warn('terminal stdin unavailable on input', {
               execId,
               sessionId,
-              containerId: containerId.substring(0, 12),
+              workspaceId: workspaceShortId,
             });
             send({ type: 'error', code: 'stdin_closed', message: 'Terminal stdin unavailable' });
             return;
@@ -800,14 +805,16 @@ export class ContainerTerminalGateway {
         }
         case 'resize': {
           if (!execId) return;
+          const handleRef = workspaceHandle;
+          if (!handleRef) return;
           this.sessions.touch(sessionId);
           resetIdleTimer();
-          void this.containers
+          void handleRef
             .resizeExec(execId, { cols: message.cols, rows: message.rows })
             .catch((err) => {
               this.logger.warn('terminal resize failed', {
                 execId,
-                containerId: containerId.substring(0, 12),
+                workspaceId: workspaceShortId,
                 sessionId,
                 error: err instanceof Error ? err.message : String(err),
               });

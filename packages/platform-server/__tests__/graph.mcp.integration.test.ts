@@ -18,6 +18,8 @@ import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
+import { WORKSPACE_PROVIDER, type WorkspaceProvider, type WorkspaceProviderCapabilities, type ExecRequest, type InteractiveExecRequest, type WorkspaceKey, type WorkspaceSpec, type DestroyWorkspaceOptions } from '../src/workspace/providers/workspace.provider';
+import { PassThrough } from 'node:stream';
 
 class StubContainerService extends ContainerService {
   constructor(registry: ContainerRegistry) {
@@ -61,6 +63,46 @@ class StubContainerService extends ContainerService {
   override async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
   override async removeContainer(_id: string, _force = false): Promise<void> {}
   override async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
+}
+
+class StubWorkspaceProvider implements WorkspaceProvider {
+  capabilities(): WorkspaceProviderCapabilities {
+    return {
+      persistentVolume: true,
+      network: true,
+      networkAliases: true,
+      dockerInDocker: true,
+      interactiveExec: true,
+      execResize: true,
+    };
+  }
+
+  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
+    return { workspaceId: 'workspace', created: true };
+  }
+
+  async exec(_workspaceId: string, _request: ExecRequest) {
+    return { stdout: '', stderr: '', exitCode: 0 };
+  }
+
+  async openInteractiveExec(_workspaceId: string, _request: InteractiveExecRequest) {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    setImmediate(() => stdout.end());
+    return { execId: 'exec', stdin, stdout, close: async () => ({ exitCode: 0 }) };
+  }
+
+  async resize(_execId: string, _size: { cols: number; rows: number }): Promise<void> {
+    return;
+  }
+
+  async destroyWorkspace(_workspaceId: string, _options?: DestroyWorkspaceOptions): Promise<void> {
+    return;
+  }
+
+  async touchWorkspace(_workspaceId: string): Promise<void> {
+    return;
+  }
 }
 class StubConfigService extends ConfigService {
   constructor() {
@@ -128,6 +170,7 @@ describe('Graph MCP integration', () => {
     const module = await Test.createTestingModule({
       providers: [
         { provide: ContainerService, useClass: StubContainerService },
+        { provide: WORKSPACE_PROVIDER, useClass: StubWorkspaceProvider },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
         {

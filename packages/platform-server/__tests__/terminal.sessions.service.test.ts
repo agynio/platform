@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalSessionsService } from '../src/infra/container/terminal.sessions.service';
-import type { ContainerService } from '../src/infra/container/container.service';
+import type { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 
 describe('TerminalSessionsService', () => {
-  let containers: Pick<ContainerService, 'execContainer'>;
+  let provider: Pick<WorkspaceProvider, 'exec'>;
   let service: TerminalSessionsService;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    containers = {
-      execContainer: vi.fn().mockResolvedValue({ stdout: '/bin/bash\n', stderr: '', exitCode: 0 }),
-    } as unknown as Pick<ContainerService, 'execContainer'>;
-    service = new TerminalSessionsService(containers as ContainerService);
+    provider = {
+      exec: vi.fn().mockResolvedValue({ stdout: '/bin/bash\n', stderr: '', exitCode: 0 }) as unknown,
+    } as Pick<WorkspaceProvider, 'exec'>;
+    service = new TerminalSessionsService(provider as WorkspaceProvider);
   });
 
   afterEach(() => {
@@ -24,14 +24,13 @@ describe('TerminalSessionsService', () => {
     expect(result.sessionId).toBeTruthy();
     expect(result.wsUrl).toContain(result.sessionId);
     expect(result.negotiated.shell).toBe('/bin/bash');
-    expect(containers.execContainer).toHaveBeenCalledWith(
-      'abc123',
-      ['/bin/sh', '-lc', expect.stringContaining('command -v bash')],
-      expect.any(Object),
-    );
+    expect(provider.exec).toHaveBeenCalledWith('abc123', {
+      command: ['/bin/sh', '-lc', expect.stringContaining('command -v bash')],
+      timeoutMs: expect.any(Number),
+    });
 
     const record = service.validate(result.sessionId, result.token);
-    expect(record.containerId).toBe('abc123');
+    expect(record.workspaceId).toBe('abc123');
     service.markConnected(result.sessionId);
     service.touch(result.sessionId);
     expect(service.get(result.sessionId)).toBeDefined();

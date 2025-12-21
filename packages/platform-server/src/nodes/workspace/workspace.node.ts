@@ -1,12 +1,17 @@
-import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
-import Node from '../base/Node';
-import { ContainerHandle } from '../../infra/container/container.handle';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { z } from 'zod';
-import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../core/constants';
+
+import Node from '../base/Node';
 import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { WorkspaceHandle } from '../../workspace/workspace.handle';
+import {
+  WORKSPACE_PROVIDER,
+  type WorkspaceProvider,
+  type WorkspaceSpec,
+} from '../../workspace/providers/workspace.provider';
+import { SUPPORTED_PLATFORMS } from '../../core/constants';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -71,23 +76,21 @@ export const ContainerProviderStaticConfigSchema = z
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 type VolumeConfig = z.infer<typeof VolumeConfigSchema>;
 
-const DEFAULTS: ContainerOpts = {
-  platform: 'linux/arm64',
-  workingDir: '/workspace',
-};
+const DEFAULT_PLATFORM = 'linux/arm64';
+const DEFAULT_WORKDIR = '/workspace';
+const DEFAULT_TTL_SECONDS = 86_400;
+const DOCKER_HOST_ENV = 'tcp://localhost:2375';
+const DEFAULT_DOCKER_MIRROR = 'http://registry-mirror:5000';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
-  private idLabels: (id: string) => Record<string, string>;
-
   constructor(
-    @Inject(ContainerService) protected containerService: ContainerService,
+    @Inject(WORKSPACE_PROVIDER) private readonly workspaceProvider: WorkspaceProvider,
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(NcpsKeyService) protected ncpsKeyService: NcpsKeyService,
     @Inject(EnvService) protected envService: EnvService,
   ) {
     super();
-    this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': id, 'hautech.ai/node_id': this.nodeId });
   }
 
   init(params: { nodeId: string }): void {
@@ -98,276 +101,120 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     return { sourcePorts: { $self: { kind: 'instance' as const } } } as const;
   }
 
-  async provide(threadId: string): Promise<ContainerHandle> {
-    // Build base thread labels and workspace-specific labels
-    const labels = this.idLabels(threadId);
-    const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
-    // Primary lookup: thread-scoped workspace container only
-    // Debug note: ContainerService logs the exact filters as well.
-    this.logger.debug(`[ContainerProviderEntity] lookup labels (workspace) labels=${JSON.stringify(workspaceLabels)}`);
-    let container: ContainerHandle | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
-
-    // Typed fallback: retry by thread_id only and exclude DinD sidecars.
-    if (!container) {
-      this.logger.debug(`[ContainerProviderEntity] fallback lookup by thread_id only labels=${JSON.stringify(labels)}`);
-      const candidates = await this.containerService.findContainersByLabels(labels);
-      if (Array.isArray(candidates) && candidates.length) {
-        const results = await Promise.all(
-          candidates.map(async (c) => {
-            try {
-              const cl = await this.containerService.getContainerLabels(c.id);
-              return { c, cl };
-            } catch {
-              return { c, cl: undefined as Record<string, string> | undefined };
-            }
-          }),
-        );
-        container = this.chooseNonDinDContainer(results) ?? container;
-      }
-    }
-    const enableDinD = this.config?.enableDinD ?? false;
+  async provide(threadId: string): Promise<WorkspaceHandle> {
+    const platform = this.config?.platform ?? DEFAULT_PLATFORM;
     const networkName = this.configService.workspaceNetworkName;
 
-    // Enforce non-reuse on platform mismatch if a platform is requested now
-    const requestedPlatform = this.config?.platform ?? DEFAULTS.platform;
-    if (container && requestedPlatform) {
-      let existingPlatform: string | undefined;
-      try {
-        const containerLabels = await this.containerService.getContainerLabels(container.id);
-        existingPlatform = containerLabels?.[PLATFORM_LABEL];
-      } catch {
-        existingPlatform = undefined; // treat as mismatch
-      }
-      const mismatched = !existingPlatform || existingPlatform !== requestedPlatform;
-      if (mismatched) {
-        if (enableDinD) await this.cleanupDinDSidecars(labels, container.id).catch(() => {});
-        await this.stopAndRemoveContainer(container);
-        container = undefined;
-      }
-    }
+    const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);
 
-    if (container) {
-      const shortId = container.id.substring(0, 12);
-      let networks: string[] | undefined;
-      try {
-        networks = await this.containerService.getContainerNetworks(container.id);
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`Failed to inspect workspace networks containerId=${shortId} error=${errMessage}`);
-      }
-      const attachedToNetwork = Array.isArray(networks) && networks.includes(networkName);
-      if (!attachedToNetwork) {
-        const networksList = Array.isArray(networks) ? networks.join(',') : 'none';
-        this.logger.log(
-          `Recreating workspace to enforce workspace network containerId=${shortId} requiredNetwork=${networkName} networks=${networksList}`,
+    const { workspaceId, created } = await this.workspaceProvider.ensureWorkspace(
+      {
+        threadId,
+        nodeId: this.nodeId,
+        role: 'workspace',
+        platform,
+      },
+      spec,
+    );
+
+    const handle = new WorkspaceHandle(this.workspaceProvider, workspaceId);
+
+    if (created && this.config?.initialScript) {
+      const script = this.config.initialScript;
+      const { exitCode, stderr } = await handle.exec(script, { tty: false });
+      if (exitCode !== 0) {
+        this.logger.error(
+          `Initial script failed (exitCode=${exitCode}) for workspace ${handle.shortId}${stderr ? ` stderr: ${stderr}` : ''}`,
         );
-        if (enableDinD) await this.cleanupDinDSidecars(labels, container.id).catch(() => {});
-        await this.stopAndRemoveContainer(container);
-        container = undefined;
       }
     }
 
-    if (!container) {
-      const DOCKER_HOST_ENV = 'tcp://localhost:2375';
-      const DOCKER_MIRROR_URL =
-        this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      const enableDinD = this.config?.enableDinD ?? false;
-      const volumeConfig: VolumeConfig | undefined = this.config?.volumes;
-      const volumesEnabled = volumeConfig?.enabled ?? false;
-      const normalizedMountPath = volumesEnabled
-        ? (volumeConfig?.mountPath ?? DEFAULTS.workingDir)
-        : DEFAULTS.workingDir;
-      const volumeName = `ha_ws_${threadId}`;
-      const binds = volumesEnabled ? [`${volumeName}:${normalizedMountPath}`] : undefined;
-      let envMerged: Record<string, string> | undefined = await (async () => {
-        const cfgEnv = this.config?.env as Record<string, string> | EnvItem[] | undefined;
-        const base: Record<string, string> = !Array.isArray(cfgEnv) && cfgEnv ? { ...cfgEnv } : {};
-        return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
-      })();
-      const githubToken = this.configService.githubToken;
-      if (githubToken && this.hasFlakeRepoConfig()) {
-        const hasToken = !!envMerged && typeof envMerged === 'object' && 'GITHUB_TOKEN' in envMerged;
-        if (!hasToken) {
-          envMerged = { ...(envMerged ?? {}), GITHUB_TOKEN: githubToken } as Record<string, string>;
-        }
-      }
-      // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured
-
-      const hasNixConfig =
-        !!envMerged && typeof envMerged === 'object' && 'NIX_CONFIG' in (envMerged as Record<string, string>);
-      const ncpsEnabled = this.configService?.ncpsEnabled === true;
-      const ncpsUrl = this.configService?.ncpsUrl;
-      const keys = this.ncpsKeyService?.getKeysForInjection() || [];
-      let nixConfigInjected = false;
-      if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && keys.length > 0) {
-        const joined = keys.join(' ');
-        const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${joined} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
-        envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
-        nixConfigInjected = true;
-      }
-
-      const normalizedEnv: Record<string, string> | undefined = envMerged;
-      const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
-      const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);
-      const networkAlias = this.sanitizeNetworkAlias(threadId);
-      const createExtrasHostConfig =
-        cpuLimitNano !== undefined || memoryLimitBytes !== undefined
-          ? {
-              HostConfig: {
-                ...(cpuLimitNano !== undefined ? { NanoCPUs: cpuLimitNano } : {}),
-                ...(memoryLimitBytes !== undefined ? { Memory: memoryLimitBytes } : {}),
-              },
-            }
-          : undefined;
-      const createExtrasNetworking: ContainerOpts['createExtras'] = {
-        NetworkingConfig: {
-          EndpointsConfig: {
-            [networkName]: {
-              Aliases: [networkAlias],
-            },
-          },
-        },
-      };
-      const createExtras: ContainerOpts['createExtras'] | undefined = createExtrasHostConfig
-        ? {
-            ...createExtrasHostConfig,
-            ...createExtrasNetworking,
-          }
-        : createExtrasNetworking;
-      const started = await this.containerService.start({
-        ...DEFAULTS,
-        workingDir: normalizedMountPath,
-        binds,
-        image: this.config?.image ?? DEFAULTS.image,
-        // Ensure env is in a format ContainerService understands (Record or string[]). envService returns Record.
-        env: enableDinD ? { ...(normalizedEnv || {}), DOCKER_HOST: DOCKER_HOST_ENV } : normalizedEnv,
-        labels: { ...workspaceLabels },
-        platform: requestedPlatform,
-        ttlSeconds: this.config?.ttlSeconds ?? 86400,
-        createExtras,
+    if (created && nixConfigInjected) {
+      await this.runWorkspaceNetworkDiagnostics(handle).catch((err: unknown) => {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Workspace Nix diagnostics failed workspaceId=${handle.shortId} error=${errMessage}`);
       });
-      container = started;
-      if (enableDinD) await this.ensureDinD(started, labels, DOCKER_MIRROR_URL);
-      if (nixConfigInjected) {
-        await this.runWorkspaceNetworkDiagnostics(started).catch((err: unknown) => {
-          const errMessage = err instanceof Error ? err.message : String(err);
-          this.logger.warn(
-            `Workspace Nix diagnostics failed containerId=${started.id.substring(0, 12)} error=${errMessage}`,
-          );
-        });
-      }
-
-      if (this.config?.initialScript) {
-        const script = this.config.initialScript;
-        const { exitCode, stderr } = await started.exec(script, { tty: false });
-        if (exitCode !== 0) {
-          this.logger.error(
-            `Initial script failed (exitCode=${exitCode}) for container ${started.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
-          );
-        }
-      }
-
-      // Intentional ordering: run initialScript first, then Nix install.
-      // This lets the script prepare environment (e.g., user/profile) before installing packages.
-      // Install Nix packages when resolved specs are provided (best-effort)
-      try {
-        const nixUnknown = this.config?.nix as unknown;
-        const pkgsUnknown =
-          nixUnknown && typeof nixUnknown === 'object' && 'packages' in (nixUnknown as Record<string, unknown>)
-            ? (nixUnknown as Record<string, unknown>)['packages']
-            : undefined;
-        const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
-        const specs = this.normalizeToInstallSpecs(pkgsArr);
-        const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
-        await this.ensureNixPackages(started, specs, originalCount);
-      } catch (e) {
-        // Do not fail startup on install errors; logs provide context
-        const errMessage = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Nix install step failed (post-start): ${errMessage}`);
-      }
-    } else {
-      const DOCKER_MIRROR_URL =
-        this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      const existing = container;
-      if (!existing) {
-        throw new Error('Workspace container expected but not found for reuse path');
-      }
-      if (this.config?.enableDinD) await this.ensureDinD(existing, labels, DOCKER_MIRROR_URL);
-      // Also attempt install on reuse (idempotent)
-      try {
-        const nixUnknown = this.config?.nix as unknown;
-        const pkgsUnknown =
-          nixUnknown && typeof nixUnknown === 'object' && 'packages' in (nixUnknown as Record<string, unknown>)
-            ? (nixUnknown as Record<string, unknown>)['packages']
-            : undefined;
-        const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
-        const specs = this.normalizeToInstallSpecs(pkgsArr);
-        const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
-        await this.ensureNixPackages(existing, specs, originalCount);
-      } catch (e) {
-        const errMessage = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Nix install step failed (reuse): ${errMessage}`);
-      }
     }
-    const handle = container;
-    if (!handle) {
-      throw new Error('Workspace container not provisioned');
-    }
+
     try {
-      await this.containerService.touchLastUsed(handle.id);
-    } catch {
-      // ignore touch last-used errors
+      const nixUnknown = this.config?.nix as unknown;
+      const pkgsUnknown =
+        nixUnknown && typeof nixUnknown === 'object' && 'packages' in (nixUnknown as Record<string, unknown>)
+          ? (nixUnknown as Record<string, unknown>)['packages']
+          : undefined;
+      const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
+      const specs = this.normalizeToInstallSpecs(pkgsArr);
+      const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
+      await this.ensureNixPackages(handle, specs, originalCount);
+    } catch (e) {
+      const errMessage = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Nix install step failed: ${errMessage}`);
     }
+
     return handle;
   }
 
-  private async ensureDinD(workspace: ContainerHandle, baseLabels: Record<string, string>, mirrorUrl: string) {
-    // Check existing
-    let dind = await this.containerService.findContainerByLabels({
-      ...baseLabels,
-      'hautech.ai/role': 'dind',
-      'hautech.ai/parent_cid': workspace.id,
-    });
+  private async buildWorkspaceSpec(
+    threadId: string,
+    networkName: string,
+  ): Promise<{ spec: WorkspaceSpec; nixConfigInjected: boolean }> {
+    const enableDinD = this.config?.enableDinD ?? false;
+    const volumeConfig: VolumeConfig | undefined = this.config?.volumes;
+    const volumesEnabled = volumeConfig?.enabled ?? false;
+    const normalizedMountPath = volumesEnabled ? volumeConfig?.mountPath ?? DEFAULT_WORKDIR : DEFAULT_WORKDIR;
+    const dockerMirrorUrl = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || DEFAULT_DOCKER_MIRROR;
 
-    if (!dind) {
-      // Start DinD with shared network namespace
-      const dindLabels = { ...baseLabels, 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': workspace.id };
-      dind = await this.containerService.start({
-        image: 'docker:27-dind',
-        env: { DOCKER_TLS_CERTDIR: '' },
-        cmd: ['-H', 'tcp://0.0.0.0:2375', '--registry-mirror', mirrorUrl],
-        labels: dindLabels,
-        autoRemove: true,
-        privileged: true,
-        networkMode: `container:${workspace.id}`,
-        anonymousVolumes: ['/var/lib/docker'],
-      });
-    }
+    const cfgEnv = this.config?.env as Record<string, string> | EnvItem[] | undefined;
+    const baseEnv: Record<string, string> = !Array.isArray(cfgEnv) && cfgEnv ? { ...cfgEnv } : {};
+    let envMerged = await this.envService.resolveProviderEnv(cfgEnv, undefined, baseEnv);
 
-    // Readiness: poll docker info within dind container
-    await this.waitForDinDReady(dind);
-  }
-
-  private async waitForDinDReady(dind: ContainerHandle) {
-    const deadline = Date.now() + 60_000; // 60s timeout
-    // Helper sleep
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    while (Date.now() < deadline) {
-      try {
-        const { exitCode } = await this.containerService.execContainer(dind.id, [
-          'sh',
-          '-lc',
-          'docker -H tcp://0.0.0.0:2375 info >/dev/null 2>&1',
-        ]);
-        if (exitCode === 0) return;
-      } catch {
-        // ignore exec errors
+    const githubToken = this.configService.githubToken;
+    if (githubToken && this.hasFlakeRepoConfig()) {
+      const hasToken = !!envMerged && typeof envMerged === 'object' && 'GITHUB_TOKEN' in envMerged;
+      if (!hasToken) {
+        envMerged = { ...(envMerged ?? {}), GITHUB_TOKEN: githubToken } as Record<string, string>;
       }
-      // Early fail if DinD exited unexpectedly (best-effort; skip if low-level client not available)
-      await this.failFastIfDinDExited(dind);
-      await sleep(1000);
     }
-    throw new Error('DinD sidecar did not become ready within timeout');
+
+    const hasNixConfig = !!envMerged && typeof envMerged === 'object' && 'NIX_CONFIG' in envMerged;
+    const ncpsEnabled = this.configService?.ncpsEnabled === true;
+    const ncpsUrl = this.configService?.ncpsUrl;
+    const keys = this.ncpsKeyService?.getKeysForInjection() || [];
+    let nixConfigInjected = false;
+    if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && keys.length > 0) {
+      const joined = keys.join(' ');
+      const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${joined} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
+      envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
+      nixConfigInjected = true;
+    }
+
+    const envWithDinD = enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged || undefined;
+    const networkAlias = this.sanitizeNetworkAlias(threadId);
+    const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
+    const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);
+
+    const spec: WorkspaceSpec = {
+      workingDir: normalizedMountPath,
+      env: envWithDinD,
+      network: { name: networkName, aliases: [networkAlias] },
+      dockerInDocker: { enabled: enableDinD, mirrorUrl: dockerMirrorUrl },
+      ttlSeconds: this.config?.ttlSeconds ?? DEFAULT_TTL_SECONDS,
+    };
+
+    if (volumesEnabled) {
+      spec.persistentVolume = { mountPath: normalizedMountPath };
+    }
+    if (this.config?.image) {
+      spec.image = this.config.image;
+    }
+    if (cpuLimitNano !== undefined || memoryLimitBytes !== undefined) {
+      spec.resources = {
+        ...(cpuLimitNano !== undefined ? { cpuNano: cpuLimitNano } : {}),
+        ...(memoryLimitBytes !== undefined ? { memoryBytes: memoryLimitBytes } : {}),
+      };
+    }
+
+    return { spec, nixConfigInjected };
   }
 
   private sanitizeNetworkAlias(threadId: string): string {
@@ -389,10 +236,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     return `ws-${encoded || 'thread'}`.slice(0, 63);
   }
 
-  private async runWorkspaceNetworkDiagnostics(container: ContainerHandle): Promise<void> {
-    const shortId = container.id.substring(0, 12);
+  private async runWorkspaceNetworkDiagnostics(handle: WorkspaceHandle): Promise<void> {
+    const shortId = handle.shortId;
     try {
-      const { stdout } = await container.exec([
+      const { stdout } = await handle.exec([
         'sh',
         '-lc',
         "nix show-config | grep -E '^(substituters|trusted-public-keys)\\s*=' || true",
@@ -412,12 +259,12 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       }
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Workspace Nix config check failed containerId=${shortId} error=${errMessage}`);
+      this.logger.warn(`Workspace Nix config check failed workspaceId=${shortId} error=${errMessage}`);
     }
 
-    await this.runWorkspaceDiagnosticCommand(container, 'getent hosts ncps', 'ncps host lookup');
+    await this.runWorkspaceDiagnosticCommand(handle, 'getent hosts ncps', 'ncps host lookup');
     await this.runWorkspaceDiagnosticCommand(
-      container,
+      handle,
       'curl -sSf --max-time 3 http://ncps:8501/nix-cache-info',
       'ncps cache probe',
       { logStdoutSnippet: true },
@@ -425,27 +272,27 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async runWorkspaceDiagnosticCommand(
-    container: ContainerHandle,
+    handle: WorkspaceHandle,
     command: string,
     description: string,
     options: { logStdoutSnippet?: boolean } = {},
   ): Promise<void> {
-    const shortId = container.id.substring(0, 12);
+    const shortId = handle.shortId;
     try {
-      const { stdout, stderr, exitCode } = await container.exec(['sh', '-lc', command]);
+      const { stdout, stderr, exitCode } = await handle.exec(['sh', '-lc', command]);
       if (exitCode === 0) {
         const payload = options.logStdoutSnippet ? this.snip(stdout) : stdout.trim();
-        this.logger.log(`Workspace ${description} succeeded containerId=${shortId} stdout=${payload}`);
+        this.logger.log(`Workspace ${description} succeeded workspaceId=${shortId} stdout=${payload}`);
       } else {
         const stdoutTrimmed = stdout.trim();
         const stderrTrimmed = stderr.trim();
         this.logger.warn(
-          `Workspace ${description} failed containerId=${shortId} exitCode=${exitCode} stdout=${stdoutTrimmed} stderr=${stderrTrimmed}`,
+          `Workspace ${description} failed workspaceId=${shortId} exitCode=${exitCode} stdout=${stdoutTrimmed} stderr=${stderrTrimmed}`,
         );
       }
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Workspace ${description} error containerId=${shortId} error=${errMessage}`);
+      this.logger.warn(`Workspace ${description} error workspaceId=${shortId} error=${errMessage}`);
     }
   }
 
@@ -453,74 +300,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     const trimmed = value.trim();
     if (trimmed.length <= max) return trimmed;
     return `${trimmed.slice(0, max)}...`;
-  }
-
-  private chooseNonDinDContainer(
-    results: Array<{ c: ContainerHandle; cl?: Record<string, string> | undefined }>,
-  ): ContainerHandle | undefined {
-    for (const { c, cl } of results) {
-      if (cl?.['hautech.ai/role'] === 'dind') continue;
-      return c;
-    }
-    return undefined;
-  }
-
-  private async cleanupDinDSidecars(labels: Record<string, string>, parentId: string): Promise<void> {
-    try {
-      const dinds = await this.containerService.findContainersByLabels({
-        ...labels,
-        'hautech.ai/role': 'dind',
-        'hautech.ai/parent_cid': parentId,
-      });
-      await Promise.all(
-        dinds.map(async (d) => {
-          try {
-            await d.stop(5);
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-          }
-          try {
-            await d.remove(true);
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 404 && sc !== 409) throw e;
-          }
-        }),
-      );
-    } catch {
-      // ignore DinD sidecar lookup errors
-    }
-  }
-
-  private async stopAndRemoveContainer(container: ContainerHandle): Promise<void> {
-    try {
-      await container.stop();
-    } catch (e: unknown) {
-      const sc = getStatusCode(e);
-      if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-    }
-    try {
-      await container.remove(true);
-    } catch (e: unknown) {
-      const sc = getStatusCode(e);
-      if (sc !== 404 && sc !== 409) throw e;
-    }
-  }
-
-  private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
-    // Typed guard around Docker inspect; tests may stub ContainerService minimally.
-    try {
-      const docker = this.containerService.getDocker();
-      const inspect = await docker.getContainer(dind.id).inspect();
-      const state = (inspect as { State?: { Running?: boolean; Status?: string } }).State;
-      if (state && state.Running === false) {
-        throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
-      }
-    } catch (e) {
-      // On missing methods or errors, surface a typed error
-      throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
-    }
   }
 
   private normalizeCpuLimit(raw: unknown): number | undefined {
@@ -692,7 +471,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async removeProfileEntries(
-    container: ContainerHandle,
+    handle: WorkspaceHandle,
     entries: Array<{ index: number; normalized: string }>,
     pathPrefix: string,
   ): Promise<void> {
@@ -701,7 +480,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     const sorted = [...entries].sort((a, b) => b.index - a.index);
     for (const entry of sorted) {
       const cmd = `${pathPrefix} && nix profile remove ${entry.index}`;
-      const res = await container.exec(cmd, timeoutOpts);
+      const res = await handle.exec(cmd, timeoutOpts);
       if (res.exitCode === 0) {
         this.logger.log(`Nix remove succeeded for ${entry.normalized} (index=${entry.index})`);
       } else {
@@ -711,7 +490,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async installFlakeRefs(
-    container: ContainerHandle,
+    handle: WorkspaceHandle,
     pathPrefix: string,
     baseInstall: string,
     refs: string[],
@@ -719,7 +498,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     if (refs.length === 0) return true;
     const combined = `${pathPrefix} && ${baseInstall} ${refs.join(' ')}`;
     this.logger.log(`Nix install: ${refs.length} package(s) (combined)`);
-    const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
+    const combinedRes = await handle.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
     if (combinedRes.exitCode === 0) return true;
 
     this.logger.error(`Nix install (combined) failed exitCode=${combinedRes.exitCode}`);
@@ -727,7 +506,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     let allSucceeded = true;
     for (const ref of refs) {
       const cmd = `${pathPrefix} && ${baseInstall} ${ref}`;
-      const res = await container.exec(cmd, timeoutOpts);
+      const res = await handle.exec(cmd, timeoutOpts);
       if (res.exitCode === 0) {
         this.logger.log(`Nix install succeeded for ${ref}`);
       } else {
@@ -739,7 +518,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async ensureNixPackages(
-    container: ContainerHandle,
+    handle: WorkspaceHandle,
     specs: NixInstallSpec[],
     originalCount: number,
   ): Promise<void> {
@@ -753,7 +532,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         return;
       }
 
-      const detect = await container.exec('command -v nix >/dev/null 2>&1 && nix --version', {
+      const detect = await handle.exec('command -v nix >/dev/null 2>&1 && nix --version', {
         timeoutMs: 5000,
         idleTimeoutMs: 0,
       });
@@ -766,7 +545,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const BASE_INSTALL =
         "nix profile install --accept-flake-config --extra-experimental-features 'nix-command flakes' --no-write-lock-file";
 
-      const profileList = await container.exec(`${PATH_PREFIX} && nix profile list`, {
+      const profileList = await handle.exec(`${PATH_PREFIX} && nix profile list`, {
         timeoutMs: 60_000,
         idleTimeoutMs: 30_000,
       });
@@ -789,7 +568,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       }
 
       const installSucceeded = await this.installFlakeRefs(
-        container,
+        handle,
         PATH_PREFIX,
         BASE_INSTALL,
         installs.map((entry) => entry.flakeUri),
@@ -804,7 +583,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
 
       if (removals.length > 0) {
         await this.removeProfileEntries(
-          container,
+          handle,
           removals.map(({ index, normalized }) => ({ index, normalized })),
           PATH_PREFIX,
         );
@@ -814,15 +593,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       this.logger.error(`Nix install threw: ${errMessage}`);
     }
   }
-}
-
-// Helper: safely read statusCode from unknown error values
-function getStatusCode(e: unknown): number | undefined {
-  if (typeof e === 'object' && e !== null && 'statusCode' in e) {
-    const v = (e as { statusCode?: unknown }).statusCode;
-    if (typeof v === 'number') return v;
-  }
-  return undefined;
 }
 
 // Parse Vault reference string in format "mount/path/key" with path supporting nested segments.

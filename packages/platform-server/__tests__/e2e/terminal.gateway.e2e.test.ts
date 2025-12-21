@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import { ContainerTerminalController } from '../../src/infra/container/containerTerminal.controller';
 import { ContainerTerminalGateway } from '../../src/infra/container/terminal.gateway';
 import { TerminalSessionsService } from '../../src/infra/container/terminal.sessions.service';
-import { ContainerService } from '../../src/infra/container/container.service';
+import { WORKSPACE_PROVIDER, type WorkspaceProvider } from '../../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from '../helpers/ws';
 
 type TerminalMessage = {
@@ -19,17 +19,32 @@ type TerminalMessage = {
 };
 
 @Injectable()
-class TestContainerService {
+class TestWorkspaceProvider implements WorkspaceProvider {
   public stdin?: PassThrough;
   public stdout?: PassThrough;
   public closeCalls = 0;
   public readonly resizes: Array<{ execId: string; cols: number; rows: number }> = [];
 
-  async execContainer(_containerId: string, _command: string | string[], _opts?: unknown) {
+  capabilities() {
+    return {
+      persistentVolume: true,
+      network: true,
+      networkAliases: true,
+      dockerInDocker: true,
+      interactiveExec: true,
+      execResize: true,
+    } as const;
+  }
+
+  async ensureWorkspace(_key: unknown, _spec: unknown) {
+    return { workspaceId: 'test-workspace', created: true };
+  }
+
+  async exec(_workspaceId: string, _request: unknown) {
     return { stdout: '/bin/bash\n', stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(_containerId: string, _command: string | string[], _opts?: unknown) {
+  async openInteractiveExec(_workspaceId: string, _request: unknown) {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     this.stdin = stdin;
@@ -64,14 +79,22 @@ class TestContainerService {
     return { stdin, stdout, stderr: undefined, close, execId: 'exec-test' };
   }
 
-  async resizeExec(execId: string, size: { cols: number; rows: number }) {
+  async resize(execId: string, size: { cols: number; rows: number }) {
     this.resizes.push({ execId, ...size });
+  }
+
+  async destroyWorkspace(): Promise<void> {
+    return;
+  }
+
+  async touchWorkspace(): Promise<void> {
+    return;
   }
 }
 
 describe('ContainerTerminalGateway E2E', () => {
   let app: NestFastifyApplication;
-  let containerService: TestContainerService;
+  let workspaceProvider: TestWorkspaceProvider;
   let baseUrl: string;
 
   beforeAll(async () => {
@@ -80,7 +103,7 @@ describe('ContainerTerminalGateway E2E', () => {
       providers: [
         ContainerTerminalGateway,
         TerminalSessionsService,
-        { provide: ContainerService, useClass: TestContainerService },
+        { provide: WORKSPACE_PROVIDER, useClass: TestWorkspaceProvider },
       ],
     }).compile();
 
@@ -98,7 +121,7 @@ describe('ContainerTerminalGateway E2E', () => {
     }
     baseUrl = `http://127.0.0.1:${addressInfo.port}`;
 
-    containerService = app.get(ContainerService) as unknown as TestContainerService;
+    workspaceProvider = app.get(WORKSPACE_PROVIDER) as unknown as TestWorkspaceProvider;
   });
 
   afterAll(async () => {
@@ -107,11 +130,11 @@ describe('ContainerTerminalGateway E2E', () => {
 
   it('supports full websocket terminal lifecycle', async () => {
     const fastify = app.getHttpAdapter().getInstance();
-    const containerId = 'c'.repeat(64);
+    const workspaceId = 'c'.repeat(64);
 
     const sessionResponse = await fastify.inject({
       method: 'POST',
-      url: `/api/containers/${containerId}/terminal/sessions`,
+      url: `/api/containers/${workspaceId}/terminal/sessions`,
       payload: { cols: 120, rows: 32 },
     });
     expect(sessionResponse.statusCode).toBe(201);
@@ -120,7 +143,7 @@ describe('ContainerTerminalGateway E2E', () => {
     const messages: TerminalMessage[] = [];
     const wsUrl = new URL(baseUrl);
     wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsUrl.pathname = `/api/containers/${containerId}/terminal/ws`;
+    wsUrl.pathname = `/api/containers/${workspaceId}/terminal/ws`;
     wsUrl.search = new URLSearchParams({ sessionId, token }).toString();
 
     const ws = new WebSocket(wsUrl.toString());
@@ -164,7 +187,7 @@ describe('ContainerTerminalGateway E2E', () => {
     );
 
     ws.send(JSON.stringify({ type: 'resize', cols: 150, rows: 48 }));
-    await waitFor(() => containerService.resizes.some((item) => item.cols === 150 && item.rows === 48), 2000);
+    await waitFor(() => workspaceProvider.resizes.some((item) => item.cols === 150 && item.rows === 48), 2000);
 
     ws.send(JSON.stringify({ type: 'close' }));
     const closeInfo = await waitForWsClose(ws, 3000);
@@ -172,6 +195,6 @@ describe('ContainerTerminalGateway E2E', () => {
     expect([1000, 1005]).toContain(closeInfo.code);
     expect(messages.some((msg) => msg.type === 'status' && msg.phase === 'exited')).toBe(true);
     expect(messages.some((msg) => msg.type === 'error')).toBe(false);
-    expect(containerService.closeCalls).toBeGreaterThan(0);
+    expect(workspaceProvider.closeCalls).toBeGreaterThan(0);
   });
 });

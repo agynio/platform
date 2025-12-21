@@ -1,3 +1,3 @@
 export * from './types';
-export * from './dockerExecTransport';
+export * from './workspaceExecTransport';
 export * from './localMcpServer.node';

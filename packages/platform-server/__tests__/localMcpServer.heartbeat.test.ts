@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
-import { ContainerService } from '../src/infra/container/container.service';
-import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PassThrough } from 'node:stream';
 import { createModuleRefStub } from './helpers/module-ref.stub';
+import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 
 function createBlockingMcpMock() {
   const tools = [
@@ -65,60 +64,50 @@ function createBlockingMcpMock() {
   return { createFreshStreamPair, release: () => release && release() };
 }
 
+class BlockingWorkspaceProvider extends WorkspaceProviderStub {
+  public readonly mock = createBlockingMcpMock();
+
+  override async openInteractiveExec(_workspaceId: string, _request: any) {
+    const { stream } = this.mock.createFreshStreamPair();
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    stdin.on('data', (chunk) => {
+      stream.write(chunk);
+    });
+    stdin.on('end', () => {
+      stream.end();
+    });
+    stream.pipe(stdout);
+    return { execId: 'blocking', stdin, stdout, close: async () => ({ exitCode: 0 }) };
+  }
+}
+
 describe('LocalMCPServer heartbeat behavior', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  const createContainerService = () => {
-    const registryStub = {
-      registerStart: async () => {},
-      updateLastUsed: async () => {},
-      markStopped: async () => {},
-      markTerminating: async () => {},
-      claimForTermination: async () => true,
-      recordTerminationFailure: async () => {},
-      findByVolume: async () => null,
-      listByThread: async () => [],
-      ensureIndexes: async () => {},
-    } as unknown as ContainerRegistry;
-    return new ContainerService(registryStub);
-  };
-
   it('touches last_used during session and stops after completion', async () => {
-    const containerService = createContainerService();
-    const docker: any = containerService.getDocker();
-    const mock = createBlockingMcpMock();
-    if (docker.modem) docker.modem.demuxStream = (s: any, out: any) => s.pipe(out);
-    docker.getContainer = () => ({
-      exec: async () => ({
-        start: (_: any, cb: any) => {
-          const { stream } = mock.createFreshStreamPair();
-          cb(undefined, stream);
-        },
-        inspect: async () => ({ ExitCode: 0 }),
-      }),
-    });
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, createModuleRefStub());
-    server.setContainerProvider({ provide: async (t: string) => ({ id: `cid-${t}` }) } as any);
+    const provider = new BlockingWorkspaceProvider();
+    const workspaceNode = new WorkspaceNodeStub(provider);
+    const server = new LocalMCPServerNode(envStub, {} as any, createModuleRefStub());
+    server.setContainerProvider(workspaceNode as unknown as typeof server['containerProvider']);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
-
-    const touchSpy = vi.spyOn(containerService, 'touchLastUsed').mockResolvedValue(undefined as any);
 
     const p = server.callTool('echo', { text: 'x' }, { threadId: 'thr', timeoutMs: 10 * 60 * 60 * 1000 });
     await Promise.resolve();
     await Promise.resolve();
-    expect(touchSpy).toHaveBeenCalledTimes(1); // initial touch
+    expect(provider.touchWorkspaceCalls.length).toBeGreaterThanOrEqual(1);
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(touchSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(provider.touchWorkspaceCalls.length).toBeGreaterThanOrEqual(2);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(touchSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(provider.touchWorkspaceCalls.length).toBeGreaterThanOrEqual(3);
 
-    mock.release();
+    provider.mock.release();
     await p;
-    const before = touchSpy.mock.calls.length;
+    const before = provider.touchWorkspaceCalls.length;
     await vi.advanceTimersByTimeAsync(5 * 60_000);
-    expect(touchSpy.mock.calls.length).toBe(before);
+    expect(provider.touchWorkspaceCalls.length).toBe(before);
   });
 });

@@ -12,7 +12,7 @@ import { ShellCommandNode, ShellToolStaticConfigSchema } from './shell_command.n
 import { randomUUID } from 'node:crypto';
 import { Injectable, Scope } from '@nestjs/common';
 import { ArchiveService } from '../../../infra/archive/archive.service';
-import { ContainerHandle } from '../../../infra/container/container.handle';
+import type { WorkspaceHandle } from '../../../workspace/workspace.handle';
 import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
 import { ToolOutputStatus } from '@prisma/client';
@@ -187,7 +187,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   }
 
   private async saveOversizedOutputInContainer(
-    container: ContainerHandle,
+    container: WorkspaceHandle,
     filename: string,
     content: string,
   ): Promise<string> {
@@ -201,7 +201,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     headline: string;
     combinedOutput: string;
     limit: number;
-    container: ContainerHandle;
+    container: WorkspaceHandle;
     savedPath?: string | null;
     truncationMessage?: string | null;
     defaultTailLimit?: number;
@@ -253,7 +253,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     exitCode: number;
     combinedOutput: string;
     limit: number;
-    container: ContainerHandle;
+    container: WorkspaceHandle;
     savedPath?: string | null;
     truncationMessage?: string | null;
   }): Promise<{ message: string; savedPath: string | null; truncationMessage: string | null }> {
@@ -279,7 +279,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     this.logger.log(`shell_command invoked command=${command}`);
 
     // Base env pulled from container; overlay from node config
-    const baseEnv = undefined; // ContainerHandle does not expose getEnv; resolution handled via EnvService
+    const baseEnv = undefined; // WorkspaceHandle does not expose getEnv; resolution handled via EnvService
     const envOverlay = await this.node.resolveEnv(baseEnv);
     const cfg = this.getResolvedConfig();
     const timeoutMs = cfg.executionTimeoutMs;

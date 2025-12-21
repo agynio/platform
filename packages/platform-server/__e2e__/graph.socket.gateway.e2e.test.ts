@@ -16,7 +16,7 @@ import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
-import { ContainerService } from '../src/infra/container/container.service';
+import { WORKSPACE_PROVIDER, type WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 
 class LiveGraphRuntimeStub {
   subscribe() {
@@ -56,12 +56,36 @@ class PrismaServiceStub {
   }
 }
 
-class ContainerServiceStub {
-  async execContainer(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+class WorkspaceProviderStub implements WorkspaceProvider {
+  capabilities() {
+    return {
+      persistentVolume: true,
+      network: true,
+      networkAliases: true,
+      dockerInDocker: true,
+      interactiveExec: true,
+      execResize: true,
+    } as const;
+  }
+
+  async ensureWorkspace(_key?: unknown, _spec?: unknown) {
+    return { workspaceId: 'stub-workspace', created: false };
+  }
+
+  async exec(_workspaceId: string, _request: unknown): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(_containerId: string, _command: string | string[], _opts?: unknown) {
+  async openInteractiveExec(
+    _workspaceId: string,
+    _request: unknown,
+  ): Promise<{
+    execId: string;
+    stdin: PassThrough;
+    stdout: PassThrough;
+    stderr: PassThrough;
+    close: () => Promise<{ exitCode: number }>;
+  }> {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     const stderr = new PassThrough();
@@ -78,7 +102,15 @@ class ContainerServiceStub {
     };
   }
 
-  async resizeExec(): Promise<void> {
+  async resize(_execId: string, _size: { cols: number; rows: number }): Promise<void> {
+    return;
+  }
+
+  async destroyWorkspace(_workspaceId: string): Promise<void> {
+    return;
+  }
+
+  async touchWorkspace(_workspaceId: string): Promise<void> {
     return;
   }
 }
@@ -95,7 +127,7 @@ class TerminalSessionsServiceStub {
     this.session = {
       sessionId: '11111111-1111-4111-8111-111111111111',
       token: 'stub-token',
-      containerId: '22222222-2222-4222-8222-222222222222',
+      workspaceId: '22222222-2222-4222-8222-222222222222',
       shell: '/bin/sh',
       cols: 80,
       rows: 24,
@@ -248,7 +280,7 @@ describe('Socket gateway real server handshakes', () => {
         { provide: PrismaService, useClass: PrismaServiceStub },
         ContainerTerminalGateway,
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
-        { provide: ContainerService, useClass: ContainerServiceStub },
+        { provide: WORKSPACE_PROVIDER, useClass: WorkspaceProviderStub },
         EventsBusService,
         RunEventsService,
       ],
@@ -444,7 +476,7 @@ describe('Socket gateway real server handshakes', () => {
     const session = terminalSessions.session;
     const wsUrl = new URL(baseUrl);
     wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsUrl.pathname = `/api/containers/${session.containerId}/terminal/ws`;
+    wsUrl.pathname = `/api/containers/${session.workspaceId}/terminal/ws`;
     wsUrl.search = new URLSearchParams({ sessionId: session.sessionId, token: session.token }).toString();
 
     const client = new WebSocket(wsUrl.toString());
@@ -506,7 +538,7 @@ describe('Socket gateway real server handshakes', () => {
     const session = terminalSessions.session;
     const wsUrl = new URL(baseUrl);
     wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsUrl.pathname = `/api/containers/${session.containerId}/terminal/ws`;
+    wsUrl.pathname = `/api/containers/${session.workspaceId}/terminal/ws`;
     wsUrl.search = new URLSearchParams({ sessionId: session.sessionId, token: session.token }).toString();
 
     const client = createClient(baseUrl, {

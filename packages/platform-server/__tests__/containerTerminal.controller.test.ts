@@ -17,9 +17,9 @@ describe('ContainerTerminalController', () => {
     } as unknown as TerminalSessionsService;
     const controller = new ContainerTerminalController(service);
 
-    const result = await controller.createSession('cid', { cols: 80, rows: 24 });
+    const result = await controller.createSession('wid', { cols: 80, rows: 24 });
 
-    expect(service.createSession).toHaveBeenCalledWith('cid', { cols: 80, rows: 24 });
+    expect(service.createSession).toHaveBeenCalledWith('wid', { cols: 80, rows: 24 });
     expect(result).toEqual(response);
   });
 
@@ -38,6 +38,6 @@ describe('ContainerTerminalController', () => {
     } as unknown as TerminalSessionsService;
     const controller = new ContainerTerminalController(service);
 
-    await expect(controller.createSession('cid', {})).rejects.toThrow('bad');
+    await expect(controller.createSession('wid', {})).rejects.toThrow('bad');
   });
 });

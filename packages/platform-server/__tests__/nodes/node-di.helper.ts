@@ -24,6 +24,8 @@ import { ThreadTransportService } from '../../src/messaging/threadTransport.serv
 import { VaultService } from '../../src/vault/vault.service';
 import { ReferenceResolverService } from '../../src/utils/reference-resolver.service';
 import { createReferenceResolverStub } from '../helpers/reference-resolver.stub';
+import { WORKSPACE_PROVIDER } from '../../src/workspace/providers/workspace.provider';
+import { WorkspaceProviderStub } from '../helpers/workspace-provider.stub';
 
 type InjectionToken = Type<unknown> | string | symbol;
 
@@ -66,6 +68,7 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
         getContainerLabels: vi.fn(async () => ({})),
       }),
   ],
+  [WORKSPACE_PROVIDER, () => new WorkspaceProviderStub()],
   [
     ConfigService,
     () =>
