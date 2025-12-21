@@ -240,7 +240,7 @@ export function ModelFormDialog({
                     <FormItem>
                       <FormLabel>Model Name</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="assistant-prod" />
+                        <Input {...field} placeholder="assistant-prod" size="sm" />
                       </FormControl>
                       <FormDescription>Unique identifier referenced by agents.</FormDescription>
                       <FormMessage />
@@ -255,7 +255,7 @@ export function ModelFormDialog({
                     <FormItem>
                       <FormLabel>Provider Model Identifier</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder={providerPlaceholder} />
+                        <Input {...field} placeholder={providerPlaceholder} size="sm" />
                       </FormControl>
                       <FormDescription>Exact model slug as recognized by the provider.</FormDescription>
                       <FormMessage />
@@ -279,6 +279,7 @@ export function ModelFormDialog({
                             value: credentialOption.name,
                             label: credentialOption.name,
                           }))}
+                          size="sm"
                         />
                       </FormControl>
                       <FormDescription>
@@ -298,7 +299,7 @@ export function ModelFormDialog({
                     <FormItem>
                       <FormLabel>Mode</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="chat" />
+                        <Input {...field} placeholder="chat" size="sm" />
                       </FormControl>
                       <FormDescription>LiteLLM mode (chat, completion, embedding, etc.).</FormDescription>
                     </FormItem>
@@ -352,7 +353,7 @@ export function ModelFormDialog({
           </Form>
 
           <div className="border-t border-[var(--agyn-border-subtle)] px-6 pb-6">
-            <ScreenDialogFooter className="mt-6">
+            <ScreenDialogFooter className="mt-6 mb-2 sm:mb-4">
               <Button variant="ghost" size="md" onClick={() => onOpenChange(false)} disabled={submitting}>
                 Cancel
               </Button>
@@ -390,7 +391,7 @@ function NumericField({ label, name, placeholder, control }: NumericFieldProps) 
         <FormItem>
           <FormLabel>{label}</FormLabel>
           <FormControl>
-            <Input type="number" step="any" {...field} placeholder={placeholder} />
+            <Input type="number" step="any" {...field} placeholder={placeholder} size="sm" />
           </FormControl>
           <FormMessage />
         </FormItem>
