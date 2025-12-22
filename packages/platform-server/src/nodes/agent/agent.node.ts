@@ -156,35 +156,6 @@ type RegisteredTool = {
   source: ToolSource;
 };
 
-const extractToolPrompt = (tool: unknown): { name: string; prompt: string } => {
-  if (!tool || typeof tool !== 'object') {
-    return { name: '', prompt: '' };
-  }
-  const definitionCandidate = (tool as { definition?: unknown }).definition;
-  if (typeof definitionCandidate !== 'function') {
-    return { name: '', prompt: '' };
-  }
-
-  let definition: unknown;
-  try {
-    definition = definitionCandidate.call(tool);
-  } catch {
-    return { name: '', prompt: '' };
-  }
-
-  if (!definition || typeof definition !== 'object') {
-    return { name: '', prompt: '' };
-  }
-
-  const nameValue = (definition as { name?: unknown }).name;
-  const descriptionValue = (definition as { description?: unknown }).description;
-
-  return {
-    name: typeof nameValue === 'string' ? nameValue : '',
-    prompt: typeof descriptionValue === 'string' ? descriptionValue : '',
-  };
-};
-
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
 import { Inject, Injectable, OnModuleInit, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -442,12 +413,8 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
 
   private buildEffectiveConfig(model: string, tools: FunctionTool[]): EffectiveAgentConfig {
     const systemTemplate = this.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
-    const toolContext: Array<{ name: string; prompt: string }> = [];
-    for (const tool of tools as ReadonlyArray<unknown>) {
-      toolContext.push(extractToolPrompt(tool));
-    }
-    const renderedPrompt: unknown = renderMustache(systemTemplate, { tools: toolContext });
-    const systemPrompt = typeof renderedPrompt === 'string' ? renderedPrompt : String(renderedPrompt ?? '');
+    const toolContext = tools.map((tool) => ({ name: tool.name, prompt: tool.description }));
+    const systemPrompt = renderMustache(systemTemplate, { tools: toolContext });
 
     return {
       model,
