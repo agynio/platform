@@ -185,6 +185,27 @@ describe('ShellCommandTool combined output', () => {
     payloadTexts.forEach((text) => expect(text.includes('\u0000')).toBe(false));
   });
 
+  it('decodes UTF-16BE stdout chunks with BOM before persistence', async () => {
+    const leBody = Buffer.from('Hello BE', 'utf16le');
+    const beBody = Buffer.alloc(leBody.length);
+    for (let i = 0; i < leBody.length; i += 2) {
+      beBody[i] = leBody[i + 1]!;
+      beBody[i + 1] = leBody[i]!;
+    }
+    const utf16beChunk = Buffer.concat([Buffer.from([0xfe, 0xff]), beBody]);
+    const chunks: OutputChunk[] = [{ source: 'stdout', data: utf16beChunk }];
+    const container = new SequenceContainer(chunks);
+    const { tool, runEvents } = createToolWithContainer(container);
+
+    const result = await tool.executeStreaming({ command: 'cat utf16-be.txt' }, ctx as any, streamingOptions);
+
+    expect(result).toBe('Hello BE');
+    expect(runEvents.appendToolOutputChunk).toHaveBeenCalledTimes(1);
+    const persisted = runEvents.appendToolOutputChunk.mock.calls[0][0]?.data as string;
+    expect(persisted).toBe('Hello BE');
+    expect(persisted.includes('\u0000')).toBe(false);
+  });
+
   it('removes CSI sequences that span chunk boundaries (streaming)', async () => {
     const chunks: OutputChunk[] = [
       { source: 'stdout', data: 'color: ' },
