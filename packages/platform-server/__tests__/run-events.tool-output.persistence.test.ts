@@ -125,14 +125,12 @@ describe('RunEventsService tool output persistence resilience', () => {
     );
   });
 
-  it('decodes UTF-16LE chunk data with BOM before persisting', async () => {
+  it('strips replacement prefix and null bytes from chunk data before persisting', async () => {
     const now = new Date();
-    const utf16leBuffer = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('Hello', 'utf16le')]);
-    const rawData = utf16leBuffer.toString('binary');
     const prismaClient = {
       toolOutputChunk: {
         create: vi.fn().mockImplementation(async ({ data }) => {
-          expect(data.data).toBe('Hello');
+          expect(data.data).toBe('Hi');
           return {
             eventId: data.eventId,
             seqGlobal: data.seqGlobal,
@@ -150,63 +148,18 @@ describe('RunEventsService tool output persistence resilience', () => {
     const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
     const service = new RunEventsService(prismaService);
 
-    const result = await service.appendToolOutputChunk({ ...baseChunkArgs, data: rawData });
+    const result = await service.appendToolOutputChunk({ ...baseChunkArgs, data: '\uFFFD\uFFFDH\u0000i\u0000' });
 
-    expect(result.data).toBe('Hello');
+    expect(result.data).toBe('Hi');
     expect(debugSpy).toHaveBeenCalledWith(
       'Sanitized tool output for Postgres compatibility',
       expect.objectContaining({
         runId: 'run-1',
         eventId: 'event-1',
         field: 'chunk.data',
-        transcodedEncoding: 'utf16le',
-        strippedNullCount: 0,
-      }),
-    );
-  });
-
-  it('decodes UTF-16BE chunk data with BOM before persisting', async () => {
-    const now = new Date();
-    const leBody = Buffer.from('Hello', 'utf16le');
-    const beBody = Buffer.alloc(leBody.length);
-    for (let i = 0; i < leBody.length; i += 2) {
-      beBody[i] = leBody[i + 1]!;
-      beBody[i + 1] = leBody[i]!;
-    }
-    const utf16beBuffer = Buffer.concat([Buffer.from([0xfe, 0xff]), beBody]);
-    const rawData = utf16beBuffer.toString('binary');
-    const prismaClient = {
-      toolOutputChunk: {
-        create: vi.fn().mockImplementation(async ({ data }) => {
-          expect(data.data).toBe('Hello');
-          return {
-            eventId: data.eventId,
-            seqGlobal: data.seqGlobal,
-            seqStream: data.seqStream,
-            source: data.source,
-            data: data.data,
-            ts: now,
-          };
-        }),
-      },
-      toolOutputTerminal: {
-        upsert: vi.fn(),
-      },
-    } as Record<string, unknown>;
-    const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
-    const service = new RunEventsService(prismaService);
-
-    const result = await service.appendToolOutputChunk({ ...baseChunkArgs, data: rawData });
-
-    expect(result.data).toBe('Hello');
-    expect(debugSpy).toHaveBeenCalledWith(
-      'Sanitized tool output for Postgres compatibility',
-      expect.objectContaining({
-        runId: 'run-1',
-        eventId: 'event-1',
-        field: 'chunk.data',
-        transcodedEncoding: 'utf16be',
-        strippedNullCount: 0,
+        strippedNullCount: 2,
+        strippedReplacementPrefix: true,
+        strippedBomChar: false,
       }),
     );
   });
@@ -244,7 +197,8 @@ describe('RunEventsService tool output persistence resilience', () => {
         eventId: 'event-1',
         field: 'chunk.data',
         strippedNullCount: 1,
-        transcodedEncoding: null,
+        strippedReplacementPrefix: false,
+        strippedBomChar: false,
       }),
     );
   });
@@ -285,7 +239,7 @@ describe('RunEventsService tool output persistence resilience', () => {
 
     const result = await service.finalizeToolOutputTerminal({
       ...baseTerminalArgs,
-      message: 'bad\u0000news',
+      message: '\uFFFD\uFFFDbad\u0000news',
     });
 
     expect(result.message).toBe('badnews');
@@ -296,7 +250,8 @@ describe('RunEventsService tool output persistence resilience', () => {
         eventId: 'event-1',
         field: 'terminal.message',
         strippedNullCount: 1,
-        transcodedEncoding: null,
+        strippedReplacementPrefix: true,
+        strippedBomChar: false,
       }),
     );
   });

@@ -475,26 +475,32 @@ export class RunEventsService {
     if (value === undefined || value === null) return value ?? null;
 
     let current = value;
-    let transcodedEncoding: 'utf16le' | 'utf16be' | null = null;
+    let strippedNullCount = 0;
+    let strippedReplacementPrefix = false;
+    let strippedBomChar = false;
 
-    const transcoded = this.maybeTranscodeUtf16Bom(value, context);
-    if (transcoded) {
-      current = transcoded.text;
-      transcodedEncoding = transcoded.encoding;
+    if (current.startsWith('\uFFFD\uFFFD')) {
+      current = current.slice(2);
+      strippedReplacementPrefix = true;
     }
 
-    let strippedNullCount = 0;
+    if (current.charCodeAt(0) === 0xfeff) {
+      current = current.slice(1);
+      strippedBomChar = true;
+    }
+
     if (current.includes('\u0000')) {
       strippedNullCount = current.split('\u0000').length - 1;
       current = current.replace(/\u0000/g, '');
     }
 
-    if (transcodedEncoding || strippedNullCount > 0) {
+    if (strippedNullCount > 0 || strippedReplacementPrefix || strippedBomChar) {
       this.logToolOutputSanitization(
         context,
         {
-          transcodedEncoding,
           strippedNullCount,
+          strippedReplacementPrefix,
+          strippedBomChar,
           originalLength: value.length,
           sanitizedLength: current.length,
         },
@@ -504,50 +510,9 @@ export class RunEventsService {
     return current;
   }
 
-  private maybeTranscodeUtf16Bom(
-    value: string,
-    context: { runId: string; eventId: string; field: string },
-  ): { text: string; encoding: 'utf16le' | 'utf16be' } | null {
-    if (value.length < 2) return null;
-
-    const first = value.charCodeAt(0);
-    const second = value.charCodeAt(1);
-    let encoding: 'utf16le' | 'utf16be' | null = null;
-
-    if (first === 0xff && second === 0xfe) {
-      encoding = 'utf16le';
-    } else if (first === 0xfe && second === 0xff) {
-      encoding = 'utf16be';
-    } else {
-      return null;
-    }
-
-    try {
-      const buffer = Buffer.from(value, 'binary');
-      if (buffer.length <= 2) {
-        return { text: '', encoding };
-      }
-      const body = buffer.subarray(2);
-      const decoder = new TextDecoder(encoding === 'utf16le' ? 'utf-16le' : 'utf-16be');
-      let decoded = decoder.decode(body);
-      if (decoded.charCodeAt(0) === 0xfeff) {
-        decoded = decoded.slice(1);
-      }
-      return { text: decoded, encoding };
-    } catch (error) {
-      this.logger.debug('Failed to transcode UTF-16 tool output; preserving original text', {
-        runId: context.runId,
-        eventId: context.eventId,
-        field: context.field,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
   private logToolOutputSanitization(
     context: { runId: string; eventId: string; field: string; source?: ToolOutputSource | null },
-    details: { transcodedEncoding: 'utf16le' | 'utf16be' | null; strippedNullCount: number; originalLength: number; sanitizedLength: number },
+    details: { strippedNullCount: number; strippedReplacementPrefix: boolean; strippedBomChar: boolean; originalLength: number; sanitizedLength: number },
   ): void {
     const key = `${context.runId}:${context.eventId}:${context.field}`;
     if (this.toolOutputSanitizationNotices.has(key)) return;
@@ -557,8 +522,9 @@ export class RunEventsService {
       eventId: context.eventId,
       field: context.field,
       source: context.source ?? null,
-      transcodedEncoding: details.transcodedEncoding,
       strippedNullCount: details.strippedNullCount,
+      strippedReplacementPrefix: details.strippedReplacementPrefix,
+      strippedBomChar: details.strippedBomChar,
       originalLength: details.originalLength,
       sanitizedLength: details.sanitizedLength,
     });

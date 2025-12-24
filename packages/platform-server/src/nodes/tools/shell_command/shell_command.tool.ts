@@ -171,6 +171,78 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     return input.replace(ANSI_OSC_REGEX, '').replace(ANSI_STRING_REGEX, '').replace(ANSI_REGEX, '');
   }
 
+  private createBomAwareDecoder(
+    onEncodingChange?: (source: OutputSource, encoding: 'utf-8' | 'utf-16le' | 'utf-16be') => void,
+  ) {
+    type DecoderEncoding = 'utf-8' | 'utf-16le' | 'utf-16be';
+    type DecoderState = {
+      decoder: TextDecoder;
+      encoding: DecoderEncoding;
+      inspected: boolean;
+      pending: Buffer | null;
+    };
+
+    const states: Record<OutputSource, DecoderState> = {
+      stdout: { decoder: new TextDecoder('utf-8'), encoding: 'utf-8', inspected: false, pending: null },
+      stderr: { decoder: new TextDecoder('utf-8'), encoding: 'utf-8', inspected: false, pending: null },
+    };
+
+    const notifyEncodingChange = (source: OutputSource, encoding: DecoderEncoding) => {
+      if (onEncodingChange) onEncodingChange(source, encoding);
+    };
+
+    const decodeChunk = (source: OutputSource, chunk: Buffer): string => {
+      if (!chunk || chunk.length === 0) return '';
+      const state = states[source];
+      if (!state.inspected) {
+        const combined = state.pending ? Buffer.concat([state.pending, chunk]) : chunk;
+        if (combined.length < 2) {
+          state.pending = combined;
+          return '';
+        }
+        state.inspected = true;
+        state.pending = null;
+        if (combined[0] === 0xff && combined[1] === 0xfe) {
+          state.encoding = 'utf-16le';
+          state.decoder = new TextDecoder('utf-16le');
+          notifyEncodingChange(source, state.encoding);
+          const remainder = combined.subarray(2);
+          if (remainder.length === 0) return '';
+          return state.decoder.decode(remainder, { stream: true });
+        }
+        if (combined[0] === 0xfe && combined[1] === 0xff) {
+          state.encoding = 'utf-16be';
+          state.decoder = new TextDecoder('utf-16be');
+          notifyEncodingChange(source, state.encoding);
+          const remainder = combined.subarray(2);
+          if (remainder.length === 0) return '';
+          return state.decoder.decode(remainder, { stream: true });
+        }
+        return state.decoder.decode(combined, { stream: true });
+      }
+      return state.decoder.decode(chunk, { stream: true });
+    };
+
+    const flushDecoder = (source: OutputSource): string => {
+      const state = states[source];
+      let output = '';
+      if (!state.inspected) {
+        state.inspected = true;
+        if (state.pending && state.pending.length > 0) {
+          output += state.decoder.decode(state.pending, { stream: true });
+          state.pending = null;
+        }
+      }
+      output += state.decoder.decode();
+      return output;
+    };
+
+    return {
+      decodeChunk,
+      flushDecoder,
+    };
+  }
+
   private getResolvedConfig() {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
     return {
@@ -285,10 +357,13 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const timeoutMs = cfg.executionTimeoutMs;
     const idleTimeoutMs = cfg.idleTimeoutMs;
 
-    const decoders: Record<OutputSource, TextDecoder> = {
-      stdout: new TextDecoder('utf-8'),
-      stderr: new TextDecoder('utf-8'),
-    };
+    const decoders = this.createBomAwareDecoder((source, encoding) => {
+      this.logger.debug('ShellCommandTool detected UTF-16 output', {
+        source,
+        encoding,
+        command,
+      });
+    });
 
     const cleanBySource: Record<OutputSource, string> = { stdout: '', stderr: '' };
     const orderedSegments: Array<{ source: OutputSource; text: string }> = [];
@@ -312,7 +387,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const flushDecoderRemainder = () => {
       (['stdout', 'stderr'] as OutputSource[]).forEach((source) => {
-        const tail = decoders[source].decode();
+        const tail = decoders.flushDecoder(source);
         if (tail) consumeDecoded(source, tail);
         const flushed = cleaners[source].flush();
         if (flushed) pushSegment(source, flushed);
@@ -321,7 +396,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
-      const decoded = decoders[source].decode(chunk, { stream: true });
+      const decoded = decoders.decodeChunk(source, chunk);
       if (!decoded) return;
       consumeDecoded(source, decoded);
     };
@@ -461,10 +536,15 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const clientBufferLimitBytes = Math.max(0, Math.trunc(cfg.clientBufferLimitBytes));
     const outputLimit = cfg.outputLimitChars;
 
-    const decoders: Record<OutputSource, TextDecoder> = {
-      stdout: new TextDecoder('utf-8'),
-      stderr: new TextDecoder('utf-8'),
-    };
+    const decoders = this.createBomAwareDecoder((source, encoding) => {
+      this.logger.debug('ShellCommandTool detected UTF-16 output', {
+        runId: options.runId,
+        eventId: options.eventId,
+        source,
+        encoding,
+        command,
+      });
+    });
     const cleaners: Record<OutputSource, AnsiSequenceCleaner> = {
       stdout: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
       stderr: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
@@ -608,7 +688,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
-      const decoded = decoders[source].decode(chunk, { stream: true });
+      const decoded = decoders.decodeChunk(source, chunk);
       if (!decoded) return;
       const cleaned = cleaners[source].consume(decoded);
       if (!cleaned) return;
@@ -672,7 +752,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         terminalStatus = 'error';
       }
     } finally {
-      const stdoutTail = decoders.stdout.decode();
+      const stdoutTail = decoders.flushDecoder('stdout');
       if (stdoutTail) {
         const cleanedTail = cleaners.stdout.consume(stdoutTail);
         if (cleanedTail) {
@@ -683,7 +763,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       if (flushedStdout) {
         handleDecoratedChunk('stdout', flushedStdout, Buffer.byteLength(flushedStdout, 'utf8'));
       }
-      const stderrTail = decoders.stderr.decode();
+      const stderrTail = decoders.flushDecoder('stderr');
       if (stderrTail) {
         const cleanedTail = cleaners.stderr.consume(stderrTail);
         if (cleanedTail) {

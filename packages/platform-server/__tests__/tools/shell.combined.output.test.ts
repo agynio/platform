@@ -4,7 +4,7 @@ import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_comm
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../src/utils/execTimeout';
 
-type OutputChunk = { source: 'stdout' | 'stderr'; data: string };
+type OutputChunk = { source: 'stdout' | 'stderr'; data: string | Buffer };
 
 class SequenceContainer implements ContainerHandle {
   constructor(private readonly chunks: OutputChunk[], private readonly exitCode = 0) {}
@@ -16,9 +16,10 @@ class SequenceContainer implements ContainerHandle {
     const stdoutParts: string[] = [];
     const stderrParts: string[] = [];
     for (const chunk of this.chunks) {
-      if (chunk.source === 'stdout') stdoutParts.push(chunk.data);
-      else stderrParts.push(chunk.data);
-      options?.onOutput?.(chunk.source, Buffer.from(chunk.data, 'utf8'));
+      const buffer = typeof chunk.data === 'string' ? Buffer.from(chunk.data, 'utf8') : chunk.data;
+      if (chunk.source === 'stdout') stdoutParts.push(buffer.toString('utf8'));
+      else stderrParts.push(buffer.toString('utf8'));
+      options?.onOutput?.(chunk.source, buffer);
     }
     return { stdout: stdoutParts.join(''), stderr: stderrParts.join(''), exitCode: this.exitCode };
   }
@@ -149,6 +150,39 @@ describe('ShellCommandTool combined output', () => {
     expect(terminalArgs).toMatchObject({ status: 'success', exitCode: 0 });
     expect(terminalArgs.bytesStdout).toBe(Buffer.byteLength('alpha\ngamma\n', 'utf8'));
     expect(terminalArgs.bytesStderr).toBe(Buffer.byteLength('beta\n', 'utf8'));
+  });
+
+  it('decodes UTF-16LE stdout chunks with BOM before persistence', async () => {
+    const utf16Chunk = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('Hello world', 'utf16le')]);
+    const chunks: OutputChunk[] = [{ source: 'stdout', data: utf16Chunk }];
+    const container = new SequenceContainer(chunks);
+    const { tool, runEvents } = createToolWithContainer(container);
+
+    const result = await tool.executeStreaming({ command: 'cat utf16-le.txt' }, ctx as any, streamingOptions);
+
+    expect(result).toBe('Hello world');
+    expect(runEvents.appendToolOutputChunk).toHaveBeenCalledTimes(1);
+    const persisted = runEvents.appendToolOutputChunk.mock.calls[0][0]?.data as string;
+    expect(persisted).toBe('Hello world');
+    expect(persisted.includes('\u0000')).toBe(false);
+  });
+
+  it('handles BOM split across stdout chunks when decoding UTF-16LE output', async () => {
+    const chunkA = Buffer.from([0xff]);
+    const chunkB = Buffer.concat([Buffer.from([0xfe]), Buffer.from('Hi there', 'utf16le')]);
+    const chunks: OutputChunk[] = [
+      { source: 'stdout', data: chunkA },
+      { source: 'stdout', data: chunkB },
+    ];
+    const container = new SequenceContainer(chunks);
+    const { tool, runEvents } = createToolWithContainer(container);
+
+    const result = await tool.executeStreaming({ command: 'cat utf16-split.txt' }, ctx as any, streamingOptions);
+
+    expect(result).toBe('Hi there');
+    const payloadTexts = runEvents.appendToolOutputChunk.mock.calls.map((call) => call[0]?.data as string);
+    expect(payloadTexts.join('')).toBe('Hi there');
+    payloadTexts.forEach((text) => expect(text.includes('\u0000')).toBe(false));
   });
 
   it('removes CSI sequences that span chunk boundaries (streaming)', async () => {
