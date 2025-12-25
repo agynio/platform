@@ -30,14 +30,17 @@ const baseTerminalArgs = {
 
 describe('RunEventsService tool output persistence resilience', () => {
   let warnSpy: SpyInstance;
+  let debugSpy: SpyInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
     warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
+    debugSpy.mockRestore();
   });
 
   it('logs once and continues streaming when chunk persistence fails', async () => {
@@ -119,6 +122,137 @@ describe('RunEventsService tool output persistence resilience', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       'Tool output snapshot retrieval failed. Run `pnpm --filter @agyn/platform-server prisma migrate deploy` followed by `pnpm --filter @agyn/platform-server prisma generate` to install the latest schema.',
       expect.objectContaining({ eventId: 'event-1', runId: 'run-1' }),
+    );
+  });
+
+  it('strips replacement prefix and null bytes from chunk data before persisting', async () => {
+    const now = new Date();
+    const prismaClient = {
+      toolOutputChunk: {
+        create: vi.fn().mockImplementation(async ({ data }) => {
+          expect(data.data).toBe('Hi');
+          return {
+            eventId: data.eventId,
+            seqGlobal: data.seqGlobal,
+            seqStream: data.seqStream,
+            source: data.source,
+            data: data.data,
+            ts: now,
+          };
+        }),
+      },
+      toolOutputTerminal: {
+        upsert: vi.fn(),
+      },
+    } as Record<string, unknown>;
+    const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
+    const service = new RunEventsService(prismaService);
+
+    const result = await service.appendToolOutputChunk({ ...baseChunkArgs, data: '\uFFFD\uFFFDH\u0000i\u0000' });
+
+    expect(result.data).toBe('Hi');
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Sanitized tool output for Postgres compatibility',
+      expect.objectContaining({
+        runId: 'run-1',
+        eventId: 'event-1',
+        field: 'chunk.data',
+        strippedNullCount: 2,
+        strippedReplacementPrefix: true,
+        strippedBomChar: false,
+      }),
+    );
+  });
+
+  it('strips null bytes from chunk data before persisting', async () => {
+    const now = new Date();
+    const prismaClient = {
+      toolOutputChunk: {
+        create: vi.fn().mockImplementation(async ({ data }) => {
+          expect(data.data).toBe('abcdef');
+          return {
+            eventId: data.eventId,
+            seqGlobal: data.seqGlobal,
+            seqStream: data.seqStream,
+            source: data.source,
+            data: data.data,
+            ts: now,
+          };
+        }),
+      },
+      toolOutputTerminal: {
+        upsert: vi.fn(),
+      },
+    } as Record<string, unknown>;
+    const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
+    const service = new RunEventsService(prismaService);
+
+    const result = await service.appendToolOutputChunk({ ...baseChunkArgs, data: 'abc\u0000def' });
+
+    expect(result.data).toBe('abcdef');
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Sanitized tool output for Postgres compatibility',
+      expect.objectContaining({
+        runId: 'run-1',
+        eventId: 'event-1',
+        field: 'chunk.data',
+        strippedNullCount: 1,
+        strippedReplacementPrefix: false,
+        strippedBomChar: false,
+      }),
+    );
+  });
+
+  it('strips null bytes from terminal message before persisting', async () => {
+    const now = new Date();
+    const prismaClient = {
+      toolOutputChunk: {
+        create: vi.fn().mockResolvedValue({
+          eventId: baseChunkArgs.eventId,
+          seqGlobal: baseChunkArgs.seqGlobal,
+          seqStream: baseChunkArgs.seqStream,
+          source: baseChunkArgs.source,
+          data: baseChunkArgs.data,
+          ts: now,
+        }),
+      },
+      toolOutputTerminal: {
+        upsert: vi.fn().mockImplementation(async ({ create }) => {
+          expect(create.message).toBe('badnews');
+          return {
+            eventId: create.eventId,
+            exitCode: create.exitCode,
+            status: create.status,
+            bytesStdout: create.bytesStdout,
+            bytesStderr: create.bytesStderr,
+            totalChunks: create.totalChunks,
+            droppedChunks: create.droppedChunks,
+            savedPath: create.savedPath,
+            message: create.message,
+            ts: now,
+          };
+        }),
+      },
+    } as Record<string, unknown>;
+    const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
+    const service = new RunEventsService(prismaService);
+
+    const result = await service.finalizeToolOutputTerminal({
+      ...baseTerminalArgs,
+      message: '\uFFFD\uFFFDbad\u0000news',
+    });
+
+    expect(result.message).toBe('badnews');
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Sanitized tool output for Postgres compatibility',
+      expect.objectContaining({
+        runId: 'run-1',
+        eventId: 'event-1',
+        field: 'terminal.message',
+        strippedNullCount: 1,
+        strippedReplacementPrefix: true,
+        strippedBomChar: false,
+      }),
     );
   });
 });
