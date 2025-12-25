@@ -123,7 +123,8 @@ describe('NodePropertiesSidebar - manage tool', () => {
     latestReferenceProps.current = null;
   });
 
-  it('renders prompt preview and updates manage tool config', () => {
+  it('renders prompt preview in fullscreen editor and updates manage tool config', async () => {
+    const user = userEvent.setup();
     const onConfigChange = vi.fn();
 
     const config: NodeConfig = {
@@ -172,13 +173,21 @@ describe('NodePropertiesSidebar - manage tool', () => {
       />,
     );
 
-    expect(screen.getByText('Hello Alice (R&D Lead)')).toBeInTheDocument();
+    expect(screen.queryByText('Hello Alice (R&D Lead)')).not.toBeInTheDocument();
 
     const promptTextarea = screen.getByPlaceholderText('Coordinate managed agents and assign roles...') as HTMLTextAreaElement;
     expect(promptTextarea.value).toBe('Hello {{#agents}}{{name}} ({{role}}){{/agents}}');
 
     fireEvent.change(promptTextarea, { target: { value: 'Team summary: {{#agents}}{{name}}{{/agents}}' } });
     expect(latestUpdate(onConfigChange, 'prompt')).toBe('Team summary: {{#agents}}{{name}}{{/agents}}');
+
+    const fullscreenButton = screen.getByTitle('Open fullscreen markdown editor');
+    await user.click(fullscreenButton);
+
+    expect(await screen.findByText('Hello Alice (R&D Lead)')).toBeInTheDocument();
+
+    const cancelButton = screen.getByRole('button', { name: /cancel/i });
+    await user.click(cancelButton);
 
     const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
     fireEvent.change(dropdown, { target: { value: 'async' } });

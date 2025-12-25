@@ -3,7 +3,6 @@ import { useCallback, useMemo, type ChangeEvent } from 'react';
 import { Dropdown } from '../../../Dropdown';
 import { Input } from '../../../Input';
 import { MarkdownInput } from '../../../MarkdownInput';
-import { MarkdownContent } from '../../../MarkdownContent';
 import { FieldLabel } from '../../FieldLabel';
 import type { NodePropertiesViewProps } from '../../viewTypes';
 import { readNumber, toNumberOrUndefined } from '../../utils';
@@ -108,39 +107,15 @@ export function ManageToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
     return context;
   }, [graphNodes, graphEdges, nodeId]);
 
-  const hasPrompt = promptValue.trim().length > 0;
-
-  const renderedPrompt = useMemo(() => {
-    if (!hasPrompt) {
-      return '';
-    }
-    return renderMustacheTemplate(promptValue, { agents: agentsContext });
-  }, [agentsContext, hasPrompt, promptValue]);
-
-  const hasRenderedContent = renderedPrompt.trim().length > 0;
-
-  const previewHint = useMemo(() => {
-    if (!hasPrompt) {
-      return 'Preview updates once a prompt is provided.';
-    }
-    if (agentsContext.length === 0) {
-      return 'Rendered with an empty agents list (no connected agents).';
-    }
-    const namedAgents = agentsContext
-      .map((agent) => agent.name)
-      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
-      .map((name) => name.trim());
-
-    if (namedAgents.length === 1) {
-      return `Rendered with agent "${namedAgents[0]}".`;
-    }
-
-    if (namedAgents.length > 1 && namedAgents.length <= 3) {
-      return `Rendered with agents: ${namedAgents.join(', ')}.`;
-    }
-
-    return `Rendered with ${agentsContext.length} connected agents.`;
-  }, [agentsContext, hasPrompt]);
+  const renderPromptPreview = useCallback(
+    (template: string) => {
+      if (!template || template.trim().length === 0) {
+        return '';
+      }
+      return renderMustacheTemplate(template, { agents: agentsContext });
+    },
+    [agentsContext],
+  );
 
   return (
     <>
@@ -159,23 +134,9 @@ export function ManageToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
             onChange={handlePromptChange}
             size="sm"
             maxLength={8192}
-            helperText="Rendered below with the current agents context."
+            helperText="Preview tab renders with connected agents context."
+            previewTransform={renderPromptPreview}
           />
-        </div>
-
-        <div>
-          <FieldLabel label="Prompt Preview" hint={previewHint} />
-          <div className="mt-2 rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white px-3 py-2">
-            {hasPrompt ? (
-              hasRenderedContent ? (
-                <MarkdownContent content={renderedPrompt} />
-              ) : (
-                <p className="text-sm italic text-[var(--agyn-gray)]">Rendered prompt is empty.</p>
-              )
-            ) : (
-              <p className="text-sm italic text-[var(--agyn-gray)]">Enter a prompt to see the rendered preview.</p>
-            )}
-          </div>
         </div>
 
         <div>

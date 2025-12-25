@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { MutableRefObject } from 'react';
 import { Eye, Code, SplitSquareVertical } from 'lucide-react';
 import { Button } from './Button';
@@ -10,6 +10,7 @@ interface FullscreenMarkdownEditorProps {
   onChange: (value: string) => void;
   onClose: () => void;
   label?: string;
+  previewTransform?: (value: string) => string;
 }
 
 type ViewMode = 'split' | 'edit' | 'preview';
@@ -264,17 +265,21 @@ const useScrollSync = ({
   return { markEditorAsSource };
 };
 
-export function FullscreenMarkdownEditor({ 
-  value, 
-  onChange, 
+export function FullscreenMarkdownEditor({
+  value,
+  onChange,
   onClose,
-  label = 'Editor'
+  label = 'Editor',
+  previewTransform,
 }: FullscreenMarkdownEditorProps) {
   const [localValue, setLocalValue] = useState(value);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
+  const previewContent = useMemo(() => {
+    return previewTransform ? previewTransform(localValue) : localValue;
+  }, [localValue, previewTransform]);
 
   useEffect(() => {
     setLocalValue(value);
@@ -372,7 +377,7 @@ export function FullscreenMarkdownEditor({
               <div ref={previewScrollRef} className="flex-1 overflow-auto bg-white p-6">
                 <div ref={previewContentRef}>
                   <MarkdownContent
-                    content={localValue}
+                    content={previewContent}
                     className="prose prose-sm max-w-none markdown-preview"
                   />
                 </div>
