@@ -46,12 +46,17 @@ interface ConversationProps {
   collapsed?: boolean;
   scrollRef?: Ref<HTMLDivElement>;
   onScroll?: (event: UIEvent<HTMLDivElement>) => void;
+  onCancelQueuedMessage?: (queuedMessageId: string) => void;
+  onCancelReminder?: (reminderId: string) => void;
+  isCancelQueuedMessagesPending?: boolean;
+  cancellingReminderIds?: ReadonlySet<string>;
 }
 
 const EMPTY_QUEUED_MESSAGES: QueuedMessageData[] = [];
 const EMPTY_REMINDERS: ReminderData[] = [];
 const EMPTY_HEADER: ReactNode = null;
 const EMPTY_FOOTER: ReactNode = null;
+const EMPTY_REMINDER_IDS: ReadonlySet<string> = new Set();
 
 function ConversationImpl({
   runs,
@@ -64,6 +69,10 @@ function ConversationImpl({
   collapsed,
   scrollRef,
   onScroll,
+  onCancelQueuedMessage,
+  onCancelReminder,
+  isCancelQueuedMessagesPending = false,
+  cancellingReminderIds = EMPTY_REMINDER_IDS,
 }: ConversationProps) {
   const messagesRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [runHeights, setRunHeights] = useState<Map<string, number>>(new Map());
@@ -188,6 +197,8 @@ function ConversationImpl({
                       <QueuedMessage
                         key={msg.id}
                         content={msg.content}
+                        onCancel={onCancelQueuedMessage ? () => onCancelQueuedMessage(msg.id) : undefined}
+                        isCancelling={isCancelQueuedMessagesPending}
                       />
                     ))}
 
@@ -198,6 +209,8 @@ function ConversationImpl({
                         content={reminder.content}
                         scheduledTime={reminder.scheduledTime}
                         date={reminder.date}
+                        onCancel={onCancelReminder ? () => onCancelReminder(reminder.id) : undefined}
+                        isCancelling={cancellingReminderIds.has(reminder.id)}
                       />
                     ))}
                   </div>
@@ -238,7 +251,11 @@ function areEqual(prev: ConversationProps, next: ConversationProps): boolean {
     prev.defaultCollapsed === next.defaultCollapsed &&
     prev.className === next.className &&
     prev.scrollRef === next.scrollRef &&
-    prev.onScroll === next.onScroll
+    prev.onScroll === next.onScroll &&
+    prev.onCancelQueuedMessage === next.onCancelQueuedMessage &&
+    prev.onCancelReminder === next.onCancelReminder &&
+    prev.isCancelQueuedMessagesPending === next.isCancelQueuedMessagesPending &&
+    prev.cancellingReminderIds === next.cancellingReminderIds
   );
 }
 

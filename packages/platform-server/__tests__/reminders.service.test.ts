@@ -26,7 +26,11 @@ describe('RemindersService.cancelThreadReminders', () => {
       },
     };
     const prismaService = { getClient: () => prismaClient };
-    const eventsBus = { emitReminderCount: vi.fn() };
+    const eventsBus = {
+      emitReminderCount: vi.fn(),
+      emitThreadMetrics: vi.fn(),
+      emitThreadMetricsAncestors: vi.fn(),
+    };
 
     const node = new RemindMeNode(eventsBus as any, prismaService as any);
     node.init({ nodeId: 'node-a' } as any);
@@ -40,11 +44,11 @@ describe('RemindersService.cancelThreadReminders', () => {
       });
 
     const runtime = createRuntimeFixture({ id: 'node-a', instance: node }, { id: 'node-other', template: 'skip', instance: {} });
-    const service = new RemindersService(prismaService as any, runtime as any);
+    const service = new RemindersService(prismaService as any, runtime as any, eventsBus as any);
     const logger = (service as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
     vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-    const result = await service.cancelThreadReminders({ threadId: 'thread-123' });
+    const result = await service.cancelThreadReminders({ threadId: 'thread-123', emitMetrics: true });
 
     expect(clearSpy).toHaveBeenCalledWith('thread-123');
     const [[updateArgs]] = prismaClient.reminder.updateMany.mock.calls as Array<[
@@ -56,6 +60,8 @@ describe('RemindersService.cancelThreadReminders', () => {
     expect(updateArgs.where).toEqual({ threadId: 'thread-123', completedAt: null, cancelledAt: null });
     expect(updateArgs.data.cancelledAt).toBeInstanceOf(Date);
     expect(result).toEqual({ cancelledDb: 3, clearedRuntime: 2 });
+    expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'thread-123' });
+    expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'thread-123' });
   });
 
   it('logs and continues when a runtime node throws', async () => {
@@ -65,7 +71,11 @@ describe('RemindersService.cancelThreadReminders', () => {
       },
     };
     const prismaService = { getClient: () => prismaClient };
-    const eventsBus = { emitReminderCount: vi.fn() };
+    const eventsBus = {
+      emitReminderCount: vi.fn(),
+      emitThreadMetrics: vi.fn(),
+      emitThreadMetricsAncestors: vi.fn(),
+    };
 
     const failingNode = new RemindMeNode(eventsBus as any, prismaService as any);
     failingNode.init({ nodeId: 'node-fail' } as any);
@@ -83,7 +93,7 @@ describe('RemindersService.cancelThreadReminders', () => {
       { id: 'node-fail', instance: failingNode },
       { id: 'node-ok', instance: succeedingNode },
     );
-    const service = new RemindersService(prismaService as any, runtime as any);
+    const service = new RemindersService(prismaService as any, runtime as any, eventsBus as any);
     const logger = (service as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
@@ -94,5 +104,65 @@ describe('RemindersService.cancelThreadReminders', () => {
     );
     expect(succeedingTool.clearTimersByThread).toHaveBeenCalledWith('thread-err');
     expect(result).toEqual({ cancelledDb: 4, clearedRuntime: 2 });
+  });
+});
+
+describe('RemindersService.cancelReminder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('cancels a single reminder and clears runtime timer', async () => {
+    const prismaClient = {
+      reminder: {
+        findUnique: vi.fn(async () => ({ id: 'rem-1', threadId: 'thread-abc', completedAt: null, cancelledAt: null })),
+        update: vi.fn(async () => ({ id: 'rem-1' })),
+      },
+    };
+    const prismaService = { getClient: () => prismaClient };
+    const eventsBus = {
+      emitReminderCount: vi.fn(),
+      emitThreadMetrics: vi.fn(),
+      emitThreadMetricsAncestors: vi.fn(),
+    };
+
+    const node = new RemindMeNode(eventsBus as any, prismaService as any);
+    node.init({ nodeId: 'node-1' } as any);
+    const tool = node.getTool();
+    const clearSpy = vi
+      .spyOn(tool, 'clearTimerById')
+      .mockImplementation((reminderId: string) => (reminderId === 'rem-1' ? 'thread-from-runtime' : null));
+
+    const runtime = createRuntimeFixture({ id: 'node-1', instance: node });
+    const service = new RemindersService(prismaService as any, runtime as any, eventsBus as any);
+
+    const result = await service.cancelReminder({ reminderId: 'rem-1', emitMetrics: true });
+
+    expect(result).toEqual({ threadId: 'thread-from-runtime', cancelledDb: true, clearedRuntime: 1 });
+    expect(prismaClient.reminder.update).toHaveBeenCalled();
+    expect(clearSpy).toHaveBeenCalledWith('rem-1');
+    expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'thread-from-runtime' });
+    expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'thread-from-runtime' });
+  });
+
+  it('returns null when reminder is not found', async () => {
+    const prismaClient = {
+      reminder: {
+        findUnique: vi.fn(async () => null),
+      },
+    };
+    const prismaService = { getClient: () => prismaClient };
+    const eventsBus = {
+      emitReminderCount: vi.fn(),
+      emitThreadMetrics: vi.fn(),
+      emitThreadMetricsAncestors: vi.fn(),
+    };
+    const runtime = createRuntimeFixture();
+    const service = new RemindersService(prismaService as any, runtime as any, eventsBus as any);
+
+    const result = await service.cancelReminder({ reminderId: 'missing', emitMetrics: true });
+
+    expect(result).toBeNull();
+    expect(eventsBus.emitThreadMetrics).not.toHaveBeenCalled();
   });
 });

@@ -3,7 +3,7 @@ import type { LiveNode } from '../graph/liveGraph.types';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 
 export type AgentRuntimeInstance = Pick<AgentNode, 'invoke' | 'status'> &
-  Partial<Pick<AgentNode, 'listQueuedPreview'>>;
+  Partial<Pick<AgentNode, 'listQueuedPreview' | 'clearQueuedMessages'>>;
 
 export function isAgentRuntimeInstance(value: unknown): value is AgentRuntimeInstance {
   if (value instanceof AgentNode) return true;
@@ -16,6 +16,12 @@ export function hasQueuedPreviewCapability(
   value: AgentRuntimeInstance,
 ): value is AgentRuntimeInstance & Pick<AgentNode, 'listQueuedPreview'> {
   return typeof value.listQueuedPreview === 'function';
+}
+
+export function hasQueueManagementCapability(
+  value: AgentRuntimeInstance,
+): value is AgentRuntimeInstance & Pick<AgentNode, 'clearQueuedMessages'> {
+  return typeof value.clearQueuedMessages === 'function';
 }
 
 export function isAgentTemplate(template: string, registry: TemplateRegistry): boolean {

@@ -8,6 +8,7 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { NotImplementedException } from '@nestjs/common';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { RemindersService } from '../src/agents/reminders.service';
 
 describe('AgentsThreadsController tool output snapshot endpoint', () => {
   it('returns 501 when tool output persistence is unavailable', async () => {
@@ -24,6 +25,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -60,6 +62,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 

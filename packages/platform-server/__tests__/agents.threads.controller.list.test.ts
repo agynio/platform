@@ -7,6 +7,7 @@ import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinato
 import { RunEventsService } from '../src/events/run-events.service';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { RemindersService } from '../src/agents/reminders.service';
 
 const runEventsStub = {
   getRunSummary: vi.fn(async () => null),
@@ -37,6 +38,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -87,6 +89,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -122,6 +125,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -157,6 +161,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -188,6 +193,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -230,6 +236,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -279,6 +286,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -309,6 +317,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 

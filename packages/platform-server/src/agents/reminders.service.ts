@@ -4,12 +4,20 @@ import { PrismaService } from '../core/services/prisma.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { RemindMeNode } from '../nodes/tools/remind_me/remind_me.node';
 import type { RemindMeFunctionTool } from '../nodes/tools/remind_me/remind_me.tool';
+import { EventsBusService } from '../events/events-bus.service';
 
 type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
 
 interface CancelThreadRemindersOptions {
   threadId: string;
   prismaOverride?: PrismaExecutor;
+  emitMetrics?: boolean;
+}
+
+interface CancelReminderOptions {
+  reminderId: string;
+  prismaOverride?: PrismaExecutor;
+  emitMetrics?: boolean;
 }
 
 @Injectable()
@@ -18,6 +26,7 @@ export class RemindersService {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
   private format(context?: Record<string, unknown>): string {
@@ -31,7 +40,7 @@ export class RemindersService {
     return { message: String(error) };
   }
 
-  async cancelThreadReminders({ threadId, prismaOverride }: CancelThreadRemindersOptions): Promise<{
+  async cancelThreadReminders({ threadId, prismaOverride, emitMetrics }: CancelThreadRemindersOptions): Promise<{
     cancelledDb: number;
     clearedRuntime: number;
   }> {
@@ -73,10 +82,105 @@ export class RemindersService {
       }
     }
 
+    if (emitMetrics && (cancelledDb > 0 || clearedRuntime > 0)) {
+      this.emitMetrics(threadId);
+    }
+
     return { cancelledDb, clearedRuntime };
   }
 
-  private safeGetRuntimeNodes(threadId: string) {
+  async cancelReminder({ reminderId, prismaOverride, emitMetrics }: CancelReminderOptions): Promise<
+    | {
+        threadId: string;
+        cancelledDb: boolean;
+        clearedRuntime: number;
+      }
+    | null
+  > {
+    const prisma = prismaOverride ?? this.prismaService.getClient();
+
+    const reminder = await prisma.reminder.findUnique({
+      where: { id: reminderId },
+      select: { id: true, threadId: true, completedAt: true, cancelledAt: true },
+    });
+    if (!reminder) {
+      return null;
+    }
+
+    const threadId = reminder.threadId ?? null;
+
+    let cancelledDb = false;
+    if (!reminder.completedAt && !reminder.cancelledAt) {
+      try {
+        await prisma.reminder.update({ where: { id: reminderId }, data: { cancelledAt: new Date() } });
+        cancelledDb = true;
+      } catch (error) {
+        this.logger.warn(
+          `RemindersService persistence single-cancel error${this.format({
+            reminderId,
+            threadId,
+            error: this.errorInfo(error),
+          })}`,
+        );
+      }
+    }
+
+    const runtimeResult = this.clearRuntimeReminder(reminderId, threadId ?? undefined);
+    const resolvedThreadId = runtimeResult.threadId ?? threadId;
+    const clearedRuntime = runtimeResult.cleared ? 1 : 0;
+
+    if (emitMetrics && resolvedThreadId) {
+      this.emitMetrics(resolvedThreadId);
+    }
+
+    return {
+      threadId: resolvedThreadId ?? reminder.threadId ?? '',
+      cancelledDb,
+      clearedRuntime,
+    };
+  }
+
+  private clearRuntimeReminder(reminderId: string, threadIdHint?: string): { cleared: boolean; threadId?: string } {
+    let resolvedThreadId = threadIdHint;
+    for (const liveNode of this.safeGetRuntimeNodes(threadIdHint ?? reminderId)) {
+      if (liveNode.template !== 'remindMeTool') continue;
+      const instance = liveNode.instance;
+      if (!(instance instanceof RemindMeNode)) continue;
+      const tool = instance.getTool() as RemindMeFunctionTool;
+      if (typeof tool.clearTimerById !== 'function') continue;
+
+      try {
+        const clearedThreadId = tool.clearTimerById(reminderId);
+        if (typeof clearedThreadId === 'string') {
+          resolvedThreadId = clearedThreadId;
+          return { cleared: true, threadId: resolvedThreadId };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `RemindersService runtime single-cancel error${this.format({
+            reminderId,
+            threadId: threadIdHint,
+            nodeId: liveNode.id,
+            error: this.errorInfo(error),
+          })}`,
+        );
+      }
+    }
+    return { cleared: false, threadId: resolvedThreadId };
+  }
+
+  private emitMetrics(threadId: string): void {
+    try {
+      this.eventsBus.emitThreadMetrics({ threadId });
+      this.eventsBus.emitThreadMetricsAncestors({ threadId });
+    } catch (error) {
+      this.logger.warn(
+        `RemindersService metrics emit failed${this.format({ threadId, error: this.errorInfo(error) })}`,
+      );
+    }
+  }
+
+  private safeGetRuntimeNodes(threadId?: string) {
     try {
       return this.runtime.getNodes();
     } catch (error) {

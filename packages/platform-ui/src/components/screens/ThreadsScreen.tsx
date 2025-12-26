@@ -75,6 +75,10 @@ interface ThreadsScreenProps {
   draftFetchOptions?: (query: string) => Promise<AutocompleteOption[]>;
   onDraftRecipientChange?: (agentId: string | null, agentName: string | null) => void;
   onDraftCancel?: () => void;
+  onCancelQueuedMessage?: (queuedMessageId: string) => void;
+  onCancelReminder?: (reminderId: string) => void;
+  isCancelQueuedMessagesPending?: boolean;
+  cancellingReminderIds?: ReadonlySet<string>;
   className?: string;
 }
 
@@ -114,6 +118,10 @@ export default function ThreadsScreen({
   draftFetchOptions,
   onDraftRecipientChange,
   onDraftCancel,
+  onCancelQueuedMessage,
+  onCancelReminder,
+  isCancelQueuedMessagesPending,
+  cancellingReminderIds,
   className = '',
   conversationScrollRef,
   onConversationScroll,
@@ -569,6 +577,10 @@ export default function ThreadsScreen({
             collapsed={isRunsInfoCollapsed}
             scrollRef={conversationScrollRef}
             onScroll={onConversationScroll}
+            onCancelQueuedMessage={onCancelQueuedMessage}
+            onCancelReminder={onCancelReminder}
+            isCancelQueuedMessagesPending={isCancelQueuedMessagesPending}
+            cancellingReminderIds={cancellingReminderIds}
           />
         </div>
 

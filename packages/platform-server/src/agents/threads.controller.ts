@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -18,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
+import { RemindersService } from './reminders.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
 import { ThreadCleanupCoordinator } from './threadCleanup.coordinator';
@@ -27,7 +29,7 @@ import { RunSignalsRegistry } from './run-signals.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { HumanMessage } from '@agyn/llm';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
-import { hasQueuedPreviewCapability, isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
+import { hasQueueManagementCapability, hasQueuedPreviewCapability, isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
 import { randomUUID } from 'node:crypto';
 import { ThreadParentNotFoundError } from './agents.persistence.service';
 
@@ -217,6 +219,7 @@ export class AgentsThreadsController {
   private readonly logger = new Logger(AgentsThreadsController.name);
   constructor(
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(RemindersService) private readonly reminders: RemindersService,
     @Inject(ThreadCleanupCoordinator) private readonly cleanupCoordinator: ThreadCleanupCoordinator,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
@@ -445,6 +448,61 @@ export class AgentsThreadsController {
       return { id: item.id, text, enqueuedAt };
     });
     return { items };
+  }
+
+  @Delete('threads/:threadId/queued-messages')
+  async clearQueuedMessages(@Param('threadId') threadId: string) {
+    const thread = await this.persistence.getThreadById(threadId);
+    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+
+    const assignedAgentNodeId = typeof thread.assignedAgentNodeId === 'string' ? thread.assignedAgentNodeId.trim() : '';
+    if (!assignedAgentNodeId) {
+      return { clearedCount: 0 } as const;
+    }
+
+    const liveNodes = this.runtime.getNodes();
+    const agentNodes = liveNodes.filter((node) => isAgentLiveNode(node, this.templateRegistry));
+    if (agentNodes.length === 0) {
+      return { clearedCount: 0 } as const;
+    }
+
+    const liveAgentNode = agentNodes.find((node) => node.id === assignedAgentNodeId);
+    if (!liveAgentNode) {
+      return { clearedCount: 0 } as const;
+    }
+
+    const instance = liveAgentNode.instance;
+    if (!isAgentRuntimeInstance(instance) || !hasQueueManagementCapability(instance)) {
+      return { clearedCount: 0 } as const;
+    }
+
+    try {
+      const cleared = instance.clearQueuedMessages(threadId);
+      return { clearedCount: Number.isFinite(cleared) ? Math.max(0, Math.trunc(cleared)) : 0 } as const;
+    } catch (error) {
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.warn(
+        `clearQueuedMessages runtime failure thread=${threadId} agent=${assignedAgentNodeId}`,
+        stack,
+        AgentsThreadsController.name,
+      );
+      return { clearedCount: 0 } as const;
+    }
+  }
+
+  @Post('threads/:threadId/reminders/cancel')
+  async cancelThreadReminders(@Param('threadId') threadId: string) {
+    const thread = await this.persistence.getThreadById(threadId);
+    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+
+    try {
+      const result = await this.reminders.cancelThreadReminders({ threadId, emitMetrics: true });
+      return result;
+    } catch (error) {
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`cancelThreadReminders failed thread=${threadId}`, stack, AgentsThreadsController.name);
+      throw new InternalServerErrorException({ error: 'cancel_failed' });
+    }
   }
 
   @Get('runs/:runId/messages')

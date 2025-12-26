@@ -492,6 +492,80 @@ describe('AgentsThreads page', () => {
     expect(screen.queryByText('Reminders')).not.toBeInTheDocument();
   });
 
+  it('clears queued messages from the conversation when cancelled', async () => {
+    const user = userEvent.setup();
+    const threadId = '33333333-3333-4333-8333-333333333333';
+    const queuedMessage = { id: 'msg-queued-1', text: 'Queued message waiting' };
+    const thread = makeThread({ id: threadId });
+    registerThreadScenario({ thread, runs: [], queuedMessages: [queuedMessage] });
+    registerGraphAgents([]);
+
+    let queued = [queuedMessage];
+    const deleteCalls: Array<Record<string, string>> = [];
+    server.use(
+      http.get('*/api/agents/threads/:threadId/queued-messages', ({ params }) => {
+        if (params.threadId === threadId) return HttpResponse.json({ items: queued });
+        return HttpResponse.json({ items: [] });
+      }),
+      http.get(abs('/api/agents/threads/:threadId/queued-messages'), ({ params }) => {
+        if (params.threadId === threadId) return HttpResponse.json({ items: queued });
+        return HttpResponse.json({ items: [] });
+      }),
+      http.delete('*/api/agents/threads/:threadId/queued-messages', ({ params }) => {
+        deleteCalls.push(params as Record<string, string>);
+        queued = [];
+        return HttpResponse.json({ clearedCount: 1 });
+      }),
+      http.delete(abs('/api/agents/threads/:threadId/queued-messages'), ({ params }) => {
+        deleteCalls.push(params as Record<string, string>);
+        queued = [];
+        return HttpResponse.json({ clearedCount: 1 });
+      }),
+    );
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel queued message' });
+    await user.click(cancelButton);
+
+    await waitFor(() => expect(deleteCalls.length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.queryByText('Queued message waiting')).not.toBeInTheDocument());
+  });
+
+  it('cancels a reminder from the conversation list', async () => {
+    const user = userEvent.setup();
+    const threadId = '44444444-4444-4444-8444-444444444444';
+    const reminder = makeReminder({ id: 'rem-cancel-1', threadId, note: 'Cancel this reminder' });
+    const thread = makeThread({ id: threadId });
+    registerThreadScenario({ thread, runs: [], reminders: [reminder] });
+    registerGraphAgents([]);
+
+    let remindersList = [reminder];
+    const cancelCalls: Array<Record<string, string>> = [];
+    server.use(
+      http.get('*/api/agents/reminders', () => HttpResponse.json({ items: remindersList })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: remindersList })),
+      http.post('*/api/agents/reminders/:reminderId/cancel', ({ params }) => {
+        cancelCalls.push(params as Record<string, string>);
+        remindersList = [];
+        return HttpResponse.json({ threadId, cancelledDb: true, clearedRuntime: 0 });
+      }),
+      http.post(abs('/api/agents/reminders/:reminderId/cancel'), ({ params }) => {
+        cancelCalls.push(params as Record<string, string>);
+        remindersList = [];
+        return HttpResponse.json({ threadId, cancelledDb: true, clearedRuntime: 0 });
+      }),
+    );
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel reminder' });
+    await user.click(cancelButton);
+
+    await waitFor(() => expect(cancelCalls.length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.queryByText('Cancel this reminder')).not.toBeInTheDocument());
+  });
+
   it('sends a message and clears the composer input', async () => {
     const thread = makeThread();
     registerThreadScenario({ thread, runs: [], children: [] });

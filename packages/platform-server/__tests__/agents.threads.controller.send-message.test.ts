@@ -9,6 +9,7 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { ThreadStatus } from '@prisma/client';
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { RemindersService } from '../src/agents/reminders.service';
 
 const runEventsStub = {
   getRunSummary: async () => null,
@@ -65,6 +66,7 @@ async function setup(options: SetupOptions = {}) {
       { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       { provide: LiveGraphRuntime, useValue: { getNodes: () => nodes } },
       { provide: TemplateRegistry, useValue: templateRegistryStub },
+      { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
     ],
   }).compile();
 

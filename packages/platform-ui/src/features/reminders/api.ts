@@ -108,3 +108,10 @@ export async function listReminders(
 
   throw new Error('Unexpected reminders response shape');
 }
+
+export function cancelReminder(reminderId: string) {
+  return http.post<{ threadId: string; cancelledDb: boolean; clearedRuntime: number }>(
+    `/api/agents/reminders/${encodeURIComponent(reminderId)}/cancel`,
+    {},
+  );
+}

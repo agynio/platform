@@ -74,4 +74,10 @@ export const threads = {
     asData<{ items: { id: string; text: string; enqueuedAt?: string }[] }>(
       http.get(`/api/agents/threads/${encodeURIComponent(id)}/queued-messages`),
     ),
+  clearQueuedMessages: (id: string) =>
+    asData<{ clearedCount: number }>(http.delete(`/api/agents/threads/${encodeURIComponent(id)}/queued-messages`)),
+  cancelThreadReminders: (id: string) =>
+    asData<{ cancelledDb: number; clearedRuntime: number }>(
+      http.post(`/api/agents/threads/${encodeURIComponent(id)}/reminders/cancel`, {}),
+    ),
 };

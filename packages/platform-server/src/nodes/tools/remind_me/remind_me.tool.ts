@@ -120,4 +120,15 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     this.onRegistryChanged?.(this.active.size, Date.now(), threadId);
     return clearedIds;
   }
+
+  clearTimerById(reminderId: string): string | null {
+    const entry = this.active.get(reminderId);
+    if (!entry) return null;
+
+    clearTimeout(entry.timer);
+    this.active.delete(reminderId);
+    const threadId = entry.reminder.threadId ?? null;
+    this.onRegistryChanged?.(this.active.size, Date.now(), threadId ?? undefined);
+    return threadId;
+  }
 }

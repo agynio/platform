@@ -687,6 +687,10 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     return this.buffer.snapshot(threadId);
   }
 
+  public clearQueuedMessages(threadId: string): number {
+    return this.buffer.clearThread(threadId);
+  }
+
   addTool(toolNode: BaseToolNode<unknown>): void {
     const tool: FunctionTool = toolNode.getTool();
     const added = this.registerTool(tool, this.buildNodeToolSource(toolNode));

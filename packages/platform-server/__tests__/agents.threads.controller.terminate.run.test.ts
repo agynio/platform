@@ -8,6 +8,7 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { NotFoundException } from '@nestjs/common';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { RemindersService } from '../src/agents/reminders.service';
 
 const runEventsStub = {
   getRunSummary: vi.fn(),
@@ -32,6 +33,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate, clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -56,6 +58,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate, clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 
@@ -79,6 +82,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
         { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
         { provide: TemplateRegistry, useValue: { getMeta: vi.fn(() => undefined) } satisfies Pick<TemplateRegistry, 'getMeta'> },
+        { provide: RemindersService, useValue: { cancelThreadReminders: vi.fn(), cancelReminder: vi.fn() } },
       ],
     }).compile();
 

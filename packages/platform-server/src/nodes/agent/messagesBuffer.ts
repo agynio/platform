@@ -98,12 +98,17 @@ export class MessagesBuffer {
     return s.lastEnqueueAt + this.debounceMs;
   }
 
-  /** Clear queued items for a thread. */
-  clearThread(thread: string): void {
+  /** Clear queued items for a thread. Returns number of removed messages. */
+  clearThread(thread: string): number {
     const s = this.threads.get(thread);
-    if (!s) return;
+    if (!s) return 0;
+    const removed = s.queue.length;
+    if (removed === 0) {
+      return 0;
+    }
     s.queue.length = 0;
     s.lastEnqueueAt = 0;
+    return removed;
   }
 
   destroy(): void {

@@ -1,7 +1,8 @@
-import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, Min, Max, IsOptional, IsUUID } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
+import { RemindersService } from './reminders.service';
 
 export class ListRemindersQueryDto {
   @IsOptional()
@@ -45,6 +46,7 @@ export class ListRemindersQueryDto {
 export class AgentsRemindersController {
   constructor(
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(RemindersService) private readonly reminders: RemindersService,
   ) {}
 
   @Get('reminders')
@@ -71,5 +73,17 @@ export class AgentsRemindersController {
     const take = query.take ?? 100;
     const items = await this.persistence.listReminders(filter, take, query.threadId);
     return { items };
+  }
+
+  @Post('reminders/:reminderId/cancel')
+  async cancelReminder(@Param('reminderId') reminderId: string) {
+    const result = await this.reminders.cancelReminder({ reminderId, emitMetrics: true });
+    if (!result) {
+      throw new NotFoundException({ error: 'reminder_not_found' });
+    }
+    if (!result.threadId) {
+      throw new NotFoundException({ error: 'reminder_not_found' });
+    }
+    return { ok: true as const, threadId: result.threadId };
   }
 }

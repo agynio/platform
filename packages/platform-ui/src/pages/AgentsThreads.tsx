@@ -29,6 +29,7 @@ import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 import { clearDraft, readDraft, writeDraft, THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { useUser } from '@/user/user.runtime';
+import { cancelReminder as cancelReminderApi } from '@/features/reminders/api';
 
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
@@ -518,6 +519,7 @@ export function AgentsThreads() {
   const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | null>(params.threadId ?? null);
   const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
   const [queuedMessages, setQueuedMessages] = useState<ConversationQueuedMessageData[]>([]);
+  const [cancellingReminderIds, setCancellingReminderIds] = useState<ReadonlySet<string>>(() => new Set());
   const [prefetchedRuns, setPrefetchedRuns] = useState<RunMeta[]>([]);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
@@ -883,6 +885,7 @@ export function AgentsThreads() {
     runIdsRef.current = new Set();
     setMessagesError(null);
     setQueuedMessages([]);
+    setCancellingReminderIds(new Set());
 
     if (!selectedThreadId || isDraftSelected) {
       setRunMessages({});
@@ -1511,7 +1514,102 @@ export function AgentsThreads() {
   });
   const { mutate: sendThreadMessage, isPending: isSendMessagePending } = sendMessageMutation;
 
+  const cancelQueuedMessagesMutation = useMutation({
+    mutationFn: async ({ threadId }: { threadId: string; queuedMessageId?: string }) => {
+      return threads.clearQueuedMessages(threadId);
+    },
+    onMutate: async ({ threadId }) => {
+      const queryKey = ['agents', 'threads', threadId, 'queued'] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previousQuery = queryClient.getQueryData<{ items: { id: string; text: string; enqueuedAt?: string }[] }>(queryKey);
+      const previousState = queuedMessages.map((item) => ({ ...item }));
+      setQueuedMessages([]);
+      return { threadId, previousQuery, previousState };
+    },
+    onError: (error: unknown, { threadId }, context) => {
+      if (context?.previousQuery) {
+        queryClient.setQueryData(['agents', 'threads', threadId, 'queued'] as const, context.previousQuery);
+      }
+      if (context?.previousState) {
+        setQueuedMessages(context.previousState);
+      }
+      const message = error instanceof Error && error.message ? error.message : 'Failed to clear queued messages.';
+      notifyError(message);
+    },
+    onSuccess: (_result, { threadId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', threadId, 'queued'] });
+    },
+  });
+
+  const cancelReminderMutation = useMutation({
+    mutationFn: async ({ reminderId }: { reminderId: string; threadId: string }) => {
+      return cancelReminderApi(reminderId);
+    },
+    onMutate: async ({ reminderId, threadId }) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.add(reminderId);
+        return next;
+      });
+
+      const queryKey = ['agents', 'threads', threadId, 'reminders'] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previousData = queryClient.getQueryData<{ items: ThreadReminder[] }>(queryKey);
+      const previousCount = previousData?.items?.length ?? 0;
+      if (previousData) {
+        const filteredItems = previousData.items.filter((item) => item.id !== reminderId);
+        queryClient.setQueryData(queryKey, { items: filteredItems });
+        updateThreadRemindersCount(threadId, filteredItems.length);
+        return { threadId, reminderId, previousData, previousCount };
+      }
+      return { threadId, reminderId, previousData: undefined, previousCount };
+    },
+    onError: (error: unknown, { reminderId, threadId }, context) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reminderId);
+        return next;
+      });
+      if (context?.previousData) {
+        queryClient.setQueryData(['agents', 'threads', threadId, 'reminders'] as const, context.previousData);
+        updateThreadRemindersCount(threadId, context.previousCount ?? 0);
+      }
+      const message = error instanceof Error && error.message ? error.message : 'Failed to cancel reminder.';
+      notifyError(message);
+    },
+    onSuccess: (_result, { reminderId, threadId }, context) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reminderId);
+        return next;
+      });
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', threadId, 'reminders'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'by-id', threadId] });
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', threadId, 'metrics'] });
+      if (context?.previousCount !== undefined) {
+        const nextCount = Math.max(0, context.previousCount - 1);
+        updateThreadRemindersCount(threadId, nextCount);
+      }
+    },
+  });
+
   const isComposerPending = isSendMessagePending || isCreateThreadPending;
+
+  const handleCancelQueuedMessage = useCallback(
+    (queuedMessageId: string) => {
+      if (!selectedThreadId || isDraftSelected) return;
+      cancelQueuedMessagesMutation.mutate({ threadId: selectedThreadId, queuedMessageId });
+    },
+    [selectedThreadId, isDraftSelected, cancelQueuedMessagesMutation],
+  );
+
+  const handleCancelReminder = useCallback(
+    (reminderId: string) => {
+      if (!selectedThreadId || isDraftSelected) return;
+      cancelReminderMutation.mutate({ threadId: selectedThreadId, reminderId });
+    },
+    [selectedThreadId, isDraftSelected, cancelReminderMutation],
+  );
 
   const toggleThreadStatusMutation = useMutation({
     mutationFn: async ({ id, next }: { id: string; next: 'open' | 'closed' }) => {
@@ -2007,6 +2105,10 @@ export function AgentsThreads() {
           draftFetchOptions={draftFetchOptions}
           onDraftRecipientChange={handleDraftRecipientChange}
           onDraftCancel={handleDraftCancel}
+          onCancelQueuedMessage={handleCancelQueuedMessage}
+          onCancelReminder={handleCancelReminder}
+          isCancelQueuedMessagesPending={cancelQueuedMessagesMutation.isPending}
+          cancellingReminderIds={cancellingReminderIds}
         />
       </div>
       <ContainerTerminalDialog

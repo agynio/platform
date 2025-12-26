@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AgentsRemindersController, ListRemindersQueryDto } from '../src/agents/reminders.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RemindersService } from '../src/agents/reminders.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
@@ -63,7 +64,10 @@ describe('AgentsRemindersController', () => {
     } as unknown as AgentsPersistenceService;
     const module = await Test.createTestingModule({
       controllers: [AgentsRemindersController],
-      providers: [{ provide: AgentsPersistenceService, useValue: svc }],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: svc },
+        { provide: RemindersService, useValue: { cancelReminder: vi.fn() } },
+      ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
@@ -90,7 +94,10 @@ describe('AgentsRemindersController', () => {
     } as unknown as AgentsPersistenceService;
     const module = await Test.createTestingModule({
       controllers: [AgentsRemindersController],
-      providers: [{ provide: AgentsPersistenceService, useValue: svc }],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: svc },
+        { provide: RemindersService, useValue: { cancelReminder: vi.fn() } },
+      ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
@@ -106,6 +113,71 @@ describe('AgentsRemindersController', () => {
       threadId: 'aaaa1111-1111-1111-1111-111111111111',
     });
     expect(result).toEqual(paginatedResponse);
+  });
+
+  it('cancels a reminder via RemindersService', async () => {
+    const svc = {
+      listReminders: vi.fn(),
+      listRemindersPaginated: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+    const reminders = {
+      cancelReminder: vi.fn(async () => ({ threadId: 'thread-9', cancelledDb: true, clearedRuntime: 1 })),
+    } as unknown as RemindersService;
+    const module = await Test.createTestingModule({
+      controllers: [AgentsRemindersController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: svc },
+        { provide: RemindersService, useValue: reminders },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsRemindersController);
+    const res = await ctrl.cancelReminder('rem-1');
+
+    expect(reminders.cancelReminder).toHaveBeenCalledWith({ reminderId: 'rem-1', emitMetrics: true });
+    expect(res).toEqual({ ok: true, threadId: 'thread-9' });
+  });
+
+  it('throws 404 when reminder is missing', async () => {
+    const svc = {
+      listReminders: vi.fn(),
+      listRemindersPaginated: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+    const reminders = {
+      cancelReminder: vi.fn(async () => null),
+    } as unknown as RemindersService;
+    const module = await Test.createTestingModule({
+      controllers: [AgentsRemindersController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: svc },
+        { provide: RemindersService, useValue: reminders },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsRemindersController);
+
+    await expect(ctrl.cancelReminder('missing')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws 404 when reminders service omits thread id', async () => {
+    const svc = {
+      listReminders: vi.fn(),
+      listRemindersPaginated: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+    const reminders = {
+      cancelReminder: vi.fn(async () => ({ threadId: '', cancelledDb: true, clearedRuntime: 0 })),
+    } as unknown as RemindersService;
+    const module = await Test.createTestingModule({
+      controllers: [AgentsRemindersController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: svc },
+        { provide: RemindersService, useValue: reminders },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsRemindersController);
+
+    await expect(ctrl.cancelReminder('rem-2')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
