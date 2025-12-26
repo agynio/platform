@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
-import type { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
+import { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
+import type { AgentNode } from '../../src/nodes/agent/agent.node';
 import type { AgentsPersistenceService } from '../../src/agents/agents.persistence.service';
 import type { LLMContext } from '../../src/llm/types';
 import { HumanMessage } from '@agyn/llm';
@@ -11,6 +12,14 @@ import type { CallAgentLinkingService } from '../../src/agents/call-agent-linkin
 type ToolLogger = { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
 
 type WorkerAgent = { invoke: ReturnType<typeof vi.fn> };
+
+class FakeAgentNode {
+  constructor(private readonly cfg: { name: string; role?: string; prompt?: string; systemPrompt?: string }) {}
+
+  get config() {
+    return this.cfg;
+  }
+}
 
 const createManageNodeStub = (
   workerName: string,
@@ -725,5 +734,26 @@ describe('ManageFunctionTool.execute', () => {
       childThreadId: 'child-thread-sync-object',
       toolName: 'manage',
     });
+  });
+});
+
+describe('ManageToolNode agent prompt context', () => {
+  it('prefers agent prompt over system prompt when available', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const linking = {} as unknown as CallAgentLinkingService;
+    const manageNode = new ManageToolNode(persistence, linking);
+    manageNode.init({ nodeId: 'manage-node-context' });
+
+    const agentWithPrompt = new FakeAgentNode({ name: 'Alpha', role: 'pilot', prompt: 'Alpha prompt', systemPrompt: 'Alpha system' });
+    const agentWithoutPrompt = new FakeAgentNode({ name: 'Beta', role: 'builder', systemPrompt: 'Beta system' });
+
+    manageNode.addWorker(agentWithPrompt as unknown as AgentNode);
+    manageNode.addWorker(agentWithoutPrompt as unknown as AgentNode);
+
+    const context = manageNode.getAgentPromptContext();
+    expect(context.agents).toEqual([
+      { name: 'Alpha', role: 'pilot', prompt: 'Alpha prompt' },
+      { name: 'Beta', role: 'builder', prompt: 'Beta system' },
+    ]);
   });
 });

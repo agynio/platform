@@ -37,6 +37,13 @@ export class TemplateRegistry {
     return this.meta.get(template);
   }
 
+  findTemplateByCtor(ctor: TemplateCtor): string | undefined {
+    for (const [template, registeredCtor] of this.classes) {
+      if (registeredCtor === ctor) return template;
+    }
+    return undefined;
+  }
+
   async toSchema(): Promise<TemplateNodeSchema[]> {
     const schemas: TemplateNodeSchema[] = [];
     for (const name of this.classes.keys()) {

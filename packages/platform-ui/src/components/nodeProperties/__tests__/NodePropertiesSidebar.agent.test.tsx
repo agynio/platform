@@ -223,7 +223,7 @@ describe('NodePropertiesSidebar - agent', () => {
       kind: 'Agent',
       title: 'Incident Lead',
       template: 'agent',
-      systemPrompt: 'Available tools:\n{{#tools}}{{name}} - {{prompt}}\n{{/tools}}',
+      systemPrompt: 'Available tools:\n{{#tools}}{{title}} - {{prompt}} :: {{description}}\n{{/tools}}',
     } as NodeConfig;
 
     const state: NodeState = { status: 'ready' };
@@ -294,15 +294,19 @@ describe('NodePropertiesSidebar - agent', () => {
     );
 
     const promptTextarea = screen.getByPlaceholderText('You are a helpful assistant...') as HTMLTextAreaElement;
-    expect(promptTextarea.value).toBe('Available tools:\n{{#tools}}{{name}} - {{prompt}}\n{{/tools}}');
+    expect(promptTextarea.value).toBe('Available tools:\n{{#tools}}{{title}} - {{prompt}} :: {{description}}\n{{/tools}}');
+
+    const agentPromptTextarea = screen.getByPlaceholderText('Summarize this agent for coordinating tools...') as HTMLTextAreaElement;
+    expect(agentPromptTextarea.value).toBe('');
+    fireEvent.change(agentPromptTextarea, { target: { value: 'Coordinate incidents' } });
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Coordinate incidents' }));
 
     const fullscreenButton = screen.getByTitle('Open fullscreen markdown editor');
     await user.click(fullscreenButton);
 
     await screen.findByText('Edit your content with live markdown preview');
-    expect(document.body).toHaveTextContent(/call_agent_custom - Escalate immediately/);
-    expect(document.body).toHaveTextContent(/shell_command/);
-    expect(document.body).toHaveTextContent(/Execute shell commands/);
+    expect(document.body).toHaveTextContent(/Call Agent - Escalate immediately :: Escalate immediately/);
+    expect(document.body).toHaveTextContent(/Shell Tool - Execute shell commands :: Execute shell commands/);
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
     await user.click(cancelButton);

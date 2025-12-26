@@ -112,8 +112,10 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
       const config = agent?.config ?? {};
       const rawName = typeof config?.name === 'string' ? config.name.trim() : '';
       const role = typeof config?.role === 'string' ? config.role.trim() : '';
-      const rawPrompt = typeof config?.systemPrompt === 'string' ? config.systemPrompt : undefined;
-      const prompt = rawPrompt && rawPrompt.trim().length > 0 ? rawPrompt : DEFAULT_SYSTEM_PROMPT;
+      const rawPrompt = typeof config?.prompt === 'string' ? config.prompt : undefined;
+      const systemPrompt = typeof config?.systemPrompt === 'string' ? config.systemPrompt : undefined;
+      const promptSource = rawPrompt && rawPrompt.trim().length > 0 ? rawPrompt : systemPrompt;
+      const prompt = promptSource && promptSource.trim().length > 0 ? promptSource : DEFAULT_SYSTEM_PROMPT;
       return { name: rawName, role, prompt };
     });
     return { agents };

@@ -8,6 +8,11 @@ import { SendSlackMessageNode } from './send_slack_message.node';
 
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
     bot_token: z.union([
       z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
       SecretReferenceSchema,

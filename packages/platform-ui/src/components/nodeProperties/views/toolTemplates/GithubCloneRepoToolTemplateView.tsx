@@ -4,6 +4,7 @@ import { Input } from '../../../Input';
 import { Dropdown } from '../../../Dropdown';
 import { ReferenceInput } from '../../../ReferenceInput';
 import { FieldLabel } from '../../FieldLabel';
+import { Textarea } from '../../../Textarea';
 import type { NodePropertiesViewProps } from '../../viewTypes';
 import {
   encodeReferenceValue,
@@ -23,6 +24,7 @@ export function GithubCloneRepoToolTemplateView(props: NodePropertiesViewProps<'
 
   const configRecord = config as Record<string, unknown>;
   const nameField = useToolNameField(props);
+  const promptValue = typeof configRecord.prompt === 'string' ? (configRecord.prompt as string) : '';
 
   const tokenReference = useMemo(() => readReferenceValue(configRecord.token), [configRecord.token]);
   const tokenSourceType = useMemo<ReferenceSourceType>(
@@ -77,6 +79,14 @@ export function GithubCloneRepoToolTemplateView(props: NodePropertiesViewProps<'
       void ensureVariableKeys?.();
     }
   }, [ensureSecretKeys, ensureVariableKeys, tokenSourceType]);
+
+  const handlePromptChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
 
   const setAuthRef = useCallback(
     (source: AuthSource, updates: { envVar?: string; mount?: string; path?: string; key?: string } = {}) => {
@@ -149,6 +159,18 @@ export function GithubCloneRepoToolTemplateView(props: NodePropertiesViewProps<'
   return (
     <>
       <ToolNameField {...nameField} />
+
+      <section className="space-y-2">
+        <FieldLabel label="Prompt" hint="Optional prompt metadata shared with the parent agent." />
+        <Textarea
+          rows={3}
+          value={promptValue}
+          onChange={(event) => handlePromptChange(event.target.value)}
+          placeholder="Describe how this repository clone helper should be used..."
+          className="min-h-[96px]"
+          maxLength={8192}
+        />
+      </section>
 
       <section className="space-y-2">
         <FieldLabel label="GitHub Token" hint="Provide a token or reference for cloning private repositories." />

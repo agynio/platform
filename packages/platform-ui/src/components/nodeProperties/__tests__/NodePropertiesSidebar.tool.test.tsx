@@ -91,6 +91,12 @@ describe('NodePropertiesSidebar - shell tool', () => {
       />,
     );
 
+    const promptTextarea = screen.getByPlaceholderText('Describe how shell access should be used...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Run read-only diagnostics' } });
+    expect(onConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'Run read-only diagnostics' }),
+    );
+
     const workdirInput = screen.getByPlaceholderText('/workspace') as HTMLInputElement;
     fireEvent.change(workdirInput, { target: { value: '/tmp' } });
     expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ workdir: '/tmp' }));
@@ -229,9 +235,11 @@ describe('NodePropertiesSidebar - call agent tool', () => {
       />,
     );
 
-    const descriptionTextarea = screen
-      .getAllByRole('textbox')
-      .find((element) => element.tagName.toLowerCase() === 'textarea') as HTMLTextAreaElement;
+    const promptTextarea = screen.getByPlaceholderText('Describe how this tool should be used...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Coordinate escalations' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Coordinate escalations');
+
+    const descriptionTextarea = screen.getByPlaceholderText('Describe what this tool does...') as HTMLTextAreaElement;
     fireEvent.change(descriptionTextarea, { target: { value: 'New description' } });
     expect(latestUpdate(onConfigChange, 'description')).toBe('New description');
 
@@ -276,6 +284,10 @@ describe('NodePropertiesSidebar - send slack message tool', () => {
       />,
     );
 
+    const promptTextarea = screen.getByPlaceholderText('Describe when to use this Slack tool...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Escalate urgent incidents' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Escalate urgent incidents');
+
     const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
     fireEvent.focus(tokenInput);
     expect(ensureSecretKeys).toHaveBeenCalled();
@@ -314,6 +326,12 @@ describe('NodePropertiesSidebar - github clone repo tool', () => {
         isActionPending={false}
       />,
     );
+
+    const promptTextarea = screen.getByPlaceholderText(
+      'Describe how this repository clone helper should be used...'
+    ) as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Clone repositories for analysis' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Clone repositories for analysis');
 
     const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
     fireEvent.change(tokenInput, { target: { value: 'ghp_123' } });

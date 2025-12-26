@@ -17,6 +17,8 @@ import { getCanonicalToolName } from './toolCanonicalNames';
 
 type AgentToolContext = {
   name: string;
+  title: string;
+  description: string;
   prompt: string;
 };
 
@@ -25,6 +27,7 @@ interface AgentSectionProps {
   role: string;
   model: string;
   systemPrompt: string;
+  prompt: string;
   restrictOutput: boolean;
   restrictionMessage: string;
   restrictionMaxInjections?: number;
@@ -39,6 +42,7 @@ interface AgentSectionProps {
   onRoleBlur: () => void;
   onModelChange: (value: string) => void;
   onSystemPromptChange: (value: string) => void;
+  onPromptChange: (value: string) => void;
   onRestrictOutputChange: (checked: boolean) => void;
   onRestrictionMessageChange: (value: string) => void;
   onRestrictionMaxInjectionsChange: (value: number | undefined) => void;
@@ -59,12 +63,14 @@ export function AgentSection({
   graphEdges,
   name,
   role,
+  prompt,
   onNameChange,
   onNameBlur,
   onRoleChange,
   onRoleBlur,
   onModelChange,
   onSystemPromptChange,
+  onPromptChange,
   onRestrictOutputChange,
   onRestrictionMessageChange,
   onRestrictionMaxInjectionsChange,
@@ -77,6 +83,7 @@ export function AgentSection({
   const summarizationKeepValue = summarization.keepTokens !== undefined ? String(summarization.keepTokens) : '';
   const summarizationMaxValue = summarization.maxTokens !== undefined ? String(summarization.maxTokens) : '';
   const summarizationPromptValue = summarization.prompt ?? '';
+  const agentPromptValue = prompt;
   const { getTemplate } = useTemplatesCache();
 
   const toolsContext = useMemo<AgentToolContext[]>(() => {
@@ -113,19 +120,30 @@ export function AgentSection({
       const configName = typeof targetConfig.name === 'string' ? targetConfig.name.trim() : '';
       const template = getTemplate(targetNode.template ?? null);
       const canonicalName = getCanonicalToolName(targetNode.template);
+      const nodeTitle = typeof targetNode.title === 'string' ? targetNode.title.trim() : '';
       const fallbackName = canonicalName.length > 0
         ? canonicalName
         : typeof template?.title === 'string' && template.title.trim().length > 0
           ? template.title.trim()
-          : targetNode.title;
+          : nodeTitle;
       const nameValue = configName.length > 0 ? configName : fallbackName;
 
-      const configPrompt = typeof targetConfig.description === 'string' ? targetConfig.description.trim() : '';
-      const templatePrompt = typeof template?.description === 'string' ? template.description.trim() : '';
-      const promptValue = configPrompt.length > 0 ? configPrompt : templatePrompt;
+      const configTitle = typeof targetConfig.title === 'string' ? targetConfig.title.trim() : '';
+      const templateTitle = typeof template?.title === 'string' ? template.title.trim() : '';
+      const fallbackTitle = templateTitle.length > 0 ? templateTitle : nodeTitle.length > 0 ? nodeTitle : nameValue;
+      const titleValue = configTitle.length > 0 ? configTitle : fallbackTitle;
+
+      const configDescription = typeof targetConfig.description === 'string' ? targetConfig.description.trim() : '';
+      const templateDescription = typeof template?.description === 'string' ? template.description.trim() : '';
+      const descriptionValue = configDescription.length > 0 ? configDescription : templateDescription;
+
+      const configPrompt = typeof targetConfig.prompt === 'string' ? targetConfig.prompt.trim() : '';
+      const promptValue = configPrompt.length > 0 ? configPrompt : (descriptionValue.length > 0 ? descriptionValue : nameValue);
 
       context.push({
         name: nameValue,
+        title: titleValue,
+        description: descriptionValue,
         prompt: promptValue,
       });
     }
@@ -197,6 +215,20 @@ export function AgentSection({
               size="sm"
               helperText="Preview tab renders with connected tools context."
               previewTransform={renderSystemPromptPreview}
+            />
+          </div>
+          <div>
+            <FieldLabel
+              label="Prompt"
+              hint="Optional prompt metadata shared with managing tools."
+            />
+            <Textarea
+              rows={3}
+              placeholder="Summarize this agent for coordinating tools..."
+              value={agentPromptValue}
+              onChange={(event) => onPromptChange(event.target.value)}
+              className="min-h-[96px]"
+              maxLength={8192}
             />
           </div>
         </div>

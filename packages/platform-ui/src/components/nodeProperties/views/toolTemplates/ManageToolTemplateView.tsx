@@ -98,8 +98,10 @@ export function ManageToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
       const targetConfig = (targetNode.config ?? {}) as Record<string, unknown>;
       const rawName = typeof targetConfig.name === 'string' ? targetConfig.name.trim() : '';
       const role = typeof targetConfig.role === 'string' ? targetConfig.role.trim() : '';
-      const rawPrompt = typeof targetConfig.systemPrompt === 'string' ? targetConfig.systemPrompt : '';
-      const prompt = rawPrompt && rawPrompt.trim().length > 0 ? rawPrompt : DEFAULT_SYSTEM_PROMPT;
+      const rawPrompt = typeof targetConfig.prompt === 'string' ? targetConfig.prompt : '';
+      const systemPrompt = typeof targetConfig.systemPrompt === 'string' ? targetConfig.systemPrompt : '';
+      const promptSource = rawPrompt && rawPrompt.trim().length > 0 ? rawPrompt : systemPrompt;
+      const prompt = promptSource && promptSource.trim().length > 0 ? promptSource : DEFAULT_SYSTEM_PROMPT;
 
       context.push({ name: rawName, role, prompt });
     }

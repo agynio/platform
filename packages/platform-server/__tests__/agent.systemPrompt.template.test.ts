@@ -8,6 +8,8 @@ import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { FunctionTool } from '@agyn/llm';
+import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
+import type { TemplatePortConfig } from '../src/graph/ports.types';
 
 const EmptySchema = z.object({});
 
@@ -32,6 +34,21 @@ class StaticFunctionTool extends FunctionTool<typeof EmptySchema> {
 
   async execute(): Promise<never> {
     throw new Error('not implemented');
+  }
+}
+
+class StubToolNode extends BaseToolNode<Record<string, unknown>> {
+  constructor(cfg: Record<string, unknown>) {
+    super();
+    this._config = cfg as Record<string, unknown>;
+  }
+
+  getTool(): FunctionTool {
+    throw new Error('not implemented');
+  }
+
+  getPortConfig(): TemplatePortConfig {
+    return { sourcePorts: {}, targetPorts: {} } as TemplatePortConfig;
   }
 }
 
@@ -99,6 +116,39 @@ describe('AgentNode system prompt templating', () => {
 
     expect(effective.prompts.system).toBe('Tools list: end.');
 
+    await moduleRef.close();
+  });
+
+  it('surfaces configured prompt, title, and description in tool context', async () => {
+    const { moduleRef, agent } = await createAgentHarness();
+    const tool = new StaticFunctionTool({ name: 'manager', description: 'fallback description' });
+    const stubNode = new StubToolNode({ title: 'Manager Tool', description: 'Config description', prompt: 'Config prompt' });
+
+    const internals = agent as unknown as {
+      toolsByName: Map<
+        string,
+        {
+          tool: FunctionTool;
+          source: { sourceType: 'node'; nodeRef: BaseToolNode<unknown>; className?: string; nodeId?: string };
+        }
+      >;
+    };
+    internals.toolsByName.clear();
+    internals.toolsByName.set(tool.name, {
+      tool,
+      source: { sourceType: 'node', nodeRef: stubNode, className: 'StubToolNode' },
+    });
+
+    await agent.setConfig({ systemPrompt: '{{#tools}}{{title}} :: {{prompt}} :: {{description}}{{/tools}}' });
+
+    const effective = (agent as unknown as { buildEffectiveConfig: (model: string, tools: FunctionTool[]) => any }).buildEffectiveConfig(
+      'gpt-test',
+      [tool],
+    );
+
+    expect(effective.prompts.system).toBe('Manager Tool :: Config prompt :: Config description');
+
+    internals.toolsByName.clear();
     await moduleRef.close();
   });
 });

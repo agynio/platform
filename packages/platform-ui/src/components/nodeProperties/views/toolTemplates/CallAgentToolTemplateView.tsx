@@ -17,17 +17,27 @@ export function CallAgentToolTemplateView(props: NodePropertiesViewProps<'Tool'>
   const nameField = useToolNameField(props);
 
   const descriptionValue = typeof configRecord.description === 'string' ? (configRecord.description as string) : '';
+  const promptValue = typeof configRecord.prompt === 'string' ? (configRecord.prompt as string) : '';
   const responseMode: ResponseMode =
     configRecord.response === 'async' || configRecord.response === 'ignore'
       ? (configRecord.response as ResponseMode)
       : 'sync';
 
   const descriptionTextareaValue = useMemo(() => descriptionValue, [descriptionValue]);
+  const promptTextareaValue = useMemo(() => promptValue, [promptValue]);
 
   const handleDescriptionChange = useCallback(
     (value: string) => {
       const trimmed = value.trim();
       onConfigChange?.({ description: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
+
+  const handlePromptChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined });
     },
     [onConfigChange],
   );
@@ -45,11 +55,22 @@ export function CallAgentToolTemplateView(props: NodePropertiesViewProps<'Tool'>
 
       <section className="space-y-4">
         <div>
+          <FieldLabel label="Prompt" hint="Optional prompt metadata shared with the parent agent." />
+          <Textarea
+            value={promptTextareaValue}
+            onChange={(event) => handlePromptChange(event.target.value)}
+            className="min-h-[96px]"
+            placeholder="Describe how this tool should be used..."
+            maxLength={8192}
+          />
+        </div>
+        <div>
           <FieldLabel label="Description" hint="Optional description shared with downstream tooling." />
           <Textarea
             value={descriptionTextareaValue}
             onChange={(event) => handleDescriptionChange(event.target.value)}
             className="min-h-[96px]"
+            placeholder="Describe what this tool does..."
           />
         </div>
         <div>
