@@ -2,7 +2,7 @@ import { type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   icon: ReactNode;
   rounded?: boolean;
 }
@@ -27,6 +27,7 @@ export function IconButton({
   };
   
   const sizes = {
+    xs: 'w-6 h-6 [&_svg]:w-3 [&_svg]:h-3',
     sm: 'w-8 h-8 [&_svg]:w-4 [&_svg]:h-4',
     md: 'w-10 h-10 [&_svg]:w-5 [&_svg]:h-5',
     lg: 'w-12 h-12 [&_svg]:w-6 [&_svg]:h-6',

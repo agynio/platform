@@ -28,14 +28,14 @@ export function QueuedMessage({
 
         {/* Message Content */}
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-start gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-[var(--agyn-gray)]">User</span>
             {onCancel ? (
               <IconButton
                 icon={
-                  isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />
+                  isCancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />
                 }
-                size="sm"
+                size="xs"
                 variant="danger"
                 aria-label="Cancel queued message"
                 title="Cancel queued message"
