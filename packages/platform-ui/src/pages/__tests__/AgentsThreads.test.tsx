@@ -525,16 +525,11 @@ describe('AgentsThreads page', () => {
 
     renderAt(`/agents/threads/${thread.id}`);
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     const cancelButton = await screen.findByRole('button', { name: 'Cancel queued message' });
     await user.click(cancelButton);
 
     await waitFor(() => expect(deleteCalls.length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.queryByText('Queued message waiting')).not.toBeInTheDocument());
-
-    expect(confirmSpy).toHaveBeenCalledWith('Cancel this queued message?');
-    confirmSpy.mockRestore();
   });
 
   it('cancels a reminder from the conversation list', async () => {
@@ -564,94 +559,11 @@ describe('AgentsThreads page', () => {
 
     renderAt(`/agents/threads/${thread.id}`);
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     const cancelButton = await screen.findByRole('button', { name: 'Cancel reminder' });
     await user.click(cancelButton);
 
     await waitFor(() => expect(cancelCalls.length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.queryByText('Cancel this reminder')).not.toBeInTheDocument());
-
-    expect(confirmSpy).toHaveBeenCalledWith('Cancel this reminder?');
-    confirmSpy.mockRestore();
-  });
-
-  it('does not clear queued messages when confirmation is declined', async () => {
-    const user = userEvent.setup();
-    const threadId = '55555555-5555-4555-8555-555555555555';
-    const queuedMessage = { id: 'msg-queued-2', text: 'Do not cancel me' };
-    const thread = makeThread({ id: threadId });
-    registerThreadScenario({ thread, runs: [], queuedMessages: [queuedMessage] });
-    registerGraphAgents([]);
-
-    const deleteCalls: Array<Record<string, string>> = [];
-    server.use(
-      http.get('*/api/agents/threads/:threadId/queued-messages', ({ params }) => {
-        if (params.threadId === threadId) return HttpResponse.json({ items: [queuedMessage] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/threads/:threadId/queued-messages'), ({ params }) => {
-        if (params.threadId === threadId) return HttpResponse.json({ items: [queuedMessage] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.delete('*/api/agents/threads/:threadId/queued-messages', ({ params }) => {
-        deleteCalls.push(params as Record<string, string>);
-        return HttpResponse.json({ clearedCount: 1 });
-      }),
-      http.delete(abs('/api/agents/threads/:threadId/queued-messages'), ({ params }) => {
-        deleteCalls.push(params as Record<string, string>);
-        return HttpResponse.json({ clearedCount: 1 });
-      }),
-    );
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    renderAt(`/agents/threads/${thread.id}`);
-
-    const cancelButton = await screen.findByRole('button', { name: 'Cancel queued message' });
-    await user.click(cancelButton);
-
-    expect(confirmSpy).toHaveBeenCalledWith('Cancel this queued message?');
-    expect(deleteCalls).toHaveLength(0);
-    expect(await screen.findByText('Do not cancel me')).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
-  });
-
-  it('does not cancel reminders when confirmation is declined', async () => {
-    const user = userEvent.setup();
-    const threadId = '66666666-6666-4666-8666-666666666666';
-    const reminder = makeReminder({ id: 'rem-cancel-2', threadId, note: 'Keep this reminder' });
-    const thread = makeThread({ id: threadId });
-    registerThreadScenario({ thread, runs: [], reminders: [reminder] });
-    registerGraphAgents([]);
-
-    const cancelCalls: Array<Record<string, string>> = [];
-    server.use(
-      http.get('*/api/agents/reminders', () => HttpResponse.json({ items: [reminder] })),
-      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [reminder] })),
-      http.post('*/api/agents/reminders/:reminderId/cancel', ({ params }) => {
-        cancelCalls.push(params as Record<string, string>);
-        return HttpResponse.json({ threadId, cancelledDb: 1, clearedRuntime: 0 });
-      }),
-      http.post(abs('/api/agents/reminders/:reminderId/cancel'), ({ params }) => {
-        cancelCalls.push(params as Record<string, string>);
-        return HttpResponse.json({ threadId, cancelledDb: 1, clearedRuntime: 0 });
-      }),
-    );
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    renderAt(`/agents/threads/${thread.id}`);
-
-    const cancelButton = await screen.findByRole('button', { name: 'Cancel reminder' });
-    await user.click(cancelButton);
-
-    expect(confirmSpy).toHaveBeenCalledWith('Cancel this reminder?');
-    expect(cancelCalls).toHaveLength(0);
-    expect(await screen.findByText('Keep this reminder')).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it('sends a message and clears the composer input', async () => {
