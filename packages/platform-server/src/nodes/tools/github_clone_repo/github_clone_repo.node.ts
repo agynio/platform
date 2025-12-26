@@ -17,6 +17,11 @@ const TokenRefSchema = z
 
 export const GithubCloneRepoToolStaticConfigSchema = z
   .object({
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
     token: TokenRefSchema.optional(),
     authRef: z
       .object({

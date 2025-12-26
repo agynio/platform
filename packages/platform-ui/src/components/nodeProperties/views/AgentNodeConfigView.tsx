@@ -12,13 +12,14 @@ import {
 
 type AgentNodeProps = NodePropertiesViewProps<'Agent'>;
 
-function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
+function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, graphEdges }: AgentNodeProps) {
   const configRecord = config as Record<string, unknown>;
   const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
   const agentModelValue = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
   const agentSystemPromptValue =
     typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
+  const agentPromptValue = typeof configRecord.prompt === 'string' ? (configRecord.prompt as string) : '';
   const agentRestrictOutput = configRecord.restrictOutput === true;
   const agentRestrictionMessageValue =
     typeof configRecord.restrictionMessage === 'string'
@@ -124,6 +125,13 @@ function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
     [onConfigChange],
   );
 
+  const handleAgentPromptChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ prompt: value });
+    },
+    [onConfigChange],
+  );
+
   const handleAgentRestrictOutputChange = useCallback(
     (checked: boolean) => {
       onConfigChange?.({ restrictOutput: checked });
@@ -166,17 +174,22 @@ function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
       role={agentRoleInput}
       model={agentModelValue}
       systemPrompt={agentSystemPromptValue}
+      prompt={agentPromptValue}
       restrictOutput={agentRestrictOutput}
       restrictionMessage={agentRestrictionMessageValue}
       restrictionMaxInjections={agentRestrictionMaxInjectionsValue}
       queueConfig={agentQueueConfig}
       summarization={agentSummarizationConfig}
+      nodeId={nodeId}
+      graphNodes={graphNodes}
+      graphEdges={graphEdges}
       onNameChange={handleAgentNameChange}
       onNameBlur={handleAgentNameBlur}
       onRoleChange={handleAgentRoleChange}
       onRoleBlur={handleAgentRoleBlur}
       onModelChange={handleAgentModelChange}
       onSystemPromptChange={handleAgentSystemPromptChange}
+      onPromptChange={handleAgentPromptChange}
       onRestrictOutputChange={handleAgentRestrictOutputChange}
       onRestrictionMessageChange={handleAgentRestrictionMessageChange}
       onRestrictionMaxInjectionsChange={handleAgentRestrictionMaxInjectionsChange}

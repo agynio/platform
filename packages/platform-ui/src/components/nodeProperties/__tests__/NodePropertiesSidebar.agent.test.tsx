@@ -1,11 +1,36 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodeState } from '../types';
+import type { TemplateSchema } from '@/api/types/graph';
+
+const templateStore = new Map<string, TemplateSchema>();
+
+vi.mock('@/lib/graph/templates.provider', async () => {
+  const actual = await vi.importActual<any>('@/lib/graph/templates.provider');
+  return {
+    ...actual,
+    useTemplatesCache: () => ({
+      templates: Array.from(templateStore.values()),
+      ready: true,
+      error: null,
+      refresh: vi.fn(),
+      getTemplate: (name: string | null | undefined) => {
+        if (!name) return undefined;
+        return templateStore.get(name) ?? undefined;
+      },
+    }),
+  };
+});
 
 describe('NodePropertiesSidebar - agent', () => {
+  beforeEach(() => {
+    templateStore.clear();
+  });
+
   it('renders profile inputs and applies default title fallback', () => {
     const onConfigChange = vi.fn();
     const config: NodeConfig = {
@@ -170,5 +195,120 @@ describe('NodePropertiesSidebar - agent', () => {
 
     const titleInput = screen.getByPlaceholderText('Agent') as HTMLInputElement;
     expect(titleInput.value).toBe('');
+  });
+
+  it('renders system prompt preview with connected tools', async () => {
+    const user = userEvent.setup();
+    const onConfigChange = vi.fn();
+
+    templateStore.set('callAgentTool', {
+      name: 'callAgentTool',
+      title: 'Call Agent',
+      kind: 'tool',
+      description: 'Coordinate escalations',
+      sourcePorts: {},
+      targetPorts: {},
+    });
+
+    templateStore.set('shellTool', {
+      name: 'shellTool',
+      title: 'Shell Tool',
+      kind: 'tool',
+      description: 'Execute shell commands',
+      sourcePorts: {},
+      targetPorts: {},
+    });
+
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: 'Incident Lead',
+      template: 'agent',
+      systemPrompt: 'Available tools:\n{{#tools}}{{title}} - {{prompt}} :: {{description}}\n{{/tools}}',
+    } as NodeConfig;
+
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+        nodeId="agent-node"
+        graphNodes={[
+          {
+            id: 'agent-node',
+            template: 'agent',
+            kind: 'Agent',
+            title: 'Incident Lead',
+            x: 0,
+            y: 0,
+            status: 'ready',
+            config: {},
+            ports: { inputs: [], outputs: [] },
+          },
+          {
+            id: 'tool-1',
+            template: 'callAgentTool',
+            kind: 'Tool',
+            title: 'Call Agent Tool',
+            x: 100,
+            y: 200,
+            status: 'ready',
+            config: { name: 'call_agent_custom', description: 'Escalate immediately' },
+            ports: { inputs: [], outputs: [] },
+          },
+          {
+            id: 'tool-2',
+            template: 'shellTool',
+            kind: 'Tool',
+            title: 'Shell Tool',
+            x: 200,
+            y: 300,
+            status: 'ready',
+            config: {},
+            ports: { inputs: [], outputs: [] },
+          },
+        ] as any}
+        graphEdges={[
+          {
+            id: 'agent-tools-edge-1',
+            source: 'agent-node',
+            target: 'tool-1',
+            sourceHandle: 'tools',
+            targetHandle: '$',
+          },
+          {
+            id: 'agent-tools-edge-2',
+            source: 'agent-node',
+            target: 'tool-2',
+            sourceHandle: 'tools',
+            targetHandle: '$',
+          },
+        ] as any}
+      />,
+    );
+
+    const promptTextarea = screen.getByPlaceholderText('You are a helpful assistant...') as HTMLTextAreaElement;
+    expect(promptTextarea.value).toBe('Available tools:\n{{#tools}}{{title}} - {{prompt}} :: {{description}}\n{{/tools}}');
+
+    const agentPromptTextarea = screen.getByPlaceholderText('Summarize this agent for coordinating tools...') as HTMLTextAreaElement;
+    expect(agentPromptTextarea.value).toBe('');
+    fireEvent.change(agentPromptTextarea, { target: { value: 'Coordinate incidents' } });
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Coordinate incidents' }));
+
+    const fullscreenButton = screen.getByTitle('Open fullscreen markdown editor');
+    await user.click(fullscreenButton);
+
+    await screen.findByText('Edit your content with live markdown preview');
+    expect(document.body).toHaveTextContent(/Call Agent - Escalate immediately :: Escalate immediately/);
+    expect(document.body).toHaveTextContent(/Shell Tool - Execute shell commands :: Execute shell commands/);
+
+    const cancelButton = screen.getByRole('button', { name: /cancel/i });
+    await user.click(cancelButton);
   });
 });

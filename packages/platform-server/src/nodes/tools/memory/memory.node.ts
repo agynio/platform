@@ -16,6 +16,11 @@ type MemoryToolService = {
 export const MemoryToolNodeStaticConfigSchema = z
   .object({
     description: z.string().min(1).optional().describe('Optional description for tool metadata.'),
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
     name: z
       .string()
       .regex(/^[a-z0-9_]{1,64}$/)

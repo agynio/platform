@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from 'react';
+
 import { Input } from '../Input';
 import { MarkdownInput } from '../MarkdownInput';
 import { Dropdown } from '../Dropdown';
@@ -8,23 +10,39 @@ import { FieldLabel } from './FieldLabel';
 import { QUEUE_PROCESS_BUFFER_OPTIONS, QUEUE_WHEN_BUSY_OPTIONS } from './constants';
 import type { AgentQueueConfig, AgentSummarizationConfig } from './types';
 import { toNumberOrUndefined } from './utils';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
+import { useTemplatesCache } from '@/lib/graph/templates.provider';
+import { renderMustacheTemplate } from '@/lib/mustache';
+import { getCanonicalToolName } from './toolCanonicalNames';
+
+type AgentToolContext = {
+  name: string;
+  title: string;
+  description: string;
+  prompt: string;
+};
 
 interface AgentSectionProps {
   name: string;
   role: string;
   model: string;
   systemPrompt: string;
+  prompt: string;
   restrictOutput: boolean;
   restrictionMessage: string;
   restrictionMaxInjections?: number;
   queueConfig: AgentQueueConfig;
   summarization: AgentSummarizationConfig;
+  nodeId?: string;
+  graphNodes?: GraphNodeConfig[];
+  graphEdges?: GraphPersistedEdge[];
   onNameChange: (value: string) => void;
   onNameBlur: () => void;
   onRoleChange: (value: string) => void;
   onRoleBlur: () => void;
   onModelChange: (value: string) => void;
   onSystemPromptChange: (value: string) => void;
+  onPromptChange: (value: string) => void;
   onRestrictOutputChange: (checked: boolean) => void;
   onRestrictionMessageChange: (value: string) => void;
   onRestrictionMaxInjectionsChange: (value: number | undefined) => void;
@@ -40,14 +58,19 @@ export function AgentSection({
   restrictionMaxInjections,
   queueConfig,
   summarization,
+  nodeId,
+  graphNodes,
+  graphEdges,
   name,
   role,
+  prompt,
   onNameChange,
   onNameBlur,
   onRoleChange,
   onRoleBlur,
   onModelChange,
   onSystemPromptChange,
+  onPromptChange,
   onRestrictOutputChange,
   onRestrictionMessageChange,
   onRestrictionMaxInjectionsChange,
@@ -60,6 +83,87 @@ export function AgentSection({
   const summarizationKeepValue = summarization.keepTokens !== undefined ? String(summarization.keepTokens) : '';
   const summarizationMaxValue = summarization.maxTokens !== undefined ? String(summarization.maxTokens) : '';
   const summarizationPromptValue = summarization.prompt ?? '';
+  const agentPromptValue = prompt;
+  const { getTemplate } = useTemplatesCache();
+
+  const toolsContext = useMemo<AgentToolContext[]>(() => {
+    const currentNodeId = typeof nodeId === 'string' && nodeId.length > 0 ? nodeId : null;
+    if (!currentNodeId) {
+      return [];
+    }
+
+    const nodesList = Array.isArray(graphNodes) ? graphNodes : [];
+    const edgesList = Array.isArray(graphEdges) ? graphEdges : [];
+    if (nodesList.length === 0 || edgesList.length === 0) {
+      return [];
+    }
+
+    const nodesById = new Map(nodesList.map((node) => [node.id, node] as const));
+    const seenTargets = new Set<string>();
+    const context: AgentToolContext[] = [];
+
+    const readConfigString = (config: Record<string, unknown>, key: string): string | undefined => {
+      const raw = config[key];
+      if (typeof raw !== 'string') {
+        return undefined;
+      }
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    for (const edge of edgesList) {
+      if (!edge) continue;
+      const sourceId = typeof edge.source === 'string' ? edge.source : '';
+      if (sourceId !== currentNodeId) continue;
+      const handle = typeof edge.sourceHandle === 'string' ? edge.sourceHandle : '';
+      if (handle !== 'tools') continue;
+
+      const targetId = typeof edge.target === 'string' ? edge.target : '';
+      if (!targetId || seenTargets.has(targetId)) continue;
+
+      const targetNode = nodesById.get(targetId);
+      if (!targetNode || targetNode.kind !== 'Tool') continue;
+
+      seenTargets.add(targetId);
+      const targetConfig = (targetNode.config ?? {}) as Record<string, unknown>;
+      const configName = readConfigString(targetConfig, 'name');
+      const template = getTemplate(targetNode.template ?? null);
+      const canonicalName = getCanonicalToolName(targetNode.template).trim();
+      const templateTitle = typeof template?.title === 'string' ? template.title.trim() : '';
+      const templateDescription = typeof template?.description === 'string' ? template.description.trim() : '';
+      const nodeTitle = typeof targetNode.title === 'string' ? targetNode.title.trim() : '';
+
+      const fallbackName = canonicalName.length > 0 ? canonicalName : templateTitle || nodeTitle;
+      const name = configName ?? (fallbackName.length > 0 ? fallbackName : 'tool');
+      const configTitle = readConfigString(targetConfig, 'title');
+      const title = configTitle ?? (templateTitle.length > 0 ? templateTitle : name);
+
+      const configDescription = readConfigString(targetConfig, 'description');
+      const description = configDescription ?? templateDescription ?? '';
+
+      const configPrompt = readConfigString(targetConfig, 'prompt');
+      const prompt = configPrompt ?? (description.length > 0 ? description : title);
+
+      context.push({
+        name,
+        title,
+        description,
+        prompt,
+      });
+    }
+
+    return context;
+  }, [graphEdges, graphNodes, nodeId, getTemplate]);
+
+  const renderSystemPromptPreview = useCallback(
+    (template: string) => {
+      if (!template || template.trim().length === 0) {
+        return '';
+      }
+      return renderMustacheTemplate(template, { tools: toolsContext });
+    },
+    [toolsContext],
+  );
 
   return (
     <>
@@ -113,6 +217,22 @@ export function AgentSection({
               value={systemPrompt}
               onChange={(event) => onSystemPromptChange(event.target.value)}
               size="sm"
+              helperText="Preview tab renders with connected tools context."
+              previewTransform={renderSystemPromptPreview}
+            />
+          </div>
+          <div>
+            <FieldLabel
+              label="Prompt"
+              hint="Optional prompt metadata shared with managing tools."
+            />
+            <Textarea
+              rows={3}
+              placeholder="Summarize this agent for coordinating tools..."
+              value={agentPromptValue}
+              onChange={(event) => onPromptChange(event.target.value)}
+              className="min-h-[96px]"
+              maxLength={8192}
             />
           </div>
         </div>

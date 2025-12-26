@@ -1,6 +1,7 @@
 import { LocalMCPServerNode } from '../mcp';
 
 import { ConfigService } from '../../core/services/config.service';
+import { TemplateRegistry, type TemplateCtor, type TemplateMeta } from '../../graph-core/templateRegistry';
 
 import { z } from 'zod';
 
@@ -35,7 +36,7 @@ import { normalizeError } from '../../utils/error-response';
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
 
-const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant.';
+export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant.';
 const DEFAULT_SUMMARIZATION_PROMPT =
   'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).';
 const DEFAULT_RESTRICTION_MESSAGE =
@@ -66,6 +67,12 @@ export const AgentStaticConfigSchema = z
       .default(DEFAULT_SYSTEM_PROMPT)
       .describe('System prompt injected at the start of each conversation turn.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with managing tools.')
+      .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 4 } }),
     // Agent-side message buffer handling (exposed for Agent static config)
     debounceMs: z.number().int().min(0).default(0).describe('Debounce window (ms) for agent-side message buffer.'),
     whenBusy: z
@@ -143,6 +150,7 @@ type ToolSource =
       sourceType: 'node';
       nodeId?: string;
       className?: string;
+      nodeRef?: BaseToolNode<unknown>;
     }
   | {
       sourceType: 'mcp';
@@ -163,6 +171,7 @@ import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
 import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
+import { renderMustache } from '../../prompt/mustache.template';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
@@ -175,6 +184,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   private persistenceRef: AgentsPersistenceService | null | undefined;
   private runSignalsRef: RunSignalsRegistry | null | undefined;
   private threadTransportRef: ThreadTransportService | null | undefined;
+  private templateRegistryRef: TemplateRegistry | null | undefined;
   private moduleInitialized = false;
 
   constructor(
@@ -217,6 +227,17 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       throw new Error(`RunSignalsRegistry unavailable (${initializedState})`);
     }
     return this.runSignalsRef;
+  }
+
+  private getTemplateRegistry(): TemplateRegistry | null {
+    if (this.templateRegistryRef === undefined) {
+      try {
+        this.templateRegistryRef = this.moduleRef.get(TemplateRegistry, { strict: false }) ?? null;
+      } catch {
+        this.templateRegistryRef = null;
+      }
+    }
+    return this.templateRegistryRef;
   }
 
   private getThreadTransport(): ThreadTransportService | null {
@@ -292,6 +313,11 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     if (typeof sanitized.role === 'string' && sanitized.role.length === 0) {
       delete sanitized.role;
     }
+    if (typeof sanitized.prompt === 'string') {
+      const trimmedPrompt = sanitized.prompt.trim();
+      sanitized.prompt = trimmedPrompt.length > 0 ? trimmedPrompt : undefined;
+      if (!sanitized.prompt) delete sanitized.prompt;
+    }
     await super.setConfig(sanitized);
   }
 
@@ -316,7 +342,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     } catch {
       nodeId = undefined;
     }
-    return { sourceType: 'node', nodeId, className: toolNode.constructor.name };
+    return { sourceType: 'node', nodeId, className: toolNode.constructor.name, nodeRef: toolNode };
   }
 
   private buildMcpToolSource(server: LocalMCPServerNode): ToolSource {
@@ -384,6 +410,55 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     return Array.from(this.toolsByName.values()).map((entry) => entry.tool);
   }
 
+  private readToolNodeConfig(node: BaseToolNode<unknown> | undefined): Record<string, unknown> | undefined {
+    if (!node) return undefined;
+    try {
+      const cfg = node.config;
+      return cfg && typeof cfg === 'object' ? (cfg as Record<string, unknown>) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private resolveTemplateMetaForNode(node: BaseToolNode<unknown> | undefined): TemplateMeta | undefined {
+    if (!node) return undefined;
+    const registry = this.getTemplateRegistry();
+    if (!registry) return undefined;
+    try {
+      const template = registry.findTemplateByCtor(node.constructor as TemplateCtor);
+      if (!template) return undefined;
+      return registry.getMeta(template);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private readConfigString(config: Record<string, unknown> | undefined, key: string): string | undefined {
+    if (!config) return undefined;
+    const raw = config[key];
+    if (typeof raw !== 'string') return undefined;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private buildToolMustacheContext(tools: FunctionTool[]): Array<{ name: string; title: string; description: string; prompt: string }> {
+    return tools.map((tool) => {
+      const entry = this.toolsByName.get(tool.name);
+      const nodeRef = entry?.source.sourceType === 'node' ? entry.source.nodeRef : undefined;
+      const configRecord = this.readToolNodeConfig(nodeRef);
+      const templateMeta = this.resolveTemplateMetaForNode(nodeRef);
+      const configTitle = this.readConfigString(configRecord, 'title');
+      const configDescription = this.readConfigString(configRecord, 'description');
+      const configPrompt = this.readConfigString(configRecord, 'prompt');
+
+      const description = configDescription ?? tool.description ?? '';
+      const prompt = configPrompt ?? description;
+      const title = configTitle ?? templateMeta?.title ?? tool.name;
+
+      return { name: tool.name, title, description, prompt };
+    });
+  }
+
   private async injectBufferedMessages(
     behavior: EffectiveAgentConfig['behavior'],
     state: LLMState,
@@ -410,11 +485,15 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     return this.memoryConnector ? this.memoryConnector.getPlacement() : 'none';
   }
 
-  private buildEffectiveConfig(model: string): EffectiveAgentConfig {
+  private buildEffectiveConfig(model: string, tools: FunctionTool[]): EffectiveAgentConfig {
+    const systemTemplate = this.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+    const toolContext = this.buildToolMustacheContext(tools);
+    const systemPrompt = renderMustache(systemTemplate, { tools: toolContext });
+
     return {
       model,
       prompts: {
-        system: this.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+        system: systemPrompt,
         summarization: DEFAULT_SUMMARIZATION_PROMPT,
       },
       summarization: {
@@ -583,12 +662,11 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
 
       const configModel = this.config.model ?? 'gpt-5';
       const persistedModel = await persistence.ensureThreadModel(thread, configModel);
-      const effective = this.buildEffectiveConfig(persistedModel ?? configModel);
+      const activeTools = this.getActiveTools();
+      const effective = this.buildEffectiveConfig(persistedModel ?? configModel, activeTools);
       effectiveBehavior = effective.behavior;
 
       this.buffer.setDebounceMs(effective.behavior.debounceMs);
-
-      const activeTools = this.getActiveTools();
 
       terminateSignal = new Signal();
       this.getRunSignals().register(ensuredRunId, terminateSignal);

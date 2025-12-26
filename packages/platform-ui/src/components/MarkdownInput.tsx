@@ -7,6 +7,7 @@ interface MarkdownInputProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaEle
   error?: string;
   helperText?: string;
   size?: 'sm' | 'default';
+  previewTransform?: (value: string) => string;
 }
 
 export function MarkdownInput({
@@ -18,6 +19,7 @@ export function MarkdownInput({
   value,
   onChange,
   disabled,
+  previewTransform,
   ...props
 }: MarkdownInputProps) {
   const [showFullscreenEditor, setShowFullscreenEditor] = useState(false);
@@ -92,6 +94,7 @@ export function MarkdownInput({
           onChange={handleFullscreenSave}
           onClose={() => setShowFullscreenEditor(false)}
           label={label || 'Editor'}
+          previewTransform={previewTransform}
         />
       )}
     </div>

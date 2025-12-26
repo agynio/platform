@@ -5,6 +5,8 @@ import type { NodeConfig } from '../../types';
 import type { NodePropertiesViewProps } from '../../viewTypes';
 import { useEnvEditorState } from '../../hooks/useEnvEditorState';
 import { readNumber } from '../../utils';
+import { FieldLabel } from '../../FieldLabel';
+import { Textarea } from '../../../Textarea';
 
 import ToolNameField from './ToolNameField';
 import { useToolNameField } from './useToolNameField';
@@ -32,6 +34,9 @@ export function ShellToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
 
   const [envOpen, setEnvOpen] = useState(true);
   const [limitsOpen, setLimitsOpen] = useState(false);
+
+  const promptValue = typeof configRecord.prompt === 'string' ? (configRecord.prompt as string) : '';
+  const promptTextareaValue = useMemo(() => promptValue, [promptValue]);
 
   const toolWorkdir =
     typeof configRecord.workdir === 'string'
@@ -102,9 +107,28 @@ export function ShellToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
     [onConfigChange],
   );
 
+  const handlePromptChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined } as Partial<NodeConfig>);
+    },
+    [onConfigChange],
+  );
+
   return (
     <>
       <ToolNameField {...nameField} />
+
+      <section className="space-y-2">
+        <FieldLabel label="Prompt" hint="Optional prompt metadata shared with the parent agent." />
+        <Textarea
+          value={promptTextareaValue}
+          onChange={(event) => handlePromptChange(event.target.value)}
+          className="min-h-[96px]"
+          placeholder="Describe how shell access should be used..."
+          maxLength={8192}
+        />
+      </section>
 
       <ToolSection
         workdir={toolWorkdir}

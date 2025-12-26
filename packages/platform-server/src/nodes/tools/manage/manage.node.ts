@@ -3,7 +3,7 @@ import z from 'zod';
 import { HumanMessage } from '@agyn/llm';
 import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool } from './manage.tool';
-import { AgentNode } from '../../agent/agent.node';
+import { AgentNode, DEFAULT_SYSTEM_PROMPT } from '../../agent/agent.node';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 import type { SendResult } from '../../../messaging/types';
@@ -13,6 +13,11 @@ import type { CallerAgent } from '../../../llm/types';
 export const ManageToolStaticConfigSchema = z
   .object({
     description: z.string().min(1).optional(),
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional Mustache template rendered as the tool prompt.'),
     name: z
       .string()
       .regex(/^[a-z0-9_]{1,64}$/)
@@ -99,6 +104,21 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
 
   getWorkerName(agent: AgentNode): string {
     return this.syncWorker(agent).name;
+  }
+
+  getAgentPromptContext(): { agents: { name: string; role: string; prompt: string }[] } {
+    this.refreshAllWorkers();
+    const agents = Array.from(this.workers).map((agent) => {
+      const config = agent?.config ?? {};
+      const rawName = typeof config?.name === 'string' ? config.name.trim() : '';
+      const role = typeof config?.role === 'string' ? config.role.trim() : '';
+      const rawPrompt = typeof config?.prompt === 'string' ? config.prompt : undefined;
+      const systemPrompt = typeof config?.systemPrompt === 'string' ? config.systemPrompt : undefined;
+      const promptSource = rawPrompt && rawPrompt.trim().length > 0 ? rawPrompt : systemPrompt;
+      const prompt = promptSource && promptSource.trim().length > 0 ? promptSource : DEFAULT_SYSTEM_PROMPT;
+      return { name: rawName, role, prompt };
+    });
+    return { agents };
   }
 
   private refreshAllWorkers(): void {

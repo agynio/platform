@@ -22,6 +22,11 @@ const EnvItemSchema = z
   .describe('Environment variable entry with resolved string value.');
 export const ShellToolStaticConfigSchema = z
   .object({
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
     env: z
       .array(EnvItemSchema)
       .optional()

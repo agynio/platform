@@ -4,7 +4,7 @@ import type { NodeConfig, NodeKind, NodePropertiesSidebarProps, NodeState } from
 
 type CommonViewProps<K extends NodeKind> = Pick<
   NodePropertiesSidebarProps,
-  'displayTitle' | 'onConfigChange' | 'onProvision' | 'onDeprovision' | 'canProvision' | 'canDeprovision' | 'isActionPending'
+  'displayTitle' | 'onConfigChange' | 'onProvision' | 'onDeprovision' | 'canProvision' | 'canDeprovision' | 'isActionPending' | 'nodeId' | 'graphNodes' | 'graphEdges'
 > & {
   config: NodeConfig & { kind: K };
   state: NodeState;
