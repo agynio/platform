@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:litellm": "vitest run __tests__/integration/litellm.integration.test.ts",
     "test:watch": "vitest",
     "lint": "pnpm run prisma:generate && eslint .",
     "prepare": "prisma generate",
