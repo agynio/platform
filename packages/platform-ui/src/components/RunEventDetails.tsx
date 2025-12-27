@@ -361,6 +361,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
+    const reasoningTokens = asNumber(event.data.tokens?.reasoning);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
     const toolCalls = Array.isArray(event.data.toolCalls)
@@ -478,6 +479,17 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
               )}
             </div>
+            {reasoningTokens !== undefined && (
+              <div className="mt-4">
+                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Reasoning</h3>
+                <div className="border border-[var(--agyn-border-subtle)] rounded-[10px] p-4 bg-[var(--agyn-bg-light)]">
+                  <div className="flex items-center justify-between text-sm text-[var(--agyn-dark)]">
+                    <span>Tokens</span>
+                    <span className="font-medium">{reasoningTokens.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {toolCalls.length > 0 && (
               <div className="mt-4">
                 <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Invoked tools</h3>

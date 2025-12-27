@@ -80,4 +80,33 @@ describe('RunEventDetails – LLM outputs', () => {
     expect(screen.getByText(/command:/i)).toBeInTheDocument();
     expect(screen.getByText(/"echo 1"/)).toBeInTheDocument();
   });
+
+  it('renders a reasoning block when reasoning tokens are provided', () => {
+    const event: RunEvent = {
+      id: 'evt-llm-reasoning',
+      type: 'llm',
+      timestamp: '2024-01-01T00:02:00.000Z',
+      data: {
+        response: 'Here is my answer.',
+        tokens: {
+          total: 1200,
+          reasoning: 250,
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <RunEventDetails event={event} />
+      </MemoryRouter>,
+    );
+
+    const reasoningHeading = screen.getByText('Reasoning');
+    expect(reasoningHeading).toBeInTheDocument();
+    const reasoningSection = reasoningHeading.closest('div');
+    expect(reasoningSection).not.toBeNull();
+    const withinContainer = within(reasoningSection as HTMLElement);
+    expect(withinContainer.getByText('Tokens')).toBeInTheDocument();
+    expect(withinContainer.getByText('250')).toBeInTheDocument();
+  });
 });
