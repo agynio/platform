@@ -29,6 +29,132 @@ const safeJsonParse = (value: string): unknown => {
   }
 };
 
+const extractReasoningMetrics = (value: unknown): { tokens?: number; score?: number } => {
+  const visited = new WeakSet<object>();
+
+  const combine = (
+    base: { tokens?: number; score?: number },
+    addition: { tokens?: number; score?: number },
+  ): { tokens?: number; score?: number } => {
+    if (base.tokens === undefined && addition.tokens !== undefined) {
+      base.tokens = addition.tokens;
+    }
+    if (base.score === undefined && addition.score !== undefined) {
+      base.score = addition.score;
+    }
+    return base;
+  };
+
+  const walk = (current: unknown): { tokens?: number; score?: number } => {
+    if (current === null || current === undefined) {
+      return {};
+    }
+
+    if (typeof current === 'number') {
+      return { tokens: current };
+    }
+
+    if (typeof current === 'string') {
+      const numeric = Number(current);
+      if (!Number.isNaN(numeric)) {
+        return { tokens: numeric };
+      }
+      const parsed = safeJsonParse(current);
+      if (parsed !== current) {
+        return walk(parsed);
+      }
+      return {};
+    }
+
+    if (typeof current !== 'object') {
+      return {};
+    }
+
+    if (Array.isArray(current)) {
+      const aggregated: { tokens?: number; score?: number } = {};
+      for (const item of current) {
+        combine(aggregated, walk(item));
+        if (aggregated.tokens !== undefined && aggregated.score !== undefined) {
+          break;
+        }
+      }
+      return aggregated;
+    }
+
+    const record = current as Record<string, unknown>;
+    if (visited.has(record)) {
+      return {};
+    }
+    visited.add(record);
+
+    const result: { tokens?: number; score?: number } = {};
+
+    const tokenKeys: Array<keyof typeof record> = [
+      'tokens',
+      'reasoningTokens',
+      'reasoning_tokens',
+      'token_count',
+      'totalTokens',
+      'total',
+      'value',
+      'count',
+    ];
+
+    const directTokenCandidates: Array<unknown> = tokenKeys.map((key) => record[key]);
+
+    for (const candidate of directTokenCandidates) {
+      const numeric = asNumber(candidate);
+      if (numeric !== undefined) {
+        result.tokens = numeric;
+        break;
+      }
+    }
+
+    const scoreKeys: Array<keyof typeof record> = ['score', 'reasoningScore', 'confidence'];
+
+    const directScoreCandidates: Array<unknown> = scoreKeys.map((key) => record[key]);
+
+    for (const candidate of directScoreCandidates) {
+      const numeric = asNumber(candidate);
+      if (numeric !== undefined) {
+        result.score = numeric;
+        break;
+      }
+    }
+
+    if (result.tokens !== undefined && result.score !== undefined) {
+      return result;
+    }
+
+    const nestedKeys: Array<keyof typeof record> = ['reasoning', 'metrics', 'usage', 'data', 'details', 'stats'];
+    for (const key of nestedKeys) {
+      if (key in record) {
+        combine(result, walk(record[key]));
+        if (result.tokens !== undefined && result.score !== undefined) {
+          break;
+        }
+      }
+    }
+
+    if (result.tokens === undefined || result.score === undefined) {
+      const skippedKeys = new Set<keyof typeof record>([...tokenKeys, ...scoreKeys, ...nestedKeys]);
+      for (const [key, value] of Object.entries(record) as Array<[keyof typeof record, unknown]>) {
+        if (skippedKeys.has(key)) {
+          continue;
+        }
+        combine(result, walk(value));
+        if (result.tokens !== undefined && result.score !== undefined) {
+          break;
+        }
+      }
+    }
+
+    return result;
+  };
+
+  return walk(value);
+};
+
 const CONTEXT_PAGINATION_PAGE_SIZE = 20;
 
 export interface RunEventData extends Record<string, unknown> {
@@ -361,6 +487,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
+    const reasoningTokens = extractReasoningMetrics(event.data.tokens?.reasoning).tokens;
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
     const toolCalls = Array.isArray(event.data.toolCalls)
@@ -465,6 +592,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
           {/* Output */}
           <div className="flex flex-col min-h-0 min-w-0">
+            {reasoningTokens !== undefined && (
+              <div className="flex-shrink-0 mb-4">
+                <div className="flex items-center gap-2 mb-3 h-8">
+                  <span className="text-sm text-[var(--agyn-gray)]">Reasoning</span>
+                </div>
+                <div className="text-[var(--agyn-dark)] text-sm font-mono">
+                  {reasoningTokens.toLocaleString()} tokens
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
               <span className="text-sm text-[var(--agyn-gray)]">Output</span>
               <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
@@ -480,7 +617,9 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             </div>
             {toolCalls.length > 0 && (
               <div className="mt-4">
-                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Invoked tools</h3>
+                <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
+                  <span className="text-sm text-[var(--agyn-gray)]">Invoked tools</span>
+                </div>
                 {renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `llm-${event.id}`)}
               </div>
             )}
@@ -555,9 +694,32 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       };
 
       const timestamp = formatTimestamp(message.timestamp);
-      const reasoning = isRecord(message.reasoning) ? message.reasoning : undefined;
-      const reasoningTokens = asNumber(reasoning?.tokens);
-      const reasoningScore = asNumber(reasoning?.score);
+      const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
+      const tokensRecord = isRecord(message.tokens) ? message.tokens : undefined;
+
+      const reasoningCandidates: unknown[] = [
+        message.reasoning,
+        additionalKwargs?.reasoning,
+        tokensRecord?.reasoning,
+        tokensRecord?.reasoningTokens,
+        message.reasoningTokens,
+      ];
+
+      let reasoningTokens: number | undefined;
+      let reasoningScore: number | undefined;
+      for (const candidate of reasoningCandidates) {
+        if (candidate === undefined) continue;
+        const metrics = extractReasoningMetrics(candidate);
+        if (reasoningTokens === undefined && metrics.tokens !== undefined) {
+          reasoningTokens = metrics.tokens;
+        }
+        if (reasoningScore === undefined && metrics.score !== undefined) {
+          reasoningScore = metrics.score;
+        }
+        if (reasoningTokens !== undefined && reasoningScore !== undefined) {
+          break;
+        }
+      }
 
       const getReasoningVariant = () => {
         if (reasoningTokens !== undefined) {
@@ -567,8 +729,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
         }
         return 'neutral';
       };
-
-      const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
       const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
       const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
       const hasToolCalls = toolCalls.length > 0;
