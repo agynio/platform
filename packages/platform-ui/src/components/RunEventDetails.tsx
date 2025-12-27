@@ -696,6 +696,22 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       const timestamp = formatTimestamp(message.timestamp);
       const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
       const tokensRecord = isRecord(message.tokens) ? message.tokens : undefined;
+      const contentJson = isRecord(message.contentJson) ? message.contentJson : undefined;
+      const metadataRecord = isRecord(message.metadata) ? message.metadata : undefined;
+      const usageRecord = isRecord(message.usage) ? message.usage : undefined;
+      const additionalUsage = isRecord(additionalKwargs?.usage) ? (additionalKwargs?.usage as Record<string, unknown>) : undefined;
+      const contentUsage = isRecord(contentJson?.usage) ? (contentJson.usage as Record<string, unknown>) : undefined;
+      const metadataUsage = isRecord(metadataRecord?.usage) ? (metadataRecord.usage as Record<string, unknown>) : undefined;
+      const usageDetailsCandidates: unknown[] = [
+        contentUsage?.['output_tokens_details'],
+        contentUsage?.['outputTokensDetails'],
+        usageRecord?.['output_tokens_details'],
+        usageRecord?.['outputTokensDetails'],
+        metadataUsage?.['output_tokens_details'],
+        metadataUsage?.['outputTokensDetails'],
+        additionalUsage?.['output_tokens_details'],
+        additionalUsage?.['outputTokensDetails'],
+      ];
 
       const reasoningCandidates: unknown[] = [
         message.reasoning,
@@ -703,6 +719,15 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
         tokensRecord?.reasoning,
         tokensRecord?.reasoningTokens,
         message.reasoningTokens,
+        ...usageDetailsCandidates,
+        usageRecord,
+        additionalUsage,
+        contentUsage,
+        metadataUsage,
+        contentJson?.reasoning,
+        metadataRecord?.reasoning,
+        contentJson,
+        metadataRecord,
       ];
 
       let reasoningTokens: number | undefined;

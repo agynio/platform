@@ -56,6 +56,64 @@ describe('RunEventDetails – LLM outputs', () => {
     });
   });
 
+  it('surfaces reasoning tokens embedded in assistant context usage snapshots', () => {
+    const event: RunEvent = {
+      id: 'evt-llm-context-usage',
+      type: 'llm',
+      timestamp: '2024-01-01T00:00:30.000Z',
+      data: {
+        context: [],
+        assistantContext: [
+          {
+            id: 'ctx-assistant-usage',
+            role: 'assistant',
+            content: 'Assistant reasoning-rich context',
+            contentJson: {
+              output: [
+                {
+                  type: 'reasoning',
+                  summary: [{ type: 'text', text: 'thinking...' }],
+                  reasoning: [],
+                },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: 'Assistant reasoning-rich context',
+                      annotations: [],
+                    },
+                  ],
+                },
+              ],
+              usage: {
+                input_tokens: 144,
+                output_tokens: 120,
+                total_tokens: 264,
+                output_tokens_details: {
+                  reasoning_tokens: 42,
+                },
+              },
+            },
+          },
+        ],
+        response: 'Latest assistant response',
+        model: 'gpt-4o',
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <RunEventDetails event={event} />
+      </MemoryRouter>,
+    );
+
+    const panel = screen.getByTestId('assistant-context-panel');
+    expect(within(panel).getByText('Assistant reasoning-rich context')).toBeInTheDocument();
+    expect(within(panel).getByText('42 tokens')).toBeInTheDocument();
+  });
+
   it('shows invoked tool calls for llm events using the shared function-call UI', () => {
     const event: RunEvent = {
       id: 'evt-llm-tools',
