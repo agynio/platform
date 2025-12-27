@@ -102,6 +102,49 @@ describe.sequential('LLMSettingsService', () => {
     scope.done();
   });
 
+  it('lists models from nested data wrappers', async () => {
+    const scope = nock(BASE_URL)
+      .get('/model/info')
+      .reply(200, {
+        data: {
+          models: [
+            {
+              model_name: 'anthropic/support',
+              litellm_params: { model: 'claude-3' },
+              model_info: { id: 'model-123' },
+            },
+            { foo: 'bar' },
+          ],
+        },
+      });
+
+    const service = new LLMSettingsService(createConfig());
+    const models = await service.listModels();
+    expect(models).toHaveLength(1);
+    expect(models[0]?.model_name).toBe('anthropic/support');
+    scope.done();
+  });
+
+  it('lists models when response exposes array at root level', async () => {
+    const scope = nock(BASE_URL)
+      .get('/model/info')
+      .reply(200, {
+        models: [
+          {
+            model_name: 'anthropic/support',
+            litellm_params: { model: 'claude-3' },
+            model_info: { id: 'model-anthropic' },
+          },
+        ],
+      });
+
+    const service = new LLMSettingsService(createConfig());
+    const models = await service.listModels();
+    expect(models).toHaveLength(1);
+    expect(models[0]?.model_name).toBe('anthropic/support');
+    scope.done();
+  });
+
   it('prevents deleting credentials referenced by models', async () => {
     const modelsScope = nock(BASE_URL)
       .get('/model/info')

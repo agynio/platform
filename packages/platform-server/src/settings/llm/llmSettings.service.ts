@@ -689,13 +689,35 @@ function isModelRecord(value: unknown): value is LiteLLMModelRecord {
 
 function extractLiteLLMArray(payload: unknown, keys: string[]): unknown[] {
   if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === 'object') {
-    for (const key of keys) {
-      const value = (payload as Record<string, unknown>)[key];
-      if (Array.isArray(value)) {
-        return value;
-      }
+  if (!payload || typeof payload !== 'object') return [];
+
+  let current: unknown = payload;
+  for (const key of keys) {
+    if (Array.isArray(current)) {
+      return current;
+    }
+    if (!current || typeof current !== 'object') {
+      current = undefined;
+      break;
+    }
+    const next = (current as Record<string, unknown>)[key];
+    if (Array.isArray(next)) {
+      return next;
+    }
+    current = next;
+  }
+
+  if (Array.isArray(current)) {
+    return current;
+  }
+
+  const root = payload as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = root[key];
+    if (Array.isArray(candidate)) {
+      return candidate;
     }
   }
+
   return [];
 }
