@@ -19,5 +19,3 @@ export type {
   ResolutionEventSource,
   ResolutionErrorCode,
 } from './references';
-
-export { normalizeLiteLLMProvider, resolveLiteLLMProviderOrThrow } from './litellm/providerAliases';

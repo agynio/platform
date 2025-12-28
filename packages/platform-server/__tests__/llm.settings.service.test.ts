@@ -80,6 +80,27 @@ describe.sequential('LLMSettingsService', () => {
     scope.done();
   });
 
+  it('normalizes provider identifiers returned from LiteLLM', async () => {
+    const scope = nock(BASE_URL)
+      .get('/public/providers/fields')
+      .matchHeader('authorization', 'Bearer sk-master')
+      .reply(200, [
+        {
+          provider: 'Azure-OpenAI',
+          provider_display_name: 'Azure OpenAI',
+          litellm_provider: 'openai_chat',
+          credential_fields: [],
+        },
+      ]);
+
+    const service = new LLMSettingsService(createConfig());
+    const result = await service.listProviders();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.provider).toBe('azure');
+    expect(result[0]?.litellm_provider).toBe('openai');
+    scope.done();
+  });
+
   it('lists credentials from nested payload structures', async () => {
     const scope = nock(BASE_URL)
       .get('/credentials')

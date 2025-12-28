@@ -1,5 +1,9 @@
 import { Injectable, Logger, BadRequestException, ConflictException, HttpException, Inject } from '@nestjs/common';
-import { normalizeLiteLLMProvider, resolveLiteLLMProviderOrThrow } from '@agyn/shared';
+import {
+  normalizeLiteLLMProvider,
+  resolveLiteLLMProviderOrThrow,
+  withCanonicalProviderInfo,
+} from './providerNormalization';
 import { ConfigService } from '../../core/services/config.service';
 import {
   LiteLLMCredentialDetail,
@@ -182,7 +186,8 @@ export class LLMSettingsService {
   }
 
   async listProviders(): Promise<LiteLLMProviderInfo[]> {
-    return this.fetchProviders();
+    const providers = await this.fetchProviders();
+    return providers.map((provider) => withCanonicalProviderInfo(provider));
   }
 
   async listCredentials(): Promise<LiteLLMCredentialSummary[]> {

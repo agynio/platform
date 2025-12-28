@@ -1,4 +1,3 @@
-import { normalizeLiteLLMProvider } from '@agyn/shared';
 import type {
   LiteLLMCredential,
   LiteLLMModel,
@@ -61,18 +60,18 @@ const FIELD_TYPE_MAP: Record<string, ProviderFieldType> = {
   upload: 'textarea',
 };
 
+function normalizeProviderKey(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : '';
+}
+
 function resolveCredentialProvider(info?: Record<string, unknown>): string {
   if (!info) return '';
-  const litellm = info['litellm_provider'];
-  if (typeof litellm === 'string') {
-    const normalized = normalizeLiteLLMProvider(litellm);
-    if (normalized) return normalized;
-  }
-  const legacy = info['custom_llm_provider'];
-  if (typeof legacy === 'string') {
-    const normalized = normalizeLiteLLMProvider(legacy);
-    if (normalized) return normalized;
-  }
+  const litellm = normalizeProviderKey(info['litellm_provider']);
+  if (litellm) return litellm;
+  const legacy = normalizeProviderKey(info['custom_llm_provider']);
+  if (legacy) return legacy;
   return '';
 }
 
@@ -81,22 +80,19 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
   return items.map((item) => {
     const rawProvider = typeof item.provider === 'string' ? item.provider : '';
     const rawProviderTrimmed = rawProvider.trim();
-    const normalizedProvider = normalizeLiteLLMProvider(rawProviderTrimmed);
-    const fallbackProviderId = rawProviderTrimmed.length > 0 ? rawProviderTrimmed.toLowerCase() : '';
-
+    const normalizedProvider = normalizeProviderKey(rawProviderTrimmed);
     const rawLitellmProvider = typeof item.litellm_provider === 'string' ? item.litellm_provider : '';
     const rawLitellmTrimmed = rawLitellmProvider.trim();
-    const normalizedLitellmProvider = normalizeLiteLLMProvider(rawLitellmTrimmed);
-    const fallbackLitellmProvider = rawLitellmTrimmed.length > 0 ? rawLitellmTrimmed.toLowerCase() : '';
+    const normalizedLitellmProvider = normalizeProviderKey(rawLitellmTrimmed);
 
     const canonicalProviderId =
       normalizedProvider ||
-      fallbackProviderId ||
       normalizedLitellmProvider ||
-      fallbackLitellmProvider ||
+      (rawProviderTrimmed.length > 0 ? rawProviderTrimmed.toLowerCase() : '') ||
+      (rawLitellmTrimmed.length > 0 ? rawLitellmTrimmed.toLowerCase() : '') ||
       rawProviderTrimmed ||
       'unknown';
-    const litellmProvider = normalizedLitellmProvider || fallbackLitellmProvider || canonicalProviderId;
+    const litellmProvider = normalizedLitellmProvider || canonicalProviderId;
     const labelBase =
       typeof item.provider_display_name === 'string' && item.provider_display_name.trim().length > 0
         ? item.provider_display_name.trim()
@@ -187,8 +183,7 @@ export function mapModels(
         : typeof paramsRaw.litellm_provider === 'string'
           ? (paramsRaw.litellm_provider as string)
           : '';
-    const providerKeyNormalized = normalizeLiteLLMProvider(providerKeySource);
-    const providerKey = providerKeyNormalized ?? providerKeySource.trim();
+    const providerKey = normalizeProviderKey(providerKeySource) || providerKeySource.trim();
     const provider = providers.get(providerKey);
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 

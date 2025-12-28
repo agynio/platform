@@ -40,3 +40,15 @@ export function resolveLiteLLMProviderOrThrow(provider?: string | null): string 
   }
   return normalized;
 }
+
+export function withCanonicalProviderInfo<T extends { provider: string; litellm_provider: string }>(
+  info: T,
+): T {
+  const provider = normalizeLiteLLMProvider(info.provider) ?? info.provider.trim().toLowerCase();
+  const litellmProvider = normalizeLiteLLMProvider(info.litellm_provider) ?? info.litellm_provider.trim().toLowerCase();
+  return {
+    ...info,
+    provider,
+    litellm_provider: litellmProvider,
+  };
+}
