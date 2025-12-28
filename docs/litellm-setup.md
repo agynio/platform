@@ -42,6 +42,7 @@ App configuration: LiteLLM admin requirements
 Model naming guidance
 - Use the exact LiteLLM model name as configured in the LiteLLM UI. For OpenAI via LiteLLM, provider prefixes may be required (e.g., openai/gpt-4o-mini).
 - Aliases are supported; enter the alias in the UI if you created one (e.g., gpt-5).
+- Provider identifiers should match the canonical keys exposed by LiteLLM's `/public/providers` endpoint. The platform normalizes a few historical aliases (for example, `azure_openai` now maps to `azure`), but using the official key avoids sync errors.
 - The UI does not enforce a list of models; it accepts any non-empty string. Validation occurs at runtime when calling the provider.
 
 Agent configuration behavior

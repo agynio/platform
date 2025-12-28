@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException, ConflictException, HttpException, Inject } from '@nestjs/common';
+import { normalizeLiteLLMProvider, resolveLiteLLMProviderOrThrow } from '@agyn/shared';
 import { ConfigService } from '../../core/services/config.service';
 import {
   LiteLLMCredentialDetail,
@@ -159,12 +160,14 @@ function extractModelInfoId(info?: Record<string, unknown>): string | undefined 
 function extractCredentialProvider(info?: Record<string, unknown>): string | undefined {
   if (!info) return undefined;
   const litellm = info['litellm_provider'];
-  if (typeof litellm === 'string' && litellm.trim().length > 0) {
-    return litellm.trim();
+  if (typeof litellm === 'string') {
+    const normalized = normalizeLiteLLMProvider(litellm);
+    if (normalized) return normalized;
   }
   const legacy = info['custom_llm_provider'];
-  if (typeof legacy === 'string' && legacy.trim().length > 0) {
-    return legacy.trim();
+  if (typeof legacy === 'string') {
+    const normalized = normalizeLiteLLMProvider(legacy);
+    if (normalized) return normalized;
   }
   return undefined;
 }
@@ -187,8 +190,9 @@ export class LLMSettingsService {
   }
 
   async createCredential(input: CreateCredentialInput): Promise<LiteLLMGenericResponse> {
+    const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
     const info: Record<string, unknown> = {
-      litellm_provider: input.provider,
+      litellm_provider: providerKey,
       ...(input.metadata || {}),
     };
     const payload = {
@@ -201,7 +205,9 @@ export class LLMSettingsService {
 
   async updateCredential(input: UpdateCredentialInput): Promise<LiteLLMGenericResponse> {
     const info: Record<string, unknown> = {};
-    if (input.provider) info.litellm_provider = input.provider;
+    if (input.provider) {
+      info.litellm_provider = resolveLiteLLMProviderOrThrow(input.provider);
+    }
     if (input.metadata) Object.assign(info, input.metadata);
     const sanitizedValues = sanitizeRecord(input.values);
     const payload = {
@@ -245,6 +251,7 @@ export class LLMSettingsService {
     const litellmParams: Record<string, unknown> = {
       model: input.model,
       custom_llm_provider: provider,
+      litellm_provider: provider,
       litellm_credential_name: input.name,
     };
     const modelInfo: Record<string, unknown> = {};
@@ -412,12 +419,16 @@ export class LLMSettingsService {
   }
 
   private buildModelParams(input: CreateModelInput): Record<string, unknown> {
-    const params: Record<string, unknown> = {
-      model: input.model,
-      custom_llm_provider: input.provider,
-      litellm_credential_name: input.credentialName,
-      ...(input.params || {}),
-    };
+    const params: Record<string, unknown> = { ...(input.params || {}) };
+    delete params.model;
+    delete params.custom_llm_provider;
+    delete params.litellm_provider;
+    delete params.litellm_credential_name;
+    const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
+    params.model = input.model;
+    params.custom_llm_provider = providerKey;
+    params.litellm_provider = providerKey;
+    params.litellm_credential_name = input.credentialName;
     if (input.temperature !== undefined) params.temperature = input.temperature;
     if (input.maxTokens !== undefined) params.max_tokens = input.maxTokens;
     if (input.topP !== undefined) params.top_p = input.topP;
@@ -501,7 +512,20 @@ export class LLMSettingsService {
 
   private mergeModelParams(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    if (input.provider) next.custom_llm_provider = input.provider;
+    const currentProvider = normalizeLiteLLMProvider(
+      (next.custom_llm_provider as string | undefined) ?? (next.litellm_provider as string | undefined),
+    );
+    if (currentProvider) {
+      next.custom_llm_provider = currentProvider;
+      next.litellm_provider = currentProvider;
+    } else {
+      delete next.litellm_provider;
+    }
+    if (input.provider) {
+      const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
+      next.custom_llm_provider = providerKey;
+      next.litellm_provider = providerKey;
+    }
     if (input.model) next.model = input.model;
     if (input.credentialName) next.litellm_credential_name = input.credentialName;
     if (input.temperature !== undefined) next.temperature = input.temperature;
@@ -513,6 +537,9 @@ export class LLMSettingsService {
     if (input.params) {
       for (const [key, value] of Object.entries(input.params)) {
         if (value === undefined) continue;
+        if (key === 'model' || key === 'custom_llm_provider' || key === 'litellm_provider' || key === 'litellm_credential_name') {
+          continue;
+        }
         next[key] = value;
       }
     }

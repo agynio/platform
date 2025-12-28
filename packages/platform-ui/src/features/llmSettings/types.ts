@@ -1,3 +1,4 @@
+import { normalizeLiteLLMProvider } from '@agyn/shared';
 import type {
   LiteLLMCredential,
   LiteLLMModel,
@@ -63,12 +64,14 @@ const FIELD_TYPE_MAP: Record<string, ProviderFieldType> = {
 function resolveCredentialProvider(info?: Record<string, unknown>): string {
   if (!info) return '';
   const litellm = info['litellm_provider'];
-  if (typeof litellm === 'string' && litellm.trim().length > 0) {
-    return litellm.trim();
+  if (typeof litellm === 'string') {
+    const normalized = normalizeLiteLLMProvider(litellm);
+    if (normalized) return normalized;
   }
   const legacy = info['custom_llm_provider'];
-  if (typeof legacy === 'string' && legacy.trim().length > 0) {
-    return legacy.trim();
+  if (typeof legacy === 'string') {
+    const normalized = normalizeLiteLLMProvider(legacy);
+    if (normalized) return normalized;
   }
   return '';
 }
@@ -76,6 +79,7 @@ function resolveCredentialProvider(info?: Record<string, unknown>): string {
 export function mapProviders(items: LiteLLMProviderInfo[] | undefined): ProviderOption[] {
   if (!Array.isArray(items)) return [];
   return items.map((item) => {
+    const litellmProvider = normalizeLiteLLMProvider(item.litellm_provider) ?? item.litellm_provider;
     const fields: ProviderField[] = Array.isArray(item.credential_fields)
       ? item.credential_fields.map((field) => ({
           key: field.key,
@@ -91,7 +95,7 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
     return {
       id: item.provider,
       label: item.provider_display_name ?? item.provider,
-      litellmProvider: item.litellm_provider,
+      litellmProvider,
       fields,
       defaultModelPlaceholder: item.default_model_placeholder ?? null,
     } satisfies ProviderOption;
@@ -156,7 +160,14 @@ export function mapModels(
     const paramsRaw = (item.litellm_params ?? {}) as Record<string, unknown>;
     const modelInfo = (item.model_info ?? {}) as Record<string, unknown>;
 
-    const providerKey = typeof paramsRaw.custom_llm_provider === 'string' ? (paramsRaw.custom_llm_provider as string) : '';
+    const providerKeySource =
+      typeof paramsRaw.custom_llm_provider === 'string'
+        ? (paramsRaw.custom_llm_provider as string)
+        : typeof paramsRaw.litellm_provider === 'string'
+          ? (paramsRaw.litellm_provider as string)
+          : '';
+    const providerKeyNormalized = normalizeLiteLLMProvider(providerKeySource);
+    const providerKey = providerKeyNormalized ?? providerKeySource.trim();
     const provider = providers.get(providerKey);
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 
