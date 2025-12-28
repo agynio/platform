@@ -1,8 +1,7 @@
-import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
+import { Clock, MessageSquare, Bot, Brain, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
-import { Badge } from './Badge';
 import { IconButton } from './IconButton';
 import { JsonViewer } from './JsonViewer';
 import { MarkdownContent } from './MarkdownContent';
@@ -27,6 +26,164 @@ const safeJsonParse = (value: string): unknown => {
   } catch {
     return value;
   }
+};
+
+type ReasoningMetricsOptions = {
+  requireReasoningContext?: boolean;
+  initialHasReasoningContext?: boolean;
+};
+
+const extractReasoningMetrics = (
+  value: unknown,
+  options?: ReasoningMetricsOptions,
+): { tokens?: number; score?: number } => {
+  const requireReasoningContext = options?.requireReasoningContext ?? false;
+  const visited = new WeakSet<object>();
+
+  const keyIndicatesReasoning = (key: unknown): boolean =>
+    typeof key === 'string' && key.toLowerCase().includes('reason');
+
+  const combine = (
+    base: { tokens?: number; score?: number },
+    addition: { tokens?: number; score?: number },
+  ): { tokens?: number; score?: number } => {
+    if (base.tokens === undefined && addition.tokens !== undefined) {
+      base.tokens = addition.tokens;
+    }
+    if (base.score === undefined && addition.score !== undefined) {
+      base.score = addition.score;
+    }
+    return base;
+  };
+
+  const walk = (
+    current: unknown,
+    context: { hasReasoningContext: boolean },
+  ): { tokens?: number; score?: number } => {
+    if (current === null || current === undefined) {
+      return {};
+    }
+
+    if (typeof current === 'number') {
+      if (requireReasoningContext && !context.hasReasoningContext) {
+        return {};
+      }
+      return { tokens: current };
+    }
+
+    if (typeof current === 'string') {
+      const numeric = Number(current);
+      if (!Number.isNaN(numeric)) {
+        if (requireReasoningContext && !context.hasReasoningContext) {
+          return {};
+        }
+        return { tokens: numeric };
+      }
+      const parsed = safeJsonParse(current);
+      if (parsed !== current) {
+        return walk(parsed, context);
+      }
+      return {};
+    }
+
+    if (typeof current !== 'object') {
+      return {};
+    }
+
+    if (Array.isArray(current)) {
+      const aggregated: { tokens?: number; score?: number } = {};
+      for (const item of current) {
+        combine(aggregated, walk(item, context));
+        if (aggregated.tokens !== undefined && aggregated.score !== undefined) {
+          break;
+        }
+      }
+      return aggregated;
+    }
+
+    const record = current as Record<string, unknown>;
+    if (visited.has(record)) {
+      return {};
+    }
+    visited.add(record);
+
+    const result: { tokens?: number; score?: number } = {};
+
+    const tokenKeys: Array<keyof typeof record> = [
+      'tokens',
+      'reasoningTokens',
+      'reasoning_tokens',
+      'token_count',
+      'totalTokens',
+      'total',
+      'value',
+      'count',
+    ];
+
+    for (const key of tokenKeys) {
+      if (!(key in record)) continue;
+      const candidate = record[key];
+      const numeric = asNumber(candidate);
+      if (numeric === undefined) continue;
+      const keyIsReasoning = keyIndicatesReasoning(key);
+      if (requireReasoningContext && !(context.hasReasoningContext || keyIsReasoning)) {
+        continue;
+      }
+      result.tokens = numeric;
+      break;
+    }
+
+    const scoreKeys: Array<keyof typeof record> = ['score', 'reasoningScore', 'confidence'];
+
+    const directScoreCandidates: Array<unknown> = scoreKeys.map((key) => record[key]);
+
+    for (const candidate of directScoreCandidates) {
+      const numeric = asNumber(candidate);
+      if (numeric !== undefined) {
+        result.score = numeric;
+        break;
+      }
+    }
+
+    if (result.tokens !== undefined && result.score !== undefined) {
+      return result;
+    }
+
+    const nestedKeys: Array<keyof typeof record> = ['reasoning', 'metrics', 'usage', 'data', 'details', 'stats'];
+    for (const key of nestedKeys) {
+      if (key in record) {
+        const keyIsReasoning = keyIndicatesReasoning(key);
+        const nextContext = {
+          hasReasoningContext: context.hasReasoningContext || keyIsReasoning,
+        };
+        combine(result, walk(record[key], nextContext));
+        if (result.tokens !== undefined && result.score !== undefined) {
+          break;
+        }
+      }
+    }
+
+    if (result.tokens === undefined || result.score === undefined) {
+      const skippedKeys = new Set<keyof typeof record>([...tokenKeys, ...scoreKeys, ...nestedKeys]);
+      for (const [key, value] of Object.entries(record) as Array<[keyof typeof record, unknown]>) {
+        if (skippedKeys.has(key)) {
+          continue;
+        }
+        const keyIsReasoning = keyIndicatesReasoning(key);
+        const nextContext = {
+          hasReasoningContext: context.hasReasoningContext || keyIsReasoning,
+        };
+        combine(result, walk(value, nextContext));
+        if (result.tokens !== undefined && result.score !== undefined) {
+          break;
+        }
+      }
+    }
+
+    return result;
+  };
+
+  return walk(value, { hasReasoningContext: options?.initialHasReasoningContext ?? false });
 };
 
 const CONTEXT_PAGINATION_PAGE_SIZE = 20;
@@ -361,6 +518,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const assistantContext = asRecordArray(event.data.assistantContext);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
+    const reasoningTokens = extractReasoningMetrics(event.data.tokens?.reasoning).tokens;
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
     const toolCalls = Array.isArray(event.data.toolCalls)
@@ -465,6 +623,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
           {/* Output */}
           <div className="flex flex-col min-h-0 min-w-0">
+            {reasoningTokens !== undefined && (
+              <div className="flex-shrink-0 mb-4">
+                <div className="flex items-center gap-2 mb-3 h-8">
+                  <span className="text-sm text-[var(--agyn-gray)]">Reasoning</span>
+                </div>
+                <div className="text-[var(--agyn-dark)] text-sm font-mono">
+                  {reasoningTokens.toLocaleString()} tokens
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
               <span className="text-sm text-[var(--agyn-gray)]">Output</span>
               <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
@@ -480,7 +648,9 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             </div>
             {toolCalls.length > 0 && (
               <div className="mt-4">
-                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Invoked tools</h3>
+                <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
+                  <span className="text-sm text-[var(--agyn-gray)]">Invoked tools</span>
+                </div>
                 {renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `llm-${event.id}`)}
               </div>
             )}
@@ -555,20 +725,57 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       };
 
       const timestamp = formatTimestamp(message.timestamp);
-      const reasoning = isRecord(message.reasoning) ? message.reasoning : undefined;
-      const reasoningTokens = asNumber(reasoning?.tokens);
-      const reasoningScore = asNumber(reasoning?.score);
-
-      const getReasoningVariant = () => {
-        if (reasoningTokens !== undefined) {
-          if (reasoningTokens < 50) return 'secondary';
-          if (reasoningTokens < 150) return 'default';
-          return 'error';
-        }
-        return 'neutral';
-      };
-
       const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
+      const tokensRecord = isRecord(message.tokens) ? message.tokens : undefined;
+      const contentJson = isRecord(message.contentJson) ? message.contentJson : undefined;
+      const metadataRecord = isRecord(message.metadata) ? message.metadata : undefined;
+      const usageRecord = isRecord(message.usage) ? message.usage : undefined;
+      const additionalUsage = isRecord(additionalKwargs?.usage) ? (additionalKwargs?.usage as Record<string, unknown>) : undefined;
+      const contentUsage = isRecord(contentJson?.usage) ? (contentJson.usage as Record<string, unknown>) : undefined;
+      const metadataUsage = isRecord(metadataRecord?.usage) ? (metadataRecord.usage as Record<string, unknown>) : undefined;
+      type ReasoningCandidate = { value: unknown; initialReasoning?: boolean };
+
+      const usageDetailsCandidates: ReasoningCandidate[] = [
+        { value: contentUsage?.['output_tokens_details'], initialReasoning: true },
+        { value: contentUsage?.['outputTokensDetails'], initialReasoning: true },
+        { value: usageRecord?.['output_tokens_details'], initialReasoning: true },
+        { value: usageRecord?.['outputTokensDetails'], initialReasoning: true },
+        { value: metadataUsage?.['output_tokens_details'], initialReasoning: true },
+        { value: metadataUsage?.['outputTokensDetails'], initialReasoning: true },
+        { value: additionalUsage?.['output_tokens_details'], initialReasoning: true },
+        { value: additionalUsage?.['outputTokensDetails'], initialReasoning: true },
+      ];
+
+      const reasoningCandidates: ReasoningCandidate[] = [
+        { value: message.reasoning, initialReasoning: true },
+        { value: additionalKwargs?.reasoning, initialReasoning: true },
+        { value: tokensRecord?.reasoning, initialReasoning: true },
+        { value: tokensRecord?.reasoningTokens, initialReasoning: true },
+        { value: message.reasoningTokens, initialReasoning: true },
+        ...usageDetailsCandidates,
+        { value: usageRecord },
+        { value: additionalUsage },
+        { value: contentUsage },
+        { value: metadataUsage },
+        { value: contentJson?.reasoning, initialReasoning: true },
+        { value: metadataRecord?.reasoning, initialReasoning: true },
+        { value: contentJson },
+        { value: metadataRecord },
+      ];
+
+      let reasoningTokens: number | undefined;
+      for (const candidate of reasoningCandidates) {
+        if (candidate.value === undefined) continue;
+        const metrics = extractReasoningMetrics(candidate.value, {
+          requireReasoningContext: true,
+          initialHasReasoningContext: candidate.initialReasoning ?? false,
+        });
+        const tokens = metrics.tokens;
+        if (tokens !== undefined && tokens > 0) {
+          reasoningTokens = tokens;
+          break;
+        }
+      }
       const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
       const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
       const hasToolCalls = toolCalls.length > 0;
@@ -608,17 +815,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 />
               </div>
             )}
-            {(reasoningTokens !== undefined || reasoningScore !== undefined) && (
-              <Badge variant={getReasoningVariant()} className="ml-auto">
-                <span className="text-xs">
-                  {reasoningTokens !== undefined ? (
-                    <span>{reasoningTokens.toLocaleString()} tokens</span>
-                  ) : (
-                    <span>Score: {reasoningScore}</span>
-                  )}
-                </span>
-              </Badge>
-            )}
           </div>
           <div className="ml-5 space-y-3">
             {(role === 'system' || role === 'user') && (
@@ -636,6 +832,17 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
             {role === 'assistant' && (
               <div className="space-y-3">
                 {renderAssistantContent()}
+                {reasoningTokens !== undefined && (
+                  <div
+                    className="pl-5 flex items-center gap-2 text-sm text-[var(--agyn-dark)]"
+                    data-testid="assistant-context-reasoning"
+                  >
+                    <Brain className="w-3.5 h-3.5 text-[var(--agyn-purple)]" />
+                    <span className="font-medium">
+                      Reasoning tokens: {reasoningTokens.toLocaleString()}
+                    </span>
+                  </div>
+                )}
                 {hasToolCalls &&
                   renderFunctionCalls(toolCalls, expandedToolCalls, toggleToolCall, `context-${index}`)}
               </div>
