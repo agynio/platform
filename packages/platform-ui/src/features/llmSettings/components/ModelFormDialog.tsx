@@ -82,7 +82,7 @@ interface ModelFormDialogProps {
   testPending?: boolean;
   testRequired?: boolean;
   canSubmit?: boolean;
-  testStatus?: 'idle' | 'success' | 'error';
+  testStatus?: 'idle' | 'pending' | 'success' | 'error';
 }
 
 function toInputString(value: number | undefined): string {
@@ -467,7 +467,9 @@ export function ModelFormDialog({
                   ? 'Test passed for current values.'
                   : testStatus === 'error'
                     ? 'Test failed. Update the configuration and try again.'
-                    : 'Run a test to enable creation.'}
+                    : testStatus === 'pending'
+                      ? 'Testing current configuration…'
+                      : 'Run a test to enable creation.'}
               </p>
             ) : null}
           </div>
