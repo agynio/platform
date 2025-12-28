@@ -16,7 +16,7 @@ import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { SwitchControl } from '@/components/SwitchControl';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
-import type { CredentialRecord, ModelRecord, ProviderOption } from '../types';
+import { createProviderOptionMap, type CredentialRecord, type ModelRecord, type ProviderOption } from '../types';
 
 type ModelFormValues = FieldValues & {
   name: string;
@@ -133,7 +133,7 @@ export function ModelFormDialog({
   onOpenChange,
   onSubmit,
 }: ModelFormDialogProps): ReactElement {
-  const providerMap = useMemo(() => new Map(providers.map((p) => [p.litellmProvider, p])), [providers]);
+  const providerMap = useMemo(() => createProviderOptionMap(providers), [providers]);
   const form = useForm<ModelFormValues>({ defaultValues: buildDefaultValues(mode, model) });
 
   useEffect(() => {

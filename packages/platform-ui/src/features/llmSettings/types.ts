@@ -60,17 +60,67 @@ const FIELD_TYPE_MAP: Record<string, ProviderFieldType> = {
   upload: 'textarea',
 };
 
-function normalizeProviderKey(value: unknown): string {
+const PROVIDER_ALIAS_MAP: Record<string, string> = {
+  azure_openai: 'azure',
+  'azure-openai': 'azure',
+  azureopenai: 'azure',
+  azure_openai_chat: 'azure',
+  azure_openai_completion: 'azure',
+  azure_openai_responses: 'azure',
+  azure_openai_embeddings: 'azure',
+  azure_ai_studio: 'azure_ai',
+  'azure-ai-studio': 'azure_ai',
+  azure_ai_foundry: 'azure_ai',
+  'azure-ai-foundry': 'azure_ai',
+  azure_ad: 'azure',
+  'azure-ad': 'azure',
+  openai_chat: 'openai',
+  openai_chat_completion: 'openai',
+  openai_chatcompletions: 'openai',
+  openai_text: 'text-completion-openai',
+  openai_text_completion: 'text-completion-openai',
+  text_completion_openai: 'text-completion-openai',
+  'text-completion-openai': 'text-completion-openai',
+};
+
+function canonicalizeProviderKey(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+  return PROVIDER_ALIAS_MAP[lower] ?? lower;
+}
+
+function fallbackProviderKey(value: unknown): string {
   if (typeof value !== 'string') return '';
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed.toLowerCase() : '';
 }
 
+const PROVIDER_LOOKUP_BY_CANONICAL = (() => {
+  const entries = Object.entries(PROVIDER_ALIAS_MAP);
+  const map = new Map<string, Set<string>>();
+  for (const [alias, canonical] of entries) {
+    const normalizedCanonical = canonicalizeProviderKey(canonical);
+    const current = map.get(normalizedCanonical) ?? new Set<string>();
+    current.add(normalizedCanonical);
+    current.add(alias);
+    map.set(normalizedCanonical, current);
+  }
+  return new Map(Array.from(map.entries(), ([canonical, set]) => [canonical, Array.from(set)]));
+})();
+
+export function getProviderLookupKeys(provider: string): string[] {
+  const canonical = canonicalizeProviderKey(provider);
+  if (!canonical) return [];
+  return PROVIDER_LOOKUP_BY_CANONICAL.get(canonical) ?? [canonical];
+}
+
 function resolveCredentialProvider(info?: Record<string, unknown>): string {
   if (!info) return '';
-  const litellm = normalizeProviderKey(info['litellm_provider']);
+  const litellm = canonicalizeProviderKey(info['litellm_provider']);
   if (litellm) return litellm;
-  const legacy = normalizeProviderKey(info['custom_llm_provider']);
+  const legacy = canonicalizeProviderKey(info['custom_llm_provider']);
   if (legacy) return legacy;
   return '';
 }
@@ -80,16 +130,18 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
   return items.map((item) => {
     const rawProvider = typeof item.provider === 'string' ? item.provider : '';
     const rawProviderTrimmed = rawProvider.trim();
-    const normalizedProvider = normalizeProviderKey(rawProviderTrimmed);
+    const normalizedProvider = canonicalizeProviderKey(rawProviderTrimmed);
     const rawLitellmProvider = typeof item.litellm_provider === 'string' ? item.litellm_provider : '';
     const rawLitellmTrimmed = rawLitellmProvider.trim();
-    const normalizedLitellmProvider = normalizeProviderKey(rawLitellmTrimmed);
+    const normalizedLitellmProvider = canonicalizeProviderKey(rawLitellmTrimmed);
+    const fallbackProvider = fallbackProviderKey(rawProviderTrimmed);
+    const fallbackLitellmProvider = fallbackProviderKey(rawLitellmTrimmed);
 
     const canonicalProviderId =
       normalizedProvider ||
       normalizedLitellmProvider ||
-      (rawProviderTrimmed.length > 0 ? rawProviderTrimmed.toLowerCase() : '') ||
-      (rawLitellmTrimmed.length > 0 ? rawLitellmTrimmed.toLowerCase() : '') ||
+      fallbackProvider ||
+      fallbackLitellmProvider ||
       rawProviderTrimmed ||
       'unknown';
     const litellmProvider = normalizedLitellmProvider || canonicalProviderId;
@@ -183,7 +235,10 @@ export function mapModels(
         : typeof paramsRaw.litellm_provider === 'string'
           ? (paramsRaw.litellm_provider as string)
           : '';
-    const providerKey = normalizeProviderKey(providerKeySource) || providerKeySource.trim();
+    const providerKey =
+      canonicalizeProviderKey(providerKeySource) ||
+      fallbackProviderKey(providerKeySource) ||
+      (typeof providerKeySource === 'string' ? providerKeySource.trim() : '');
     const provider = providers.get(providerKey);
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 
@@ -224,4 +279,24 @@ export function mapModels(
       metadata,
     } satisfies ModelRecord;
   });
+}
+
+export function createProviderOptionMap(providers: ProviderOption[]): Map<string, ProviderOption> {
+  const map = new Map<string, ProviderOption>();
+  for (const provider of providers) {
+    const keys = new Set<string>();
+    keys.add(provider.id);
+    keys.add(provider.litellmProvider);
+    for (const key of getProviderLookupKeys(provider.id)) {
+      keys.add(key);
+    }
+    for (const key of getProviderLookupKeys(provider.litellmProvider)) {
+      keys.add(key);
+    }
+    for (const key of keys) {
+      if (!key) continue;
+      map.set(key, provider);
+    }
+  }
+  return map;
 }
