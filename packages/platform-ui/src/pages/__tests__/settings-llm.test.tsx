@@ -609,6 +609,11 @@ describe('Settings/LLM page', () => {
       http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: modelRecords })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
+      http.post(abs('/api/settings/llm/credentials/zz-anthropic-legacy/test'), async ({ request }) => {
+        const body = (await request.json()) as { model?: string; mode?: string | null; input?: string | null };
+        expect(body).toMatchObject({ model: 'claude-3-opus', input: '' });
+        return HttpResponse.json({ success: true, status: 'ok', detail: 'connected' });
+      }),
       http.post(abs('/api/settings/llm/models'), async ({ request }) => {
         const body = (await request.json()) as {
           name: string;
@@ -683,6 +688,18 @@ describe('Settings/LLM page', () => {
     await user.type(modelInput, 'claude-3-opus');
 
     const submitButton = within(dialog).getByRole('button', { name: 'Create Model' });
+    expect(submitButton).toBeDisabled();
+
+    const testButton = within(dialog).getByRole('button', { name: 'Test Model' });
+    await user.click(testButton);
+
+    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — anthropic-support' });
+    expect(within(resultDialog).getByText('Test succeeded')).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"status": "ok"/)).toBeInTheDocument();
+    await user.click(within(resultDialog).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(submitButton).toBeEnabled());
+
     await user.click(submitButton);
 
     await waitFor(() => expect(notifyMocks.success).toHaveBeenCalledWith('Model created'));
@@ -691,6 +708,87 @@ describe('Settings/LLM page', () => {
     const createdRow = screen.getByTestId('llm-model-row-anthropic-support');
     expect(within(createdRow).getByText('Anthropic')).toBeInTheDocument();
     expect(within(createdRow).getByText('zz-anthropic-legacy')).toBeInTheDocument();
+  });
+
+  it('requires a successful test before enabling create and invalidates on changes', async () => {
+    const providers = [
+      {
+        provider: 'OpenAI',
+        provider_display_name: 'OpenAI',
+        litellm_provider: 'openai',
+        credential_fields: [
+          { key: 'api_key', label: 'OpenAI API Key', field_type: 'password', required: true, placeholder: null, tooltip: null, options: null, default_value: null },
+        ],
+        default_model_placeholder: 'gpt-4o-mini',
+      },
+    ];
+
+    const credentialRecords = [
+      {
+        credential_name: 'openai-prod',
+        credential_info: { litellm_provider: 'openai' },
+        credential_values: { api_key: 'sk****prod' },
+      },
+    ];
+
+    server.use(
+      http.get(abs('/api/settings/llm/admin-status'), () =>
+        HttpResponse.json({
+          configured: true,
+          baseUrl: 'http://127.0.0.1:4000',
+          hasMasterKey: true,
+          provider: 'litellm',
+          adminReachable: true,
+        }),
+      ),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
+      http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
+      http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
+      http.post(abs('/api/settings/llm/credentials/openai-prod/test'), async ({ request }) => {
+        const body = (await request.json()) as { model?: string; input?: string | null };
+        expect(body).toMatchObject({ model: 'gpt-4o-mini', input: '' });
+        return HttpResponse.json({ success: true, status: 'ok' });
+      }),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <TestProviders>
+        <SettingsLlm />
+      </TestProviders>,
+    );
+
+    await screen.findByText('openai-prod');
+
+    const modelsTab = screen.getByRole('tab', { name: 'Models' });
+    await user.click(modelsTab);
+
+    await user.click(screen.getByRole('button', { name: 'Add Model' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Create Model/i });
+    const nameInput = within(dialog).getByLabelText('Model Name');
+    const modelInput = within(dialog).getByLabelText('Provider Model Identifier');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'openai-live');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-4o-mini');
+
+    const submitButton = within(dialog).getByRole('button', { name: 'Create Model' });
+    expect(submitButton).toBeDisabled();
+
+    const testButton = within(dialog).getByRole('button', { name: 'Test Model' });
+    await user.click(testButton);
+
+    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — openai-live' });
+    await user.click(within(resultDialog).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(submitButton).toBeEnabled());
+
+    await user.type(modelInput, '-latest');
+    expect(submitButton).toBeDisabled();
   });
 
   it('uses backend-provided health check modes in dialogs', async () => {
@@ -1132,8 +1230,13 @@ describe('Settings/LLM page', () => {
     await user.click(screen.getByRole('button', { name: 'Run Test' }));
 
     await waitFor(() => expect(testSpy).toHaveBeenCalledTimes(1));
-    await screen.findByText('Test succeeded');
-    expect(screen.getByText(/"status": "ok"/)).toBeInTheDocument();
+    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — assistant-prod' });
+    expect(within(resultDialog).getByText('Test succeeded')).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"status": "ok"/)).toBeInTheDocument();
+    const backButton = within(resultDialog).getByRole('button', { name: 'Back to test' });
+    await user.click(backButton);
+    await screen.findByRole('heading', { name: 'Test Model — assistant-prod' });
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(notifyMocks.success).toHaveBeenCalledWith('Model test succeeded');
   });
 
@@ -1210,9 +1313,11 @@ describe('Settings/LLM page', () => {
 
     await user.click(screen.getByRole('button', { name: 'Run Test' }));
 
-    await screen.findByText('Test failed');
-    expect(screen.getByText('bad request')).toBeInTheDocument();
-    expect(screen.getByText(/"error": "litellm_failure"/)).toBeInTheDocument();
+    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — assistant-prod' });
+    expect(within(resultDialog).getByText('Test failed')).toBeInTheDocument();
+    expect(within(resultDialog).getByText('bad request')).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"error": "litellm_failure"/)).toBeInTheDocument();
+    await user.click(within(resultDialog).getByRole('button', { name: 'Close' }));
     expect(notifyMocks.error).toHaveBeenCalledWith('bad request');
   });
 

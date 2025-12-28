@@ -1,5 +1,5 @@
 import { useEffect, type ReactElement } from 'react';
-import { X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import {
   ScreenDialog,
@@ -16,24 +16,12 @@ import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/forms/Form';
 import type { ModelRecord } from '../types';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { LiteLLMHealthResponse } from '@/api/modules/llmSettings';
 
 interface TestModelFormValues {
   mode: string;
   overrideModel: string;
   credentialName: string;
   input: string;
-}
-
-function formatPayload(value: unknown): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 }
 
 export interface TestModelDialogProps {
@@ -44,8 +32,6 @@ export interface TestModelDialogProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TestModelFormValues) => Promise<void> | void;
   submitting: boolean;
-  result?: LiteLLMHealthResponse;
-  error?: { message: string; payload?: unknown };
 }
 
 export function TestModelDialog({
@@ -54,8 +40,6 @@ export function TestModelDialog({
   healthCheckModes,
   healthCheckModesLoading,
   submitting,
-  result,
-  error,
   onOpenChange,
   onSubmit,
 }: TestModelDialogProps): ReactElement {
@@ -87,9 +71,6 @@ export function TestModelDialog({
       input: values.input,
     });
   });
-
-  const successPayload = result ? formatPayload(result) : undefined;
-  const errorPayload = error ? formatPayload(error.payload ?? error.message) : undefined;
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
@@ -174,30 +155,6 @@ export function TestModelDialog({
             />
           </form>
         </Form>
-        {result ? (
-          <Alert className="mt-4">
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>Test succeeded</AlertTitle>
-            <AlertDescription>
-              <p>LiteLLM returned the following response:</p>
-              {successPayload ? (
-                <pre className="mt-2 max-h-48 w-full overflow-auto rounded border border-border bg-muted px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">{successPayload}</pre>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {error ? (
-          <Alert variant="destructive" className="mt-4">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Test failed</AlertTitle>
-            <AlertDescription>
-              <p>{error.message}</p>
-              {errorPayload ? (
-                <pre className="mt-2 max-h-48 w-full overflow-auto rounded border border-border bg-muted px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">{errorPayload}</pre>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
         <ScreenDialogFooter className="mt-6">
           <Button variant="ghost" size="md" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel

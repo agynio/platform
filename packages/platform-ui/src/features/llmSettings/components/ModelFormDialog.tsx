@@ -52,15 +52,37 @@ export interface ModelFormPayload {
   metadata: Record<string, unknown>;
 }
 
+export type ModelFormSnapshot = {
+  name: string;
+  model: string;
+  credentialName: string;
+  mode: string;
+  temperature: string;
+  maxTokens: string;
+  topP: string;
+  frequencyPenalty: string;
+  presencePenalty: string;
+  stream: boolean;
+  rpm: string;
+  tpm: string;
+  paramsJson: string;
+};
+
 interface ModelFormDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
   providers: ProviderOption[];
   credentials: CredentialRecord[];
   model?: ModelRecord;
+  submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: ModelFormPayload) => Promise<void> | void;
-  submitting: boolean;
+  onValuesChange?: (snapshot: ModelFormSnapshot) => void;
+  onTest?: (params: { snapshot: ModelFormSnapshot; payload: ModelFormPayload }) => Promise<void> | void;
+  testPending?: boolean;
+  testRequired?: boolean;
+  canSubmit?: boolean;
+  testStatus?: 'idle' | 'success' | 'error';
 }
 
 function toInputString(value: number | undefined): string {
@@ -123,6 +145,24 @@ function parseParams(json: string): Record<string, unknown> | undefined {
   throw new Error('Params must be a JSON object');
 }
 
+function buildSnapshot(values: ModelFormValues): ModelFormSnapshot {
+  return {
+    name: values.name ?? '',
+    model: values.model ?? '',
+    credentialName: values.credentialName ?? '',
+    mode: values.mode ?? '',
+    temperature: values.temperature ?? '',
+    maxTokens: values.maxTokens ?? '',
+    topP: values.topP ?? '',
+    frequencyPenalty: values.frequencyPenalty ?? '',
+    presencePenalty: values.presencePenalty ?? '',
+    stream: Boolean(values.stream),
+    rpm: values.rpm ?? '',
+    tpm: values.tpm ?? '',
+    paramsJson: values.paramsJson ?? '',
+  };
+}
+
 export function ModelFormDialog({
   open,
   mode,
@@ -132,6 +172,12 @@ export function ModelFormDialog({
   submitting,
   onOpenChange,
   onSubmit,
+  onValuesChange,
+  onTest,
+  testPending = false,
+  testRequired = false,
+  canSubmit = true,
+  testStatus = 'idle',
 }: ModelFormDialogProps): ReactElement {
   const providerMap = useMemo(() => createProviderOptionMap(providers), [providers]);
   const form = useForm<ModelFormValues>({ defaultValues: buildDefaultValues(mode, model) });
@@ -139,6 +185,16 @@ export function ModelFormDialog({
   useEffect(() => {
     form.reset(buildDefaultValues(mode, model));
   }, [mode, model, form]);
+
+  useEffect(() => {
+    if (!onValuesChange) return;
+    const emit = () => onValuesChange(buildSnapshot(form.getValues()));
+    emit();
+    const subscription = form.watch(() => {
+      emit();
+    });
+    return () => subscription.unsubscribe();
+  }, [form, onValuesChange]);
 
   const credentialName = useWatch({ control: form.control, name: 'credentialName' });
   const selectedCredential = useMemo(
@@ -161,44 +217,63 @@ export function ModelFormDialog({
     }
   }, [credentials, form]);
 
-  const handleSubmit = form.handleSubmit(async (values) => {
+  const createPayload = (values: ModelFormValues): ModelFormPayload | null => {
     if (!values.credentialName) {
       form.setError('credentialName', { message: 'Select credential' });
-      return;
+      return null;
     }
 
     const credential = credentials.find((item) => item.name === values.credentialName);
     const credentialProviderKey = credential?.providerKey ?? '';
     if (!credentialProviderKey) {
       form.setError('credentialName', { message: 'Selected credential is missing provider metadata' });
-      return;
+      return null;
     }
 
+    let params: Record<string, unknown> | undefined;
     try {
-      const params = parseParams(values.paramsJson);
-      await onSubmit({
-        name: values.name.trim(),
-        providerKey: credentialProviderKey,
-        model: values.model.trim(),
-        credentialName: values.credentialName,
-        mode: values.mode?.trim() || undefined,
-        temperature: toOptionalNumber(values.temperature),
-        maxTokens: toOptionalNumber(values.maxTokens),
-        topP: toOptionalNumber(values.topP),
-        frequencyPenalty: toOptionalNumber(values.frequencyPenalty),
-        presencePenalty: toOptionalNumber(values.presencePenalty),
-        stream: values.stream,
-        rpm: toOptionalNumber(values.rpm),
-        tpm: toOptionalNumber(values.tpm),
-        params,
-        metadata: model?.metadata ?? {},
-      });
+      params = parseParams(values.paramsJson);
     } catch (error) {
       if (error instanceof Error) {
         form.setError('paramsJson', { message: error.message });
       }
+      return null;
     }
+
+    return {
+      name: values.name.trim(),
+      providerKey: credentialProviderKey,
+      model: values.model.trim(),
+      credentialName: values.credentialName,
+      mode: values.mode?.trim() ? values.mode.trim() : undefined,
+      temperature: toOptionalNumber(values.temperature),
+      maxTokens: toOptionalNumber(values.maxTokens),
+      topP: toOptionalNumber(values.topP),
+      frequencyPenalty: toOptionalNumber(values.frequencyPenalty),
+      presencePenalty: toOptionalNumber(values.presencePenalty),
+      stream: values.stream,
+      rpm: toOptionalNumber(values.rpm),
+      tpm: toOptionalNumber(values.tpm),
+      params,
+      metadata: model?.metadata ?? {},
+    } satisfies ModelFormPayload;
+  };
+
+  const handleSubmit = form.handleSubmit(async (values) => {
+    const payload = createPayload(values);
+    if (!payload) return;
+    await onSubmit(payload);
   });
+
+  const handleTest = async () => {
+    if (!onTest) return;
+    const valid = await form.trigger(['name', 'model', 'credentialName']);
+    if (!valid) return;
+    const values = form.getValues();
+    const payload = createPayload(values);
+    if (!payload) return;
+    await onTest({ snapshot: buildSnapshot(values), payload });
+  };
 
   const providerPlaceholder = selectedProvider?.defaultModelPlaceholder ?? 'provider/model-name';
 
@@ -357,10 +432,44 @@ export function ModelFormDialog({
               <Button variant="ghost" size="md" onClick={() => onOpenChange(false)} disabled={submitting}>
                 Cancel
               </Button>
-              <Button type="submit" form="llm-model-form" variant="primary" size="md" disabled={submitting}>
+              {onTest ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={handleTest}
+                  disabled={submitting || testPending}
+                >
+                  {testPending ? 'Testing…' : 'Test Model'}
+                </Button>
+              ) : null}
+              <Button
+                type="submit"
+                form="llm-model-form"
+                variant="primary"
+                size="md"
+                disabled={submitting || (mode === 'create' && testRequired && !canSubmit)}
+              >
                 {submitting ? 'Saving…' : mode === 'create' ? 'Create Model' : 'Save Changes'}
               </Button>
             </ScreenDialogFooter>
+            {mode === 'create' && testRequired ? (
+              <p
+                className={`mt-1 text-xs ${
+                  testStatus === 'success'
+                    ? 'text-[var(--agyn-status-finished)]'
+                    : testStatus === 'error'
+                      ? 'text-[var(--agyn-status-failed)]'
+                      : 'text-[var(--agyn-text-subtle)]'
+                }`}
+              >
+                {testStatus === 'success'
+                  ? 'Test passed for current values.'
+                  : testStatus === 'error'
+                    ? 'Test failed. Update the configuration and try again.'
+                    : 'Run a test to enable creation.'}
+              </p>
+            ) : null}
           </div>
         </div>
       </ScreenDialogContent>
