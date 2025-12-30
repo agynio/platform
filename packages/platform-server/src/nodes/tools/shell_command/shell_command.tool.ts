@@ -35,6 +35,7 @@ const ANSI_REGEX = /[\u001B\u009B][[[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-
 const ANSI_OSC_REGEX = /\u001b\][^\u001b\u0007]*(?:\u0007|\u001b\\)/g;
 const ANSI_STRING_REGEX = /\u001b[PX^_][^\u001b]*(?:\u001b\\)/g;
 const OUTPUT_TAIL_LIMIT = 10_000;
+const NUL_CHAR_REGEX = /\u0000/g;
 
 const ESC = '\u001b';
 const BEL = '\u0007';
@@ -168,7 +169,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
   private stripAnsi(input: string): string {
     if (!input) return '';
-    return input.replace(ANSI_OSC_REGEX, '').replace(ANSI_STRING_REGEX, '').replace(ANSI_REGEX, '');
+    return input
+      .replace(ANSI_OSC_REGEX, '')
+      .replace(ANSI_STRING_REGEX, '')
+      .replace(ANSI_REGEX, '')
+      .replace(NUL_CHAR_REGEX, '');
   }
 
   private createBomAwareDecoder(
