@@ -106,26 +106,45 @@ afterEach(() => {
 });
 
 describe('ManageFunctionTool description', () => {
-  it('delegates to manage node fallback description', () => {
+  it('renders agent prompt context when template is provided', () => {
     const persistence = {} as unknown as AgentsPersistenceService;
     const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {
-      config: { description: 'Coordinating agents' },
+      config: { prompt: 'Agents:\n{{#agents}}- {{name}} ({{role}}) -> {{prompt}}\n{{/agents}}' },
+      getAgentPromptContext: vi.fn().mockReturnValue({
+        agents: [
+          { name: 'Alpha', role: 'pilot', prompt: 'Alpha prompt' },
+          { name: 'Beta', role: '', prompt: 'Beta prompt' },
+        ],
+      }),
     });
 
     const { tool } = createToolInstance(persistence, manageNode);
 
-    expect(tool.description).toBe('Coordinating agents');
-    expect(manageNode.getFallbackDescription).toHaveBeenCalledTimes(1);
+    expect(tool.description).toContain('- Alpha (pilot) -> Alpha prompt');
+    expect(tool.description).toContain('- Beta () -> Beta prompt');
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
   });
 
-  it('returns default label when no description configured', () => {
+  it('falls back to static description when template missing', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {
+      config: { description: 'Static description' },
+    });
+
+    const { tool } = createToolInstance(persistence, manageNode);
+
+    expect(tool.description).toBe('Static description');
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
+  });
+
+  it('returns default fallback when neither prompt nor description configured', () => {
     const persistence = {} as unknown as AgentsPersistenceService;
     const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {});
 
     const { tool } = createToolInstance(persistence, manageNode);
 
     expect(tool.description).toBe('Manage tool');
-    expect(manageNode.getFallbackDescription).toHaveBeenCalledTimes(1);
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
   });
 });
 
