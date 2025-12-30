@@ -2,15 +2,30 @@ import 'reflect-metadata';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
-import type { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
+import { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
+import { DEFAULT_SYSTEM_PROMPT } from '../../src/nodes/agent/agent.node';
+import type { AgentNode } from '../../src/nodes/agent/agent.node';
 import type { AgentsPersistenceService } from '../../src/agents/agents.persistence.service';
 import type { LLMContext } from '../../src/llm/types';
 import { HumanMessage } from '@agyn/llm';
+import { renderMustache } from '../../src/prompt/mustache.template';
 import type { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
 
 type ToolLogger = { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
 
 type WorkerAgent = { invoke: ReturnType<typeof vi.fn> };
+
+class FakeAgentNode {
+  constructor(private readonly cfg: { name: string; role?: string; systemPrompt?: string; resolvedSystemPrompt?: string }) {}
+
+  get config() {
+    return this.cfg;
+  }
+
+  resolveEffectiveSystemPrompt(): string {
+    return this.cfg.resolvedSystemPrompt ?? this.cfg.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+  }
+}
 
 const createManageNodeStub = (
   workerName: string,
@@ -29,6 +44,7 @@ const createManageNodeStub = (
       if (value === (agent as unknown as ManageToolNode['getWorkers'][number])) return workerName;
       throw new Error('unexpected agent');
     }),
+    getAgentPromptContext: vi.fn().mockReturnValue({ agents: [] }),
     registerInvocation: vi.fn().mockResolvedValue(undefined),
     awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
     getMode: vi.fn().mockReturnValue('sync'),
@@ -37,6 +53,23 @@ const createManageNodeStub = (
       .fn()
       .mockImplementation((worker: string, text: string) => `Response from: ${worker}\n${text}`),
     renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    resolvePrompt: vi.fn().mockImplementation(function (this: ManageToolNode) {
+      const template = typeof this.config?.prompt === 'string' ? this.config.prompt.trim() : '';
+      const fallback = typeof this.config?.description === 'string' ? this.config.description.trim() : '';
+      if (!template) {
+        return fallback || 'Manage tool';
+      }
+      const context = this.getAgentPromptContext();
+      const rendered = renderMustache(template, context).trim();
+      if (rendered.length > 0) {
+        return rendered;
+      }
+      return fallback || 'Manage tool';
+    }),
+    getFallbackDescription: vi.fn().mockImplementation(function (this: ManageToolNode) {
+      const description = typeof this.config?.description === 'string' ? this.config.description.trim() : '';
+      return description.length > 0 ? description : 'Manage tool';
+    }),
   } satisfies Record<string, unknown>;
   return Object.assign(base, overrides) as unknown as ManageToolNode;
 };
@@ -70,6 +103,49 @@ const createToolInstance = (
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+describe('ManageFunctionTool description', () => {
+  it('renders agent prompt context when template is provided', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {
+      config: { prompt: 'Agents:\n{{#agents}}- {{name}} ({{role}}) -> {{prompt}}\n{{/agents}}' },
+      getAgentPromptContext: vi.fn().mockReturnValue({
+        agents: [
+          { name: 'Alpha', role: 'pilot', prompt: 'Alpha prompt' },
+          { name: 'Beta', role: '', prompt: 'Beta prompt' },
+        ],
+      }),
+    });
+
+    const { tool } = createToolInstance(persistence, manageNode);
+
+    expect(tool.description).toContain('- Alpha (pilot) -> Alpha prompt');
+    expect(tool.description).toContain('- Beta () -> Beta prompt');
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
+  });
+
+  it('falls back to static description when template missing', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {
+      config: { description: 'Static description' },
+    });
+
+    const { tool } = createToolInstance(persistence, manageNode);
+
+    expect(tool.description).toBe('Static description');
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
+  });
+
+  it('returns default fallback when neither prompt nor description configured', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const manageNode = createManageNodeStub('Worker Alpha', { invoke: vi.fn() }, {});
+
+    const { tool } = createToolInstance(persistence, manageNode);
+
+    expect(tool.description).toBe('Manage tool');
+    expect(manageNode.resolvePrompt).toHaveBeenCalled();
+  });
 });
 
 describe('ManageFunctionTool.execute', () => {
@@ -682,5 +758,31 @@ describe('ManageFunctionTool.execute', () => {
       childThreadId: 'child-thread-sync-object',
       toolName: 'manage',
     });
+  });
+});
+
+describe('ManageToolNode agent prompt context', () => {
+  it('uses resolved system prompt for each worker agent', () => {
+    const persistence = {} as unknown as AgentsPersistenceService;
+    const linking = {} as unknown as CallAgentLinkingService;
+    const manageNode = new ManageToolNode(persistence, linking);
+    manageNode.init({ nodeId: 'manage-node-context' });
+
+    const agentWithResolvedPrompt = new FakeAgentNode({
+      name: 'Alpha',
+      role: 'pilot',
+      systemPrompt: 'Alpha base',
+      resolvedSystemPrompt: 'Alpha resolved prompt',
+    });
+    const agentWithoutOverride = new FakeAgentNode({ name: 'Beta', role: 'builder', systemPrompt: 'Beta system' });
+
+    manageNode.addWorker(agentWithResolvedPrompt as unknown as AgentNode);
+    manageNode.addWorker(agentWithoutOverride as unknown as AgentNode);
+
+    const context = manageNode.getAgentPromptContext();
+    expect(context.agents).toEqual([
+      { name: 'Alpha', role: 'pilot', prompt: 'Alpha resolved prompt' },
+      { name: 'Beta', role: 'builder', prompt: 'Beta system' },
+    ]);
   });
 });

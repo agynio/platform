@@ -12,7 +12,7 @@ import {
 
 type AgentNodeProps = NodePropertiesViewProps<'Agent'>;
 
-function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
+function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, graphEdges }: AgentNodeProps) {
   const configRecord = config as Record<string, unknown>;
   const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
@@ -171,6 +171,9 @@ function AgentNodeConfigContent({ config, onConfigChange }: AgentNodeProps) {
       restrictionMaxInjections={agentRestrictionMaxInjectionsValue}
       queueConfig={agentQueueConfig}
       summarization={agentSummarizationConfig}
+      nodeId={nodeId}
+      graphNodes={graphNodes}
+      graphEdges={graphEdges}
       onNameChange={handleAgentNameChange}
       onNameBlur={handleAgentNameBlur}
       onRoleChange={handleAgentRoleChange}

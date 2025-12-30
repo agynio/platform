@@ -1,4 +1,5 @@
 import type { FlakeRepoSelection, NixpkgsSelection } from '@/components/nix/types';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
 export type NodeStatus =
   | 'not_ready'
@@ -85,4 +86,7 @@ export interface NodePropertiesSidebarProps {
   variableKeys?: string[];
   ensureSecretKeys?: () => Promise<string[]>;
   ensureVariableKeys?: () => Promise<string[]>;
+  nodeId?: string;
+  graphNodes?: GraphNodeConfig[];
+  graphEdges?: GraphPersistedEdge[];
 }

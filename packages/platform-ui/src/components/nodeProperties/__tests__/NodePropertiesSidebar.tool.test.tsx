@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodeState } from '../types';
+import type { TemplateSchema } from '@/api/types/graph';
 
 const latestReferenceProps: { current: any } = { current: null };
+const templateStore = new Map<string, TemplateSchema>();
 
 const latestUpdate = (mockFn: ReturnType<typeof vi.fn>, key: string) => {
   const calls = mockFn.mock.calls;
@@ -53,9 +55,27 @@ vi.mock('../../Dropdown', () => ({
   },
 }));
 
+vi.mock('@/lib/graph/templates.provider', async () => {
+  const actual = await vi.importActual<any>('@/lib/graph/templates.provider');
+  return {
+    ...actual,
+    useTemplatesCache: () => ({
+      templates: Array.from(templateStore.values()),
+      ready: true,
+      error: null,
+      refresh: vi.fn(),
+      getTemplate: (name: string | null | undefined) => {
+        if (!name) return undefined;
+        return templateStore.get(name) ?? undefined;
+      },
+    }),
+  };
+});
+
 describe('NodePropertiesSidebar - shell tool', () => {
   beforeEach(() => {
     latestReferenceProps.current = null;
+    templateStore.clear();
   });
 
   it('renders shell tool controls and propagates config updates', async () => {
@@ -91,6 +111,12 @@ describe('NodePropertiesSidebar - shell tool', () => {
       />,
     );
 
+    const promptTextarea = screen.getByPlaceholderText('Describe how shell access should be used...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Run read-only diagnostics' } });
+    expect(onConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'Run read-only diagnostics' }),
+    );
+
     const workdirInput = screen.getByPlaceholderText('/workspace') as HTMLInputElement;
     fireEvent.change(workdirInput, { target: { value: '/tmp' } });
     expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ workdir: '/tmp' }));
@@ -121,9 +147,11 @@ describe('NodePropertiesSidebar - shell tool', () => {
 describe('NodePropertiesSidebar - manage tool', () => {
   beforeEach(() => {
     latestReferenceProps.current = null;
+    templateStore.clear();
   });
 
-  it('updates manage tool mode and timeout', () => {
+  it('renders prompt preview in fullscreen editor and updates manage tool config', async () => {
+    const user = userEvent.setup();
     const onConfigChange = vi.fn();
 
     const config: NodeConfig = {
@@ -132,6 +160,7 @@ describe('NodePropertiesSidebar - manage tool', () => {
       template: 'manageTool',
       mode: 'sync',
       timeoutMs: 1500,
+      prompt: 'Hello {{#agents}}{{name}} ({{role}}){{/agents}}',
     } satisfies NodeConfig;
     const state: NodeState = { status: 'ready' };
 
@@ -145,8 +174,58 @@ describe('NodePropertiesSidebar - manage tool', () => {
         canProvision={false}
         canDeprovision={true}
         isActionPending={false}
+        nodeId="manage-1"
+        graphNodes={[
+          {
+            id: 'manage-1',
+            template: 'manageTool',
+            kind: 'Tool',
+            title: 'Manage Tool',
+            x: 100,
+            y: 0,
+            status: 'ready',
+            config,
+            ports: { inputs: [], outputs: [] },
+          },
+          {
+            id: 'agent-1',
+            template: 'agent-template',
+            kind: 'Agent',
+            title: 'Agent One',
+            x: 0,
+            y: 0,
+            status: 'not_ready',
+            config: { name: 'Alice', role: 'R&D Lead', systemPrompt: '' },
+            ports: { inputs: [], outputs: [] },
+          },
+        ] as any}
+        graphEdges={[
+          {
+            id: 'manage-1-agent__agent-1-$',
+            source: 'manage-1',
+            target: 'agent-1',
+            sourceHandle: 'agent',
+            targetHandle: '$',
+          },
+        ] as any}
       />,
     );
+
+    expect(screen.queryByText('Hello Alice (R&D Lead)')).not.toBeInTheDocument();
+
+    const promptTextarea = screen.getByPlaceholderText('Coordinate managed agents and assign roles...') as HTMLTextAreaElement;
+    expect(promptTextarea.value).toBe('Hello {{#agents}}{{name}} ({{role}}){{/agents}}');
+
+    fireEvent.change(promptTextarea, { target: { value: 'Team summary: {{#agents}}{{name}}{{/agents}}' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Team summary: {{#agents}}{{name}}{{/agents}}');
+
+    const fullscreenButton = screen.getByTitle('Open fullscreen markdown editor');
+    await user.click(fullscreenButton);
+
+    expect(await screen.findByText((content) => content.includes('Hello Alice (R&D Lead)'))).toBeInTheDocument();
+
+    const cancelButton = screen.getByRole('button', { name: /cancel/i });
+    await user.click(cancelButton);
 
     const dropdown = screen.getByTestId('dropdown') as HTMLSelectElement;
     fireEvent.change(dropdown, { target: { value: 'async' } });
@@ -161,6 +240,7 @@ describe('NodePropertiesSidebar - manage tool', () => {
 describe('NodePropertiesSidebar - call agent tool', () => {
   beforeEach(() => {
     latestReferenceProps.current = null;
+    templateStore.clear();
   });
 
   it('updates description and response mode', () => {
@@ -188,9 +268,11 @@ describe('NodePropertiesSidebar - call agent tool', () => {
       />,
     );
 
-    const descriptionTextarea = screen
-      .getAllByRole('textbox')
-      .find((element) => element.tagName.toLowerCase() === 'textarea') as HTMLTextAreaElement;
+    const promptTextarea = screen.getByPlaceholderText('Describe how this tool should be used...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Coordinate escalations' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Coordinate escalations');
+
+    const descriptionTextarea = screen.getByPlaceholderText('Describe what this tool does...') as HTMLTextAreaElement;
     fireEvent.change(descriptionTextarea, { target: { value: 'New description' } });
     expect(latestUpdate(onConfigChange, 'description')).toBe('New description');
 
@@ -235,6 +317,10 @@ describe('NodePropertiesSidebar - send slack message tool', () => {
       />,
     );
 
+    const promptTextarea = screen.getByPlaceholderText('Describe when to use this Slack tool...') as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Escalate urgent incidents' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Escalate urgent incidents');
+
     const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
     fireEvent.focus(tokenInput);
     expect(ensureSecretKeys).toHaveBeenCalled();
@@ -273,6 +359,12 @@ describe('NodePropertiesSidebar - github clone repo tool', () => {
         isActionPending={false}
       />,
     );
+
+    const promptTextarea = screen.getByPlaceholderText(
+      'Describe how this repository clone helper should be used...'
+    ) as HTMLTextAreaElement;
+    fireEvent.change(promptTextarea, { target: { value: 'Clone repositories for analysis' } });
+    expect(latestUpdate(onConfigChange, 'prompt')).toBe('Clone repositories for analysis');
 
     const tokenInput = screen.getByTestId('reference-input') as HTMLInputElement;
     fireEvent.change(tokenInput, { target: { value: 'ghp_123' } });

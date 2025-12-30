@@ -186,6 +186,7 @@ describe('CallToolsLLMReducer error isolation', () => {
       listWorkers: vi.fn().mockReturnValue(['Worker One']),
       getWorkerByName: vi.fn().mockReturnValue({ invoke: workerInvoke }),
       getWorkerName: vi.fn().mockReturnValue('Worker One'),
+      getAgentPromptContext: vi.fn().mockReturnValue({ agents: [] }),
       registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn(),
       getMode: vi.fn().mockReturnValue('async'),

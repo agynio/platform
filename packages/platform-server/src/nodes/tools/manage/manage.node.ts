@@ -3,16 +3,27 @@ import z from 'zod';
 import { HumanMessage } from '@agyn/llm';
 import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool } from './manage.tool';
-import { AgentNode } from '../../agent/agent.node';
+import {
+  AgentNode,
+  DEFAULT_SYSTEM_PROMPT,
+  createAgentPromptResolutionState,
+  type AgentPromptResolutionState,
+} from '../../agent/agent.node';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 import type { SendResult } from '../../../messaging/types';
 import { ThreadChannelNode } from '../../../messaging/threadTransport.service';
 import type { CallerAgent } from '../../../llm/types';
+import { renderMustache } from '../../../prompt/mustache.template';
 
 export const ManageToolStaticConfigSchema = z
   .object({
     description: z.string().min(1).optional(),
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional Mustache template rendered as the tool prompt.'),
     name: z
       .string()
       .regex(/^[a-z0-9_]{1,64}$/)
@@ -99,6 +110,100 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
 
   getWorkerName(agent: AgentNode): string {
     return this.syncWorker(agent).name;
+  }
+
+  getAgentPromptContext(state?: AgentPromptResolutionState): { agents: { name: string; role: string; prompt: string }[] } {
+    const resolution = state ?? createAgentPromptResolutionState();
+    this.refreshAllWorkers();
+    const agents = Array.from(this.workers).map((agent) => {
+      const config = agent?.config ?? {};
+      const rawName = typeof config?.name === 'string' ? config.name.trim() : '';
+      const role = typeof config?.role === 'string' ? config.role.trim() : '';
+      const prompt = this.resolveWorkerPrompt(agent, resolution);
+      return { name: rawName, role, prompt };
+    });
+    return { agents };
+  }
+
+  resolvePrompt(state?: AgentPromptResolutionState): string {
+    const template = typeof this.config?.prompt === 'string' ? this.config.prompt.trim() : '';
+    if (!template) {
+      const fallback = this.getFallbackDescription();
+      if (state) {
+        state.cache.tools.set(this, fallback);
+      }
+      return fallback;
+    }
+
+    const resolution = state ?? createAgentPromptResolutionState();
+    const cached = resolution.cache.tools.get(this);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    if (resolution.stack.tools.has(this)) {
+      const fallback = this.getFallbackDescription();
+      resolution.cache.tools.set(this, fallback);
+      return fallback;
+    }
+
+    resolution.stack.tools.add(this);
+
+    try {
+      const context = this.getAgentPromptContext(resolution);
+      const rendered = renderMustache(template, context).trim();
+      const normalized = rendered.length > 0 ? rendered : this.getFallbackDescription();
+      resolution.cache.tools.set(this, normalized);
+      return normalized;
+    } finally {
+      resolution.stack.tools.delete(this);
+    }
+  }
+
+  getFallbackDescription(): string {
+    const raw = typeof this.config?.description === 'string' ? this.config.description.trim() : '';
+    return raw.length > 0 ? raw : 'Manage tool';
+  }
+
+  private resolveWorkerPrompt(agent: AgentNode, state: AgentPromptResolutionState): string {
+    if (state.stack.agents.has(agent)) {
+      const fallback = this.pickAgentFallback(agent);
+      const normalized = fallback.length > 0 ? fallback : DEFAULT_SYSTEM_PROMPT;
+      state.cache.agents.set(agent, normalized);
+      return normalized;
+    }
+
+    try {
+      const resolved = agent.resolveEffectiveSystemPrompt(state);
+      const trimmed = typeof resolved === 'string' ? resolved.trim() : '';
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    } catch {
+      // fall through to fallbacks
+    }
+
+    try {
+      const fallback = this.pickAgentFallback(agent);
+      if (fallback.length > 0) {
+        return fallback;
+      }
+    } catch {
+      // ignore config access errors
+    }
+
+    return DEFAULT_SYSTEM_PROMPT;
+  }
+
+  private pickAgentFallback(agent: AgentNode): string {
+    const raw = agent?.config?.systemPrompt;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    return '';
   }
 
   private refreshAllWorkers(): void {
