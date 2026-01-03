@@ -11,7 +11,7 @@ import {
   type LiteLLMModel,
   type LiteLLMAdminStatus,
 } from '@/api/modules/llmSettings';
-import { mapProviders, mapCredentials, mapModels, type ProviderOption } from './types';
+import { mapProviders, mapCredentials, mapModels, createProviderOptionMap, type ProviderOption } from './types';
 import { HEALTH_CHECK_MODES_FALLBACK } from './constants';
 
 export function useProviderOptions(): {
@@ -23,7 +23,7 @@ export function useProviderOptions(): {
   const query = useQuery({ queryKey: ['llm', 'providers'], queryFn: () => listProviders() });
   const providersPayload = query.data as LiteLLMProviderInfo[] | undefined;
   const providers = useMemo(() => mapProviders(providersPayload), [providersPayload]);
-  const map = useMemo(() => new Map(providers.map((p) => [p.litellmProvider, p])), [providers]);
+  const map = useMemo(() => createProviderOptionMap(providers), [providers]);
   return {
     providers,
     map,

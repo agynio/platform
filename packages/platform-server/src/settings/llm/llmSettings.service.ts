@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, HttpException, Inject } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException, HttpException, Inject } from '@nestjs/common';
+import {
+  normalizeLiteLLMProvider,
+  resolveLiteLLMProviderOrThrow,
+  withCanonicalProviderInfo,
+} from './providerNormalization';
 import { ConfigService } from '../../core/services/config.service';
 import {
   LiteLLMCredentialDetail,
@@ -129,6 +134,8 @@ function sanitizeRecord(input?: Record<string, unknown>): Record<string, unknown
   return Object.keys(out).length ? out : {};
 }
 
+const RESERVED_MODEL_INFO_KEYS = new Set(['id', 'mode', 'rpm', 'tpm']);
+
 function ensureNoSecretKeys(params?: Record<string, unknown>): void {
   if (!params) return;
   for (const key of Object.keys(params)) {
@@ -148,15 +155,23 @@ function redactBaseUrl(value?: string): string | undefined {
   }
 }
 
+function extractModelInfoId(info?: Record<string, unknown>): string | undefined {
+  if (!info) return undefined;
+  const candidate = info['id'];
+  return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate : undefined;
+}
+
 function extractCredentialProvider(info?: Record<string, unknown>): string | undefined {
   if (!info) return undefined;
   const litellm = info['litellm_provider'];
-  if (typeof litellm === 'string' && litellm.trim().length > 0) {
-    return litellm.trim();
+  if (typeof litellm === 'string') {
+    const normalized = normalizeLiteLLMProvider(litellm);
+    if (normalized) return normalized;
   }
   const legacy = info['custom_llm_provider'];
-  if (typeof legacy === 'string' && legacy.trim().length > 0) {
-    return legacy.trim();
+  if (typeof legacy === 'string') {
+    const normalized = normalizeLiteLLMProvider(legacy);
+    if (normalized) return normalized;
   }
   return undefined;
 }
@@ -171,7 +186,8 @@ export class LLMSettingsService {
   }
 
   async listProviders(): Promise<LiteLLMProviderInfo[]> {
-    return this.fetchProviders();
+    const providers = await this.fetchProviders();
+    return providers.map((provider) => withCanonicalProviderInfo(provider));
   }
 
   async listCredentials(): Promise<LiteLLMCredentialSummary[]> {
@@ -179,8 +195,9 @@ export class LLMSettingsService {
   }
 
   async createCredential(input: CreateCredentialInput): Promise<LiteLLMGenericResponse> {
+    const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
     const info: Record<string, unknown> = {
-      litellm_provider: input.provider,
+      litellm_provider: providerKey,
       ...(input.metadata || {}),
     };
     const payload = {
@@ -193,7 +210,9 @@ export class LLMSettingsService {
 
   async updateCredential(input: UpdateCredentialInput): Promise<LiteLLMGenericResponse> {
     const info: Record<string, unknown> = {};
-    if (input.provider) info.litellm_provider = input.provider;
+    if (input.provider) {
+      info.litellm_provider = resolveLiteLLMProviderOrThrow(input.provider);
+    }
     if (input.metadata) Object.assign(info, input.metadata);
     const sanitizedValues = sanitizeRecord(input.values);
     const payload = {
@@ -237,6 +256,7 @@ export class LLMSettingsService {
     const litellmParams: Record<string, unknown> = {
       model: input.model,
       custom_llm_provider: provider,
+      litellm_provider: provider,
       litellm_credential_name: input.name,
     };
     const modelInfo: Record<string, unknown> = {};
@@ -250,34 +270,57 @@ export class LLMSettingsService {
   }
 
   async listModels(): Promise<LiteLLMModelRecord[]> {
-    const body = await this.request<unknown>('GET', '/model/info');
-    const models = extractLiteLLMArray(body, ['data', 'models']);
-    return models.filter((item): item is LiteLLMModelRecord => isModelRecord(item));
+    try {
+      const body = await this.request<unknown>('GET', '/model/info');
+      const models = extractLiteLLMArray(body, ['data', 'models']);
+      return models.filter((item): item is LiteLLMModelRecord => isModelRecord(item));
+    } catch (err) {
+      if (err instanceof LiteLLMAdminError && isModelListUninitialized(err.responseBody)) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   async createModel(input: CreateModelInput): Promise<LiteLLMModelRecord> {
     ensureNoSecretKeys(input.params);
+    const name = input.name.trim();
+    await this.assertModelNameAvailable(name);
     const litellmParams = this.buildModelParams(input);
     const modelInfo = this.buildModelInfo(input);
     const payload = {
-      model_name: input.name,
+      model_name: name,
       litellm_params: litellmParams,
-      model_info: modelInfo,
+      model_info: modelInfo ?? {},
     };
-    return this.request<LiteLLMModelRecord>('POST', '/model/new', payload, { classifyWrite: true });
+    const created = await this.request<LiteLLMModelRecord>('POST', '/model/new', payload, { classifyWrite: true });
+    await this.maybeLogModelSync(created);
+    return created;
   }
 
   async updateModel(input: UpdateModelInput): Promise<LiteLLMModelRecord> {
     ensureNoSecretKeys(input.params);
-    const current = await this.findModel(input.id);
+    const models = await this.listModels();
+    const current = this.findModelInList(models, input.id);
     if (!current) {
       throw new BadRequestException(`model ${input.id} not found`);
     }
+    const currentName = typeof current.model_name === 'string' ? current.model_name.trim() : '';
+    const fallbackName = input.id.trim();
+    let nextName = currentName || fallbackName;
+    if (input.name !== undefined) {
+      const requestedName = input.name.trim();
+      const currentNormalized = this.normalizeModelName(nextName);
+      const requestedNormalized = this.normalizeModelName(requestedName);
+      if (requestedNormalized !== currentNormalized) {
+        await this.assertModelNameAvailable(requestedName, { models, skip: current });
+      }
+      nextName = requestedName;
+    }
     const nextParams = this.mergeModelParams(current.litellm_params, input);
     const nextInfo = this.mergeModelInfo(current.model_info, input);
-    const name = input.name ?? current.model_name ?? input.id;
     const payload = {
-      model_name: name,
+      model_name: nextName,
       litellm_params: nextParams,
       model_info: nextInfo,
     };
@@ -381,12 +424,16 @@ export class LLMSettingsService {
   }
 
   private buildModelParams(input: CreateModelInput): Record<string, unknown> {
-    const params: Record<string, unknown> = {
-      model: input.model,
-      custom_llm_provider: input.provider,
-      litellm_credential_name: input.credentialName,
-      ...(input.params || {}),
-    };
+    const params: Record<string, unknown> = { ...(input.params || {}) };
+    delete params.model;
+    delete params.custom_llm_provider;
+    delete params.litellm_provider;
+    delete params.litellm_credential_name;
+    const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
+    params.model = input.model;
+    params.custom_llm_provider = providerKey;
+    params.litellm_provider = providerKey;
+    params.litellm_credential_name = input.credentialName;
     if (input.temperature !== undefined) params.temperature = input.temperature;
     if (input.maxTokens !== undefined) params.max_tokens = input.maxTokens;
     if (input.topP !== undefined) params.top_p = input.topP;
@@ -396,20 +443,94 @@ export class LLMSettingsService {
     return params;
   }
 
-  private buildModelInfo(input: CreateModelInput): Record<string, unknown> {
-    const info: Record<string, unknown> = {
-      id: input.name,
-      ...(input.metadata || {}),
-    };
-    info.mode = input.mode ?? 'chat';
+  private sanitizeModelMetadata(metadata?: Record<string, unknown>): Record<string, unknown> {
+    if (!metadata) return {};
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value === undefined) continue;
+      if (RESERVED_MODEL_INFO_KEYS.has(key)) continue;
+      sanitized[key] = value;
+    }
+    return sanitized;
+  }
+
+  private buildModelInfo(input: CreateModelInput): Record<string, unknown> | undefined {
+    const info: Record<string, unknown> = {};
+    const metadata = this.sanitizeModelMetadata(input.metadata);
+    if (Object.keys(metadata).length > 0) {
+      Object.assign(info, metadata);
+    }
     if (input.rpm !== undefined) info.rpm = input.rpm;
     if (input.tpm !== undefined) info.tpm = input.tpm;
-    return info;
+    return Object.keys(info).length > 0 ? info : undefined;
+  }
+
+  private async maybeLogModelSync(created: LiteLLMModelRecord): Promise<void> {
+    if (!this.isModelSyncDebugEnabled()) return;
+    const baseUrl = redactBaseUrl(this.config.litellmBaseUrl) ?? this.config.litellmBaseUrl;
+    try {
+      const models = await this.listModels();
+      const match = models.some((model) => this.isSameModel(model, created));
+      const snapshot = this.buildModelSnapshot(created);
+      const catalog = models.map((model) => this.buildModelSnapshot(model));
+      const message = match
+        ? 'LiteLLM model sync check: created model present in /model/info'
+        : 'LiteLLM model sync check: created model missing from /model/info';
+      const payload = {
+        baseUrl,
+        created: snapshot,
+        match,
+        models: catalog,
+      };
+      if (match) {
+        this.logger.log(message, payload);
+      } else {
+        this.logger.warn(message, payload);
+      }
+    } catch (err) {
+      this.logger.warn('LiteLLM model sync check failed', {
+        baseUrl,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private isModelSyncDebugEnabled(): boolean {
+    const flag = process.env.LITELLM_DEBUG_MODEL_SYNC;
+    if (!flag) return false;
+    const normalized = flag.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+
+  private buildModelSnapshot(model: LiteLLMModelRecord): {
+    model_name: string;
+    model_id?: string;
+    model_info_id?: string;
+  } {
+    const infoId = extractModelInfoId(model.model_info);
+    return {
+      model_name: model.model_name,
+      model_id: typeof model.model_id === 'string' && model.model_id.trim().length > 0 ? model.model_id : undefined,
+      model_info_id: infoId,
+    };
   }
 
   private mergeModelParams(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    if (input.provider) next.custom_llm_provider = input.provider;
+    const currentProvider = normalizeLiteLLMProvider(
+      (next.custom_llm_provider as string | undefined) ?? (next.litellm_provider as string | undefined),
+    );
+    if (currentProvider) {
+      next.custom_llm_provider = currentProvider;
+      next.litellm_provider = currentProvider;
+    } else {
+      delete next.litellm_provider;
+    }
+    if (input.provider) {
+      const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
+      next.custom_llm_provider = providerKey;
+      next.litellm_provider = providerKey;
+    }
     if (input.model) next.model = input.model;
     if (input.credentialName) next.litellm_credential_name = input.credentialName;
     if (input.temperature !== undefined) next.temperature = input.temperature;
@@ -421,6 +542,9 @@ export class LLMSettingsService {
     if (input.params) {
       for (const [key, value] of Object.entries(input.params)) {
         if (value === undefined) continue;
+        if (key === 'model' || key === 'custom_llm_provider' || key === 'litellm_provider' || key === 'litellm_credential_name') {
+          continue;
+        }
         next[key] = value;
       }
     }
@@ -429,17 +553,84 @@ export class LLMSettingsService {
 
   private mergeModelInfo(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    if (input.name) next.id = input.name;
+    if (input.metadata) {
+      const metadata = this.sanitizeModelMetadata(input.metadata);
+      if (Object.keys(metadata).length > 0) {
+        Object.assign(next, metadata);
+      }
+    }
     if (input.mode) next.mode = input.mode;
-    if (input.metadata) Object.assign(next, input.metadata);
     if (input.rpm !== undefined) next.rpm = input.rpm;
     if (input.tpm !== undefined) next.tpm = input.tpm;
     return next;
   }
 
+  private collectModelIdentifiers(model: LiteLLMModelRecord): string[] {
+    const identifiers: string[] = [];
+    const push = (raw: unknown) => {
+      if (typeof raw !== 'string') return;
+      const trimmed = raw.trim();
+      if (!trimmed.length) return;
+      identifiers.push(trimmed);
+    };
+    push(model.model_name);
+    push(model.model_id);
+    if (model.model_info && typeof model.model_info === 'object') {
+      push((model.model_info as Record<string, unknown>).id);
+    }
+    return identifiers;
+  }
+
+  private isSameModel(a: LiteLLMModelRecord, b: LiteLLMModelRecord): boolean {
+    const idsA = this.collectModelIdentifiers(a);
+    if (!idsA.length) return false;
+    const idsB = this.collectModelIdentifiers(b);
+    if (!idsB.length) return false;
+    return idsA.some((id) => idsB.includes(id));
+  }
+
+  private normalizeModelName(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private findModelInList(models: LiteLLMModelRecord[], id: string): LiteLLMModelRecord | undefined {
+    const target = id.trim();
+    if (!target.length) return undefined;
+    return models.find((model) => this.collectModelIdentifiers(model).includes(target));
+  }
+
+  private async assertModelNameAvailable(
+    name: string,
+    options?: { models?: LiteLLMModelRecord[]; skip?: LiteLLMModelRecord },
+  ): Promise<void> {
+    const normalized = this.normalizeModelName(name);
+    if (!normalized.length) {
+      throw new BadRequestException('model name cannot be empty');
+    }
+    const models = options?.models ?? (await this.listModels());
+    for (const model of models) {
+      if (options?.skip && this.isSameModel(model, options.skip)) {
+        continue;
+      }
+      if (typeof model.model_name !== 'string') {
+        continue;
+      }
+      const candidate = this.normalizeModelName(model.model_name);
+      if (!candidate.length) {
+        continue;
+      }
+      if (candidate === normalized) {
+        throw new ConflictException({
+          error: 'model_name_conflict',
+          message: `Model "${name}" already exists. Choose a different name.`,
+        });
+      }
+    }
+  }
+
   private async findModel(id: string): Promise<LiteLLMModelRecord | undefined> {
     const models = await this.listModels();
-    return models.find((item) => item.model_name === id || item.model_info?.id === id);
+    return this.findModelInList(models, id);
   }
 
   private async findModelsReferencingCredential(name: string): Promise<string[]> {
@@ -585,15 +776,46 @@ function isModelRecord(value: unknown): value is LiteLLMModelRecord {
   return typeof v.model_name === 'string' && typeof v.litellm_params === 'object';
 }
 
+function isModelListUninitialized(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const detail = (payload as Record<string, unknown>).detail;
+  if (!detail || typeof detail !== 'object') return false;
+  const error = (detail as Record<string, unknown>).error;
+  if (typeof error !== 'string') return false;
+  return error.includes('LLM Model List not loaded');
+}
+
 function extractLiteLLMArray(payload: unknown, keys: string[]): unknown[] {
   if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === 'object') {
-    for (const key of keys) {
-      const value = (payload as Record<string, unknown>)[key];
-      if (Array.isArray(value)) {
-        return value;
-      }
+  if (!payload || typeof payload !== 'object') return [];
+
+  let current: unknown = payload;
+  for (const key of keys) {
+    if (Array.isArray(current)) {
+      return current;
+    }
+    if (!current || typeof current !== 'object') {
+      current = undefined;
+      break;
+    }
+    const next = (current as Record<string, unknown>)[key];
+    if (Array.isArray(next)) {
+      return next;
+    }
+    current = next;
+  }
+
+  if (Array.isArray(current)) {
+    return current;
+  }
+
+  const root = payload as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = root[key];
+    if (Array.isArray(candidate)) {
+      return candidate;
     }
   }
+
   return [];
 }

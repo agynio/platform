@@ -27,7 +27,6 @@ type LlmSettingsScreenProps = {
   adminBanner?: Banner | null;
   onCredentialCreate?: () => void;
   onCredentialEdit?: (credential: CredentialRecord) => void;
-  onCredentialTest?: (credential: CredentialRecord) => void;
   onCredentialDelete?: (credential: CredentialRecord) => void;
   onModelCreate?: () => void;
   onModelEdit?: (model: ModelRecord) => void;
@@ -51,7 +50,6 @@ export function LlmSettingsScreen({
   adminBanner = null,
   onCredentialCreate,
   onCredentialEdit,
-  onCredentialTest,
   onCredentialDelete,
   onModelCreate,
   onModelEdit,
@@ -166,7 +164,6 @@ export function LlmSettingsScreen({
               showProviderWarning={showProviderNotice}
               error={credentialsError}
               onEdit={(credential) => onCredentialEdit?.(credential)}
-              onTest={(credential) => onCredentialTest?.(credential)}
               onDelete={(credential) => onCredentialDelete?.(credential)}
             />
           </div>
