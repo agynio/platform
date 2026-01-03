@@ -11,7 +11,6 @@ import {
 } from '@/components/Dialog';
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
-import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/forms/Form';
@@ -21,8 +20,6 @@ import { TestModelResultView, type TestModelErrorState } from './TestModelResult
 
 interface TestModelFormValues {
   mode: string;
-  overrideModel: string;
-  credentialName: string;
   input: string;
 }
 
@@ -57,8 +54,6 @@ export function TestModelDialog({
   const form = useForm<TestModelFormValues>({
     defaultValues: {
       mode: model.mode ?? 'chat',
-      overrideModel: model.model,
-      credentialName: model.credentialName,
       input: '',
     },
   });
@@ -67,8 +62,6 @@ export function TestModelDialog({
     if (open) {
       form.reset({
         mode: model.mode ?? 'chat',
-        overrideModel: model.model,
-        credentialName: model.credentialName,
         input: '',
       });
     }
@@ -77,8 +70,6 @@ export function TestModelDialog({
   const handleSubmit = form.handleSubmit(async (values) => {
     await onSubmit({
       mode: values.mode,
-      overrideModel: values.overrideModel.trim(),
-      credentialName: values.credentialName.trim(),
       input: values.input,
     });
   });
@@ -90,7 +81,7 @@ export function TestModelDialog({
     ? successResult
       ? 'LiteLLM connection succeeded.'
       : 'LiteLLM reported an error during testing.'
-    : 'Run a LiteLLM health check for this model with optional overrides.';
+    : 'Run a LiteLLM health check for this model.';
 
   const handleDialogClose = () => {
     if (showResultView && resultView) {
@@ -152,32 +143,6 @@ export function TestModelDialog({
                       />
                     </FormControl>
                     <FormDescription>Select LiteLLM request mode for test execution.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="overrideModel"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Override Provider Model</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={model.model} />
-                    </FormControl>
-                    <FormDescription>Optional. Leave blank to use the configured provider model.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="credentialName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Override Credential</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={model.credentialName} />
-                    </FormControl>
-                    <FormDescription>Optional. Leave blank to use the configured credential.</FormDescription>
                   </FormItem>
                 )}
               />

@@ -799,7 +799,7 @@ describe('Settings/LLM page', () => {
     expect(submitButton).toBeDisabled();
   });
 
-  it('uses backend-provided health check modes in dialogs', async () => {
+  it('does not expose credential test actions', async () => {
     const providers = [
       {
         provider: 'OpenAI',
@@ -820,8 +820,6 @@ describe('Settings/LLM page', () => {
       },
     ];
 
-    const modeOptions = ['audio_speech', 'ocr', 'video_generation'];
-
     server.use(
       http.get(abs('/api/settings/llm/admin-status'), () =>
         HttpResponse.json({
@@ -835,10 +833,8 @@ describe('Settings/LLM page', () => {
       http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
       http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
-      http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: modeOptions })),
+      http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
     );
-
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     render(
       <TestProviders>
@@ -847,19 +843,8 @@ describe('Settings/LLM page', () => {
     );
 
     await screen.findByText('openai-prod');
-
-    const testButton = screen.getByLabelText('Test credential openai-prod');
-    await user.click(testButton);
-
-    const dialog = await screen.findByRole('dialog', { name: /Test Credential/i });
-    const modeCombobox = within(dialog).getByRole('combobox');
-    await waitFor(() => expect(modeCombobox).toBeEnabled());
-    await user.click(modeCombobox);
-    const listbox = await screen.findByRole('listbox');
-    const renderedOptions = within(listbox).getAllByRole('option');
-    const optionLabels = renderedOptions.map((option) => option.textContent?.trim());
-    expect(optionLabels).toEqual(modeOptions);
-    await user.keyboard('{Escape}');
+    const credentialRow = screen.getByTestId('llm-credential-row-openai-prod');
+    expect(within(credentialRow).queryByLabelText('Test credential openai-prod')).not.toBeInTheDocument();
   });
 
   it('disables admin actions and shows banner when LiteLLM admin auth is missing', async () => {

@@ -1,7 +1,5 @@
 import { type ReactElement } from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-
-import { cn } from '@/lib/utils';
 import type { LiteLLMHealthResponse } from '@/api/modules/llmSettings';
 
 export type TestModelErrorState = {
@@ -30,27 +28,24 @@ export function TestModelResultView({ result, error }: TestModelResultViewProps)
   const payloadText = formatTestModelPayload(payload);
   const statusText = success ? 'Test succeeded' : 'Test failed';
   const detailMessage = success ? undefined : error?.message;
+  const statusColorClass = success ? 'text-[var(--agyn-status-finished)]' : 'text-[var(--agyn-status-failed)]';
 
   return (
-    <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-      <span
-        className={cn(
-          'mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-transparent',
-          success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700',
+    <div className="space-y-3 text-sm">
+      <div className="flex items-center gap-2">
+        {success ? (
+          <CheckCircle2 className={`h-5 w-5 ${statusColorClass}`} aria-hidden />
+        ) : (
+          <AlertTriangle className={`h-5 w-5 ${statusColorClass}`} aria-hidden />
         )}
-        aria-hidden
-      >
-        {success ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-      </span>
-      <div className="flex-1 space-y-2">
         <p className="font-semibold text-[var(--agyn-dark)]">{statusText}</p>
-        {detailMessage ? <p className="text-sm text-[var(--agyn-text-subtle)]">{detailMessage}</p> : null}
-        {payloadText ? (
-          <pre className="max-h-72 overflow-auto rounded border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
-            {payloadText}
-          </pre>
-        ) : null}
       </div>
+      {detailMessage ? <p className="pl-7 text-sm text-[var(--agyn-text-subtle)]">{detailMessage}</p> : null}
+      {payloadText ? (
+        <pre className="ml-7 max-h-72 overflow-auto rounded border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+          {payloadText}
+        </pre>
+      ) : null}
     </div>
   );
 }

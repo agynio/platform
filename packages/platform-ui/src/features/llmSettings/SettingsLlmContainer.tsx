@@ -34,7 +34,6 @@ import {
 } from './hooks';
 import type { CredentialRecord, ModelRecord } from './types';
 import { CredentialFormDialog, type CredentialFormPayload } from './components/CredentialFormDialog';
-import { TestCredentialDialog } from './components/TestCredentialDialog';
 import { ModelFormDialog, type ModelFormPayload, type ModelFormSnapshot } from './components/ModelFormDialog';
 import { TestModelDialog } from './components/TestModelDialog';
 import type { TestModelErrorState } from './components/TestModelResultView';
@@ -253,7 +252,6 @@ export function SettingsLlmContainer(): ReactElement {
 
   const [activeTab, setActiveTab] = useState<LlmSettingsTab>('credentials');
   const [credentialDialog, setCredentialDialog] = useState<{ mode: 'create' | 'edit'; credential?: CredentialRecord } | null>(null);
-  const [testCredentialState, setTestCredentialState] = useState<CredentialRecord | null>(null);
   const [modelDialog, setModelDialog] = useState<{ mode: 'create' | 'edit'; model?: ModelRecord } | null>(null);
   const [modelFormSnapshot, setModelFormSnapshot] = useState<ModelFormSnapshot | null>(null);
   const [modelFormTestState, setModelFormTestState] = useState<{
@@ -272,7 +270,6 @@ export function SettingsLlmContainer(): ReactElement {
   useEffect(() => {
     if (!adminDisabled) return;
     setCredentialDialog(null);
-    setTestCredentialState(null);
     setModelDialog(null);
     setModelFormSnapshot(null);
     setModelFormTestState({ status: 'idle' });
@@ -358,17 +355,6 @@ export function SettingsLlmContainer(): ReactElement {
     onError: (error) => notifyError(toErrorMessage(error)),
   });
 
-  const testCredentialMutation = useMutation({
-    mutationFn: async ({ name, model, mode, input }: { name: string; model: string; mode?: string; input?: string }) => {
-      await testCredential(name, { model, mode, input });
-    },
-    onSuccess: () => {
-      notifySuccess('Credential test succeeded');
-      setTestCredentialState(null);
-    },
-    onError: (error) => notifyError(toErrorMessage(error)),
-  });
-
   const createModelMutation = useMutation({
     mutationFn: async (payload: ModelFormPayload) => {
       await createModel({
@@ -436,12 +422,10 @@ export function SettingsLlmContainer(): ReactElement {
   });
 
   const testModelMutation = useMutation({
-    mutationFn: async ({ id, mode, overrideModel, input, credentialName }: { id: string; mode?: string; overrideModel?: string; input?: string; credentialName?: string }) =>
+    mutationFn: async ({ id, mode, input }: { id: string; mode?: string; input?: string }) =>
       testModel(id, {
         mode,
-        overrideModel: overrideModel?.trim() ? overrideModel : undefined,
         input,
-        credentialName: credentialName?.trim() ? credentialName : undefined,
       }),
     onMutate: () => {
       setTestModelResultView(null);
@@ -515,10 +499,6 @@ export function SettingsLlmContainer(): ReactElement {
       : deleteModelMutation.isPending
     : false;
 
-  const providerDefaultForCredential = testCredentialState
-    ? providerMap.get(testCredentialState.providerKey)?.defaultModelPlaceholder ?? undefined
-    : undefined;
-
   const modelFormResultViewProps = modelDialog?.mode === 'create'
     ? {
         visible: Boolean(modelFormResultView),
@@ -575,10 +555,6 @@ export function SettingsLlmContainer(): ReactElement {
           if (!ensureWritable()) return;
           setCredentialDialog({ mode: 'edit', credential });
         }}
-        onCredentialTest={(credential) => {
-          if (!ensureWritable()) return;
-          setTestCredentialState(credential);
-        }}
         onCredentialDelete={(credential) => {
           if (!ensureWritable()) return;
           setDeleteState({ type: 'credential', item: credential });
@@ -626,29 +602,6 @@ export function SettingsLlmContainer(): ReactElement {
           }
         }}
       />
-
-      {testCredentialState ? (
-        <TestCredentialDialog
-          open={testCredentialState !== null}
-          credentialName={testCredentialState.name}
-          healthCheckModes={healthCheckModes}
-          healthCheckModesLoading={healthCheckModesLoading}
-          defaultModel={providerDefaultForCredential}
-          submitting={testCredentialMutation.isPending}
-          onOpenChange={(open) => {
-            if (!open) setTestCredentialState(null);
-          }}
-          onSubmit={async (values) => {
-            if (!ensureWritable()) return;
-            await testCredentialMutation.mutateAsync({
-              name: testCredentialState.name,
-              model: values.model,
-              mode: values.mode,
-              input: values.input,
-            });
-          }}
-        />
-      ) : null}
 
       <ModelFormDialog
         open={modelDialog !== null}
@@ -711,9 +664,7 @@ export function SettingsLlmContainer(): ReactElement {
               await testModelMutation.mutateAsync({
                 id: resolveModelIdentifier(testModelState.model),
                 mode: values.mode,
-                overrideModel: values.overrideModel,
                 input: values.input,
-                credentialName: values.credentialName,
               });
             } catch {
               /* handled via onError */
