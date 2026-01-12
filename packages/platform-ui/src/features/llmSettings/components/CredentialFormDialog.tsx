@@ -15,7 +15,7 @@ import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
-import type { CredentialRecord, ProviderField, ProviderOption } from '../types';
+import { createProviderOptionMap, type CredentialRecord, type ProviderField, type ProviderOption } from '../types';
 
 type CredentialFormValues = FieldValues & {
   name: string;
@@ -98,7 +98,7 @@ export function CredentialFormDialog({
   onOpenChange,
   onSubmit,
 }: CredentialFormDialogProps): ReactElement {
-  const providerMap = useMemo(() => new Map(providers.map((p) => [p.litellmProvider, p])), [providers]);
+  const providerMap = useMemo(() => createProviderOptionMap(providers), [providers]);
 
   const form = useForm<CredentialFormValues>({
     defaultValues: buildDefaultValues(mode, providers, credential),

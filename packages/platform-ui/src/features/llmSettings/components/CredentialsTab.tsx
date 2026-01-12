@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Play, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 import { IconButton } from '@/components/IconButton';
 import { Badge } from '@/components/Badge';
@@ -17,7 +17,6 @@ interface CredentialsTabProps {
   showProviderWarning: boolean;
   error?: string | null;
   onEdit: (credential: CredentialRecord) => void;
-  onTest: (credential: CredentialRecord) => void;
   onDelete: (credential: CredentialRecord) => void;
 }
 
@@ -29,7 +28,6 @@ export function CredentialsTab({
   showProviderWarning,
   error,
   onEdit,
-  onTest,
   onDelete,
 }: CredentialsTabProps): ReactElement {
   const providerCount = providers.length;
@@ -127,25 +125,6 @@ export function CredentialsTab({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <IconButton
-                                type="button"
-                                aria-label={`Test credential ${credential.name}`}
-                                variant="ghost"
-                                size="sm"
-                                disabled={!allowWrites}
-                                onClick={() => onTest(credential)}
-                                icon={<Play className="h-4 w-4" />}
-                              />
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content className={tooltipContentClass} sideOffset={6}>
-                                Test
-                                <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
                           <Tooltip.Root>
                             <Tooltip.Trigger asChild>
                               <IconButton

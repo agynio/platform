@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  litellm-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: change-me
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U litellm -d litellm']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.80.5-stable
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-integration-master}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-litellm-integration-salt}
+      DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: 'True'
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
+      HOST: 0.0.0.0
+      PORT: '4000'
+    ports:
+      - '127.0.0.1:4500:4000'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://localhost:4000/health || wget -qO- http://localhost:4000/ui || wget -qO- http://localhost:4000/',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  litellm_pgdata:
