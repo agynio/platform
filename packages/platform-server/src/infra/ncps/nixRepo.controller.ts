@@ -201,13 +201,26 @@ export class NixRepoController {
       if (lines.length === 0) {
         return null;
       }
-      for (const line of lines) {
-        const [sha] = line.split(/\s+/);
-        if (sha && /^[0-9a-fA-F]{40}$/.test(sha)) {
-          return sha.toLowerCase();
-        }
+      const parsed = lines
+        .map((line) => {
+          const [sha, ref] = line.split(/\s+/);
+          if (!sha || !ref || !/^[0-9a-fA-F]{40}$/.test(sha)) {
+            return null;
+          }
+          return { sha: sha.toLowerCase(), ref };
+        })
+        .filter((entry): entry is { sha: string; ref: string } => entry !== null);
+
+      if (parsed.length === 0) {
+        return null;
       }
-      return null;
+
+      const peeled = parsed.find((entry) => entry.ref.endsWith('^{}'));
+      if (peeled) {
+        return peeled.sha;
+      }
+
+      return parsed[0]?.sha ?? null;
     } catch (error) {
       if (error instanceof GitCommandError) {
         this.handleGitRepositoryError(error);
@@ -260,9 +273,22 @@ export class NixRepoController {
 
   private async execGit(args: string[], signal: AbortSignal): Promise<string> {
     const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+    const token = this.config.githubToken?.trim();
+    const finalArgs = [...args];
+    if (token) {
+      const header = `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+      finalArgs.unshift(`http.extraHeader=${header}`);
+      finalArgs.unshift('-c');
+    }
     return new Promise((resolve, reject) => {
-      execFile('git', args, { signal, env, windowsHide: true, maxBuffer: 5 * 1024 * 1024 }, (error, stdout, stderr) => {
+      execFile('git', finalArgs, { signal, env, windowsHide: true, maxBuffer: 5 * 1024 * 1024 }, (error, stdout, stderr) => {
         if (error) {
+          const abortName = (error as Error).name;
+          const abortCode = (error as NodeJS.ErrnoException).code;
+          if (abortName === 'AbortError' || abortCode === 'ABORT_ERR') {
+            reject(error);
+            return;
+          }
           const execError = error as NodeJS.ErrnoException;
           const exitCode = typeof execError.code === 'number' ? execError.code : null;
           reject(new GitCommandError(exitCode, stdout, stderr));
