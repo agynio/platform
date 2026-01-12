@@ -22,13 +22,19 @@ import {
   WorkspaceProvider,
   type WorkspaceProviderCapabilities,
   type ExecRequest,
-  type InteractiveExecRequest,
   type WorkspaceKey,
   type WorkspaceSpec,
   type DestroyWorkspaceOptions,
-  type InteractiveExecSession,
   type ExecResult,
 } from '../src/workspace/providers/workspace.provider';
+import type {
+  WorkspaceStdioSession,
+  WorkspaceStdioSessionRequest,
+  WorkspaceTerminalSession,
+  WorkspaceTerminalSessionRequest,
+  WorkspaceLogsSession,
+  WorkspaceLogsRequest,
+} from '../src/workspace/runtime/workspace.runtime.provider';
 import { PassThrough } from 'node:stream';
 
 class StubContainerService extends ContainerService {
@@ -82,28 +88,56 @@ class StubWorkspaceProvider extends WorkspaceProvider {
       network: true,
       networkAliases: true,
       dockerInDocker: true,
-      interactiveExec: true,
-      execResize: true,
+      stdioSession: true,
+      terminalSession: true,
+      logsSession: true,
     };
   }
 
-  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
-    return { workspaceId: 'workspace', created: true };
+  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec) {
+    return { workspaceId: 'workspace', created: true, providerType: 'docker', status: 'running' as const };
   }
 
   async exec(_workspaceId: string, _request: ExecRequest): Promise<ExecResult> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(_workspaceId: string, _request: InteractiveExecRequest): Promise<InteractiveExecSession> {
+  async openStdioSession(
+    _workspaceId: string,
+    _request: WorkspaceStdioSessionRequest,
+  ): Promise<WorkspaceStdioSession> {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     setImmediate(() => stdout.end());
-    return { execId: 'exec', stdin, stdout, stderr: undefined, close: async () => ({ exitCode: 0 }) };
+    return { stdin, stdout, stderr: undefined, close: async () => ({ exitCode: 0 }) };
   }
 
-  async resize(_execId: string, _size: { cols: number; rows: number }): Promise<void> {
-    return;
+  async openTerminalSession(
+    _workspaceId: string,
+    _request: WorkspaceTerminalSessionRequest,
+  ): Promise<WorkspaceTerminalSession> {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const sessionId = 'exec';
+    setImmediate(() => stdout.end());
+    return {
+      sessionId,
+      execId: sessionId,
+      stdin,
+      stdout,
+      stderr: undefined,
+      resize: async () => undefined,
+      close: async () => ({ exitCode: 0 }),
+    };
+  }
+
+  async openLogsSession(
+    _workspaceId: string,
+    _request: WorkspaceLogsRequest,
+  ): Promise<WorkspaceLogsSession> {
+    const stream = new PassThrough();
+    setImmediate(() => stream.end());
+    return { stream, close: async () => { stream.end(); } };
   }
 
   async destroyWorkspace(_workspaceId: string, _options?: DestroyWorkspaceOptions): Promise<void> {
@@ -111,6 +145,10 @@ class StubWorkspaceProvider extends WorkspaceProvider {
   }
 
   async touchWorkspace(_workspaceId: string): Promise<void> {
+    return;
+  }
+
+  async putArchive(): Promise<void> {
     return;
   }
 }

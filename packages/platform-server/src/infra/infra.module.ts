@@ -21,7 +21,7 @@ import { ContainerTerminalController } from './container/containerTerminal.contr
 import { ContainerEventProcessor } from './container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
 import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
-import { DockerWorkspaceProvider } from '../workspace/providers/docker.workspace.provider';
+import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -65,7 +65,7 @@ import { DockerWorkspaceProvider } from '../workspace/providers/docker.workspace
     },
     {
       provide: WorkspaceProvider,
-      useFactory: (containerService: ContainerService) => new DockerWorkspaceProvider(containerService),
+      useFactory: (containerService: ContainerService) => new DockerWorkspaceRuntimeProvider(containerService),
       inject: [ContainerService],
     },
     TerminalSessionsService,

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
-import type { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
+import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from './helpers/ws';
 
 const createSessionRecord = (overrides: Partial<TerminalSessionRecord> = {}): TerminalSessionRecord => {

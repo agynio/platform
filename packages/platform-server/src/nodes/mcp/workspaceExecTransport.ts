@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { PassThrough } from 'node:stream';
 
-import type { InteractiveExecSession } from '../../workspace/providers/workspace.provider';
+import type { WorkspaceStdioSession } from '../../workspace/runtime/workspace.runtime.provider';
 import type { JSONRPCMessage } from './types';
 
 class ReadBufferInline {
@@ -38,7 +38,7 @@ export class WorkspaceExecTransport {
 
   private readonly logger = new Logger(WorkspaceExecTransport.name);
   private readonly readBuffer = new ReadBufferInline();
-  private session: InteractiveExecSession | null = null;
+  private session: WorkspaceStdioSession | null = null;
   private stdin?: NodeJS.WritableStream;
   private stdout = new PassThrough();
   private stderr = new PassThrough();
@@ -47,7 +47,7 @@ export class WorkspaceExecTransport {
   private readonly id = ++WorkspaceExecTransport.seq;
   private started = false;
 
-  constructor(private startSession: () => Promise<InteractiveExecSession>) {}
+  constructor(private startSession: () => Promise<WorkspaceStdioSession>) {}
 
   async start(): Promise<void> {
     if (this.started) {

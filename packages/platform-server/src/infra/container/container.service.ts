@@ -426,6 +426,66 @@ export class ContainerService {
     };
   }
 
+  async streamContainerLogs(
+    containerId: string,
+    options: {
+      follow?: boolean;
+      since?: number;
+      tail?: number;
+      stdout?: boolean;
+      stderr?: boolean;
+      timestamps?: boolean;
+    } = {},
+  ): Promise<{ stream: NodeJS.ReadableStream; close: () => Promise<void> }> {
+    const container = this.docker.getContainer(containerId);
+    const inspectData = await container.inspect();
+    if (!inspectData) throw new Error(`Container '${containerId}' not found`);
+
+    const follow = options.follow ?? true;
+    const stdout = options.stdout ?? true;
+    const stderr = options.stderr ?? true;
+    const tail = typeof options.tail === 'number' ? options.tail : undefined;
+    const since = typeof options.since === 'number' ? options.since : undefined;
+    const timestamps = options.timestamps ?? false;
+
+    const rawStream = await new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
+      container.logs(
+        {
+          follow,
+          stdout,
+          stderr,
+          tail,
+          since,
+          timestamps,
+        },
+        (err, stream) => {
+          if (err) return reject(err);
+          if (!stream) return reject(new Error('No log stream returned'));
+          resolve(stream as NodeJS.ReadableStream | Buffer);
+        },
+      );
+    });
+
+    void this.touchLastUsed(inspectData.Id);
+
+    const stream: NodeJS.ReadableStream = Buffer.isBuffer(rawStream)
+      ? (() => {
+          const passthrough = new PassThrough();
+          passthrough.end(rawStream);
+          return passthrough;
+        })()
+      : rawStream;
+
+    const close = async (): Promise<void> => {
+      if (!Buffer.isBuffer(rawStream)) {
+        const candidate = rawStream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void };
+        if (typeof candidate.destroy === 'function') candidate.destroy();
+      }
+    };
+
+    return { stream, close };
+  }
+
   async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {
     const exec = this.docker.getExec(execId);
     if (!exec) throw new Error('exec_not_found');

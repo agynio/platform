@@ -5,17 +5,19 @@ import { McpServerConfig } from '../src/mcp/types.js';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceHandle } from '../src/workspace/workspace.handle';
-import type {
-  DestroyWorkspaceOptions,
-  ExecRequest,
-  ExecResult,
-  InteractiveExecRequest,
-  InteractiveExecSession,
-  WorkspaceKey,
+import {
   WorkspaceProvider,
-  WorkspaceProviderCapabilities,
-  WorkspaceSpec,
+  type DestroyWorkspaceOptions,
+  type ExecRequest,
+  type ExecResult,
+  type WorkspaceKey,
+  type WorkspaceProviderCapabilities,
+  type WorkspaceSpec,
 } from '../src/workspace/providers/workspace.provider';
+import type {
+  WorkspaceStdioSession,
+  WorkspaceStdioSessionRequest,
+} from '../src/workspace/runtime/workspace.runtime.provider';
 
 type JsonLike = Record<string, unknown>;
 
@@ -31,9 +33,8 @@ function createInProcessMock() {
       inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
     },
   ];
-  let seq = 0;
 
-  const createSession = (): InteractiveExecSession => {
+  const createSession = (): WorkspaceStdioSession => {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     const stderr = new PassThrough();
@@ -113,15 +114,14 @@ function createInProcessMock() {
       return { exitCode: 0 };
     };
 
-    const execId = `mock-exec-${++seq}`;
-    return { execId, stdin, stdout, stderr, close };
+    return { stdin, stdout, stderr, close };
   };
 
   return { createSession };
 }
 
-class MockWorkspaceProvider implements WorkspaceProvider {
-  public readonly execCalls: Array<{ workspaceId: string; request: InteractiveExecRequest }> = [];
+class MockWorkspaceProvider extends WorkspaceProvider {
+  public readonly execCalls: Array<{ workspaceId: string; request: WorkspaceStdioSessionRequest }> = [];
   public readonly touchCalls: string[] = [];
   public readonly destroyed: string[] = [];
   private readonly mock = createInProcessMock();
@@ -132,22 +132,34 @@ class MockWorkspaceProvider implements WorkspaceProvider {
       network: false,
       networkAliases: false,
       dockerInDocker: false,
-      interactiveExec: true,
-      execResize: false,
+      stdioSession: true,
+      terminalSession: false,
+      logsSession: false,
     };
   }
 
-  async ensureWorkspace(key: WorkspaceKey, _spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
-    return { workspaceId: `mock-${key.threadId}`, created: true };
+  async ensureWorkspace(key: WorkspaceKey, _spec: WorkspaceSpec) {
+    return { workspaceId: `mock-${key.threadId}`, created: true, providerType: 'docker', status: 'running' as const };
   }
 
   async exec(_workspaceId: string, _request: ExecRequest): Promise<ExecResult> {
     throw new Error('exec not implemented in MockWorkspaceProvider');
   }
 
-  async openInteractiveExec(workspaceId: string, request: InteractiveExecRequest): Promise<InteractiveExecSession> {
+  async openStdioSession(
+    workspaceId: string,
+    request: WorkspaceStdioSessionRequest,
+  ): Promise<WorkspaceStdioSession> {
     this.execCalls.push({ workspaceId, request });
     return this.mock.createSession();
+  }
+
+  async openTerminalSession(): Promise<never> {
+    throw new Error('terminal sessions not supported in MockWorkspaceProvider');
+  }
+
+  async openLogsSession(): Promise<never> {
+    throw new Error('log sessions not supported in MockWorkspaceProvider');
   }
 
   async destroyWorkspace(workspaceId: string, _options?: DestroyWorkspaceOptions): Promise<void> {
@@ -158,7 +170,6 @@ class MockWorkspaceProvider implements WorkspaceProvider {
     this.touchCalls.push(workspaceId);
   }
 
-  // Optional APIs not exercised in tests
   async putArchive(): Promise<void> {
     return;
   }

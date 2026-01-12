@@ -3,6 +3,7 @@ import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { PassThrough } from 'node:stream';
 import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
+import type { WorkspaceStdioSessionRequest } from '../src/workspace/runtime/workspace.runtime.provider';
 
 function createBlockingMcpMock() {
   const tools = [
@@ -67,7 +68,7 @@ function createBlockingMcpMock() {
 class BlockingWorkspaceProvider extends WorkspaceProviderStub {
   public readonly mock = createBlockingMcpMock();
 
-  override async openInteractiveExec(_workspaceId: string, _request: any) {
+  override async openStdioSession(_workspaceId: string, _request: WorkspaceStdioSessionRequest) {
     const { stream } = this.mock.createFreshStreamPair();
     const stdin = new PassThrough();
     const stdout = new PassThrough();
@@ -78,7 +79,12 @@ class BlockingWorkspaceProvider extends WorkspaceProviderStub {
       stream.end();
     });
     stream.pipe(stdout);
-    return { execId: 'blocking', stdin, stdout, close: async () => ({ exitCode: 0 }) };
+    return {
+      stdin,
+      stdout,
+      stderr: new PassThrough(),
+      close: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    };
   }
 }
 
