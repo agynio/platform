@@ -14,10 +14,16 @@ import {
   type WorkspaceSpec,
   type ExecRequest,
   type ExecResult,
-  type InteractiveExecRequest,
-  type InteractiveExecSession,
   type DestroyWorkspaceOptions,
 } from '../../src/workspace/providers/workspace.provider';
+import type {
+  WorkspaceTerminalSession,
+  WorkspaceTerminalSessionRequest,
+  WorkspaceStdioSession,
+  WorkspaceStdioSessionRequest,
+  WorkspaceLogsRequest,
+  WorkspaceLogsSession,
+} from '../../src/workspace/runtime/workspace.runtime.provider';
 import { waitFor, waitForWsClose } from '../helpers/ws';
 
 type TerminalMessage = {
@@ -40,20 +46,28 @@ class TestWorkspaceProvider extends WorkspaceProvider {
       network: true,
       networkAliases: true,
       dockerInDocker: true,
-      interactiveExec: true,
-      execResize: true,
+      stdioSession: false,
+      terminalSession: true,
+      logsSession: false,
     } as const;
   }
 
-  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
-    return { workspaceId: 'test-workspace', created: true };
+  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec) {
+    return { workspaceId: 'test-workspace', created: true, providerType: 'docker', status: 'running' as const };
   }
 
   async exec(_workspaceId: string, _request: ExecRequest): Promise<ExecResult> {
     return { stdout: '/bin/bash\n', stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(_workspaceId: string, _request: InteractiveExecRequest): Promise<InteractiveExecSession> {
+  async openStdioSession(): Promise<WorkspaceStdioSession> {
+    throw new Error('stdio sessions not supported in TestWorkspaceProvider');
+  }
+
+  async openTerminalSession(
+    _workspaceId: string,
+    _request: WorkspaceTerminalSessionRequest,
+  ): Promise<WorkspaceTerminalSession> {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     this.stdin = stdin;
@@ -82,14 +96,23 @@ class TestWorkspaceProvider extends WorkspaceProvider {
     const close = async () => {
       this.closeCalls += 1;
       setImmediate(() => stdout.end());
-      return { exitCode: 0 };
+      return { exitCode: 0, stdout: '', stderr: '' };
     };
 
-    return { stdin, stdout, stderr: undefined, close, execId: 'exec-test' };
+    const execId = 'exec-test';
+    const sessionId = execId;
+    const resize = async (size: { cols: number; rows: number }) => {
+      this.resizes.push({ execId, ...size });
+    };
+
+    return { stdin, stdout, stderr: undefined, close, execId, sessionId, resize };
   }
 
-  async resize(execId: string, size: { cols: number; rows: number }) {
-    this.resizes.push({ execId, ...size });
+  async openLogsSession(
+    _workspaceId: string,
+    _request: WorkspaceLogsRequest,
+  ): Promise<WorkspaceLogsSession> {
+    throw new Error('log sessions not supported in TestWorkspaceProvider');
   }
 
   async destroyWorkspace(_workspaceId: string, _options?: DestroyWorkspaceOptions): Promise<void> {
@@ -97,6 +120,10 @@ class TestWorkspaceProvider extends WorkspaceProvider {
   }
 
   async touchWorkspace(): Promise<void> {
+    return;
+  }
+
+  async putArchive(): Promise<void> {
     return;
   }
 }

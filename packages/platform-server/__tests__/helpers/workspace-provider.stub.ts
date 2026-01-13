@@ -1,23 +1,34 @@
 import { PassThrough } from 'node:stream';
-import { WorkspaceProvider } from '../../src/workspace/providers/workspace.provider';
-import type {
-  WorkspaceProviderCapabilities,
-  WorkspaceKey,
-  WorkspaceSpec,
-  ExecRequest,
-  ExecResult,
-  InteractiveExecRequest,
-  InteractiveExecSession,
-  DestroyWorkspaceOptions,
+import {
+  WorkspaceProvider,
+  type WorkspaceProviderCapabilities,
+  type WorkspaceKey,
+  type WorkspaceSpec,
+  type ExecRequest,
+  type ExecResult,
+  type DestroyWorkspaceOptions,
+  type InteractiveExecRequest,
+  type WorkspaceLogsRequestCompat,
+  type WorkspaceLogsSessionCompat,
+  type WorkspaceTerminalSessionCompat,
+  type WorkspaceTerminalSessionRequestCompat,
 } from '../../src/workspace/providers/workspace.provider';
+import type {
+  WorkspaceStdioSessionRequest,
+  WorkspaceStdioSession,
+} from '../../src/workspace/runtime/workspace.runtime.provider';
 import { WorkspaceHandle } from '../../src/workspace/workspace.handle';
 
 export class WorkspaceProviderStub extends WorkspaceProvider {
   public readonly workspaceId: string;
   public readonly execRequests: ExecRequest[] = [];
-  public readonly interactiveRequests: InteractiveExecRequest[] = [];
+  public readonly stdioRequests: WorkspaceStdioSessionRequest[] = [];
+  public readonly terminalRequests: WorkspaceTerminalSessionRequestCompat[] = [];
+  public readonly interactiveRequests: WorkspaceStdioSessionRequest[] = [];
+  public readonly logsRequests: WorkspaceLogsRequestCompat[] = [];
   public readonly touchWorkspaceCalls: string[] = [];
   public readonly ensureCalls: Array<{ key: WorkspaceKey; spec: WorkspaceSpec }> = [];
+  public readonly resizeCalls: Array<{ sessionId: string; size: { cols: number; rows: number } }> = [];
 
   constructor(private readonly baseEnv: Record<string, string> = {}, workspaceId = 'workspace-stub') {
     super();
@@ -30,14 +41,15 @@ export class WorkspaceProviderStub extends WorkspaceProvider {
       network: true,
       networkAliases: true,
       dockerInDocker: true,
-      interactiveExec: true,
-      execResize: true,
+      stdioSession: true,
+      terminalSession: true,
+      logsSession: true,
     };
   }
 
-  async ensureWorkspace(key: WorkspaceKey, spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
+  async ensureWorkspace(key: WorkspaceKey, spec: WorkspaceSpec) {
     this.ensureCalls.push({ key, spec });
-    return { workspaceId: this.workspaceId, created: false };
+    return { workspaceId: this.workspaceId, created: false, providerType: 'docker', status: 'running' as const };
   }
 
   async exec(_workspaceId: string, request: ExecRequest): Promise<ExecResult> {
@@ -56,15 +68,51 @@ export class WorkspaceProviderStub extends WorkspaceProvider {
     return { stdout, stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(_workspaceId: string, request: InteractiveExecRequest): Promise<InteractiveExecSession> {
+  async openStdioSession(
+    _workspaceId: string,
+    request: WorkspaceStdioSessionRequest,
+  ): Promise<WorkspaceStdioSession> {
+    this.stdioRequests.push(request);
     this.interactiveRequests.push(request);
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     setImmediate(() => stdout.end());
-    return { execId: 'interactive-stub', stdin, stdout, stderr: undefined, close: async () => ({ exitCode: 0 }) };
+    return { stdin, stdout, stderr: undefined, close: async () => ({ exitCode: 0, stdout: '', stderr: '' }) };
   }
 
-  async resize(_execId: string, _size: { cols: number; rows: number }): Promise<void> {
+  async openTerminalSession(
+    _workspaceId: string,
+    request: WorkspaceTerminalSessionRequestCompat,
+  ): Promise<WorkspaceTerminalSessionCompat> {
+    this.terminalRequests.push(request);
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const sessionId = `terminal-${this.terminalRequests.length}`;
+    setImmediate(() => stdout.end());
+    return {
+      sessionId,
+      execId: sessionId,
+      stdin,
+      stdout,
+      stderr: undefined,
+      resize: async (size: { cols: number; rows: number }) => {
+        this.resizeCalls.push({ sessionId, size });
+      },
+      close: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    };
+  }
+
+  async openLogsSession(
+    _workspaceId: string,
+    request: WorkspaceLogsRequestCompat,
+  ): Promise<WorkspaceLogsSessionCompat> {
+    this.logsRequests.push(request);
+    const stream = new PassThrough();
+    setImmediate(() => stream.end());
+    return { stream, close: async () => { stream.end(); } };
+  }
+
+  async putArchive(): Promise<void> {
     return;
   }
 

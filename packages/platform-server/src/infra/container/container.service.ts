@@ -13,6 +13,8 @@ import { ContainerRegistry } from './container.registry';
 import { mapInspectMounts } from './container.mounts';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
 
+const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
+
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
 export type ContainerOpts = {
@@ -340,7 +342,7 @@ export class ContainerService {
     stdin: NodeJS.WritableStream;
     stdout: NodeJS.ReadableStream;
     stderr?: NodeJS.ReadableStream;
-    close: () => Promise<{ exitCode: number }>;
+    close: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
     execId: string;
   }> {
     const container = this.docker.getContainer(containerId);
@@ -376,6 +378,26 @@ export class ContainerService {
 
     const stdoutStream = new PassThrough();
     const stderrStream = new PassThrough();
+    const stdoutCollector = createUtf8Collector(INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT);
+    const stderrCollector = createUtf8Collector(INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT);
+    const append = (collector: ReturnType<typeof createUtf8Collector>, chunk: Buffer | string) => {
+      collector.append(chunk);
+    };
+    const flushCollectors = () => {
+      try {
+        stdoutCollector.flush();
+      } catch {
+        // ignore flush errors
+      }
+      try {
+        stderrCollector.flush();
+      } catch {
+        // ignore flush errors
+      }
+    };
+    stdoutStream.on('data', (chunk: Buffer | string) => append(stdoutCollector, chunk));
+    stdoutStream.on('end', flushCollectors);
+    stdoutStream.on('close', flushCollectors);
 
     // Hijacked stream is duplex (readable+writeable)
     const hijackStream: NodeJS.ReadWriteStream = (await new Promise<NodeJS.ReadWriteStream>((resolve, reject) => {
@@ -401,11 +423,24 @@ export class ContainerService {
         stdout.pipe(stdoutStream);
         stderr.pipe(stderrStream);
       }
+      stderrStream.on('data', (chunk: Buffer | string) => append(stderrCollector, chunk));
+      const flushStderr = () => {
+        try {
+          stderrCollector.flush();
+        } catch {
+          // ignore flush errors
+        }
+      };
+      stderrStream.on('end', flushStderr);
+      stderrStream.on('close', flushStderr);
     } else {
       hijackStream.pipe(stdoutStream);
     }
 
-    const close = async (): Promise<{ exitCode: number }> => {
+    const execDetails = await exec.inspect();
+    const execId = execDetails.ID ?? 'unknown';
+
+    const close = async (): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
       try {
         hijackStream.end();
       } catch {
@@ -413,17 +448,106 @@ export class ContainerService {
       }
       // Wait a short grace period; then inspect
       const details = await exec.inspect();
-      return { exitCode: details.ExitCode ?? -1 };
+      flushCollectors();
+      const exitCode = details.ExitCode ?? -1;
+      const stdout = stdoutCollector.getText();
+      const stderrText = demux ? stderrCollector.getText() : '';
+      if (stdoutCollector.isTruncated() || stderrCollector.isTruncated()) {
+        this.warn('Interactive exec close output truncated', {
+          container: inspectData.Id.substring(0, 12),
+          execId,
+          limit: INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT,
+        });
+      }
+      return { exitCode, stdout, stderr: stderrText };
     };
 
-    const execDetails = await exec.inspect();
     return {
       stdin: hijackStream,
       stdout: stdoutStream,
       stderr: demux ? stderrStream : undefined,
       close,
-      execId: execDetails.ID,
+      execId,
     };
+  }
+
+  async streamContainerLogs(
+    containerId: string,
+    options: {
+      follow?: boolean;
+      since?: number;
+      tail?: number;
+      stdout?: boolean;
+      stderr?: boolean;
+      timestamps?: boolean;
+    } = {},
+  ): Promise<{ stream: NodeJS.ReadableStream; close: () => Promise<void> }> {
+    const container = this.docker.getContainer(containerId);
+    const inspectData = await container.inspect();
+    if (!inspectData) throw new Error(`Container '${containerId}' not found`);
+
+    const followFlag = options.follow !== false;
+    const stdout = options.stdout ?? true;
+    const stderr = options.stderr ?? true;
+    const tail = typeof options.tail === 'number' ? options.tail : undefined;
+    const since = typeof options.since === 'number' ? options.since : undefined;
+    const timestamps = options.timestamps ?? false;
+
+    const rawStream = await new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
+      if (followFlag) {
+        container.logs(
+          {
+            follow: true,
+            stdout,
+            stderr,
+            tail,
+            since,
+            timestamps,
+          },
+          (err: Error | null, stream?: NodeJS.ReadableStream) => {
+            if (err) return reject(err);
+            if (!stream) return reject(new Error('No log stream returned'));
+            resolve(stream);
+          },
+        );
+        return;
+      }
+
+      container.logs(
+        {
+          follow: false,
+          stdout,
+          stderr,
+          tail,
+          since,
+          timestamps,
+        },
+        (err: Error | null, stream?: Buffer) => {
+          if (err) return reject(err);
+          if (!stream) return reject(new Error('No log stream returned'));
+          resolve(stream);
+        },
+      );
+    });
+
+    void this.touchLastUsed(inspectData.Id);
+
+    const stream: NodeJS.ReadableStream = Buffer.isBuffer(rawStream)
+      ? (() => {
+          const passthrough = new PassThrough();
+          passthrough.end(rawStream);
+          return passthrough;
+        })()
+      : rawStream;
+
+    const close = async (): Promise<void> => {
+      if (!Buffer.isBuffer(rawStream)) {
+        const candidate = rawStream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void };
+        if (typeof candidate.destroy === 'function') candidate.destroy();
+      }
+    };
+
+    return { stream, close };
   }
 
   async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {

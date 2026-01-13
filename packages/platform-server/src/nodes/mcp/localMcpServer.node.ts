@@ -219,7 +219,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     try {
       // Create temporary transport and client for discovery
       tempTransport = new WorkspaceExecTransport(async () =>
-        tempWorkspace.openInteractiveExec(['sh', '-lc', cmdToRun], {
+        tempWorkspace.openStdioSession(['sh', '-lc', cmdToRun], {
           tty: false,
           env: envArr,
           workdir,
@@ -388,7 +388,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     try {
       // Create transport and client for this tool call
       transport = new WorkspaceExecTransport(async () =>
-        container.openInteractiveExec(['sh', '-lc', cmdToRun], {
+        container.openStdioSession(['sh', '-lc', cmdToRun], {
           tty: false,
           env: envArr,
           workdir,

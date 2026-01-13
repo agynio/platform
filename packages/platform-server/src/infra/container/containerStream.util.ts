@@ -2,20 +2,42 @@ import { PassThrough } from 'node:stream';
 
 /**
  * Streaming UTF-8 decoder/collector that properly handles multibyte boundaries.
+ * Optionally caps retained output to avoid unbounded memory usage.
  */
-export function createUtf8Collector() {
+export function createUtf8Collector(limitChars?: number) {
   const decoder = new TextDecoder('utf-8');
   let text = '';
+  let truncated = false;
+  const cap = limitChars ?? Number.POSITIVE_INFINITY;
+
+  const appendDecoded = (decoded: string) => {
+    if (!decoded || truncated) return;
+    if (text.length + decoded.length <= cap) {
+      text += decoded;
+      return;
+    }
+    const remaining = Math.max(0, cap - text.length);
+    if (remaining > 0) {
+      text += decoded.slice(0, remaining);
+    }
+    truncated = true;
+  };
+
   return {
     append(chunk: Buffer | string) {
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-      text += decoder.decode(buf, { stream: true });
+      const decoded = decoder.decode(buf, { stream: true });
+      appendDecoded(decoded);
     },
     flush() {
-      text += decoder.decode();
+      const decoded = decoder.decode();
+      appendDecoded(decoded);
     },
     getText() {
       return text;
+    },
+    isTruncated() {
+      return truncated;
     },
   };
 }

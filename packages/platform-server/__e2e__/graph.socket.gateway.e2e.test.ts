@@ -22,10 +22,16 @@ import {
   type WorkspaceSpec,
   type ExecRequest,
   type ExecResult,
-  type InteractiveExecRequest,
-  type InteractiveExecSession,
   type DestroyWorkspaceOptions,
 } from '../src/workspace/providers/workspace.provider';
+import type {
+  WorkspaceTerminalSession,
+  WorkspaceTerminalSessionRequest,
+  WorkspaceStdioSession,
+  WorkspaceStdioSessionRequest,
+  WorkspaceLogsRequest,
+  WorkspaceLogsSession,
+} from '../src/workspace/runtime/workspace.runtime.provider';
 
 class LiveGraphRuntimeStub {
   subscribe() {
@@ -72,23 +78,42 @@ class WorkspaceProviderStub extends WorkspaceProvider {
       network: true,
       networkAliases: true,
       dockerInDocker: true,
-      interactiveExec: true,
-      execResize: true,
+      stdioSession: true,
+      terminalSession: true,
+      logsSession: true,
     } as const;
   }
 
-  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
-    return { workspaceId: 'stub-workspace', created: false };
+  async ensureWorkspace(_key: WorkspaceKey, _spec: WorkspaceSpec) {
+    return { workspaceId: 'stub-workspace', created: false, providerType: 'docker', status: 'running' as const };
   }
 
   async exec(_workspaceId: string, _request: ExecRequest): Promise<ExecResult> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
 
-  async openInteractiveExec(
+  async openStdioSession(
     _workspaceId: string,
-    _request: InteractiveExecRequest,
-  ): Promise<InteractiveExecSession> {
+    _request: WorkspaceStdioSessionRequest,
+  ): Promise<WorkspaceStdioSession> {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    setTimeout(() => {
+      stdout.write('ready\n');
+    }, 50);
+    return {
+      stdin,
+      stdout,
+      stderr,
+      close: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    };
+  }
+
+  async openTerminalSession(
+    _workspaceId: string,
+    _request: WorkspaceTerminalSessionRequest,
+  ): Promise<WorkspaceTerminalSession> {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     const stderr = new PassThrough();
@@ -97,16 +122,23 @@ class WorkspaceProviderStub extends WorkspaceProvider {
       stdout.write('ready\n');
     }, 50);
     return {
+      sessionId: execId,
       execId,
       stdin,
       stdout,
       stderr,
-      close: async () => ({ exitCode: 0 }),
+      resize: async () => undefined,
+      close: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
     };
   }
 
-  async resize(_execId: string, _size: { cols: number; rows: number }): Promise<void> {
-    return;
+  async openLogsSession(
+    _workspaceId: string,
+    _request: WorkspaceLogsRequest,
+  ): Promise<WorkspaceLogsSession> {
+    const stream = new PassThrough();
+    setImmediate(() => stream.end());
+    return { stream, close: async () => { stream.end(); } };
   }
 
   async destroyWorkspace(_workspaceId: string, _options?: DestroyWorkspaceOptions): Promise<void> {
@@ -114,6 +146,10 @@ class WorkspaceProviderStub extends WorkspaceProvider {
   }
 
   async touchWorkspace(_workspaceId: string): Promise<void> {
+    return;
+  }
+
+  async putArchive(): Promise<void> {
     return;
   }
 }

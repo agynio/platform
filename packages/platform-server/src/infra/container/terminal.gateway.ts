@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.sessions.service';
 import { WorkspaceProvider } from '../../workspace/providers/workspace.provider';
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
+import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -246,7 +247,7 @@ export class ContainerTerminalGateway {
     let stdin: NodeJS.WritableStream | null = null;
     let stdout: NodeJS.ReadableStream | null = null;
     let stderr: NodeJS.ReadableStream | null = null;
-    let closeExec: (() => Promise<{ exitCode: number }>) | null = null;
+    let closeExec: (() => Promise<WorkspaceExecResult>) | null = null;
     let closed = false;
     let onMessage: ((raw: RawDataLike) => void) | null = null;
     let onClose: (() => void) | null = null;

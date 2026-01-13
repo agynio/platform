@@ -4,15 +4,22 @@ import { ContainerOpts, ContainerService } from '../../infra/container/container
 import { PLATFORM_LABEL } from '../../core/constants';
 import {
   DestroyWorkspaceOptions,
-  ExecRequest,
-  ExecResult,
-  InteractiveExecRequest,
-  InteractiveExecSession,
+  EnsureWorkspaceResult,
+  WorkspaceExecRequest,
+  WorkspaceExecResult,
   WorkspaceKey,
-  WorkspaceProvider,
-  WorkspaceProviderCapabilities,
+  WorkspaceLogsRequest,
+  WorkspaceLogsSession,
+  WorkspaceRuntimeCapabilities,
+  WorkspaceRuntimeProvider,
   WorkspaceSpec,
-} from './workspace.provider';
+  WorkspaceStdioSession,
+  WorkspaceStdioSessionRequest,
+  WorkspaceTerminalSession,
+  WorkspaceTerminalSessionRequest,
+  WorkspaceStatus,
+  WorkspaceRuntimeProviderType,
+} from '../runtime/workspace.runtime.provider';
 
 const WORKSPACE_ROLE_LABEL = 'hautech.ai/role';
 const THREAD_ID_LABEL = 'hautech.ai/thread_id';
@@ -27,25 +34,26 @@ const DIND_DEFAULT_MIRROR = 'http://registry-mirror:5000';
 const DIND_HOST = 'tcp://0.0.0.0:2375';
 
 @Injectable()
-export class DockerWorkspaceProvider extends WorkspaceProvider {
-  private readonly logger = new Logger(DockerWorkspaceProvider.name);
+export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
+  private readonly logger = new Logger(DockerWorkspaceRuntimeProvider.name);
 
   constructor(@Inject(ContainerService) private readonly containers: ContainerService) {
     super();
   }
 
-  capabilities(): WorkspaceProviderCapabilities {
+  capabilities(): WorkspaceRuntimeCapabilities {
     return {
       persistentVolume: true,
       network: true,
       networkAliases: true,
       dockerInDocker: true,
-      interactiveExec: true,
-      execResize: true,
+      stdioSession: true,
+      terminalSession: true,
+      logsSession: true,
     };
   }
 
-  async ensureWorkspace(key: WorkspaceKey, spec: WorkspaceSpec): Promise<{ workspaceId: string; created: boolean }> {
+  async ensureWorkspace(key: WorkspaceKey, spec: WorkspaceSpec): Promise<EnsureWorkspaceResult> {
     const baseLabels = this.buildBaseLabels(key);
     const workspaceLabels = { ...baseLabels, [WORKSPACE_ROLE_LABEL]: 'workspace' } as Record<string, string>;
     const networkName = spec.network?.name ?? DEFAULT_NETWORK_NAME;
@@ -99,10 +107,12 @@ export class DockerWorkspaceProvider extends WorkspaceProvider {
       // ignore errors
     }
 
-    return { workspaceId: handle.id, created };
+    const providerType: WorkspaceRuntimeProviderType = 'docker';
+    const status = await this.resolveWorkspaceStatus(handle.id);
+    return { workspaceId: handle.id, created, providerType, status };
   }
 
-  async exec(workspaceId: string, request: ExecRequest): Promise<ExecResult> {
+  async exec(workspaceId: string, request: WorkspaceExecRequest): Promise<WorkspaceExecResult> {
     return this.containers.execContainer(workspaceId, request.command, {
       workdir: request.workdir,
       env: request.env,
@@ -116,17 +126,58 @@ export class DockerWorkspaceProvider extends WorkspaceProvider {
     });
   }
 
-  async openInteractiveExec(workspaceId: string, request: InteractiveExecRequest): Promise<InteractiveExecSession> {
-    return this.containers.openInteractiveExec(workspaceId, request.command, {
+  async openStdioSession(
+    workspaceId: string,
+    request: WorkspaceStdioSessionRequest,
+  ): Promise<WorkspaceStdioSession> {
+    const session = await this.containers.openInteractiveExec(workspaceId, request.command, {
       workdir: request.workdir,
       env: request.env,
-      tty: request.tty,
-      demuxStderr: request.demuxStderr,
+      tty: request.tty ?? false,
+      demuxStderr: request.demuxStderr ?? true,
     });
+
+    return {
+      stdin: session.stdin,
+      stdout: session.stdout,
+      stderr: session.stderr,
+      close: session.close,
+    };
   }
 
-  async resize(execId: string, size: { cols: number; rows: number }): Promise<void> {
-    await this.containers.resizeExec(execId, size);
+  async openTerminalSession(
+    workspaceId: string,
+    request: WorkspaceTerminalSessionRequest,
+  ): Promise<WorkspaceTerminalSession> {
+    const session = await this.containers.openInteractiveExec(workspaceId, request.command, {
+      workdir: request.workdir,
+      env: request.env,
+      tty: true,
+      demuxStderr: request.demuxStderr ?? false,
+    });
+
+    const resize = async (size: { cols: number; rows: number }) => {
+      await this.containers.resizeExec(session.execId, size);
+    };
+
+    if (request.size) {
+      await resize(request.size).catch((err) => {
+        this.logger.warn('Initial terminal resize failed', {
+          execId: session.execId.substring(0, 12),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
+    return {
+      sessionId: session.execId,
+      execId: session.execId,
+      stdin: session.stdin,
+      stdout: session.stdout,
+      stderr: session.stderr,
+      resize,
+      close: session.close,
+    };
   }
 
   async putArchive(
@@ -136,6 +187,10 @@ export class DockerWorkspaceProvider extends WorkspaceProvider {
   ): Promise<void> {
     const path = options?.path ?? '/tmp';
     await this.containers.putArchive(workspaceId, data, { path });
+  }
+
+  async openLogsSession(workspaceId: string, request: WorkspaceLogsRequest): Promise<WorkspaceLogsSession> {
+    return this.containers.streamContainerLogs(workspaceId, request);
   }
 
   async destroyWorkspace(workspaceId: string, options: DestroyWorkspaceOptions = {}): Promise<void> {
@@ -173,6 +228,34 @@ export class DockerWorkspaceProvider extends WorkspaceProvider {
 
   async touchWorkspace(workspaceId: string): Promise<void> {
     await this.containers.touchLastUsed(workspaceId).catch(() => undefined);
+  }
+
+  private async resolveWorkspaceStatus(containerId: string): Promise<WorkspaceStatus> {
+    try {
+      const docker = this.containers.getDocker();
+      const details = await docker.getContainer(containerId).inspect();
+      const raw = typeof details?.State?.Status === 'string' ? details.State.Status.toLowerCase() : '';
+      switch (raw) {
+        case 'created':
+        case 'restarting':
+        case 'paused':
+          return 'starting';
+        case 'running':
+          return 'running';
+        case 'removing':
+        case 'dead':
+        case 'exited':
+          return 'stopped';
+        default:
+          return raw ? 'error' : 'running';
+      }
+    } catch (err) {
+      this.logger.warn('Workspace status inspection failed', {
+        workspaceId: containerId.substring(0, 12),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return 'running';
+    }
   }
 
   private buildBaseLabels(key: WorkspaceKey): Record<string, string> {

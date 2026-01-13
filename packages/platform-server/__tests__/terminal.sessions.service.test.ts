@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalSessionsService } from '../src/infra/container/terminal.sessions.service';
-import type { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
+import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 
 describe('TerminalSessionsService', () => {
   let provider: Pick<WorkspaceProvider, 'exec'>;
