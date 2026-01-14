@@ -9,6 +9,7 @@ import Node from '../nodes/base/Node';
 export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
+  description?: string;
 }
 
 export type TemplateCtor = Constructor<Node>;
@@ -35,6 +36,13 @@ export class TemplateRegistry {
 
   getMeta(template: string): TemplateMeta | undefined {
     return this.meta.get(template);
+  }
+
+  findTemplateByCtor(ctor: TemplateCtor): string | undefined {
+    for (const [template, registeredCtor] of this.classes) {
+      if (registeredCtor === ctor) return template;
+    }
+    return undefined;
   }
 
   async toSchema(): Promise<TemplateNodeSchema[]> {

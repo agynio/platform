@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from 'react';
+
 import { Input } from '../Input';
 import { MarkdownInput } from '../MarkdownInput';
 import { Dropdown } from '../Dropdown';
@@ -8,6 +10,10 @@ import { FieldLabel } from './FieldLabel';
 import { QUEUE_PROCESS_BUFFER_OPTIONS, QUEUE_WHEN_BUSY_OPTIONS } from './constants';
 import type { AgentQueueConfig, AgentSummarizationConfig } from './types';
 import { toNumberOrUndefined } from './utils';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
+import { useTemplatesCache } from '@/lib/graph/templates.provider';
+import { renderMustacheTemplate } from '@/lib/mustache';
+import { createPromptResolver, type PreviewAgentToolContext } from './promptPreview';
 
 interface AgentSectionProps {
   name: string;
@@ -19,6 +25,9 @@ interface AgentSectionProps {
   restrictionMaxInjections?: number;
   queueConfig: AgentQueueConfig;
   summarization: AgentSummarizationConfig;
+  nodeId?: string;
+  graphNodes?: GraphNodeConfig[];
+  graphEdges?: GraphPersistedEdge[];
   onNameChange: (value: string) => void;
   onNameBlur: () => void;
   onRoleChange: (value: string) => void;
@@ -40,6 +49,9 @@ export function AgentSection({
   restrictionMaxInjections,
   queueConfig,
   summarization,
+  nodeId,
+  graphNodes,
+  graphEdges,
   name,
   role,
   onNameChange,
@@ -60,6 +72,31 @@ export function AgentSection({
   const summarizationKeepValue = summarization.keepTokens !== undefined ? String(summarization.keepTokens) : '';
   const summarizationMaxValue = summarization.maxTokens !== undefined ? String(summarization.maxTokens) : '';
   const summarizationPromptValue = summarization.prompt ?? '';
+  const { getTemplate } = useTemplatesCache();
+  const toolsContext = useMemo<PreviewAgentToolContext[]>(() => {
+    if (typeof nodeId !== 'string' || nodeId.length === 0) {
+      return [];
+    }
+
+    const resolver = createPromptResolver({
+      graphNodes,
+      graphEdges,
+      getTemplate,
+      overrideAgent: { id: nodeId, systemPrompt },
+    });
+
+    return resolver.buildAgentToolContext(nodeId);
+  }, [graphEdges, graphNodes, getTemplate, nodeId, systemPrompt]);
+
+  const renderSystemPromptPreview = useCallback(
+    (template: string) => {
+      if (!template || template.trim().length === 0) {
+        return '';
+      }
+      return renderMustacheTemplate(template, { tools: toolsContext });
+    },
+    [toolsContext],
+  );
 
   return (
     <>
@@ -113,6 +150,8 @@ export function AgentSection({
               value={systemPrompt}
               onChange={(event) => onSystemPromptChange(event.target.value)}
               size="sm"
+              helperText="Preview tab renders with connected tools context."
+              previewTransform={renderSystemPromptPreview}
             />
           </div>
         </div>

@@ -8,6 +8,7 @@ import { AgentsPersistenceService } from '../../../agents/agents.persistence.ser
 import type { ErrorResponse } from '../../../utils/error-response';
 import { normalizeError } from '../../../utils/error-response';
 import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
+import { createAgentPromptResolutionState, type AgentPromptResolutionState } from '../../agent/agent.node';
 
 export const ManageInvocationSchema = z
   .object({
@@ -30,6 +31,7 @@ type InvocationResult = PromiseLike<InvocationOutcome> | InvocationOutcome;
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
   private readonly logger = new Logger(ManageFunctionTool.name);
+  private descriptionResolution?: AgentPromptResolutionState;
 
   constructor(
     private readonly persistence: AgentsPersistenceService,
@@ -56,8 +58,17 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return ManageInvocationSchema;
   }
   get description() {
-    const description = this.node.config?.description;
-    return typeof description === 'string' && description.length > 0 ? description : 'Manage tool';
+    if (this.descriptionResolution) {
+      return this.node.resolvePrompt(this.descriptionResolution);
+    }
+
+    const state = createAgentPromptResolutionState();
+    this.descriptionResolution = state;
+    try {
+      return this.node.resolvePrompt(state);
+    } finally {
+      this.descriptionResolution = undefined;
+    }
   }
 
   private getPersistence(): AgentsPersistenceService {

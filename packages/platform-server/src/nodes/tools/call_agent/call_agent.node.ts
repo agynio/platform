@@ -10,6 +10,11 @@ import { CallAgentLinkingService } from '../../../agents/call-agent-linking.serv
 export const CallAgentToolStaticConfigSchema = z
   .object({
     description: z.string().min(1).optional(),
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
     name: z
       .string()
       .regex(/^[a-z0-9_]{1,64}$/)

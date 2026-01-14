@@ -4,9 +4,17 @@ import { BaseToolNode } from '../baseToolNode';
 import { SendMessageFunctionTool } from './send_message.tool';
 import { ThreadTransportService } from '../../../messaging/threadTransport.service';
 
-export const SendMessageToolStaticConfigSchema = z.object({}).strict();
+export const SendMessageToolStaticConfigSchema = z
+  .object({
+    prompt: z
+      .string()
+      .max(8192)
+      .optional()
+      .describe('Optional prompt metadata shared with the parent agent.'),
+  })
+  .strict();
 
-type SendMessageConfig = Record<string, never>;
+type SendMessageConfig = z.infer<typeof SendMessageToolStaticConfigSchema>;
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SendMessageNode extends BaseToolNode<SendMessageConfig> {

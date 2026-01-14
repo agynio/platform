@@ -13,6 +13,7 @@ import type { ReferenceSourceType } from '../../utils';
 
 import ToolNameField from './ToolNameField';
 import { useToolNameField } from './useToolNameField';
+import { Textarea } from '../../../Textarea';
 
 export function SendSlackMessageToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
   const { config, onConfigChange, secretSuggestions, variableSuggestions, ensureSecretKeys, ensureVariableKeys } = props;
@@ -25,6 +26,8 @@ export function SendSlackMessageToolTemplateView(props: NodePropertiesViewProps<
     () => inferReferenceSource(botTokenReference.raw),
     [botTokenReference.raw],
   );
+
+  const promptValue = typeof configRecord.prompt === 'string' ? (configRecord.prompt as string) : '';
 
   const handleBotTokenChange = useCallback(
     (value: string) => {
@@ -53,9 +56,29 @@ export function SendSlackMessageToolTemplateView(props: NodePropertiesViewProps<
     }
   }, [botTokenSourceType, ensureSecretKeys, ensureVariableKeys]);
 
+  const handlePromptChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
+
   return (
     <>
       <ToolNameField {...nameField} />
+
+      <section className="space-y-2">
+        <FieldLabel label="Prompt" hint="Optional prompt metadata shared with the parent agent." />
+        <Textarea
+          rows={3}
+          placeholder="Describe when to use this Slack tool..."
+          value={promptValue}
+          onChange={(event) => handlePromptChange(event.target.value)}
+          maxLength={8192}
+          className="min-h-[96px]"
+        />
+      </section>
 
       <section className="space-y-2">
         <FieldLabel label="Slack Bot Token" hint="Provide a bot token or reference (must start with xoxb-)." />

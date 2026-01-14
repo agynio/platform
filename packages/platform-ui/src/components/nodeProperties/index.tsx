@@ -32,6 +32,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
     variableKeys,
     ensureSecretKeys,
     ensureVariableKeys,
+    nodeId,
+    graphNodes,
+    graphEdges,
   } = props;
 
   const nodeKind = config.kind;
@@ -121,6 +124,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
           variableSuggestions,
           ensureSecretKeys,
           ensureVariableKeys,
+          nodeId,
+          graphNodes,
+          graphEdges,
         } satisfies NodePropertiesViewProps<'Tool'>;
         return <View {...toolViewProps} />;
       }
@@ -141,6 +147,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
           variableSuggestions,
           ensureSecretKeys,
           ensureVariableKeys,
+          nodeId,
+          graphNodes,
+          graphEdges,
           nixPackageSearch,
           fetchNixPackageVersions,
           resolveNixPackageSelection,
@@ -168,6 +177,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
           enabledTools,
           onToggleTool,
           toolsLoading,
+          nodeId,
+          graphNodes,
+          graphEdges,
         } satisfies NodePropertiesViewProps<'MCP'>;
         return <View {...mcpViewProps} />;
       }
@@ -184,6 +196,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
           canProvision,
           canDeprovision,
           isActionPending,
+          nodeId,
+          graphNodes,
+          graphEdges,
         } satisfies NodePropertiesViewProps<'Agent'>;
         return <View {...agentViewProps} />;
       }
@@ -200,6 +215,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
           canProvision,
           canDeprovision,
           isActionPending,
+          nodeId,
+          graphNodes,
+          graphEdges,
           secretSuggestions,
           variableSuggestions,
           ensureSecretKeys,

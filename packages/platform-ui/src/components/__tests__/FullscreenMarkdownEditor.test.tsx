@@ -333,4 +333,18 @@ describe('FullscreenMarkdownEditor scroll sync', () => {
     expect(link).not.toHaveAttribute('href');
     expect(within(previewScroll).queryByRole('img')).toBeNull();
   });
+
+  it('applies previewTransform before rendering preview markdown', () => {
+    render(
+      <FullscreenMarkdownEditor
+        value='{{value}}'
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+        previewTransform={(template) => template.replace('{{value}}', 'Rendered Value')}
+      />,
+    );
+
+    const previewScroll = getPreviewScrollContainer();
+    expect(within(previewScroll).getByText('Rendered Value')).toBeInTheDocument();
+  });
 });

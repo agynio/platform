@@ -897,6 +897,9 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           variableKeys={variableKeys}
           ensureSecretKeys={ensureSecretKeys}
           ensureVariableKeys={ensureVariableKeys}
+          nodeId={selectedNode.id}
+          graphNodes={nodes}
+          graphEdges={edges}
         />
       ) : (
         <EmptySelectionSidebar nodeItems={sidebarNodeItems} statusMessage={sidebarStatusMessage} />
