@@ -264,7 +264,19 @@ describe('toWsUrl', () => {
   it('uses API base env for relative paths', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3010');
     const url = toWsUrl('/api/containers/terminal/session');
-    expect(url).toBe('ws://localhost:3010/api/containers/terminal/session');
+    const expectedBase = new URL('http://localhost:3010');
+    expectedBase.protocol = expectedBase.protocol === 'https:' ? 'wss:' : 'ws:';
+    const expected = new URL('/api/containers/terminal/session', expectedBase).toString();
+    expect(url).toBe(expected);
+  });
+
+  it('falls back to window origin when env is relative', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/');
+    const url = toWsUrl('/api/containers/terminal/session');
+    const expectedBase = new URL(window.location.origin);
+    expectedBase.protocol = expectedBase.protocol === 'https:' ? 'wss:' : 'ws:';
+    const expected = new URL('/api/containers/terminal/session', expectedBase).toString();
+    expect(url).toBe(expected);
   });
 
   it('returns absolute websocket URLs unchanged', () => {
