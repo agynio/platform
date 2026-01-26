@@ -98,7 +98,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   async provide(threadId: string): Promise<WorkspaceHandle> {
-    const platform: Platform = this.config?.platform ?? DEFAULT_PLATFORM;
+    const selected = this.config?.platform as Platform | 'auto' | undefined;
+    const platform: Platform | undefined = selected === 'auto' ? undefined : selected ?? DEFAULT_PLATFORM;
     const networkName = this.configService.workspaceNetworkName;
 
     const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);
