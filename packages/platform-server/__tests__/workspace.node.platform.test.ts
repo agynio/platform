@@ -6,12 +6,16 @@ import type { EnvService } from '../src/env/env.service';
 import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
 
+type WorkspaceTestConfig = Omit<ContainerProviderStaticConfig, 'platform'> & {
+  platform?: string;
+};
+
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
   provider: WorkspaceProviderStub;
 };
 
-async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig>): Promise<WorkspaceNodeContext> {
+async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<WorkspaceNodeContext> {
   const provider = new WorkspaceProviderStub();
   const envService = {
     resolveProviderEnv: vi.fn().mockResolvedValue({}),
@@ -30,7 +34,7 @@ async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig
 
   const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
   node.init({ nodeId: 'workspace-node' });
-  await node.setConfig(config as ContainerProviderStaticConfig);
+  await node.setConfig(config as unknown as ContainerProviderStaticConfig);
 
   return { node, provider };
 }
@@ -55,13 +59,20 @@ describe('WorkspaceNode platform selection', () => {
   });
 
   it('omits platform override when auto is selected', async () => {
-    const { node, provider } = await createWorkspaceNode({
-      platform: 'auto' as unknown as ContainerProviderStaticConfig['platform'],
-    });
+    const { node, provider } = await createWorkspaceNode({ platform: 'auto' });
 
     await node.provide('thread-auto');
 
     expect(provider.ensureCalls).toHaveLength(1);
     expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
+  });
+
+  it('falls back to default when selection is invalid', async () => {
+    const { node, provider } = await createWorkspaceNode({ platform: 'windows/amd64' });
+
+    await node.provide('thread-invalid');
+
+    expect(provider.ensureCalls).toHaveLength(1);
+    expect(provider.ensureCalls[0]?.key.platform).toBe('linux/arm64');
   });
 });
