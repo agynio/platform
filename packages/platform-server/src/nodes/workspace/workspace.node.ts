@@ -78,7 +78,7 @@ const DEFAULT_TTL_SECONDS = 86_400;
 const DOCKER_HOST_ENV = 'tcp://localhost:2375';
 const DEFAULT_DOCKER_MIRROR = 'http://registry-mirror:5000';
 
-const isSupportedPlatform = (value: string): value is Platform =>
+export const isSupportedPlatform = (value: string): value is Platform =>
   (SUPPORTED_PLATFORMS as readonly string[]).includes(value as Platform);
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -101,14 +101,23 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   async provide(threadId: string): Promise<WorkspaceHandle> {
-    const rawSelection = this.config?.platform;
+    const hasExplicitSelection =
+      this.config && Object.hasOwn(this.config as Record<string, unknown>, 'platform');
+    const rawSelection = hasExplicitSelection
+      ? (this.config as Record<string, unknown>).platform
+      : undefined;
     const selection = typeof rawSelection === 'string' ? rawSelection : undefined;
-    const platform: Platform | undefined =
-      selection === 'auto'
-        ? undefined
-        : selection && isSupportedPlatform(selection)
-          ? selection
-          : DEFAULT_PLATFORM;
+
+    let platform: Platform | undefined;
+    if (!hasExplicitSelection) {
+      platform = DEFAULT_PLATFORM;
+    } else if (selection === 'auto') {
+      platform = undefined;
+    } else if (selection && isSupportedPlatform(selection)) {
+      platform = selection;
+    } else {
+      platform = undefined;
+    }
     const networkName = this.configService.workspaceNetworkName;
 
     const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);

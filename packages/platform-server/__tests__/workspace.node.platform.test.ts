@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkspaceNode, type ContainerProviderStaticConfig } from '../src/nodes/workspace/workspace.node';
+import { WorkspaceNode, type ContainerProviderStaticConfig, isSupportedPlatform } from '../src/nodes/workspace/workspace.node';
 import type { ConfigService } from '../src/core/services/config.service';
 import type { EnvService } from '../src/env/env.service';
 import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
@@ -13,6 +13,13 @@ type WorkspaceTestConfig = Omit<ContainerProviderStaticConfig, 'platform'> & {
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
   provider: WorkspaceProviderStub;
+};
+
+const normalizePlatformForConfig = (selection?: string): ContainerProviderStaticConfig['platform'] | undefined => {
+  if (!selection || selection === 'auto') {
+    return undefined;
+  }
+  return isSupportedPlatform(selection) ? selection : undefined;
 };
 
 async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<WorkspaceNodeContext> {
@@ -34,7 +41,21 @@ async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<Wo
 
   const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
   node.init({ nodeId: 'workspace-node' });
-  await node.setConfig(config as unknown as ContainerProviderStaticConfig);
+  const { platform: rawPlatform, ...rest } = config;
+  const normalizedPlatform = normalizePlatformForConfig(rawPlatform);
+
+  const canonicalConfig: ContainerProviderStaticConfig = {
+    ...rest,
+    ...(normalizedPlatform ? { platform: normalizedPlatform } : {}),
+  };
+
+  await node.setConfig(canonicalConfig);
+
+  if (rawPlatform !== undefined) {
+    const rawConfig: Record<string, unknown> = { ...canonicalConfig };
+    rawConfig.platform = rawPlatform;
+    Reflect.set(node as Record<string, unknown>, '_config', rawConfig);
+  }
 
   return { node, provider };
 }
@@ -67,12 +88,12 @@ describe('WorkspaceNode platform selection', () => {
     expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
   });
 
-  it('falls back to default when selection is invalid', async () => {
+  it('omits platform override when selection is invalid', async () => {
     const { node, provider } = await createWorkspaceNode({ platform: 'windows/amd64' });
 
     await node.provide('thread-invalid');
 
     expect(provider.ensureCalls).toHaveLength(1);
-    expect(provider.ensureCalls[0]?.key.platform).toBe('linux/arm64');
+    expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
   });
 });
