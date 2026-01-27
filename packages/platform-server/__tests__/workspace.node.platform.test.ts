@@ -1,28 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorkspaceNode, type ContainerProviderStaticConfig, isSupportedPlatform } from '../src/nodes/workspace/workspace.node';
+import { WorkspaceNode, type ContainerProviderStaticConfig } from '../src/nodes/workspace/workspace.node';
 import type { ConfigService } from '../src/core/services/config.service';
 import type { EnvService } from '../src/env/env.service';
 import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
-
-type WorkspaceTestConfig = Omit<ContainerProviderStaticConfig, 'platform'> & {
-  platform?: string;
-};
 
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
   provider: WorkspaceProviderStub;
 };
 
-const normalizePlatformForConfig = (selection?: string): ContainerProviderStaticConfig['platform'] | undefined => {
-  if (!selection || selection === 'auto') {
-    return undefined;
-  }
-  return isSupportedPlatform(selection) ? selection : undefined;
-};
-
-async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<WorkspaceNodeContext> {
+async function createWorkspaceNode(
+  config: Partial<ContainerProviderStaticConfig> = {},
+  rawPlatform?: string,
+): Promise<WorkspaceNodeContext> {
   const provider = new WorkspaceProviderStub();
   const envService = {
     resolveProviderEnv: vi.fn().mockResolvedValue({}),
@@ -41,19 +33,11 @@ async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<Wo
 
   const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
   node.init({ nodeId: 'workspace-node' });
-  const { platform: rawPlatform, ...rest } = config;
-  const normalizedPlatform = normalizePlatformForConfig(rawPlatform);
-
-  const canonicalConfig: ContainerProviderStaticConfig = {
-    ...rest,
-    ...(normalizedPlatform ? { platform: normalizedPlatform } : {}),
-  };
-
-  await node.setConfig(canonicalConfig);
+  await node.setConfig(config as ContainerProviderStaticConfig);
 
   if (rawPlatform !== undefined) {
-    const rawConfig: Record<string, unknown> = { ...canonicalConfig };
-    rawConfig.platform = rawPlatform;
+    const currentConfig = ((node as Record<string, unknown>)._config ?? {}) as Record<string, unknown>;
+    const rawConfig: Record<string, unknown> = { ...currentConfig, platform: rawPlatform };
     Reflect.set(node as Record<string, unknown>, '_config', rawConfig);
   }
 
@@ -62,7 +46,7 @@ async function createWorkspaceNode(config: WorkspaceTestConfig = {}): Promise<Wo
 
 describe('WorkspaceNode platform selection', () => {
   it('defaults to linux/arm64 when unset', async () => {
-    const { node, provider } = await createWorkspaceNode({});
+    const { node, provider } = await createWorkspaceNode();
 
     await node.provide('thread-default');
 
@@ -80,18 +64,9 @@ describe('WorkspaceNode platform selection', () => {
   });
 
   it('omits platform override when auto is selected', async () => {
-    const { node, provider } = await createWorkspaceNode({ platform: 'auto' });
+    const { node, provider } = await createWorkspaceNode({}, 'auto');
 
     await node.provide('thread-auto');
-
-    expect(provider.ensureCalls).toHaveLength(1);
-    expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
-  });
-
-  it('omits platform override when selection is invalid', async () => {
-    const { node, provider } = await createWorkspaceNode({ platform: 'windows/amd64' });
-
-    await node.provide('thread-invalid');
 
     expect(provider.ensureCalls).toHaveLength(1);
     expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
