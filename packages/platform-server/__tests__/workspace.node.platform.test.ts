@@ -5,10 +5,13 @@ import {
   WorkspaceNode,
   type ContainerProviderStaticConfig,
 } from '../src/nodes/workspace/workspace.node';
-import { EnvService } from '../src/env/env.service';
-import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
-import { clearTestConfig, registerTestConfig } from './helpers/config';
+import { clearTestConfig } from './helpers/config';
+import {
+  createConfigServiceStub,
+  createEnvServiceStub,
+  createNcpsKeyServiceStub,
+} from './helpers/services.stub';
 
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
@@ -16,10 +19,10 @@ type WorkspaceNodeContext = {
 };
 
 describe('WorkspaceNode platform selection', () => {
-  let configService: ReturnType<typeof registerTestConfig>;
+  let configService: ReturnType<typeof createConfigServiceStub>;
 
   beforeEach(() => {
-    configService = registerTestConfig();
+    configService = createConfigServiceStub();
   });
 
   afterEach(() => {
@@ -30,8 +33,8 @@ describe('WorkspaceNode platform selection', () => {
     config: Partial<ContainerProviderStaticConfig> = {},
   ): Promise<WorkspaceNodeContext> => {
     const provider = new WorkspaceProviderStub();
-    const envService = new EnvService();
-    const ncpsKeyService = new NcpsKeyService(configService);
+    const envService = createEnvServiceStub();
+    const ncpsKeyService = createNcpsKeyServiceStub(configService);
     const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
     node.init({ nodeId: 'workspace-node' });
     const parsedConfig = ContainerProviderStaticConfigSchema.parse(config);
