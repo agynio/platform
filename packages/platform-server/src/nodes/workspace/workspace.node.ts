@@ -50,7 +50,7 @@ export const ContainerProviderStaticConfigSchema = z
       .optional()
       .describe('Optional memory limit (bytes as number or string with Ki, Mi, Gi, Ti, KB, MB, GB, or B units).'),
     platform: z
-      .enum(SUPPORTED_PLATFORMS)
+      .union([z.enum(SUPPORTED_PLATFORMS), z.literal('auto')])
       .optional()
       .describe('Docker platform selector for the workspace container')
       .meta({ 'ui:widget': 'select' }),
@@ -71,6 +71,7 @@ export const ContainerProviderStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 type VolumeConfig = z.infer<typeof VolumeConfigSchema>;
+type PlatformSelection = Platform | 'auto' | undefined;
 
 const DEFAULT_PLATFORM: Platform = 'linux/arm64';
 const DEFAULT_WORKDIR = '/workspace';
@@ -98,7 +99,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   async provide(threadId: string): Promise<WorkspaceHandle> {
-    const platform: Platform = this.config?.platform ?? DEFAULT_PLATFORM;
+    const selection: PlatformSelection = this.config?.platform;
+
+    let platform: Platform | undefined;
+    if (selection === undefined) {
+      platform = DEFAULT_PLATFORM;
+    } else if (selection === 'auto') {
+      platform = undefined;
+    } else {
+      platform = selection;
+    }
     const networkName = this.configService.workspaceNetworkName;
 
     const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);
