@@ -50,7 +50,7 @@ export const ContainerProviderStaticConfigSchema = z
       .optional()
       .describe('Optional memory limit (bytes as number or string with Ki, Mi, Gi, Ti, KB, MB, GB, or B units).'),
     platform: z
-      .enum(SUPPORTED_PLATFORMS)
+      .union([z.enum(SUPPORTED_PLATFORMS), z.literal('auto')])
       .optional()
       .describe('Docker platform selector for the workspace container')
       .meta({ 'ui:widget': 'select' }),
@@ -71,6 +71,7 @@ export const ContainerProviderStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 type VolumeConfig = z.infer<typeof VolumeConfigSchema>;
+type PlatformSelection = Platform | 'auto' | undefined;
 
 const DEFAULT_PLATFORM: Platform = 'linux/arm64';
 const DEFAULT_WORKDIR = '/workspace';
@@ -98,23 +99,15 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   async provide(threadId: string): Promise<WorkspaceHandle> {
-    const rawSelection = (this.config as Record<string, unknown> | undefined)?.platform;
+    const selection: PlatformSelection = this.config?.platform;
 
     let platform: Platform | undefined;
-    if (rawSelection === undefined) {
+    if (selection === undefined) {
       platform = DEFAULT_PLATFORM;
-    } else if (rawSelection === 'auto') {
+    } else if (selection === 'auto') {
       platform = undefined;
-    } else if (typeof rawSelection === 'string') {
-      const supported = (SUPPORTED_PLATFORMS as readonly string[]).includes(rawSelection);
-      if (!supported) {
-        throw new Error(
-          `Unsupported workspace platform override: ${rawSelection}. Expected one of ${SUPPORTED_PLATFORMS.join(', ')} or 'auto'.`,
-        );
-      }
-      platform = rawSelection as Platform;
     } else {
-      throw new Error('Workspace platform override must be a string.');
+      platform = selection;
     }
     const networkName = this.configService.workspaceNetworkName;
 

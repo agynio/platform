@@ -1,50 +1,45 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { WorkspaceNode, type ContainerProviderStaticConfig } from '../src/nodes/workspace/workspace.node';
-import type { ConfigService } from '../src/core/services/config.service';
-import type { EnvService } from '../src/env/env.service';
-import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
+import {
+  ContainerProviderStaticConfigSchema,
+  WorkspaceNode,
+  type ContainerProviderStaticConfig,
+} from '../src/nodes/workspace/workspace.node';
+import { EnvService } from '../src/env/env.service';
+import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
+import { clearTestConfig, registerTestConfig } from './helpers/config';
 
 type WorkspaceNodeContext = {
   node: WorkspaceNode;
   provider: WorkspaceProviderStub;
 };
 
-async function createWorkspaceNode(
-  config: Partial<ContainerProviderStaticConfig> = {},
-  rawPlatform?: string,
-): Promise<WorkspaceNodeContext> {
-  const provider = new WorkspaceProviderStub();
-  const envService = {
-    resolveProviderEnv: vi.fn().mockResolvedValue({}),
-  } as unknown as EnvService;
-
-  const configService = {
-    dockerMirrorUrl: undefined,
-    ncpsEnabled: false,
-    ncpsUrl: undefined,
-    workspaceNetworkName: 'agents_net',
-  } as unknown as ConfigService;
-
-  const ncpsKeyService = {
-    getKeysForInjection: vi.fn().mockReturnValue([]),
-  } as unknown as NcpsKeyService;
-
-  const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
-  node.init({ nodeId: 'workspace-node' });
-  await node.setConfig(config as ContainerProviderStaticConfig);
-
-  if (rawPlatform !== undefined) {
-    const currentConfig = ((node as Record<string, unknown>)._config ?? {}) as Record<string, unknown>;
-    const rawConfig: Record<string, unknown> = { ...currentConfig, platform: rawPlatform };
-    Reflect.set(node as Record<string, unknown>, '_config', rawConfig);
-  }
-
-  return { node, provider };
-}
-
 describe('WorkspaceNode platform selection', () => {
+  let configService: ReturnType<typeof registerTestConfig>;
+
+  beforeEach(() => {
+    configService = registerTestConfig();
+  });
+
+  afterEach(() => {
+    clearTestConfig();
+  });
+
+  const createWorkspaceNode = async (
+    config: Partial<ContainerProviderStaticConfig> = {},
+  ): Promise<WorkspaceNodeContext> => {
+    const provider = new WorkspaceProviderStub();
+    const envService = new EnvService();
+    const ncpsKeyService = new NcpsKeyService(configService);
+    const node = new WorkspaceNode(provider, configService, ncpsKeyService, envService);
+    node.init({ nodeId: 'workspace-node' });
+    const parsedConfig = ContainerProviderStaticConfigSchema.parse(config);
+    await node.setConfig(parsedConfig);
+
+    return { node, provider };
+  };
+
   it('defaults to linux/arm64 when unset', async () => {
     const { node, provider } = await createWorkspaceNode();
 
@@ -63,17 +58,8 @@ describe('WorkspaceNode platform selection', () => {
     expect(provider.ensureCalls[0]?.key.platform).toBe('linux/amd64');
   });
 
-  it('propagates explicit linux/arm64 override', async () => {
-    const { node, provider } = await createWorkspaceNode({ platform: 'linux/arm64' });
-
-    await node.provide('thread-arm64');
-
-    expect(provider.ensureCalls).toHaveLength(1);
-    expect(provider.ensureCalls[0]?.key.platform).toBe('linux/arm64');
-  });
-
   it('omits platform override when auto is selected', async () => {
-    const { node, provider } = await createWorkspaceNode({}, 'auto');
+    const { node, provider } = await createWorkspaceNode({ platform: 'auto' });
 
     await node.provide('thread-auto');
 
@@ -81,12 +67,9 @@ describe('WorkspaceNode platform selection', () => {
     expect(provider.ensureCalls[0]?.key.platform).toBeUndefined();
   });
 
-  it('throws when platform selection is invalid', async () => {
-    const { node, provider } = await createWorkspaceNode({}, 'windows/amd64');
-
-    await expect(node.provide('thread-invalid')).rejects.toThrowError(
-      /Unsupported workspace platform override: windows\/amd64/,
+  it('rejects invalid platform selections during configuration', () => {
+    expect(() => ContainerProviderStaticConfigSchema.parse({ platform: 'windows/amd64' })).toThrowError(
+      /Invalid option/,
     );
-    expect(provider.ensureCalls).toHaveLength(0);
   });
 });
