@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Issuer } from 'openid-client';
+import * as openidClient from 'openid-client';
 import { ConfigService } from '../core/services/config.service';
 
 export type TokenSetResult = {
@@ -34,7 +34,7 @@ type ClientMetadata = {
   token_endpoint_auth_method: 'client_secret_basic' | 'none';
 };
 
-const issuerApi = Issuer as unknown as IssuerApi;
+const issuerApi = (openidClient as unknown as { Issuer: IssuerApi }).Issuer;
 
 @Injectable()
 export class OidcService {

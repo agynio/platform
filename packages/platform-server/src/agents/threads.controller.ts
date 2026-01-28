@@ -263,7 +263,7 @@ export class AgentsThreadsController {
     @Body() body: CreateThreadBody | null | undefined,
     @CurrentPrincipal() principal: Principal | null,
   ): Promise<{ id: string }> {
-    const currentPrincipal = this.requirePrincipal(principal);
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
     const ownerUserId = currentPrincipal.userId;
     const textValue = typeof body?.text === 'string' ? body.text : '';
     const text = textValue.trim();
@@ -346,7 +346,7 @@ export class AgentsThreadsController {
 
   @Get('threads')
   async listThreads(@Query() query: ListThreadsQueryDto, @CurrentPrincipal() principal: Principal | null) {
-    const currentPrincipal = this.requirePrincipal(principal);
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
     const ownerUserId = currentPrincipal.userId;
     const rootsOnly = (query.rootsOnly ?? 'false') === 'true';
     const status = query.status ?? 'all';
@@ -380,7 +380,7 @@ export class AgentsThreadsController {
 
   @Get('threads/tree')
   async listThreadsTree(@Query() query: ListThreadsTreeQueryDto, @CurrentPrincipal() principal: Principal | null) {
-    const currentPrincipal = this.requirePrincipal(principal);
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
     const ownerUserId = currentPrincipal.userId;
     const status = query.status ?? 'all';
     const limit = query.limit ?? 50;
@@ -599,9 +599,9 @@ export class AgentsThreadsController {
     @Query() query: RunTimelineEventsQueryDto,
     @Query('type') typeFilter?: string | string[],
     @Query('status') statusFilter?: string | string[],
-    @CurrentPrincipal() principal: Principal | null,
+    @CurrentPrincipal() principal?: Principal | null,
   ) {
-    const currentPrincipal = this.requirePrincipal(principal);
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
     const ownerUserId = currentPrincipal.userId;
     await this.getRunOrThrow(runId, ownerUserId);
     const collect = (input?: string | string[]) => {

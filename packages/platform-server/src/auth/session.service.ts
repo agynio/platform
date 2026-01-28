@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
-import type { CookieSerializeOptions } from 'cookie';
+import type { SerializeOptions } from 'cookie';
 import { PrismaService } from '../core/services/prisma.service';
 import { ConfigService } from '../core/services/config.service';
 
@@ -18,7 +18,7 @@ export type SessionRecord = {
 @Injectable()
 export class SessionService {
   private readonly logger = new Logger(SessionService.name);
-  private readonly cookieOptions: CookieSerializeOptions;
+  private readonly cookieOptions: SerializeOptions;
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService, @Inject(ConfigService) private readonly config: ConfigService) {
     this.cookieOptions = {

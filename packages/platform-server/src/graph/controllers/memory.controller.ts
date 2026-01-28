@@ -117,6 +117,9 @@ export class MemoryController {
   ): Promise<string | undefined> {
     if (scope !== 'perThread') return undefined;
     const threadId = this.resolveThreadId(scope, ...candidates);
+    if (!threadId) {
+      throw new HttpException({ error: 'threadId required for perThread scope' }, HttpStatus.BAD_REQUEST);
+    }
     const thread = await this.persistence.getThreadById(threadId, { ownerUserId });
     if (!thread) {
       throw new NotFoundException({ error: 'thread_not_found' });

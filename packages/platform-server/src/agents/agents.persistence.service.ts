@@ -287,6 +287,7 @@ export class AgentsPersistenceService {
     parentId: string | null;
     channelNodeId: string | null;
     assignedAgentNodeId: string | null;
+    ownerUserId: string;
   }> {
     const alias = params.alias.trim();
     if (alias.length === 0) {
