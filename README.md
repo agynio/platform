@@ -87,6 +87,66 @@ Optional local services (provided in docker-compose.yml for dev):
 - NCPS (Nix cache proxy) on 8501
 - Prometheus (9090), Grafana (3000), cAdvisor (8080)
 
+## Authentication & OIDC setup (read before configuring environments)
+
+Agyn supports two authentication modes controlled by `AUTH_MODE`:
+
+- `single_user` (default): skips login and binds every request to the built-in `default@local` user (`00000000-0000-0000-0000-000000000001`). Use this only for air‑gapped demos—the default user owns every thread and there is no access control.
+- `oidc`: enables the `/api/auth/login` → `/api/auth/oidc/callback` flow, persists users by issuer/subject, and issues signed `agyn_session` cookies per authenticated user.
+
+### Required environment in OIDC mode
+
+When `AUTH_MODE=oidc`, the server refuses to boot until the following are present:
+
+| Variable | Purpose |
+| --- | --- |
+| `AUTH_MODE=oidc` | Opt-in to federated auth. |
+| `SESSION_SECRET` | 32+ character random string used to sign session cookies; must remain stable across restarts and replicas. |
+| `OIDC_ISSUER_URL` | Discovery URL (e.g., `https://login.example.com/realms/agents`). |
+| `OIDC_CLIENT_ID` | OAuth client identifier registered with your IdP. |
+| `OIDC_CLIENT_SECRET` | Optional; supply when your IdP requires confidential clients. Leave blank only if the provider allows public clients. |
+| `OIDC_REDIRECT_URI` | Must route to `https://<api-host>/api/auth/oidc/callback`. This exact URI must also be registered with the IdP. |
+| `OIDC_SCOPES` | Space/comma separated scopes (default `openid profile email`). |
+| `OIDC_POST_LOGIN_REDIRECT` | Path relative to the UI origin to land on after login (default `/`). |
+
+Example `.env` excerpt for local testing:
+
+```
+AUTH_MODE=oidc
+SESSION_SECRET=dev-0123456789abcdef0123456789abcdef
+OIDC_ISSUER_URL=https://auth.local/realms/dev
+OIDC_CLIENT_ID=agyn-local
+OIDC_CLIENT_SECRET=local-secret
+OIDC_REDIRECT_URI=http://localhost:3010/api/auth/oidc/callback
+OIDC_SCOPES=openid profile email offline_access
+OIDC_POST_LOGIN_REDIRECT=/threads
+```
+
+### Redirect + session behavior
+
+- The callback endpoint is always `GET /api/auth/oidc/callback`; set `OIDC_REDIRECT_URI` to this path on the API origin (`http://localhost:3010` in dev, your HTTPS hostname in prod).
+- Successful callbacks create a 30-day `agyn_session` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` in production). Clients must send this cookie on every request; the server verifies it using `SESSION_SECRET` and loads the user via Prisma.
+- Logging out calls `POST /api/auth/logout`, deletes the server-side session row, and clears the cookie.
+
+### Local development tips
+
+1. **Same-origin (simplest):** Build and serve `platform-ui` through nginx (or run both services behind the same host/port). No extra CORS or credential settings are required.
+2. **Cross-origin (Vite dev server → API):**
+   - Set `CORS_ORIGINS=http://localhost:5173` (or whatever hosts the UI)
+   - Ensure every UI fetch/axios call includes credentials, e.g. `fetch(url, { credentials: 'include' })` or `axios.create({ withCredentials: true })`
+   - Keep `VITE_API_BASE_URL` pointed at the API origin (e.g., `http://localhost:3010`)
+   - Update `OIDC_REDIRECT_URI` to the API origin even if the UI runs elsewhere; the IdP redirects into the API, which then forwards the browser to `OIDC_POST_LOGIN_REDIRECT`.
+3. Restarting the server rotates the default (non-random) `SESSION_SECRET`; for cross-origin dev keep a stable secret in `.env` so cookies remain valid after reloads.
+
+### Troubleshooting
+
+- **`oidc_disabled` errors**: `AUTH_MODE` is still `single_user` or the server restarted without the OIDC env block.
+- **Redirect loops or `invalid_grant`**: The IdP callback URL must exactly match `OIDC_REDIRECT_URI`, including scheme/port. Regenerate the client if needed.
+- **Cookie missing in the browser**: Confirm `CORS_ORIGINS` allows the UI origin and the client sends requests with credentials. On HTTPS sites, ensure you are not hitting the API via plain HTTP because the cookie is marked `Secure` in production.
+- **`Session cookie signature mismatch` warnings**: All replicas must share the same `SESSION_SECRET`; rotating it invalidates existing sessions.
+
+---
+
 ### Setup
 1) Clone and install:
 ```bash
