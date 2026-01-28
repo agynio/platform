@@ -11,6 +11,7 @@ export function createPrismaStub() {
     channel: any;
     channelNodeId: string | null;
     assignedAgentNodeId: string | null;
+    ownerUserId: string;
   }> = [];
   const runs: Array<{ id: string; threadId: string; status: string; createdAt: Date; updatedAt: Date }> = [];
   const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
@@ -48,6 +49,7 @@ export function createPrismaStub() {
           channel: data.channel ?? null,
           channelNodeId: data.channelNodeId ?? null,
           assignedAgentNodeId: data.assignedAgentNodeId ?? null,
+          ownerUserId: data.ownerUserId ?? 'user-default',
         };
         threads.push(row);
         return row;
@@ -61,6 +63,7 @@ export function createPrismaStub() {
         if (Object.prototype.hasOwnProperty.call(data, 'channel')) next.channel = data.channel ?? null;
         if (Object.prototype.hasOwnProperty.call(data, 'channelNodeId')) next.channelNodeId = data.channelNodeId ?? null;
         if (Object.prototype.hasOwnProperty.call(data, 'assignedAgentNodeId')) next.assignedAgentNodeId = data.assignedAgentNodeId ?? null;
+        if (Object.prototype.hasOwnProperty.call(data, 'ownerUserId')) next.ownerUserId = data.ownerUserId ?? 'user-default';
         threads[idx] = next as any;
         return threads[idx];
       },
@@ -74,11 +77,17 @@ export function createPrismaStub() {
             (where.assignedAgentNodeId === null ? t.assignedAgentNodeId !== null : t.assignedAgentNodeId !== where.assignedAgentNodeId)
           )
             continue;
+          if (Object.prototype.hasOwnProperty.call(where, 'ownerUserId') && t.ownerUserId !== where.ownerUserId) continue;
           if (Object.prototype.hasOwnProperty.call(data, 'summary')) t.summary = data.summary ?? null;
           if (Object.prototype.hasOwnProperty.call(data, 'assignedAgentNodeId')) t.assignedAgentNodeId = data.assignedAgentNodeId ?? null;
+          if (Object.prototype.hasOwnProperty.call(data, 'ownerUserId')) t.ownerUserId = data.ownerUserId ?? 'user-default';
           count += 1;
         }
         return { count };
+      },
+      findFirst: async ({ where, orderBy, select }: any) => {
+        const rows = await prisma.thread.findMany({ where, orderBy, select });
+        return rows[0] ?? null;
       },
       findMany: async (args: any) => {
         let rows = [...threads];
@@ -90,6 +99,7 @@ export function createPrismaStub() {
           rows = rows.filter((t) => ids.has(t.parentId));
         }
         if (where.status) rows = rows.filter((t) => t.status === where.status);
+        if (where.ownerUserId) rows = rows.filter((t) => t.ownerUserId === where.ownerUserId);
         if (args?.orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         const take = args?.take;
         const selected = rows.slice(0, take || rows.length);
@@ -114,6 +124,7 @@ export function createPrismaStub() {
           rows = rows.filter((t) => ids.has(t.parentId));
         }
         if (where?.status) rows = rows.filter((t) => t.status === where.status);
+        if (where?.ownerUserId) rows = rows.filter((t) => t.ownerUserId === where.ownerUserId);
         const grouped = new Map<string | null, number>();
         for (const row of rows) {
           const key = row.parentId ?? null;

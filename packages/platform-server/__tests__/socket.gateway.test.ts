@@ -3,6 +3,8 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 
 describe('GraphSocketGateway', () => {
   it('gateway initializes without errors', async () => {
@@ -24,7 +26,9 @@ describe('GraphSocketGateway', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }) } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any, configStub, authStub);
     expect(() => gateway.init({ server: fastify.server })).not.toThrow();
   });
 });

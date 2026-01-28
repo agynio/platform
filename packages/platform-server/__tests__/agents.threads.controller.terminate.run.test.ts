@@ -10,6 +10,8 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 const runEventsStub = {
   getRunSummary: vi.fn(),
   listRunEvents: vi.fn(),
@@ -38,7 +40,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.terminateRun('run-1');
+    const res = await ctrl.terminateRun('run-1', principal);
     expect(res).toEqual({ ok: true });
     expect(activateTerminate).toHaveBeenCalledWith('run-1');
   });
@@ -63,7 +65,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.terminateRun('run-2');
+    const res = await ctrl.terminateRun('run-2', principal);
     expect(res).toEqual({ ok: true });
     expect(activateTerminate).not.toHaveBeenCalled();
   });
@@ -87,6 +89,6 @@ describe('AgentsThreadsController terminate run endpoint', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await expect(ctrl.terminateRun('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ctrl.terminateRun('missing', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 });

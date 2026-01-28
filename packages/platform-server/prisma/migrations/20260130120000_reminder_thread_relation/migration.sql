@@ -1,0 +1,5 @@
+ALTER TABLE "Reminder"
+ADD CONSTRAINT "Reminder_threadId_fkey"
+FOREIGN KEY ("threadId") REFERENCES "Thread"("id")
+ON DELETE CASCADE
+ON UPDATE CASCADE;

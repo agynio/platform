@@ -20,7 +20,7 @@ class CaptureEventsBus {
   readonly runStatusChanges: Array<{ threadId: string; runId: string; status: RunStatus }> = [];
   readonly metricsScheduled: string[] = [];
 
-  emitRunStatusChanged(payload: { threadId: string; run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date } }): void {
+  emitRunStatusChanged(payload: { threadId: string; ownerUserId: string; run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date } }): void {
     this.runStatusChanges.push({ threadId: payload.threadId, runId: payload.run.id, status: payload.run.status });
   }
 

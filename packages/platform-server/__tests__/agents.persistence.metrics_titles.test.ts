@@ -4,6 +4,7 @@ import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createUserServiceStub } from './helpers/userService.stub';
 
 const createLinkingStub = (overrides?: Partial<CallAgentLinkingService>) =>
   ({
@@ -53,6 +54,7 @@ function createService(
     createRunEventsStub() as any,
     overrides?.linking ?? createLinkingStub(),
     eventsBusStub,
+    createUserServiceStub(),
   );
   return svc;
 }

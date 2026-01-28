@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
 dotenv.config();
+export type AuthMode = 'single_user' | 'oidc';
 
-export const configSchema = z.object({
+export const configSchema = z
+  .object({
   // GitHub settings are optional to allow dev boot without GitHub
   githubAppId: z.string().min(1).optional(),
   githubAppPrivateKey: z.string().min(1).optional(),
@@ -159,14 +161,65 @@ export const configSchema = z.object({
   // CORS origins (comma-separated in env; parsed to string[])
   corsOrigins: z
     .string()
-    .default("")
+    .default('')
     .transform((s) =>
       s
-        .split(",")
+        .split(',')
         .map((x) => x.trim())
         .filter((x) => !!x),
     ),
-});
+  authMode: z.enum(['single_user', 'oidc']).default('single_user'),
+  sessionSecret: z
+    .string()
+    .default('dev-session-secret-change-me-0123456789abcdef0123456789abcdef')
+    .transform((value) => value.trim())
+    .refine((value) => value.length >= 32, 'SESSION_SECRET must be at least 32 characters'),
+  oidcIssuerUrl: z.string().url().optional(),
+  oidcClientId: z.string().optional(),
+  oidcClientSecret: z.string().optional(),
+  oidcRedirectUri: z.string().url().optional(),
+  oidcScopes: z
+    .string()
+    .default('openid profile email')
+    .transform((value) =>
+      value
+        .split(/[\s,]+/)
+        .map((scope) => scope.trim())
+        .filter((scope) => scope.length > 0),
+    ),
+  oidcPostLoginRedirect: z
+    .string()
+    .default('/')
+    .transform((value) => {
+      const trimmed = value.trim();
+      return trimmed.length === 0 ? '/' : trimmed;
+    }),
+})
+  .superRefine((value, ctx) => {
+    if (value.authMode === 'oidc') {
+      if (!value.oidcIssuerUrl) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'OIDC_ISSUER_URL is required when AUTH_MODE=oidc',
+          path: ['oidcIssuerUrl'],
+        });
+      }
+      if (!value.oidcClientId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'OIDC_CLIENT_ID is required when AUTH_MODE=oidc',
+          path: ['oidcClientId'],
+        });
+      }
+      if (!value.oidcRedirectUri) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'OIDC_REDIRECT_URI is required when AUTH_MODE=oidc',
+          path: ['oidcRedirectUri'],
+        });
+      }
+    }
+  });
 
 export type Config = z.infer<typeof configSchema>;
 
@@ -370,6 +423,45 @@ export class ConfigService implements Config {
   get nixRepoAllowlist(): string[] {
     return this.params.nixRepoAllowlist ?? [];
   }
+  get authMode(): AuthMode {
+    return this.params.authMode;
+  }
+  get sessionSecret(): string {
+    return this.params.sessionSecret;
+  }
+  get oidcIssuerUrl(): string {
+    if (this.params.authMode !== 'oidc' || !this.params.oidcIssuerUrl) {
+      throw new Error('OIDC issuer not configured');
+    }
+    return this.params.oidcIssuerUrl;
+  }
+  get oidcClientId(): string {
+    if (this.params.authMode !== 'oidc' || !this.params.oidcClientId) {
+      throw new Error('OIDC client id not configured');
+    }
+    return this.params.oidcClientId;
+  }
+  get oidcClientSecret(): string | undefined {
+    return this.params.oidcClientSecret ?? undefined;
+  }
+  get oidcRedirectUri(): string {
+    if (this.params.authMode !== 'oidc' || !this.params.oidcRedirectUri) {
+      throw new Error('OIDC redirect URI not configured');
+    }
+    return this.params.oidcRedirectUri;
+  }
+  get oidcScopes(): string[] {
+    return this.params.oidcScopes;
+  }
+  get oidcPostLoginRedirect(): string {
+    return this.params.oidcPostLoginRedirect;
+  }
+  get isProduction(): boolean {
+    const envName = (process.env.NODE_ENV ?? '').toLowerCase();
+    if (envName === 'production') return true;
+    const agentsEnv = (process.env.AGENTS_ENV ?? '').toLowerCase();
+    return agentsEnv === 'production';
+  }
 
   // No global messaging adapter config in Slack-only v1
 
@@ -420,6 +512,14 @@ export class ConfigService implements Config {
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
+      authMode: process.env.AUTH_MODE,
+      sessionSecret: process.env.SESSION_SECRET,
+      oidcIssuerUrl: process.env.OIDC_ISSUER_URL,
+      oidcClientId: process.env.OIDC_CLIENT_ID,
+      oidcClientSecret: process.env.OIDC_CLIENT_SECRET,
+      oidcRedirectUri: process.env.OIDC_REDIRECT_URI,
+      oidcScopes: process.env.OIDC_SCOPES,
+      oidcPostLoginRedirect: process.env.OIDC_POST_LOGIN_REDIRECT,
     });
     const config = new ConfigService().init(parsed);
     ConfigService.register(config);

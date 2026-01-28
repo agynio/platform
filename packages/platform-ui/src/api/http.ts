@@ -8,7 +8,7 @@ function createHttp(baseURL: string): AxiosInstance {
   const inst = axios.create({
     baseURL,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    withCredentials: false,
+    withCredentials: true,
   });
 
   // Response: unwrap data; error: normalize to AxiosError with server message if present

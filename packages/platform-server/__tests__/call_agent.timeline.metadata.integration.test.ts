@@ -10,6 +10,7 @@ import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, SystemMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { UserService } from '../src/auth/user.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -31,6 +32,7 @@ if (!shouldRunDbTests) {
   const runEvents = new RunEventsService(prismaService);
   const eventsBus = new EventsBusService(runEvents);
   const callAgentLinking = new CallAgentLinkingService(prismaService, runEvents, eventsBus);
+  const userService = new UserService(prismaService);
   const agents = new AgentsPersistenceService(
     prismaService,
     metricsStub,
@@ -39,6 +41,7 @@ if (!shouldRunDbTests) {
     runEvents,
     callAgentLinking,
     eventsBus,
+    userService,
   );
 
   async function createCallAgentParentEvent(parentThreadId: string, childThreadId: string, runId: string) {

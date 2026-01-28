@@ -12,6 +12,7 @@ import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { UserProfileModule } from '../user-profile/user-profile.module';
+import { AuthModule } from '../auth/auth.module';
 
 type PinoLoggerModule = {
   forRoot: (options: {
@@ -55,6 +56,7 @@ const createLoggerModule = (): DynamicModule => {
   imports: [
     createLoggerModule(),
     CoreModule,
+    AuthModule,
     EventsModule,
     InfraModule,
     GraphApiModule,

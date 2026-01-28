@@ -61,6 +61,7 @@ import type { ResponseFunctionToolCall } from 'openai/resources/responses/respon
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { createUserServiceStub } from './helpers/userService.stub';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
@@ -97,6 +98,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
     createRunEventsStub() as any,
     createLinkingStub(),
     eventsBusStub,
+    createUserServiceStub(),
   );
   return svc;
 }
@@ -155,6 +157,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       createRunEventsStub() as any,
       linking,
       eventsBusStub,
+      createUserServiceStub(),
     );
 
     // Begin run with user + system messages
@@ -179,6 +182,9 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const createdRunMessages: any[] = [];
     const runs: any[] = [{ id: 'run-1', threadId: 'thread-1', status: 'running' }];
     const prismaMock = {
+      thread: {
+        findUnique: async ({ where }: any) => ({ id: where.id, ownerUserId: 'user-test' }),
+      },
       run: {
         findUnique: async ({ where }: any) => runs.find((x) => x.id === where.id) ?? null,
       },
@@ -210,6 +216,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       runEventsStub as any,
       linking,
       eventsBusStub,
+      createUserServiceStub(),
     );
 
     const result = await svc.recordTransportAssistantMessage({
@@ -231,10 +238,13 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
         role: 'assistant',
       }),
     );
-    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalledWith({
-      threadId: 'thread-1',
-      message: expect.objectContaining({ id: 'm1', kind: 'assistant', text: 'final reply', runId: 'run-1' }),
-    });
+    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        ownerUserId: 'user-test',
+        message: expect.objectContaining({ id: 'm1', kind: 'assistant', text: 'final reply', runId: 'run-1' }),
+      }),
+    );
   });
 
   it('recordTransportAssistantMessage skips invocation event for send_message source', async () => {
@@ -242,6 +252,9 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const createdRunMessages: any[] = [];
     const runs: any[] = [{ id: 'run-1', threadId: 'thread-1', status: 'running' }];
     const prismaMock = {
+      thread: {
+        findUnique: async ({ where }: any) => ({ id: where.id, ownerUserId: 'user-test' }),
+      },
       run: {
         findUnique: async ({ where }: any) => runs.find((x) => x.id === where.id) ?? null,
       },
@@ -273,6 +286,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       runEventsStub as any,
       linking,
       eventsBusStub,
+      createUserServiceStub(),
     );
 
     const result = await svc.recordTransportAssistantMessage({
@@ -285,9 +299,12 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     expect(result).toEqual({ messageId: 'm1' });
     expect(createdRunMessages).toEqual([{ runId: 'run-1', messageId: 'm1', type: 'output' }]);
     expect(runEventsStub.recordInvocationMessage).not.toHaveBeenCalled();
-    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalledWith({
-      threadId: 'thread-1',
-      message: expect.objectContaining({ id: 'm1', text: 'fallback reply', runId: 'run-1' }),
-    });
+    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        ownerUserId: 'user-test',
+        message: expect.objectContaining({ id: 'm1', text: 'fallback reply', runId: 'run-1' }),
+      }),
+    );
   });
 });

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventsBusService, ReminderCountEvent, RunEventBusPayload } from '../src/events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../src/events/run-events.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 
 type Handler<T> = ((payload: T) => void) | null;
 
@@ -13,10 +15,14 @@ type GatewayTestContext = {
     terminal: Handler<ToolOutputTerminalPayload>;
     reminder: Handler<ReminderCountEvent>;
     nodeState: Handler<{ nodeId: string; state: Record<string, unknown>; updatedAtMs?: number }>;
-    threadCreated: Handler<{ id: string }>;
-    threadUpdated: Handler<{ id: string }>;
-    messageCreated: Handler<{ threadId: string; message: { id: string } }>;
-    runStatus: Handler<{ threadId: string; run: { id: string; status: string; createdAt: Date; updatedAt: Date } }>;
+    threadCreated: Handler<{ id: string; ownerUserId: string }>;
+    threadUpdated: Handler<{ id: string; ownerUserId: string }>;
+    messageCreated: Handler<{ threadId: string; ownerUserId: string; message: { id: string } }>;
+    runStatus: Handler<{
+      threadId: string;
+      ownerUserId: string;
+      run: { id: string; status: string; createdAt: Date; updatedAt: Date };
+    }>;
     threadMetrics: Handler<{ threadId: string }>;
     threadMetricsAncestors: Handler<{ threadId: string }>;
   };
@@ -116,7 +122,9 @@ function createGatewayTestContext(): GatewayTestContext {
   const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
   const prisma = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
 
-  const gateway = new GraphSocketGateway(runtime, metrics, prisma, eventsBus as EventsBusService);
+  const configStub = { corsOrigins: [] } as unknown as ConfigService;
+  const authStub = { resolvePrincipalFromCookieHeader: vi.fn() } as unknown as AuthService;
+  const gateway = new GraphSocketGateway(runtime, metrics, prisma, eventsBus as EventsBusService, configStub, authStub);
   const internalLogger = (gateway as unknown as { logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void; log: (...args: unknown[]) => void; debug: (...args: unknown[]) => void } }).logger;
   const logger = {
     warn: vi.spyOn(internalLogger, 'warn').mockImplementation(() => undefined),
@@ -262,6 +270,7 @@ describe('GraphSocketGateway event bus integration', () => {
       createdAt: new Date(),
       parentId: null,
       channelNodeId: null,
+      ownerUserId: 'user-1',
     } as any);
     ctx.handlers.threadUpdated?.({
       id: 'thread-2',
@@ -271,14 +280,27 @@ describe('GraphSocketGateway event bus integration', () => {
       createdAt: new Date(),
       parentId: null,
       channelNodeId: null,
+      ownerUserId: 'user-1',
     } as any);
-    ctx.handlers.messageCreated?.({ threadId: 'thread-1', message: { id: 'msg-1', kind: 'user', text: 'hi', source: {}, createdAt: new Date() } as any });
-    ctx.handlers.runStatus?.({ threadId: 'thread-1', run: { id: 'run-1', status: 'running', createdAt: new Date(), updatedAt: new Date() } });
+    ctx.handlers.messageCreated?.({
+      threadId: 'thread-1',
+      ownerUserId: 'user-1',
+      message: { id: 'msg-1', kind: 'user', text: 'hi', source: {}, createdAt: new Date() } as any,
+    });
+    ctx.handlers.runStatus?.({
+      threadId: 'thread-1',
+      ownerUserId: 'user-1',
+      run: { id: 'run-1', status: 'running', createdAt: new Date(), updatedAt: new Date() },
+    });
 
     expect(threadCreated).toHaveBeenCalled();
     expect(threadUpdated).toHaveBeenCalled();
-    expect(messageCreated).toHaveBeenCalledWith('thread-1', expect.objectContaining({ id: 'msg-1' }));
-    expect(runStatus).toHaveBeenCalledWith('thread-1', expect.objectContaining({ id: 'run-1' }));
+    expect(messageCreated).toHaveBeenCalledWith('thread-1', 'user-1', expect.objectContaining({ id: 'msg-1' }));
+    expect(runStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      ownerUserId: expect.any(String),
+      run: expect.objectContaining({ id: 'run-1' }),
+    });
   });
 
   it('schedules metrics for thread_metrics events', () => {

@@ -13,6 +13,8 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 class StubLLMProvisioner extends LLMProvisioner {
   async init(): Promise<void> {}
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -95,6 +97,6 @@ describe('Fail-fast behavior', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await expect(ctrl.listThreads({} as any)).rejects.toBeTruthy();
+    await expect(ctrl.listThreads({} as any, principal)).rejects.toBeTruthy();
   });
 });

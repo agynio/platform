@@ -3,6 +3,8 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 import Node from '../src/nodes/base/Node';
 
 // Minimal Test Node to trigger status changes
@@ -31,7 +33,9 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }) } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any, configStub, authStub);
     gateway.init({ server: fastify.server });
 
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
@@ -81,7 +85,9 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }) } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any, configStub, authStub);
     gateway.init({ server: fastify.server });
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
     const toSpy = vi.fn((room: string) => {
@@ -115,7 +121,9 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }) } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any, configStub, authStub);
     gateway.init({ server: fastify.server });
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
     const toSpy = vi.fn((room: string) => {

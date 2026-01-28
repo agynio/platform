@@ -10,6 +10,7 @@ import type { RunEventsService } from '../../src/events/run-events.service';
 import type { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
 import type { EventsBusService } from '../../src/events/events-bus.service';
 import { HumanMessage } from '@agyn/llm';
+import { createUserServiceStub } from '../helpers/userService.stub';
 
 describe('AgentsPersistenceService', () => {
   it('persists invocation messages as user role', async () => {
@@ -21,13 +22,19 @@ describe('AgentsPersistenceService', () => {
       createdAt: new Date('2024-01-01T00:00:00Z'),
     }));
 
+    const threadRepository = {
+      findUnique: vi.fn().mockResolvedValue({ id: 'thread-1', ownerUserId: 'user-default' }),
+    };
+
     const txClient = {
+      thread: threadRepository,
       run: { create: vi.fn().mockResolvedValue({ id: 'run-1', threadId: 'thread-1', status: 'running' }) },
       message: { create: messageCreate },
       runMessage: { create: vi.fn().mockResolvedValue(undefined) },
     };
 
     const prismaClient = {
+      thread: threadRepository,
       $transaction: vi.fn(async (fn: (tx: typeof txClient) => Promise<unknown>) => await fn(txClient)),
     };
 
@@ -47,6 +54,7 @@ describe('AgentsPersistenceService', () => {
       emitThreadMetrics: vi.fn(),
       publishEvent: vi.fn().mockResolvedValue(undefined),
     } as unknown as EventsBusService;
+    const userService = createUserServiceStub();
 
     const service = new AgentsPersistenceService(
       prismaService,
@@ -56,6 +64,7 @@ describe('AgentsPersistenceService', () => {
       runEvents,
       callAgentLinking,
       eventsBus,
+      userService,
     );
 
     await service.beginRunThread('thread-1', [HumanMessage.fromText('Hello there')]);
