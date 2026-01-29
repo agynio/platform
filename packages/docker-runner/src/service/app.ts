@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import websocket from '@fastify/websocket';
 import { z } from 'zod';
-import type { GetEventsOptions } from 'dockerode';
+import type { ContainerCreateOptions, GetEventsOptions } from 'dockerode';
+import type { RawData } from 'ws';
 import {
   ContainerService,
   NonceCache,
+  SUPPORTED_PLATFORMS,
   verifyAuthHeaders,
   type ContainerOpts,
   type ExecOptions,
@@ -13,7 +15,7 @@ import type { RunnerConfig } from './config';
 
 const ensureImageSchema = z.object({
   image: z.string().min(1),
-  platform: z.string().optional(),
+  platform: z.enum(SUPPORTED_PLATFORMS).optional(),
 });
 
 const containerOptsSchema: z.ZodType<ContainerOpts> = z
@@ -21,18 +23,20 @@ const containerOptsSchema: z.ZodType<ContainerOpts> = z
     image: z.string().min(1).optional(),
     name: z.string().optional(),
     cmd: z.array(z.string()).optional(),
-    entrypoint: z.array(z.string()).optional(),
-    env: z.record(z.string()).or(z.array(z.string())).optional(),
+    entrypoint: z.string().optional(),
+    env: z.record(z.string(), z.string()).or(z.array(z.string())).optional(),
     workingDir: z.string().optional(),
     autoRemove: z.boolean().optional(),
     binds: z.array(z.string()).optional(),
     networkMode: z.string().optional(),
     tty: z.boolean().optional(),
-    labels: z.record(z.string()).optional(),
-    platform: z.string().optional(),
+    labels: z.record(z.string(), z.string()).optional(),
+    platform: z.enum(SUPPORTED_PLATFORMS).optional(),
     privileged: z.boolean().optional(),
     anonymousVolumes: z.array(z.string()).optional(),
-    createExtras: z.record(z.any()).optional(),
+    createExtras: z
+      .custom<Partial<ContainerCreateOptions>>((val) => (val && typeof val === 'object' ? val : undefined))
+      .optional(),
     ttlSeconds: z.number().int().positive().optional(),
   })
   .strict();
@@ -49,7 +53,9 @@ const removeContainerSchema = z.object({
 });
 
 const findByLabelsSchema = z.object({
-  labels: z.record(z.string()).refine((val) => Object.keys(val).length > 0, 'labels required'),
+  labels: z
+    .record(z.string(), z.string())
+    .refine((val) => Object.keys(val).length > 0, 'labels required'),
   all: z.boolean().optional(),
 });
 
@@ -59,7 +65,7 @@ const execRunSchema = z.object({
   options: z
     .object({
       workdir: z.string().optional(),
-      env: z.record(z.string()).or(z.array(z.string())).optional(),
+      env: z.record(z.string(), z.string()).or(z.array(z.string())).optional(),
       timeoutMs: z.number().int().positive().optional(),
       idleTimeoutMs: z.number().int().positive().optional(),
       tty: z.boolean().optional(),
@@ -104,6 +110,22 @@ type RequestHandler<TRequest extends FastifyRequest = FastifyRequest> = (
   request: TRequest,
   reply: FastifyReply,
 ) => Promise<void> | void;
+
+type SocketOnFn = {
+  (event: 'message', listener: (raw: RawData) => void | Promise<void>): void;
+  (event: 'close', listener: () => void | Promise<void>): void;
+  (event: string, listener: (...args: unknown[]) => void | Promise<void>): void;
+};
+
+type SocketStream = {
+  socket: {
+    send: (data: string) => void;
+    close: (code?: number, reason?: string) => void;
+    on: SocketOnFn;
+  };
+};
+
+type WebsocketRouteHandler = (socket: unknown, request: FastifyRequest) => void | Promise<void>;
 
 const authExemptPaths = new Set(['/v1/health', '/v1/ready']);
 
@@ -165,7 +187,7 @@ const sendDockerError = (
 const parse = <T>(schema: z.ZodSchema<T>, value: unknown, reply: FastifyReply): T | undefined => {
   const result = schema.safeParse(value);
   if (!result.success) {
-    validationError(reply, result.error.errors[0]?.message ?? 'Invalid payload');
+    validationError(reply, result.error.issues[0]?.message ?? 'Invalid payload');
     return undefined;
   }
   return result.data;
@@ -200,6 +222,15 @@ const decodeFilters = (encoded?: string): GetEventsOptions['filters'] | undefine
   } catch {
     return undefined;
   }
+};
+
+const rawDataToString = (raw: RawData): string => {
+  if (typeof raw === 'string') return raw;
+  if (Buffer.isBuffer(raw)) return raw.toString('utf8');
+  if (Array.isArray(raw)) {
+    return Buffer.concat(raw).toString('utf8');
+  }
+  return Buffer.from(raw as ArrayBuffer).toString('utf8');
 };
 
 export function createRunnerApp(config: RunnerConfig): FastifyInstance {
@@ -255,7 +286,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     if (!body) return;
     try {
       const handle = await containers.start(body);
-      reply.send({ containerId: handle.id, name: handle.name, status: 'running' });
+      reply.send({ containerId: handle.id, name: body.name, status: 'running' });
     } catch (error) {
       sendDockerError(reply, error, 500, 'start_failed', { retryable: true });
     }
@@ -438,9 +469,8 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     const query = parse(eventsQuerySchema, request.query, reply);
     if (!query) return;
     try {
-      const docker = containers.getDocker();
       const filters = decodeFilters(query.filters) ?? { type: ['container'] };
-      const events = await docker.getEvents({ since: query.since, filters });
+      const events = await containers.getEventsStream({ since: query.since, filters });
       const { send, close } = setupSse(reply);
       events.on('data', (chunk: Buffer) => {
         try {
@@ -455,8 +485,9 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         close();
       });
       request.raw.on('close', () => {
+        const closable = events as NodeJS.ReadableStream & { destroy?: () => void };
         try {
-          events.destroy();
+          closable.destroy?.();
         } catch {
           // ignore
         }
@@ -467,7 +498,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     }
   });
 
-  app.get('/v1/exec/interactive/ws', { websocket: true }, async (connection, request) => {
+  app.get('/v1/exec/interactive/ws', { websocket: true }, (async (connection: SocketStream, request: FastifyRequest) => {
     const querySchema = z.object({
       containerId: z.string().min(1),
       command: z.string().min(1),
@@ -543,9 +574,9 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         }
       };
 
-      connection.socket.on('message', async (raw) => {
+      connection.socket.on('message', async (raw: RawData) => {
         try {
-          const payload = JSON.parse(raw.toString()) as { type: string; data?: string };
+          const payload = JSON.parse(rawDataToString(raw)) as { type: string; data?: string };
           if (payload.type === 'stdin' && payload.data) {
             session.stdin.write(Buffer.from(payload.data, 'base64'));
             return;
@@ -574,7 +605,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       );
       connection.socket.close(1011, 'exec_failed');
     }
-  });
+  }) as WebsocketRouteHandler);
 
   return app;
 }
