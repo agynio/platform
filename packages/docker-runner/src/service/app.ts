@@ -1,0 +1,531 @@
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import websocket from '@fastify/websocket';
+import { z } from 'zod';
+import type { GetEventsOptions } from 'dockerode';
+import {
+  ContainerService,
+  NonceCache,
+  verifyAuthHeaders,
+  type ContainerOpts,
+  type ExecOptions,
+} from '..';
+import type { RunnerConfig } from './config';
+
+const ensureImageSchema = z.object({
+  image: z.string().min(1),
+  platform: z.string().optional(),
+});
+
+const containerOptsSchema: z.ZodType<ContainerOpts> = z
+  .object({
+    image: z.string().min(1).optional(),
+    name: z.string().optional(),
+    cmd: z.array(z.string()).optional(),
+    entrypoint: z.array(z.string()).optional(),
+    env: z.record(z.string()).or(z.array(z.string())).optional(),
+    workingDir: z.string().optional(),
+    autoRemove: z.boolean().optional(),
+    binds: z.array(z.string()).optional(),
+    networkMode: z.string().optional(),
+    tty: z.boolean().optional(),
+    labels: z.record(z.string()).optional(),
+    platform: z.string().optional(),
+    privileged: z.boolean().optional(),
+    anonymousVolumes: z.array(z.string()).optional(),
+    createExtras: z.record(z.any()).optional(),
+    ttlSeconds: z.number().int().positive().optional(),
+  })
+  .strict();
+
+const stopContainerSchema = z.object({
+  containerId: z.string().min(1),
+  timeoutSec: z.number().int().nonnegative().optional(),
+});
+
+const removeContainerSchema = z.object({
+  containerId: z.string().min(1),
+  force: z.boolean().optional(),
+  removeVolumes: z.boolean().optional(),
+});
+
+const findByLabelsSchema = z.object({
+  labels: z.record(z.string()).refine((val) => Object.keys(val).length > 0, 'labels required'),
+  all: z.boolean().optional(),
+});
+
+const execRunSchema = z.object({
+  containerId: z.string().min(1),
+  command: z.union([z.string(), z.array(z.string())]),
+  options: z
+    .object({
+      workdir: z.string().optional(),
+      env: z.record(z.string()).or(z.array(z.string())).optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      idleTimeoutMs: z.number().int().positive().optional(),
+      tty: z.boolean().optional(),
+      killOnTimeout: z.boolean().optional(),
+      logToPid1: z.boolean().optional(),
+    })
+    .partial()
+    .optional(),
+});
+
+const resizeExecSchema = z.object({
+  execId: z.string().min(1),
+  size: z.object({ cols: z.number().int().positive(), rows: z.number().int().positive() }),
+});
+
+const touchSchema = z.object({ containerId: z.string().min(1) });
+
+const putArchiveSchema = z.object({
+  containerId: z.string().min(1),
+  path: z.string().min(1),
+  payloadBase64: z.string().min(1),
+});
+
+const logsQuerySchema = z.object({
+  containerId: z.string().min(1),
+  follow: z.coerce.boolean().default(true),
+  since: z.coerce.number().optional(),
+  tail: z.coerce.number().optional(),
+  stdout: z.coerce.boolean().optional(),
+  stderr: z.coerce.boolean().optional(),
+  timestamps: z.coerce.boolean().optional(),
+});
+
+const listByVolumeSchema = z.object({ volumeName: z.string().min(1) });
+const removeVolumeSchema = z.object({ volumeName: z.string().min(1), force: z.boolean().optional() });
+const eventsQuerySchema = z.object({
+  since: z.coerce.number().optional(),
+  filters: z.string().optional(),
+});
+
+type RequestHandler<TRequest extends FastifyRequest = FastifyRequest> = (
+  request: TRequest,
+  reply: FastifyReply,
+) => Promise<void> | void;
+
+const authExemptPaths = new Set(['/v1/health', '/v1/ready']);
+
+const validationError = (reply: FastifyReply, message: string) =>
+  reply.status(400).send({ error: { code: 'validation_error', message, retryable: false } });
+
+const sendError = (reply: FastifyReply, status: number, code: string, message: string, retryable = false) =>
+  reply.status(status).send({ error: { code, message, retryable } });
+
+const parse = <T>(schema: z.ZodSchema<T>, value: unknown, reply: FastifyReply): T | undefined => {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    validationError(reply, result.error.errors[0]?.message ?? 'Invalid payload');
+    return undefined;
+  }
+  return result.data;
+};
+
+const setupSse = (reply: FastifyReply) => {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+  });
+  const send = (payload: unknown) => {
+    reply.raw.write(`data:${JSON.stringify(payload)}\n\n`);
+  };
+  const close = () => {
+    try {
+      reply.raw.end();
+    } catch {
+      // ignore
+    }
+  };
+  return { send, close };
+};
+
+const decodeFilters = (encoded?: string): GetEventsOptions['filters'] | undefined => {
+  if (!encoded) return undefined;
+  try {
+    const json = Buffer.from(encoded, 'base64').toString('utf8');
+    const parsed = JSON.parse(json);
+    return parsed as GetEventsOptions['filters'];
+  } catch {
+    return undefined;
+  }
+};
+
+export function createRunnerApp(config: RunnerConfig): FastifyInstance {
+  process.env.DOCKER_SOCKET = config.dockerSocket;
+  const app = Fastify({ logger: { level: config.logLevel } });
+  void app.register(websocket);
+  const containers = new ContainerService();
+  const nonceCache = new NonceCache({ ttlMs: config.signatureTtlMs });
+
+  app.addHook('preHandler', async (request, reply) => {
+    const path = (request.raw.url ?? request.url ?? '').split('?')[0];
+    if (authExemptPaths.has(path)) return;
+    const verification = verifyAuthHeaders({
+      headers: request.headers as Record<string, string | string[]>,
+      method: request.method,
+      path: request.raw.url ?? request.url ?? '',
+      body: request.body ?? '',
+      accessKey: config.accessKey,
+      secret: config.sharedSecret,
+      nonceCache,
+    });
+    if (!verification.ok) {
+      sendError(reply, 401, verification.code ?? 'unauthorized', verification.message ?? 'Unauthorized');
+    }
+  });
+
+  app.get('/v1/health', async (_, reply) => {
+    reply.send({ status: 'ok' });
+  });
+
+  app.get('/v1/ready', async (_, reply) => {
+    try {
+      await containers.getDocker().ping();
+      reply.send({ status: 'ready' });
+    } catch (error) {
+      sendError(reply, 503, 'docker_unavailable', error instanceof Error ? error.message : String(error), true);
+    }
+  });
+
+  app.post('/v1/images/ensure', (async (request, reply) => {
+    const body = parse(ensureImageSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.ensureImage(body.image, body.platform);
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'image_ensure_failed', error instanceof Error ? error.message : String(error), true);
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/containers/start', (async (request, reply) => {
+    const body = parse(containerOptsSchema, request.body ?? {}, reply);
+    if (!body) return;
+    try {
+      const handle = await containers.start(body);
+      reply.send({ containerId: handle.id, name: handle.name, status: 'running' });
+    } catch (error) {
+      sendError(reply, 500, 'start_failed', error instanceof Error ? error.message : String(error), true);
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/containers/stop', (async (request, reply) => {
+    const body = parse(stopContainerSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.stopContainer(body.containerId, body.timeoutSec ?? 10);
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'stop_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/containers/remove', (async (request, reply) => {
+    const body = parse(removeContainerSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.removeContainer(body.containerId, {
+        force: body.force,
+        removeVolumes: body.removeVolumes,
+      });
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'remove_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.get('/v1/containers/inspect', async (request, reply) => {
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    if (!query) return;
+    try {
+      const inspect = await containers.inspectContainer(query.containerId);
+      reply.send(inspect);
+    } catch (error) {
+      sendError(reply, 404, 'inspect_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.get('/v1/containers/labels', async (request, reply) => {
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    if (!query) return;
+    try {
+      const labels = await containers.getContainerLabels(query.containerId);
+      reply.send({ labels });
+    } catch (error) {
+      sendError(reply, 404, 'labels_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.get('/v1/containers/networks', async (request, reply) => {
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    if (!query) return;
+    try {
+      const networks = await containers.getContainerNetworks(query.containerId);
+      reply.send({ networks });
+    } catch (error) {
+      sendError(reply, 404, 'networks_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.post('/v1/containers/findByLabels', (async (request, reply) => {
+    const body = parse(findByLabelsSchema, request.body, reply);
+    if (!body) return;
+    try {
+      const handles = await containers.findContainersByLabels(body.labels, { all: body.all });
+      reply.send({ containerIds: handles.map((h) => h.id) });
+    } catch (error) {
+      sendError(reply, 500, 'find_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/exec/run', (async (request, reply) => {
+    const body = parse(execRunSchema, request.body, reply);
+    if (!body) return;
+    try {
+      const result = await containers.execContainer(body.containerId, body.command, body.options as ExecOptions);
+      reply.send(result);
+    } catch (error) {
+      sendError(reply, 500, 'exec_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/exec/resize', (async (request, reply) => {
+    const body = parse(resizeExecSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.resizeExec(body.execId, body.size);
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 404, 'resize_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/containers/touch', (async (request, reply) => {
+    const body = parse(touchSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.touchLastUsed(body.containerId);
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'touch_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.get('/v1/containers/listByVolume', async (request, reply) => {
+    const query = parse(listByVolumeSchema, request.query, reply);
+    if (!query) return;
+    try {
+      const ids = await containers.listContainersByVolume(query.volumeName);
+      reply.send({ containerIds: ids });
+    } catch (error) {
+      sendError(reply, 500, 'list_volume_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.post('/v1/volumes/remove', (async (request, reply) => {
+    const body = parse(removeVolumeSchema, request.body, reply);
+    if (!body) return;
+    try {
+      await containers.removeVolume(body.volumeName, { force: body.force });
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'volume_remove_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.post('/v1/containers/putArchive', (async (request, reply) => {
+    const body = parse(putArchiveSchema, request.body, reply);
+    if (!body) return;
+    try {
+      const buffer = Buffer.from(body.payloadBase64, 'base64');
+      await containers.putArchive(body.containerId, buffer, { path: body.path });
+      reply.status(204).send();
+    } catch (error) {
+      sendError(reply, 500, 'put_archive_failed', error instanceof Error ? error.message : String(error));
+    }
+  }) as RequestHandler);
+
+  app.get('/v1/containers/logs/sse', async (request, reply) => {
+    const query = parse(logsQuerySchema, request.query, reply);
+    if (!query) return;
+    try {
+      const { stream, close } = await containers.streamContainerLogs(query.containerId, {
+        follow: query.follow,
+        since: query.since,
+        tail: query.tail,
+        stdout: query.stdout,
+        stderr: query.stderr,
+        timestamps: query.timestamps,
+      });
+      const { send, close: end } = setupSse(reply);
+      const onData = (chunk: Buffer) => {
+        send({ type: 'chunk', data: chunk.toString('base64') });
+      };
+      const onError = (error: unknown) => {
+        send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+        end();
+      };
+      stream.on('data', onData);
+      stream.on('error', onError);
+      stream.on('end', () => {
+        send({ type: 'end' });
+        end();
+      });
+      request.raw.on('close', async () => {
+        stream.off('data', onData);
+        stream.off('error', onError);
+        await close();
+        end();
+      });
+    } catch (error) {
+      sendError(reply, 500, 'logs_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.get('/v1/events/sse', async (request, reply) => {
+    const query = parse(eventsQuerySchema, request.query, reply);
+    if (!query) return;
+    try {
+      const docker = containers.getDocker();
+      const filters = decodeFilters(query.filters) ?? { type: ['container'] };
+      const events = await docker.getEvents({ since: query.since, filters });
+      const { send, close } = setupSse(reply);
+      events.on('data', (chunk: Buffer) => {
+        try {
+          const parsed = JSON.parse(chunk.toString('utf8')) as Record<string, unknown>;
+          send({ type: 'event', event: parsed });
+        } catch {
+          // ignore malformed events
+        }
+      });
+      events.on('error', (error: unknown) => {
+        send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+        close();
+      });
+      request.raw.on('close', () => {
+        try {
+          events.destroy();
+        } catch {
+          // ignore
+        }
+        close();
+      });
+    } catch (error) {
+      sendError(reply, 500, 'events_failed', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.get('/v1/exec/interactive/ws', { websocket: true }, async (connection, request) => {
+    const querySchema = z.object({
+      containerId: z.string().min(1),
+      command: z.string().min(1),
+      workdir: z.string().optional(),
+      tty: z.string().optional(),
+      demux: z.string().optional(),
+      env: z.string().optional(),
+    });
+    const parsed = querySchema.safeParse(request.query);
+    if (!parsed.success) {
+      connection.socket.close(4000, 'invalid_query');
+      return;
+    }
+    const params = parsed.data;
+
+    const command = (() => {
+      try {
+        const parsed = JSON.parse(params.command);
+        if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) return parsed;
+      } catch {
+        // treat as shell command
+      }
+      return params.command;
+    })();
+
+    const env = (() => {
+      if (!params.env) return undefined;
+      try {
+        const parsed = JSON.parse(params.env);
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && typeof parsed === 'object') return parsed as Record<string, string>;
+      } catch {
+        return undefined;
+      }
+      return undefined;
+    })();
+
+    try {
+      const session = await containers.openInteractiveExec(params.containerId, command, {
+        workdir: params.workdir,
+        tty: params.tty === 'true',
+        demuxStderr: params.demux === 'false' ? false : true,
+        env,
+      });
+      connection.socket.send(JSON.stringify({ type: 'ready', execId: session.execId }));
+
+      session.stdout.on('data', (chunk: Buffer) => {
+        connection.socket.send(JSON.stringify({ type: 'stdout', data: chunk.toString('base64') }));
+      });
+      session.stderr?.on('data', (chunk: Buffer) => {
+        connection.socket.send(JSON.stringify({ type: 'stderr', data: chunk.toString('base64') }));
+      });
+
+      let exitSent = false;
+      const closeSession = async () => {
+        if (exitSent) return;
+        exitSent = true;
+        try {
+          const result = await session.close();
+          connection.socket.send(
+            JSON.stringify({
+              type: 'exit',
+              execId: session.execId,
+              exitCode: result.exitCode,
+              stdout: Buffer.from(result.stdout).toString('base64'),
+              stderr: Buffer.from(result.stderr).toString('base64'),
+            }),
+          );
+        } catch (error) {
+          connection.socket.send(
+            JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
+          );
+        }
+      };
+
+      connection.socket.on('message', async (raw) => {
+        try {
+          const payload = JSON.parse(raw.toString()) as { type: string; data?: string };
+          if (payload.type === 'stdin' && payload.data) {
+            session.stdin.write(Buffer.from(payload.data, 'base64'));
+            return;
+          }
+          if (payload.type === 'close') {
+            await closeSession();
+            connection.socket.close();
+          }
+        } catch (error) {
+          connection.socket.send(
+            JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
+          );
+        }
+      });
+
+      connection.socket.on('close', () => {
+        try {
+          session.stdin.end();
+        } catch {
+          // ignore
+        }
+      });
+    } catch (error) {
+      connection.socket.send(
+        JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
+      );
+      connection.socket.close(1011, 'exec_failed');
+    }
+  });
+
+  return app;
+}

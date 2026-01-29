@@ -1,0 +1,35 @@
+{
+  "name": "@agyn/docker-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx src/service/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/service/main.js",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.2.0",
+    "@nestjs/common": "^11.1.7",
+    "dockerode": "^4.0.8",
+    "fastify": "^5.6.1",
+    "node-fetch-native": "^1.6.7",
+    "pino": "^10.1.0",
+    "undici": "^6.19.8",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.9"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.44",
+    "@types/node": "^24.5.1",
+    "@types/ws": "^8.5.11",
+    "eslint": "^9.13.0",
+    "typescript-eslint": "^8.8.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

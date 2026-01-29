@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ContainerHandle } from '../../infra/container/container.handle';
-import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
+import type { ContainerHandle, ContainerOpts } from '@agyn/docker-runner';
+import { DOCKER_CLIENT, type DockerClient } from '../../infra/container/dockerClient.token';
 import { PLATFORM_LABEL } from '../../core/constants';
 import {
   DestroyWorkspaceOptions,
@@ -37,7 +37,7 @@ const DIND_HOST = 'tcp://0.0.0.0:2375';
 export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   private readonly logger = new Logger(DockerWorkspaceRuntimeProvider.name);
 
-  constructor(@Inject(ContainerService) private readonly containers: ContainerService) {
+  constructor(@Inject(DOCKER_CLIENT) private readonly containers: DockerClient) {
     super();
   }
 
@@ -232,8 +232,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
   private async resolveWorkspaceStatus(containerId: string): Promise<WorkspaceStatus> {
     try {
-      const docker = this.containers.getDocker();
-      const details = await docker.getContainer(containerId).inspect();
+      const details = await this.containers.inspectContainer(containerId);
       const raw = typeof details?.State?.Status === 'string' ? details.State.Status.toLowerCase() : '';
       switch (raw) {
         case 'created':
@@ -427,8 +426,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
   private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
     try {
-      const docker = this.containers.getDocker();
-      const inspect = await docker.getContainer(dind.id).inspect();
+      const inspect = await this.containers.inspectContainer(dind.id);
       const state = (inspect as { State?: { Running?: boolean; Status?: string } }).State;
       if (state && state.Running === false) {
         throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);

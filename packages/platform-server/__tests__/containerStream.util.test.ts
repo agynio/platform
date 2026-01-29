@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createUtf8Collector } from '../src/infra/container/containerStream.util';
+import { createUtf8Collector } from '@agyn/docker-runner';
 
 describe('createUtf8Collector', () => {
   it('caps retained output when limit is provided', () => {

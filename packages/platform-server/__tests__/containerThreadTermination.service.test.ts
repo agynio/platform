@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import type { ContainerMetadata, ContainerStatus } from '../src/infra/container/container.registry';
 import type { PrismaClient } from '@prisma/client';
-import type { ContainerService } from '../src/infra/container/container.service';
+import type { ContainerService } from '@agyn/docker-runner';
 import type { PrismaService } from '../src/core/services/prisma.service';
 
 type Row = {

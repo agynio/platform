@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GraphApiModule } from '../src/graph/graph-api.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';

@@ -117,7 +117,9 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), prometheus (9090), grafana (3000), cadvisor (8080)
+# litellm (127.0.0.1:4000), docker-runner (7071)
+# Optional monitoring (cadvisor/prometheus/grafana) lives in docker-compose.monitoring.yml.
+# Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -179,6 +181,11 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Workspace/Docker:
   - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
+  - DOCKER_BACKEND (default local). Set to `runner` to proxy Docker operations via the in-cluster runner service.
+  - When `DOCKER_BACKEND=runner`, configure:
+    - DOCKER_RUNNER_BASE_URL (e.g., http://docker-runner:7071)
+    - DOCKER_RUNNER_ACCESS_KEY / DOCKER_RUNNER_SHARED_SECRET (HMAC auth credentials)
+    - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)
@@ -210,7 +217,8 @@ UI variables (packages/platform-ui/.env.example):
   - vault — HashiCorp Vault (8200), auto-init helper vault-auto-init
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
-  - cadvisor (8080), prometheus (9090), grafana (3000)
+  - docker-runner — authenticated Docker API proxy (7071, mounts /var/run/docker.sock)
+  - Optional monitoring overlay (docker-compose.monitoring.yml) adds cadvisor (8080), prometheus (9090), grafana (3000) and requires Docker socket access.
 
 To start services:
 ```bash

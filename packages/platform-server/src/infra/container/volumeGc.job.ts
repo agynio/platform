@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import pLimit from 'p-limit';
 import { PrismaService } from '../../core/services/prisma.service';
-import { ContainerService } from './container.service';
+import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 
 const DEFAULT_ENABLED = true;
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -21,7 +21,10 @@ export class VolumeGcService {
   private readonly lastAttempt = new Map<string, number>();
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly prismaService: PrismaService, private readonly containerService: ContainerService) {
+  constructor(
+    private readonly prismaService: PrismaService,
+    @Inject(DOCKER_CLIENT) private readonly containerService: DockerClient,
+  ) {
     this.enabled = this.resolveBoolean(process.env.VOLUME_GC_ENABLED, DEFAULT_ENABLED);
     this.maxPerSweep = this.resolveInteger(process.env.VOLUME_GC_MAX_PER_SWEEP, DEFAULT_MAX_PER_SWEEP);
     this.concurrency = this.resolveInteger(process.env.VOLUME_GC_CONCURRENCY, DEFAULT_CONCURRENCY, 1);

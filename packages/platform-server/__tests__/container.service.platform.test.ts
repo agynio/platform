@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 import Docker from 'dockerode';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService, PLATFORM_LABEL } from '@agyn/docker-runner';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
-import { PLATFORM_LABEL } from '../src/core/constants.js';
 
 vi.mock('dockerode', () => {
   class MockContainer {

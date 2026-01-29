@@ -66,6 +66,12 @@ Per-workspace Docker-in-Docker and registry mirror
 - Readiness: the server waits for the DinD engine to be ready before executing any initial scripts.
 - To override the mirror, set environment variable `DOCKER_MIRROR_URL` to an alternate URL.
 
+Remote Docker runner
+- Setting `DOCKER_BACKEND=runner` in platform-server routes all container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
+- The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers (`DOCKER_RUNNER_ACCESS_KEY` / `DOCKER_RUNNER_SHARED_SECRET`).
+- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server instances talk to it over the internal network (default http://docker-runner:7071). Optional observability overlays that mount the socket are documented separately.
+- Container events are forwarded via SSE so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
+
 Defaults and toggles
 - LiveGraphRuntime serializes apply operations by default.
 - PRTrigger intervalMs default 60000; includeAuthored default false.

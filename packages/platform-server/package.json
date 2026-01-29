@@ -23,6 +23,7 @@
   "dependencies": {
     "@agyn/shared": "workspace:*",
     "@agyn/json-schema-to-zod": "workspace:*",
+    "@agyn/docker-runner": "workspace:*",
     "@agyn/llm": "workspace:*",
     "@fastify/cors": "^11.1.0",
     "@fastify/websocket": "^11.2.0",
