@@ -16,7 +16,7 @@ import { LiveGraphRuntime } from '../../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../../src/graph-core/templateRegistry';
 import { EnvService } from '../../src/env/env.service';
 import { ArchiveService } from '../../src/infra/archive/archive.service';
-import { ContainerService } from '../../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { NcpsKeyService } from '../../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../../src/llm/provisioners/llm.provisioner';
 import { SlackAdapter } from '../../src/messaging/slack/slack.adapter';

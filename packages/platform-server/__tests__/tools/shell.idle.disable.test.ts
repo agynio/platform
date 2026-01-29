@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ContainerService } from '../../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
 
 const makeRegistry = () => ({

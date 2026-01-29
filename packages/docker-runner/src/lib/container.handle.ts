@@ -1,4 +1,5 @@
-import { ContainerService } from '../../infra/container/container.service';
+import type { DockerClientPort } from './dockerClient.port';
+import type { ExecOptions } from './types';
 
 /**
  * Lightweight entity wrapper representing a running (or created) container.
@@ -6,24 +7,11 @@ import { ContainerService } from '../../infra/container/container.service';
  */
 export class ContainerHandle {
   constructor(
-    private service: ContainerService,
+    private readonly service: DockerClientPort,
     public readonly id: string,
   ) {}
 
-  exec(
-    command: string[] | string,
-    options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      killOnTimeout?: boolean;
-      tty?: boolean;
-      signal?: AbortSignal;
-      onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
-      logToPid1?: boolean;
-    },
-  ) {
+  exec(command: string[] | string, options?: ExecOptions) {
     return this.service.execContainer(this.id, command, options);
   }
 

@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
-import { ContainerService } from '../../src/infra/container/container.service';
+import { ContainerService, ContainerHandle } from '@agyn/docker-runner';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
 import { ExecIdleTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerHandle } from '../../src/infra/container/container.handle';
 import type { Mock } from 'vitest';
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';

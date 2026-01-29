@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ContainerRegistry, type ContainerMetadata, type ContainerStatus } from './container.registry';
-import { ContainerService } from './container.service';
+import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 import { PrismaService } from '../../core/services/prisma.service';
-import { ContainerHandle } from './container.handle';
+import type { ContainerHandle } from '@agyn/docker-runner';
 
 @Injectable()
 export class ContainerThreadTerminationService {
@@ -12,7 +12,7 @@ export class ContainerThreadTerminationService {
 
   constructor(
     @Inject(ContainerRegistry) private readonly registry: ContainerRegistry,
-    @Inject(ContainerService) private readonly containerService: ContainerService,
+    @Inject(DOCKER_CLIENT) private readonly containerService: DockerClient,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {}
 

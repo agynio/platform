@@ -4,7 +4,7 @@ import { ExecIdleTimeoutError, ExecTimeoutError } from '../../src/utils/execTime
 import type { RunEventsService } from '../../src/events/run-events.service';
 import type { EventsBusService } from '../../src/events/events-bus.service';
 import type { PrismaService } from '../../src/core/services/prisma.service';
-import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { ContainerHandle } from '@agyn/docker-runner';
 
 const baseCtx = {
   threadId: 'thread-error-tests',

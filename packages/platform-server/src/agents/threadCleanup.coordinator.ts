@@ -6,7 +6,7 @@ import { ContainerCleanupService } from '../infra/container/containerCleanup.job
 import { RunSignalsRegistry } from './run-signals.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { ContainerRegistry, type ContainerStatus } from '../infra/container/container.registry';
-import { ContainerService } from '../infra/container/container.service';
+import { DOCKER_CLIENT, type DockerClient } from '../infra/container/dockerClient.token';
 import { RemindersService } from './reminders.service';
 import { EventsBusService } from '../events/events-bus.service';
 
@@ -33,7 +33,7 @@ export class ThreadCleanupCoordinator {
     @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(ContainerRegistry) private readonly registry: ContainerRegistry,
-    @Inject(ContainerService) private readonly containerService: ContainerService,
+    @Inject(DOCKER_CLIENT) private readonly containerService: DockerClient,
     @Inject(RemindersService) private readonly reminders: RemindersService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}

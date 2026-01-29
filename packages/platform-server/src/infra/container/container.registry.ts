@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
+import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
 export type ContainerHealthStatus = 'healthy' | 'unhealthy' | 'starting';

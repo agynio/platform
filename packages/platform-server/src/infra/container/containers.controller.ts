@@ -3,7 +3,7 @@ import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
+import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 
 // Allowed sort columns for containers list
 enum SortBy {

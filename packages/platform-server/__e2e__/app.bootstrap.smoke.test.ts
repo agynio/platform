@@ -9,7 +9,7 @@ import { StartupRecoveryService } from '../src/core/services/startupRecovery.ser
 import { EventsBusService } from '../src/events/events-bus.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';

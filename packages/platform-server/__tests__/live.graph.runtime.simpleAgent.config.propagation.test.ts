@@ -5,7 +5,7 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';

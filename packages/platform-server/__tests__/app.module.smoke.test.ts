@@ -5,7 +5,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import type { PrismaClient } from '@prisma/client';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';

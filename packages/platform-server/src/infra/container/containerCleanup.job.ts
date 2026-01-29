@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ContainerRegistry as ContainerRegistryService } from './container.registry';
-import { ContainerService } from './container.service';
+import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import pLimit from 'p-limit';
 
@@ -19,7 +19,7 @@ export class ContainerCleanupService {
 
   constructor(
     @Inject(ContainerRegistryService) private registry: ContainerRegistryService,
-    @Inject(ContainerService) private containers: ContainerService,
+    @Inject(DOCKER_CLIENT) private containers: DockerClient,
   ) {
     const env = process.env.CONTAINERS_CLEANUP_ENABLED;
     this.enabled = env == null ? true : String(env).toLowerCase() === 'true';

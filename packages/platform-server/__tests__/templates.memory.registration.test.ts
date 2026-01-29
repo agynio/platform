@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
 import { ModuleRef } from '@nestjs/core';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';

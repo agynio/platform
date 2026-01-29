@@ -4,7 +4,7 @@ import { EnvService } from '../../src/env/env.service';
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
-import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { ContainerHandle } from '@agyn/docker-runner';
 
 class RecordingContainer {
   public readonly calls: Array<{ command: string | string[]; workdir?: string }> = [];
