@@ -30,6 +30,7 @@ import {
   type RemoveVolumeRequest,
   type InspectContainerResponse,
   type FindByLabelsRequest,
+  type Platform,
 } from '@agyn/docker-runner';
 import type { DockerClient } from './dockerClient.token';
 
@@ -52,6 +53,13 @@ type RequestOptions = {
 
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
 type RunnerErrorBody = { error?: { code?: string; message?: string; retryable?: boolean } };
+
+type RunnerExecMessage =
+  | { type: 'ready'; execId: string }
+  | { type: 'stdout'; data: string }
+  | { type: 'stderr'; data: string }
+  | { type: 'exit'; execId?: string; exitCode: number; stdout?: string; stderr?: string }
+  | { type: 'error'; error?: string; data?: string; message?: string };
 
 export class DockerRunnerRequestError extends Error {
   constructor(
@@ -194,7 +202,7 @@ export class HttpDockerRunnerClient implements DockerClient {
     await this.send({ method: 'POST', path: '/v1/containers/touch', body, expectedStatus: 204 });
   }
 
-  async ensureImage(image: string, platform?: string): Promise<void> {
+  async ensureImage(image: string, platform?: Platform): Promise<void> {
     const body: EnsureImageRequest = { image, platform };
     await this.send({ method: 'POST', path: '/v1/images/ensure', body, expectedStatus: 204 });
   }
@@ -247,7 +255,7 @@ export class HttpDockerRunnerClient implements DockerClient {
 
     ws.on('message', (chunk) => {
       try {
-        const payload = JSON.parse(chunk.toString()) as { type: string; data?: string; execId?: string; exitCode?: number };
+        const payload = JSON.parse(chunk.toString()) as RunnerExecMessage;
         if (payload.type === 'ready' && payload.execId) {
           execId = payload.execId;
           readyResolve?.();
@@ -278,7 +286,8 @@ export class HttpDockerRunnerClient implements DockerClient {
           return;
         }
         if (payload.type === 'error') {
-          const err = new Error(payload.data || payload.error || 'interactive exec error');
+          const errMsg = payload.error ?? payload.data ?? payload.message ?? 'interactive exec error';
+          const err = new Error(errMsg);
           closeReject?.(err);
         }
       } catch (err) {

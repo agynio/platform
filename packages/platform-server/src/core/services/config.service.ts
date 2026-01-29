@@ -323,33 +323,53 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  getDockerBackend(): 'local' | 'runner' {
+  get dockerBackend(): 'local' | 'runner' {
     return this.params.dockerBackend;
   }
 
-  getDockerRunnerBaseUrl(): string {
-    if (!this.params.dockerRunnerBaseUrl) {
-      throw new Error('docker_runner_base_url_missing');
-    }
+  get dockerRunnerBaseUrl(): string | undefined {
     return this.params.dockerRunnerBaseUrl;
   }
 
-  getDockerRunnerAccessKey(): string {
-    if (!this.params.dockerRunnerAccessKey) {
-      throw new Error('docker_runner_access_key_missing');
-    }
+  get dockerRunnerAccessKey(): string | undefined {
     return this.params.dockerRunnerAccessKey;
   }
 
-  getDockerRunnerSharedSecret(): string {
-    if (!this.params.dockerRunnerSharedSecret) {
-      throw new Error('docker_runner_shared_secret_missing');
-    }
+  get dockerRunnerSharedSecret(): string | undefined {
     return this.params.dockerRunnerSharedSecret;
   }
 
-  getDockerRunnerTimeoutMs(): number {
+  get dockerRunnerTimeoutMs(): number {
     return this.params.dockerRunnerTimeoutMs;
+  }
+
+  getDockerBackend(): 'local' | 'runner' {
+    return this.dockerBackend;
+  }
+
+  getDockerRunnerBaseUrl(): string {
+    if (!this.dockerRunnerBaseUrl) {
+      throw new Error('docker_runner_base_url_missing');
+    }
+    return this.dockerRunnerBaseUrl;
+  }
+
+  getDockerRunnerAccessKey(): string {
+    if (!this.dockerRunnerAccessKey) {
+      throw new Error('docker_runner_access_key_missing');
+    }
+    return this.dockerRunnerAccessKey;
+  }
+
+  getDockerRunnerSharedSecret(): string {
+    if (!this.dockerRunnerSharedSecret) {
+      throw new Error('docker_runner_shared_secret_missing');
+    }
+    return this.dockerRunnerSharedSecret;
+  }
+
+  getDockerRunnerTimeoutMs(): number {
+    return this.dockerRunnerTimeoutMs;
   }
 
   get workspaceNetworkName(): string {
