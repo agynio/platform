@@ -113,6 +113,55 @@ const validationError = (reply: FastifyReply, message: string) =>
 const sendError = (reply: FastifyReply, status: number, code: string, message: string, retryable = false) =>
   reply.status(status).send({ error: { code, message, retryable } });
 
+type DockerodeError = Error & {
+  statusCode?: number;
+  statusMessage?: string;
+  reason?: string;
+  code?: string;
+  json?: { message?: string };
+};
+
+const normalizeCode = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || undefined;
+};
+
+const extractDockerError = (error: unknown): { statusCode: number; code?: string; message?: string } | null => {
+  if (!error || typeof error !== 'object') return null;
+  const status = (error as DockerodeError).statusCode;
+  if (typeof status !== 'number' || !Number.isFinite(status)) return null;
+  const dockerError = error as DockerodeError;
+  const message =
+    dockerError.json?.message?.trim() ||
+    dockerError.message?.trim() ||
+    dockerError.reason?.trim() ||
+    dockerError.statusMessage?.trim();
+  const code = dockerError.code || normalizeCode(dockerError.reason || dockerError.statusMessage);
+  return {
+    statusCode: status,
+    code,
+    message: message || undefined,
+  };
+};
+
+const sendDockerError = (
+  reply: FastifyReply,
+  error: unknown,
+  fallbackStatus: number,
+  fallbackCode: string,
+  options?: { retryable?: boolean },
+) => {
+  const details = extractDockerError(error);
+  const status = details?.statusCode ?? fallbackStatus;
+  const code = details?.code ?? fallbackCode;
+  const message =
+    details?.message ?? (error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error');
+  const retryable = typeof options?.retryable === 'boolean' ? options.retryable : status >= 500;
+  sendError(reply, status, code, message, retryable);
+};
+
 const parse = <T>(schema: z.ZodSchema<T>, value: unknown, reply: FastifyReply): T | undefined => {
   const result = schema.safeParse(value);
   if (!result.success) {
@@ -197,7 +246,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.ensureImage(body.image, body.platform);
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'image_ensure_failed', error instanceof Error ? error.message : String(error), true);
+      sendDockerError(reply, error, 500, 'image_ensure_failed', { retryable: true });
     }
   }) as RequestHandler);
 
@@ -208,7 +257,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const handle = await containers.start(body);
       reply.send({ containerId: handle.id, name: handle.name, status: 'running' });
     } catch (error) {
-      sendError(reply, 500, 'start_failed', error instanceof Error ? error.message : String(error), true);
+      sendDockerError(reply, error, 500, 'start_failed', { retryable: true });
     }
   }) as RequestHandler);
 
@@ -219,7 +268,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.stopContainer(body.containerId, body.timeoutSec ?? 10);
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'stop_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'stop_failed');
     }
   }) as RequestHandler);
 
@@ -233,7 +282,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       });
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'remove_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'remove_failed');
     }
   }) as RequestHandler);
 
@@ -244,7 +293,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const inspect = await containers.inspectContainer(query.containerId);
       reply.send(inspect);
     } catch (error) {
-      sendError(reply, 404, 'inspect_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 404, 'inspect_failed');
     }
   });
 
@@ -255,7 +304,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const labels = await containers.getContainerLabels(query.containerId);
       reply.send({ labels });
     } catch (error) {
-      sendError(reply, 404, 'labels_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 404, 'labels_failed');
     }
   });
 
@@ -266,7 +315,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const networks = await containers.getContainerNetworks(query.containerId);
       reply.send({ networks });
     } catch (error) {
-      sendError(reply, 404, 'networks_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 404, 'networks_failed');
     }
   });
 
@@ -277,7 +326,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const handles = await containers.findContainersByLabels(body.labels, { all: body.all });
       reply.send({ containerIds: handles.map((h) => h.id) });
     } catch (error) {
-      sendError(reply, 500, 'find_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'find_failed');
     }
   }) as RequestHandler);
 
@@ -288,7 +337,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const result = await containers.execContainer(body.containerId, body.command, body.options as ExecOptions);
       reply.send(result);
     } catch (error) {
-      sendError(reply, 500, 'exec_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'exec_failed');
     }
   }) as RequestHandler);
 
@@ -299,7 +348,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.resizeExec(body.execId, body.size);
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 404, 'resize_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 404, 'resize_failed');
     }
   }) as RequestHandler);
 
@@ -310,7 +359,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.touchLastUsed(body.containerId);
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'touch_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'touch_failed');
     }
   }) as RequestHandler);
 
@@ -321,7 +370,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const ids = await containers.listContainersByVolume(query.volumeName);
       reply.send({ containerIds: ids });
     } catch (error) {
-      sendError(reply, 500, 'list_volume_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'list_volume_failed');
     }
   });
 
@@ -332,7 +381,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.removeVolume(body.volumeName, { force: body.force });
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'volume_remove_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'volume_remove_failed');
     }
   }) as RequestHandler);
 
@@ -344,7 +393,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       await containers.putArchive(body.containerId, buffer, { path: body.path });
       reply.status(204).send();
     } catch (error) {
-      sendError(reply, 500, 'put_archive_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'put_archive_failed');
     }
   }) as RequestHandler);
 
@@ -381,7 +430,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         end();
       });
     } catch (error) {
-      sendError(reply, 500, 'logs_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'logs_failed');
     }
   });
 
@@ -414,7 +463,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         close();
       });
     } catch (error) {
-      sendError(reply, 500, 'events_failed', error instanceof Error ? error.message : String(error));
+      sendDockerError(reply, error, 500, 'events_failed');
     }
   });
 
