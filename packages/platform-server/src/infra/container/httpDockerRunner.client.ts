@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { PassThrough, Writable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
-import { fetch } from 'undici';
+import { fetch, type Response } from 'undici';
 import type { GetEventsOptions } from 'dockerode';
 import {
   ContainerHandle,
@@ -50,9 +50,23 @@ type RequestOptions = {
   timeoutMs?: number;
 };
 
-type RunnerResponse<T> = { ok: true; data: T } | { ok: false; status: number; retryable: boolean; message: string };
-
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
+type RunnerErrorBody = { error?: { code?: string; message?: string; retryable?: boolean } };
+
+export class DockerRunnerRequestError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly errorCode?: string,
+    public readonly retryable: boolean = false,
+    message?: string,
+  ) {
+    super(message ?? `Runner request failed (${statusCode})`);
+    this.name = 'DockerRunnerRequestError';
+    if (errorCode) {
+      (this as { code?: string }).code = errorCode;
+    }
+  }
+}
 
 export class HttpDockerRunnerClient implements DockerClient {
   private readonly baseUrl: URL;
@@ -80,6 +94,37 @@ export class HttpDockerRunnerClient implements DockerClient {
     return url;
   }
 
+  private async buildErrorFromResponse(response: Response): Promise<DockerRunnerRequestError> {
+    let text = '';
+    try {
+      text = await response.text();
+    } catch {
+      // ignore read errors; treat as empty body
+    }
+    let parsed: RunnerErrorBody | undefined;
+    if (text.trim().length > 0) {
+      try {
+        parsed = JSON.parse(text) as RunnerErrorBody;
+      } catch {
+        // ignore malformed payloads
+      }
+    }
+
+    const retryable = parsed?.error?.retryable ?? RETRYABLE_STATUS.has(response.status);
+    const code = parsed?.error?.code;
+    const message = parsed?.error?.message ?? `Runner error ${response.status}`;
+    return new DockerRunnerRequestError(response.status, code, retryable, message);
+  }
+
+  private buildNetworkError(message: string): DockerRunnerRequestError {
+    return new DockerRunnerRequestError(0, 'network_error', true, message);
+  }
+
+  private async ensureOk(response: Response): Promise<Response> {
+    if (response.ok) return response;
+    throw await this.buildErrorFromResponse(response);
+  }
+
   private async send<T>(options: RequestOptions): Promise<T> {
     const bodyString = options.body === undefined ? '' : canonicalJsonStringify(options.body);
     const pathWithQuery = options.query
@@ -97,7 +142,9 @@ export class HttpDockerRunnerClient implements DockerClient {
       secret: this.sharedSecret,
     });
 
-    const execute = async (): Promise<RunnerResponse<T>> => {
+    type ExecuteResult = { success: true; data: T } | { success: false; error: DockerRunnerRequestError };
+
+    const execute = async (): Promise<ExecuteResult> => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? this.requestTimeoutMs);
       try {
@@ -113,44 +160,33 @@ export class HttpDockerRunnerClient implements DockerClient {
         clearTimeout(timeout);
         if (response.status === (options.expectedStatus ?? 200)) {
           if (response.status === 204) {
-            return { ok: true, data: undefined as T };
+            return { success: true, data: undefined as T };
           }
           const data = (await response.json()) as T;
-          return { ok: true, data };
+          return { success: true, data };
         }
-        let retryable = RETRYABLE_STATUS.has(response.status);
-        try {
-          const payload = (await response.json()) as { error?: { retryable?: boolean; message?: string } };
-          retryable = retryable || payload?.error?.retryable === true;
-          const message = payload?.error?.message ?? `Runner error ${response.status}`;
-          return { ok: false, status: response.status, retryable, message };
-        } catch {
-          return {
-            ok: false,
-            status: response.status,
-            retryable,
-            message: `Runner error ${response.status}`,
-          };
-        }
+        const error = await this.buildErrorFromResponse(response);
+        return { success: false, error };
       } catch (error) {
         clearTimeout(timeout);
         const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, status: 0, retryable: true, message };
+        return { success: false, error: this.buildNetworkError(message) };
       }
     };
 
     let attempt = 0;
     while (attempt <= this.maxRetries) {
       const result = await execute();
-      if (result.ok) return result.data;
+      if (result.success) return result.data;
+      const { error } = result;
       attempt += 1;
-      if (!result.retryable || attempt > this.maxRetries) {
-        throw new Error(result.message);
+      if (!error.retryable || attempt > this.maxRetries) {
+        throw error;
       }
       const backoff = 200 * Math.pow(2, attempt - 1);
       await delay(backoff);
     }
-    throw new Error('Runner request failed');
+    throw new DockerRunnerRequestError(0, 'runner_request_failed', true, 'Runner request failed');
   }
 
   async touchLastUsed(containerId: string): Promise<void> {
@@ -316,6 +352,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       method: 'GET',
       headers,
     });
+    await this.ensureOk(response);
     if (!response.body) throw new Error('Runner logs stream missing body');
     const stream = new PassThrough();
     const logsBody = response.body as ReadableStream<Uint8Array>;
@@ -477,6 +514,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       secret: this.sharedSecret,
     });
     const response = await fetch(url, { method: 'GET', headers });
+    await this.ensureOk(response);
     if (!response.body) throw new Error('Runner events stream missing body');
     const stream = new PassThrough();
     const eventsBody = response.body as ReadableStream<Uint8Array>;
