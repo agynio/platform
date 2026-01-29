@@ -7,6 +7,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 class ErrorReducer extends Reducer<LLMState, LLMContext> {
   override async invoke(): Promise<LLMState> {
@@ -38,6 +39,7 @@ describe('AgentNode error termination handling', () => {
               agentsDatabaseUrl: 'postgres://user:pass@host/db',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',
+              ...runnerConfigDefaults,
             }),
           ),
         },

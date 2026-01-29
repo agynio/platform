@@ -7,6 +7,7 @@ import { LLMSettingsModule } from '../src/settings/llm/llmSettings.module';
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 describe('LLMSettingsModule bootstrap', () => {
   afterEach(() => {
@@ -21,6 +22,7 @@ describe('LLMSettingsModule bootstrap', () => {
           litellmBaseUrl: 'http://127.0.0.1:4000',
           litellmMasterKey: 'sk-test-master',
           agentsDatabaseUrl: 'postgres://postgres:postgres@localhost:5432/test',
+          ...runnerConfigDefaults,
         }),
       ),
     );

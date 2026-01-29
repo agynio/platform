@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 describe('NcpsKeyService', () => {
   const baseEnv = {
@@ -11,6 +12,7 @@ describe('NcpsKeyService', () => {
     dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
     mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',
     ncpsRefreshIntervalMs: '0', // disable periodic refresh for most tests
+    ...runnerConfigDefaults,
   } as const;
 
   it('fetches key successfully on init', async () => {

@@ -7,6 +7,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { Reducer, Loop, ResponseMessage, HumanMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
+import { runnerConfigDefaults } from './helpers/config';
 
 class TestReducer extends Reducer<LLMState, LLMContext> {
   override async invoke(state: LLMState): Promise<LLMState> {
@@ -34,13 +35,14 @@ describe('AgentNode termination flow', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({
-              llmProvider: 'openai',
-              agentsDatabaseUrl: 'postgres://user:pass@host/db',
-              litellmBaseUrl: 'http://localhost:4000',
-              litellmMasterKey: 'sk-test',
-            }),
-          ),
+          configSchema.parse({
+            llmProvider: 'openai',
+            agentsDatabaseUrl: 'postgres://user:pass@host/db',
+            litellmBaseUrl: 'http://localhost:4000',
+            litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
+          }),
+        ),
         },
         { provide: LLMProvisioner, useValue: {} },
         {

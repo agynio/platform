@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import type { GetEventsOptions } from 'dockerode';
+import type { DockerEventFilters } from '@agyn/docker-runner';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 import { ContainerEventProcessor, type DockerEventMessage } from './containerEvent.processor';
 
@@ -17,7 +17,7 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
   private buffer = '';
   private eventsProcessed = 0;
   private lastEventSeconds?: number;
-  private readonly eventsFactory: ((options: { since?: number; filters?: GetEventsOptions['filters'] }) => Promise<DockerEventStream>) | null;
+  private readonly eventsFactory: ((options: { since?: number; filters?: DockerEventFilters }) => Promise<DockerEventStream>) | null;
   private readonly logger = new Logger(DockerWorkspaceEventsWatcher.name);
 
   constructor(
@@ -25,7 +25,7 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
     @Inject(ContainerEventProcessor) private readonly processor: ContainerEventProcessor,
   ) {
     const candidate = (this.containerService as unknown as {
-      getEventsStream?: (options: { since?: number; filters?: GetEventsOptions['filters'] }) => Promise<DockerEventStream>;
+      getEventsStream?: (options: { since?: number; filters?: DockerEventFilters }) => Promise<DockerEventStream>;
     })?.getEventsStream;
     if (typeof candidate === 'function') {
       this.eventsFactory = (options) => candidate.call(this.containerService, options);
@@ -62,7 +62,7 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
   private async connect(initial = false): Promise<void> {
     if (!this.running || !this.eventsFactory) return;
     const since = this.lastEventSeconds ?? Math.floor(Date.now() / 1000);
-    const filters: GetEventsOptions['filters'] = {
+    const filters: DockerEventFilters = {
       type: ['container'] as Array<'container'>,
       event: ['create', 'start', 'stop', 'die', 'kill', 'destroy', 'restart', 'oom', 'health_status'],
       label: ['hautech.ai/role=workspace'],

@@ -4,7 +4,6 @@ import { ConfigService } from '../core/services/config.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';
-import { ContainerService } from '@agyn/docker-runner';
 import { ContainerCleanupService } from './container/containerCleanup.job';
 import { VolumeGcService } from './container/volumeGc.job';
 import { ContainerThreadTerminationService } from './container/containerThreadTermination.service';
@@ -40,19 +39,14 @@ import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
     },
     {
       provide: DOCKER_CLIENT,
-      useFactory: (config: ConfigService, containerRegistry: ContainerRegistry) => {
-        const backend = config.getDockerBackend();
-        if (backend === 'runner') {
-          return new HttpDockerRunnerClient({
-            baseUrl: config.getDockerRunnerBaseUrl(),
-            accessKey: config.getDockerRunnerAccessKey(),
-            sharedSecret: config.getDockerRunnerSharedSecret(),
-            requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
-          });
-        }
-        return new ContainerService(containerRegistry);
-      },
-      inject: [ConfigService, ContainerRegistry],
+      useFactory: (config: ConfigService) =>
+        new HttpDockerRunnerClient({
+          baseUrl: config.getDockerRunnerBaseUrl(),
+          accessKey: config.getDockerRunnerAccessKey(),
+          sharedSecret: config.getDockerRunnerSharedSecret(),
+          requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
+        }),
+      inject: [ConfigService],
     },
     {
       provide: ContainerCleanupService,

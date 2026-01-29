@@ -1,4 +1,3 @@
-import type { GetEventsOptions } from 'dockerode';
 import type { ContainerHandle } from './container.handle';
 import type {
   ContainerOpts,
@@ -10,6 +9,8 @@ import type {
   LogsStreamSession,
   Platform,
 } from './types';
+
+export type DockerEventFilters = Record<string, Array<string | number>>;
 
 export interface DockerClientPort {
   touchLastUsed(containerId: string): Promise<void>;
@@ -36,5 +37,5 @@ export interface DockerClientPort {
   findContainerByLabels(labels: Record<string, string>, options?: { all?: boolean }): Promise<ContainerHandle | undefined>;
   putArchive(containerId: string, data: Buffer | NodeJS.ReadableStream, options: { path: string }): Promise<void>;
   inspectContainer(containerId: string): Promise<import('dockerode').ContainerInspectInfo>;
-  getEventsStream(options: { since?: number; filters?: GetEventsOptions['filters'] }): Promise<NodeJS.ReadableStream>;
+  getEventsStream(options: { since?: number; filters?: DockerEventFilters }): Promise<NodeJS.ReadableStream>;
 }

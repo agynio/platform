@@ -9,6 +9,7 @@ import type { LLMContext, LLMState } from '../src/llm/types';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 class PassthroughReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState): Promise<LLMState> {
@@ -44,6 +45,7 @@ describe('Agent busy gating (wait mode)', () => {
               agentsDatabaseUrl: 'postgres://user:pass@host/db',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',
+              ...runnerConfigDefaults,
             }),
           ),
         },

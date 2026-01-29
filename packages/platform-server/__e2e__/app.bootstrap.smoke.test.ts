@@ -23,6 +23,7 @@ import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
+import { runnerConfigDefaults } from '../__tests__/helpers/config';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -168,6 +169,7 @@ describe('App bootstrap smoke test', () => {
         litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
         litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',
+        ...runnerConfigDefaults,
       }),
     );
 

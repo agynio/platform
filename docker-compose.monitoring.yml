@@ -1,29 +1,4 @@
 services:
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    container_name: cadvisor
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-        read_only: true
-      - type: bind
-        source: /sys
-        target: /sys
-        read_only: true
-      - type: bind
-        source: /var/lib/docker
-        target: /var/lib/docker
-        read_only: true
-    command:
-      - --docker_only=true
-      - --disable_metrics=hugetlb,perf_event,resctrl,tcp,udp,process,referenced_memory,disk
-    networks:
-      - agents_net
-
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -32,8 +7,6 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=7d"
-    depends_on:
-      - cadvisor
     ports:
       - "9090:9090"
     volumes:

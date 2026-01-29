@@ -3,7 +3,6 @@ import { PassThrough, Writable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
 import { fetch, type Response } from 'undici';
-import type { GetEventsOptions } from 'dockerode';
 import {
   ContainerHandle,
   type ContainerOpts,
@@ -31,6 +30,7 @@ import {
   type InspectContainerResponse,
   type FindByLabelsRequest,
   type Platform,
+  type DockerEventFilters,
 } from '@agyn/docker-runner';
 import type { DockerClient } from './dockerClient.token';
 
@@ -506,7 +506,7 @@ export class HttpDockerRunnerClient implements DockerClient {
     });
   }
 
-  async getEventsStream(options: { since?: number; filters?: GetEventsOptions['filters'] }): Promise<NodeJS.ReadableStream> {
+  async getEventsStream(options: { since?: number; filters?: DockerEventFilters }): Promise<NodeJS.ReadableStream> {
     const query: Record<string, string> = {};
     if (typeof options.since === 'number') query.since = String(options.since);
     if (options.filters) {

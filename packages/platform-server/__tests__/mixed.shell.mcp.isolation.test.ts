@@ -6,6 +6,7 @@ import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { Signal } from '../src/signal';
 import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
+import { runnerConfigDefaults } from './helpers/config';
 
 describe('Mixed Shell + MCP overlay isolation', () => {
   it('does not leak env between Shell and MCP nodes', async () => {
@@ -17,6 +18,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
         agentsDatabaseUrl: 'postgres://localhost/agents',
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',
+        ...runnerConfigDefaults,
       }),
     );
     const envService = new EnvService();

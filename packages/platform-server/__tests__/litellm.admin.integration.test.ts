@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const LITELLM_BASE = 'http://127.0.0.1:4000';
 const MASTER_KEY = 'sk-dev-master-1234';
@@ -14,6 +15,7 @@ const createConfig = () =>
       litellmBaseUrl: LITELLM_BASE,
       litellmMasterKey: MASTER_KEY,
       agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
+      ...runnerConfigDefaults,
     }),
   );
 
