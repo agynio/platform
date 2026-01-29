@@ -4,8 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
 import type { ContainerStatus, ContainerEventType } from '@prisma/client';
-import type { ContainerService } from '@agyn/docker-runner';
-import type { GetEventsOptions } from 'dockerode';
+import type { ContainerService, DockerEventFilters } from '@agyn/docker-runner';
 
 type ContainerRow = {
   id: number;
@@ -191,7 +190,7 @@ class FakePrismaService {
 class FakeContainerService {
   constructor(private readonly stream: PassThrough) {}
 
-  async getEventsStream(_options: { since?: number; filters?: GetEventsOptions['filters'] }): Promise<PassThrough> {
+  async getEventsStream(_options: { since?: number; filters?: DockerEventFilters }): Promise<PassThrough> {
     return this.stream;
   }
 }

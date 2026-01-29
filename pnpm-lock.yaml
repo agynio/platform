@@ -208,9 +208,6 @@ importers:
       class-validator:
         specifier: ^0.14.1
         version: 0.14.2
-      dockerode:
-        specifier: ^4.0.8
-        version: 4.0.8
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
@@ -287,9 +284,6 @@ importers:
       '@nestjs/testing':
         specifier: ^11.1.8
         version: 11.1.8(@nestjs/common@11.1.7(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.7(@nestjs/common@11.1.7(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))
-      '@types/dockerode':
-        specifier: ^3.3.44
-        version: 3.3.44
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12

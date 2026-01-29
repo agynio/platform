@@ -11,6 +11,7 @@ import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
@@ -21,13 +22,14 @@ describe('Agent summarization graph', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({
-              llmProvider: 'openai',
-              agentsDatabaseUrl: 'postgres://localhost/agents',
-              litellmBaseUrl: 'http://localhost:4000',
-              litellmMasterKey: 'sk-test',
-            }),
-          ),
+          configSchema.parse({
+            llmProvider: 'openai',
+            agentsDatabaseUrl: 'postgres://localhost/agents',
+            litellmBaseUrl: 'http://localhost:4000',
+            litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
+          }),
+        ),
         },
         { provide: LLMProvisioner, useValue: provisioner },
         Agent,

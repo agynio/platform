@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { configSchema, ConfigService } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -80,6 +81,7 @@ const createAgentFixture = async () => {
             agentsDatabaseUrl: 'postgres://user:pass@host/db',
             litellmBaseUrl: 'http://localhost:4000',
             litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
           }),
         ),
       },

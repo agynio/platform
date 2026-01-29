@@ -3,6 +3,7 @@ import { LiteLLMProvisioner } from '../src/llm/provisioners/litellm.provisioner'
 import { ConfigService, configSchema, type Config } from '../src/core/services/config.service';
 import type { LiteLLMKeyStore, PersistedLiteLLMKey } from '../src/llm/provisioners/litellm.key.store';
 import { HumanMessage } from '@agyn/llm';
+import { runnerConfigDefaults } from './helpers/config';
 
 class InMemoryKeyStore implements LiteLLMKeyStore {
   private snapshot: PersistedLiteLLMKey | null;
@@ -44,6 +45,7 @@ const baseConfig = (): ConfigService => {
     litellmBaseUrl: 'http://litellm.local:4000',
     litellmMasterKey: 'sk-master',
     agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
+    ...runnerConfigDefaults,
   };
   return new ConfigService().init(configSchema.parse(params));
 };

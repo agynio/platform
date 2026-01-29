@@ -14,6 +14,7 @@ import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { PostgresMemoryEntitiesRepository } from '../src/nodes/memory/memory.repository';
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import { PrismaClient } from '@prisma/client';
+import { runnerConfigDefaults } from './helpers/config';
 
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!process.env.AGENTS_DATABASE_URL;
 const maybeIt = shouldRunDbTests ? it : it.skip;
@@ -27,6 +28,7 @@ describe('templates: memory registration and agent memory port', () => {
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',
+        ...runnerConfigDefaults,
       }),
     );
     const containerService = new ContainerService(undefined as unknown as ContainerRegistry);

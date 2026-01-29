@@ -51,13 +51,19 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
-  dockerBackend: z.enum(['local', 'runner']).default('local'),
   dockerRunnerBaseUrl: z
     .string()
+    .min(1, 'DOCKER_RUNNER_BASE_URL is required')
     .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
-    .optional(),
-  dockerRunnerAccessKey: z.string().optional(),
-  dockerRunnerSharedSecret: z.string().optional(),
+    .transform((value) => value.trim().replace(/\/+$/, '')),
+  dockerRunnerAccessKey: z
+    .string()
+    .min(1, 'DOCKER_RUNNER_ACCESS_KEY is required')
+    .transform((value) => value.trim()),
+  dockerRunnerSharedSecret: z
+    .string()
+    .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
+    .transform((value) => value.trim()),
   dockerRunnerTimeoutMs: z
     .union([z.string(), z.number()])
     .default('30000')
@@ -186,18 +192,6 @@ export const configSchema = z.object({
         .map((x) => x.trim())
         .filter((x) => !!x),
     ),
-}).superRefine((cfg, ctx) => {
-  if (cfg.dockerBackend === 'runner') {
-    if (!cfg.dockerRunnerBaseUrl) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dockerRunnerBaseUrl'], message: 'DOCKER_RUNNER_BASE_URL is required when DOCKER_BACKEND=runner' });
-    }
-    if (!cfg.dockerRunnerAccessKey) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dockerRunnerAccessKey'], message: 'DOCKER_RUNNER_ACCESS_KEY is required when DOCKER_BACKEND=runner' });
-    }
-    if (!cfg.dockerRunnerSharedSecret) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dockerRunnerSharedSecret'], message: 'DOCKER_RUNNER_SHARED_SECRET is required when DOCKER_BACKEND=runner' });
-    }
-  }
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -323,19 +317,15 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  get dockerBackend(): 'local' | 'runner' {
-    return this.params.dockerBackend;
-  }
-
-  get dockerRunnerBaseUrl(): string | undefined {
+  get dockerRunnerBaseUrl(): string {
     return this.params.dockerRunnerBaseUrl;
   }
 
-  get dockerRunnerAccessKey(): string | undefined {
+  get dockerRunnerAccessKey(): string {
     return this.params.dockerRunnerAccessKey;
   }
 
-  get dockerRunnerSharedSecret(): string | undefined {
+  get dockerRunnerSharedSecret(): string {
     return this.params.dockerRunnerSharedSecret;
   }
 
@@ -343,28 +333,15 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerTimeoutMs;
   }
 
-  getDockerBackend(): 'local' | 'runner' {
-    return this.dockerBackend;
-  }
-
   getDockerRunnerBaseUrl(): string {
-    if (!this.dockerRunnerBaseUrl) {
-      throw new Error('docker_runner_base_url_missing');
-    }
     return this.dockerRunnerBaseUrl;
   }
 
   getDockerRunnerAccessKey(): string {
-    if (!this.dockerRunnerAccessKey) {
-      throw new Error('docker_runner_access_key_missing');
-    }
     return this.dockerRunnerAccessKey;
   }
 
   getDockerRunnerSharedSecret(): string {
-    if (!this.dockerRunnerSharedSecret) {
-      throw new Error('docker_runner_shared_secret_missing');
-    }
     return this.dockerRunnerSharedSecret;
   }
 
@@ -478,7 +455,6 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
-      dockerBackend: process.env.DOCKER_BACKEND,
       dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerAccessKey: process.env.DOCKER_RUNNER_ACCESS_KEY,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,

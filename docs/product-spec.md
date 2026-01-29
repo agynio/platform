@@ -116,7 +116,7 @@ Configuration matrix (server env vars)
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_BACKEND (local | runner; default local). When `runner`, also set DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_ACCESS_KEY, DOCKER_RUNNER_SHARED_SECRET, and optionally DOCKER_RUNNER_TIMEOUT_MS.
+  - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_ACCESS_KEY, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000).
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)
@@ -132,7 +132,7 @@ HTTP API and sockets (pointers)
 Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL. Optional VAULT_*, DOCKER_MIRROR_URL, and DOCKER_BACKEND/DOCKER_RUNNER_* when routing Docker calls through the runner service.
+  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_ACCESS_KEY, DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev
