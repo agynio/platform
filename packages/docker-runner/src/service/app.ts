@@ -11,6 +11,7 @@ import {
   type ContainerOpts,
   type ExecOptions,
 } from '..';
+import { createDockerEventsParser } from './dockerEvents.parser';
 import type { RunnerConfig } from './config';
 
 const ensureImageSchema = z.object({
@@ -472,19 +473,36 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       const filters = decodeFilters(query.filters) ?? { type: ['container'] };
       const events = await containers.getEventsStream({ since: query.since, filters });
       const { send, close } = setupSse(reply);
-      events.on('data', (chunk: Buffer) => {
-        try {
-          const parsed = JSON.parse(chunk.toString('utf8')) as Record<string, unknown>;
-          send({ type: 'event', event: parsed });
-        } catch {
-          // ignore malformed events
-        }
+      const parser = createDockerEventsParser((event) => {
+        send({ type: 'event', event });
       });
-      events.on('error', (error: unknown) => {
+
+      const handleData = (chunk: Buffer) => parser.handleChunk(chunk);
+      const handleEnd = () => {
+        parser.flush();
+        finish();
+      };
+      const handleStreamError = (error: unknown) => {
         send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
-        close();
-      });
-      request.raw.on('close', () => {
+        finish();
+      };
+
+      const off = (eventName: 'data' | 'end' | 'close' | 'error', listener: (...args: unknown[]) => void) => {
+        if (typeof (events as NodeJS.EventEmitter).off === 'function') {
+          (events as NodeJS.EventEmitter).off(eventName, listener);
+          return;
+        }
+        (events as NodeJS.EventEmitter).removeListener?.(eventName, listener);
+      };
+
+      let closed = false;
+      const finish = () => {
+        if (closed) return;
+        closed = true;
+        off('data', handleData);
+        off('end', handleEnd);
+        off('close', handleEnd);
+        off('error', handleStreamError);
         const closable = events as NodeJS.ReadableStream & { destroy?: () => void };
         try {
           closable.destroy?.();
@@ -492,6 +510,16 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
           // ignore
         }
         close();
+      };
+
+      events.on('data', handleData);
+      events.on('end', handleEnd);
+      events.on('close', handleEnd);
+      events.on('error', handleStreamError);
+
+      request.raw.on('close', () => {
+        parser.flush();
+        finish();
       });
     } catch (error) {
       sendDockerError(reply, error, 500, 'events_failed');
