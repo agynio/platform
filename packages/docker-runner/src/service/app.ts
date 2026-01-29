@@ -477,7 +477,10 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         send({ type: 'event', event });
       });
 
-      const handleData = (chunk: Buffer) => parser.handleChunk(chunk);
+      const handleData = (...args: unknown[]) => {
+        if (!args.length) return;
+        parser.handleChunk(args[0] as Parameters<typeof parser.handleChunk>[0]);
+      };
       const handleEnd = () => {
         parser.flush();
         finish();
