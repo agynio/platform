@@ -19,7 +19,7 @@ describe('Prisma write sanitizer middleware', () => {
       },
     });
 
-    const recorded = prisma.lastConversationStateArgs;
+    const recorded = prisma.lastConversationStateUpsertArgs;
     expect(recorded).toBeDefined();
     expect(recorded?.create?.state).toEqual({
       summary: 'bad\uFFFDvalue',
@@ -30,11 +30,39 @@ describe('Prisma write sanitizer middleware', () => {
       nested: [{ text: 'chunk\uFFFDdata' }],
     });
   });
+
+  it('sanitizes where filters on update operations so sanitized rows match', async () => {
+    const prisma = new PrismaClientStub();
+    registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
+
+    await prisma.conversationState.update({
+      where: {
+        threadId_nodeId: {
+          threadId: 'thread-\u0000',
+          nodeId: 'node-\u0000',
+        },
+      },
+      data: {
+        state: { summary: 'value\u0000' },
+      },
+    });
+
+    expect(prisma.lastConversationStateUpdateArgs?.where).toEqual({
+      threadId_nodeId: {
+        threadId: 'thread-\uFFFD',
+        nodeId: 'node-\uFFFD',
+      },
+    });
+    expect(prisma.lastConversationStateUpdateArgs?.data).toEqual({
+      state: { summary: 'value\uFFFD' },
+    });
+  });
 });
 
 class PrismaClientStub {
   private readonly middleware: Prisma.Middleware[] = [];
-  public lastConversationStateArgs?: Prisma.ConversationStateUpsertArgs;
+  public lastConversationStateUpsertArgs?: Prisma.ConversationStateUpsertArgs;
+  public lastConversationStateUpdateArgs?: Prisma.ConversationStateUpdateArgs;
 
   public readonly conversationState: PrismaClient['conversationState'];
 
@@ -42,6 +70,8 @@ class PrismaClientStub {
     this.conversationState = {
       upsert: (args: Prisma.ConversationStateUpsertArgs) =>
         this.execute('upsert', 'ConversationState', args),
+      update: (args: Prisma.ConversationStateUpdateArgs) =>
+        this.execute('update', 'ConversationState', args),
     } as unknown as PrismaClient['conversationState'];
   }
 
@@ -58,7 +88,10 @@ class PrismaClientStub {
     const middleware = this.middleware[index];
     if (!middleware) {
       if (params.model === 'ConversationState' && params.action === 'upsert') {
-        this.lastConversationStateArgs = params.args as Prisma.ConversationStateUpsertArgs;
+        this.lastConversationStateUpsertArgs = params.args as Prisma.ConversationStateUpsertArgs;
+      }
+      if (params.model === 'ConversationState' && params.action === 'update') {
+        this.lastConversationStateUpdateArgs = params.args as Prisma.ConversationStateUpdateArgs;
       }
       return params.args;
     }

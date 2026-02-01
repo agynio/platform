@@ -11,13 +11,15 @@ type SanitizableParams = Record<string, unknown> & {
   args?: PlainObject;
 };
 
-const WRITE_TARGETS: Partial<Record<Prisma.PrismaAction, Array<'data' | 'create' | 'update'>>> = {
+const WRITE_TARGETS: Partial<Record<Prisma.PrismaAction, Array<'create' | 'data' | 'update' | 'where'>>> = {
   create: ['data'],
-  update: ['data'],
   createMany: ['data'],
   createManyAndReturn: ['data'],
-  updateMany: ['data'],
-  upsert: ['create', 'update'],
+  update: ['data', 'where'],
+  updateMany: ['data', 'where'],
+  upsert: ['create', 'update', 'where'],
+  delete: ['where'],
+  deleteMany: ['where'],
 };
 
 export function sanitizeStringForPostgres(input: string): string {
