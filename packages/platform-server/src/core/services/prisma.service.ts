@@ -15,8 +15,8 @@ export class PrismaService {
     try {
       if (!this.prisma) {
         const url = this.cfg.agentsDatabaseUrl;
-        this.prisma = new PrismaClient({ datasources: { db: { url } } });
-        registerPostgresSanitizerMiddleware(this.prisma);
+        const client = new PrismaClient({ datasources: { db: { url } } });
+        this.prisma = registerPostgresSanitizerMiddleware(client);
       }
       return this.prisma;
     } catch (error) {

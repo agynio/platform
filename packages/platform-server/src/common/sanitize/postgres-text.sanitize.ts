@@ -6,12 +6,10 @@ const DISALLOWED_CONTROL_REPLACE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007
 const REPLACEMENT_CHAR = '\uFFFD';
 
 type PlainObject = Record<string, unknown>;
-type SanitizableParams = Record<string, unknown> & {
-  action: Prisma.PrismaAction;
-  args?: PlainObject;
-};
 
-const WRITE_TARGETS: Partial<Record<Prisma.PrismaAction, Array<'create' | 'data' | 'update' | 'where'>>> = {
+type WriteTargetKey = 'create' | 'data' | 'update' | 'where';
+
+const WRITE_TARGETS: Partial<Record<Prisma.PrismaAction, WriteTargetKey[]>> = {
   create: ['data'],
   createMany: ['data'],
   createManyAndReturn: ['data'],
@@ -38,29 +36,47 @@ export function sanitizePrismaWriteInput<T>(input: T): T {
   return deepSanitize(input) as T;
 }
 
-export function registerPostgresSanitizerMiddleware(prisma: PrismaClient): void {
-  prisma.$use(async (params, next) => {
-    if (!isSanitizableParams(params)) {
-      return next(params);
-    }
+export function registerPostgresSanitizerMiddleware(prisma: PrismaClient): PrismaClient {
+  return prisma.$extends({
+    name: 'postgres-write-sanitizer',
+    query: {
+      $allModels: {
+        async $allOperations({ args, operation, query }) {
+          const sanitizedArgs = sanitizeWriteArgs(args, operation as Prisma.PrismaAction);
+          return query(sanitizedArgs);
+        },
+      },
+    },
+  }) as PrismaClient;
+}
 
-    const targets = WRITE_TARGETS[params.action];
-    const args = params.args;
-    if (!targets || !args) {
-      return next(params as Prisma.MiddlewareParams);
-    }
+function sanitizeWriteArgs<T>(args: T, action: Prisma.PrismaAction): T {
+  if (!args || typeof args !== 'object') {
+    return args;
+  }
 
-    for (const key of targets) {
-      if (Object.prototype.hasOwnProperty.call(args, key)) {
-        const current = args[key];
-        if (typeof current !== 'undefined') {
-          args[key] = sanitizePrismaWriteInput(current);
-        }
-      }
-    }
+  const targets = WRITE_TARGETS[action];
+  if (!targets || targets.length === 0) {
+    return args;
+  }
 
-    return next(params as Prisma.MiddlewareParams);
-  });
+  let mutatedArgs: PlainObject | undefined;
+  for (const key of targets) {
+    if (!Object.prototype.hasOwnProperty.call(args, key)) {
+      continue;
+    }
+    const current = (args as PlainObject)[key];
+    if (typeof current === 'undefined') {
+      continue;
+    }
+    const sanitized = sanitizePrismaWriteInput(current);
+    if (sanitized !== current) {
+      mutatedArgs ??= { ...(args as PlainObject) };
+      mutatedArgs[key] = sanitized;
+    }
+  }
+
+  return (mutatedArgs ?? args) as T;
 }
 
 function deepSanitize(input: unknown): unknown {
@@ -110,20 +126,4 @@ function isPlainObject(value: unknown): value is PlainObject {
 
 function isPrismaNull(value: unknown): boolean {
   return value === Prisma.DbNull || value === Prisma.JsonNull || value === Prisma.AnyNull;
-}
-
-function isSanitizableParams(value: unknown): value is SanitizableParams {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as Record<string, unknown>;
-  const action = candidate.action;
-  if (typeof action !== 'string' || !Object.prototype.hasOwnProperty.call(WRITE_TARGETS, action)) {
-    return false;
-  }
-  const args = (candidate as { args?: unknown }).args;
-  if (typeof args === 'undefined') {
-    return true;
-  }
-  return typeof args === 'object' && args !== null;
 }

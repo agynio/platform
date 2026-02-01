@@ -7,8 +7,8 @@ import { ConversationStateRepository } from '../../src/llm/repositories/conversa
 describe('Prisma write sanitizer middleware', () => {
   it('sanitizes ConversationState.upsert payloads before persistence', async () => {
     const prisma = new PrismaClientStub();
-    registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
-    const repository = new ConversationStateRepository(prisma as unknown as PrismaClient);
+    const sanitized = registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
+    const repository = new ConversationStateRepository(sanitized);
 
     await repository.upsert({
       threadId: 'thread-1',
@@ -31,11 +31,30 @@ describe('Prisma write sanitizer middleware', () => {
     });
   });
 
+  it('sanitizes upsert selectors so sanitized rows can be matched', async () => {
+    const prisma = new PrismaClientStub();
+    const sanitized = registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
+    const repository = new ConversationStateRepository(sanitized);
+
+    await repository.upsert({
+      threadId: 'thread-\u0000',
+      nodeId: 'node-\u0000',
+      state: { summary: 'value\u0000' },
+    });
+
+    expect(prisma.lastConversationStateUpsertArgs?.where).toEqual({
+      threadId_nodeId: {
+        threadId: 'thread-\uFFFD',
+        nodeId: 'node-\uFFFD',
+      },
+    });
+  });
+
   it('sanitizes where filters on update operations so sanitized rows match', async () => {
     const prisma = new PrismaClientStub();
-    registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
+    const sanitized = registerPostgresSanitizerMiddleware(prisma as unknown as PrismaClient);
 
-    await prisma.conversationState.update({
+    await sanitized.conversationState.update({
       where: {
         threadId_nodeId: {
           threadId: 'thread-\u0000',
@@ -60,7 +79,7 @@ describe('Prisma write sanitizer middleware', () => {
 });
 
 class PrismaClientStub {
-  private readonly middleware: Prisma.Middleware[] = [];
+  private handler?: QueryInterceptor;
   public lastConversationStateUpsertArgs?: Prisma.ConversationStateUpsertArgs;
   public lastConversationStateUpdateArgs?: Prisma.ConversationStateUpdateArgs;
 
@@ -75,26 +94,45 @@ class PrismaClientStub {
     } as unknown as PrismaClient['conversationState'];
   }
 
-  $use(handler: Prisma.Middleware): void {
-    this.middleware.push(handler);
+  $extends(extension: PrismaExtension): PrismaClientStub {
+    this.handler = extension.query?.$allModels?.$allOperations;
+    return this;
   }
 
   private execute(action: Prisma.PrismaAction, model: string, args: unknown): Promise<unknown> {
-    const params: Prisma.MiddlewareParams = { action, model, args };
-    return this.dispatch(0, params);
+    if (!this.handler) {
+      return this.record(action, model, args);
+    }
+    return this.handler({
+      model,
+      operation: action,
+      args,
+      query: (nextArgs) => this.record(action, model, nextArgs),
+    });
   }
 
-  private async dispatch(index: number, params: Prisma.MiddlewareParams): Promise<unknown> {
-    const middleware = this.middleware[index];
-    if (!middleware) {
-      if (params.model === 'ConversationState' && params.action === 'upsert') {
-        this.lastConversationStateUpsertArgs = params.args as Prisma.ConversationStateUpsertArgs;
-      }
-      if (params.model === 'ConversationState' && params.action === 'update') {
-        this.lastConversationStateUpdateArgs = params.args as Prisma.ConversationStateUpdateArgs;
-      }
-      return params.args;
+  private async record(action: Prisma.PrismaAction, model: string, args: unknown): Promise<unknown> {
+    if (model === 'ConversationState' && action === 'upsert') {
+      this.lastConversationStateUpsertArgs = args as Prisma.ConversationStateUpsertArgs;
     }
-    return middleware(params, (nextParams) => this.dispatch(index + 1, nextParams));
+    if (model === 'ConversationState' && action === 'update') {
+      this.lastConversationStateUpdateArgs = args as Prisma.ConversationStateUpdateArgs;
+    }
+    return args;
   }
 }
+
+type QueryInterceptor = (input: {
+  model?: string;
+  operation: string;
+  args: unknown;
+  query: (args: unknown) => Promise<unknown>;
+}) => Promise<unknown>;
+
+type PrismaExtension = {
+  query?: {
+    $allModels?: {
+      $allOperations?: QueryInterceptor;
+    };
+  };
+};
