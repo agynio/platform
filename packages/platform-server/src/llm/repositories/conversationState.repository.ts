@@ -1,6 +1,7 @@
 import type { InputJsonValue, JsonValue } from '../services/messages.serialization';
 import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
+import { sanitizeJsonValueStringsForPostgres } from './conversationState.sanitize';
 
 export type ConversationStateRead = {
   threadId: string;
@@ -25,10 +26,11 @@ export class ConversationStateRepository {
   }
 
   async upsert(rec: ConversationStateUpsert): Promise<void> {
+    const sanitizedState = sanitizeJsonValueStringsForPostgres(rec.state);
     await this.prisma.conversationState.upsert({
       where: { threadId_nodeId: { threadId: rec.threadId, nodeId: rec.nodeId } },
-      create: { threadId: rec.threadId, nodeId: rec.nodeId, state: rec.state },
-      update: { state: rec.state },
+      create: { threadId: rec.threadId, nodeId: rec.nodeId, state: sanitizedState },
+      update: { state: sanitizedState },
     });
   }
 }

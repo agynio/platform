@@ -1,5 +1,4 @@
 import { ConfigService } from './config.service';
-import { registerPostgresSanitizerMiddleware } from '../../common/sanitize/postgres-text.sanitize';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
@@ -15,8 +14,7 @@ export class PrismaService {
     try {
       if (!this.prisma) {
         const url = this.cfg.agentsDatabaseUrl;
-        const client = new PrismaClient({ datasources: { db: { url } } });
-        this.prisma = registerPostgresSanitizerMiddleware(client);
+        this.prisma = new PrismaClient({ datasources: { db: { url } } });
       }
       return this.prisma;
     } catch (error) {
