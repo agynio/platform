@@ -1,5 +1,6 @@
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { McpError } from '../../nodes/mcp/types';
 import { RunEventsService } from '../../events/run-events.service';
@@ -10,6 +11,8 @@ import type { ResponseFunctionCallOutputItemList } from 'openai/resources/respon
 import { contextItemInputFromMessage } from '../services/context-items.utils';
 import { persistContextItems } from '../services/context-items.append';
 import { ShellCommandTool } from '../../nodes/tools/shell_command/shell_command.tool';
+import { LocalMCPServerTool } from '../../nodes/mcp/localMcpServer.tool';
+import type { SpanAttributes } from '@opentelemetry/api';
 
 type ToolCallErrorCode =
   | 'BAD_JSON_ARGS'
@@ -31,6 +34,12 @@ type ToolCallErrorPayload = {
   retriable: boolean;
 };
 type ToolCallStructuredOutput = ToolCallRaw | ToolCallErrorPayload;
+
+const isToolCallErrorPayload = (value: unknown): value is ToolCallErrorPayload => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<ToolCallErrorPayload>;
+  return candidate.status === 'error' && typeof candidate.error_code === 'string';
+};
 
 type ToolCallResult = {
   status: 'success' | 'error';
@@ -177,6 +186,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     let startedEventId: string | null = null;
     let caughtError: unknown | null = null;
     let response: ToolCallResult | undefined;
+    let toolSourceOverride: string | undefined;
+
+    const finalizeResponse = (result: ToolCallResult): ToolCallResult => {
+      this.annotateToolSpanFailure({
+        response: result,
+        toolCallId: toolCall.callId,
+        toolName: tool?.name ?? toolCall.name,
+        toolSource: toolSourceOverride ?? this.resolveToolSource(tool),
+      });
+      return result;
+    };
 
     const createErrorResponse = (args: {
       code: ToolCallErrorCode;
@@ -212,7 +232,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           message: `Tool ${toolCall.name} is not registered.`,
           originalArgs: toolCall.args,
         });
-        return response;
+        return finalizeResponse(response);
       }
 
       let parsedArgs: unknown;
@@ -233,7 +253,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           originalArgs: toolCall.args,
           details,
         });
-        return response;
+        return finalizeResponse(response);
       }
 
       const validation = tool.schema.safeParse(parsedArgs);
@@ -245,7 +265,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           originalArgs: parsedArgs,
           details: issues,
         });
-        return response;
+        return finalizeResponse(response);
       }
       const input = validation.data;
 
@@ -336,12 +356,23 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         const message = err instanceof Error && err.message ? err.message : 'Unknown error';
         const details =
           err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
-        const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
+        const isMcpError = err instanceof McpError;
+        if (isMcpError) {
+          toolSourceOverride = 'mcp';
+        }
+        const code = isMcpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
         response = createErrorResponse({
           code,
           message: `Tool ${toolCall.name} execution failed: ${message}`,
           originalArgs: input,
           details,
+        });
+        this.annotateToolSpanException({
+          toolCallId: toolCall.callId,
+          toolName: tool?.name ?? toolCall.name,
+          error: err,
+          toolSource: toolSourceOverride ?? this.resolveToolSource(tool),
+          mcpErrorCode: isMcpError ? (err as McpError).code : undefined,
         });
       }
 
@@ -349,7 +380,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         throw new Error('tool_response_missing');
       }
 
-      return response;
+      return finalizeResponse(response);
     } catch (err) {
       caughtError = err;
       throw err instanceof Error ? err : new Error(String(err));
@@ -367,6 +398,75 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         }
       }
     }
+  }
+
+  private annotateToolSpanException(params: {
+    toolCallId: string;
+    toolName: string;
+    error: unknown;
+    toolSource?: string;
+    mcpErrorCode?: string;
+  }): void {
+    const span = trace.getActiveSpan();
+    if (!span) return;
+    const message = params.error instanceof Error && params.error.message ? params.error.message : String(params.error);
+    const type = params.error instanceof Error ? params.error.name : typeof params.error;
+    span.setAttribute('tool.name', params.toolName);
+    span.setAttribute('tool.call_id', params.toolCallId);
+    if (params.toolSource) span.setAttribute('tool.source', params.toolSource);
+    if (params.mcpErrorCode) span.setAttribute('mcp.error_code', params.mcpErrorCode);
+    span.setAttribute('error.type', type);
+    span.setAttribute('error.message', message);
+    if (params.error instanceof Error && typeof params.error.stack === 'string') {
+      span.setAttribute('error.stack', params.error.stack);
+    }
+    if (params.error instanceof Error) {
+      span.recordException(params.error);
+    } else {
+      span.recordException({ name: type, message });
+    }
+    span.setStatus({ code: SpanStatusCode.ERROR, message });
+  }
+
+  private annotateToolSpanFailure(params: {
+    response: ToolCallResult;
+    toolCallId: string;
+    toolName: string;
+    toolSource?: string;
+  }): void {
+    if (params.response.status !== 'error') return;
+    const span = trace.getActiveSpan();
+    if (!span) return;
+    span.setAttribute('tool.name', params.toolName);
+    span.setAttribute('tool.call_id', params.toolCallId);
+    if (params.toolSource) span.setAttribute('tool.source', params.toolSource);
+
+    const errorPayload = isToolCallErrorPayload(params.response.output) ? params.response.output : null;
+    if (errorPayload?.error_code) {
+      span.setAttribute('tool.error_code', errorPayload.error_code);
+    }
+    if (typeof errorPayload?.retriable === 'boolean') {
+      span.setAttribute('tool.retriable', errorPayload.retriable);
+    }
+
+    const message = errorPayload?.message ?? this.extractErrorMessage(params.response) ?? 'Tool execution failed';
+    span.setStatus({ code: SpanStatusCode.ERROR, message });
+
+    const eventAttributes: SpanAttributes = { 'tool.error_message': message };
+    if (errorPayload?.error_code) {
+      eventAttributes['tool.error_code'] = errorPayload.error_code;
+    }
+    if (typeof errorPayload?.retriable === 'boolean') {
+      eventAttributes['tool.retriable'] = errorPayload.retriable;
+    }
+    span.addEvent('tool.error', eventAttributes);
+  }
+
+  private resolveToolSource(tool: FunctionTool | undefined): string | undefined {
+    if (!tool) return undefined;
+    if (tool instanceof LocalMCPServerTool) return 'mcp';
+    if (tool instanceof ShellCommandTool) return 'shell';
+    return undefined;
   }
 
   private buildToolMessagePayload(response: ToolCallResult): ToolCallRaw {
