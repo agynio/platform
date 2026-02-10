@@ -35,7 +35,7 @@ Architecture and components
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: Git-backed working tree (format: 2) with deterministic edge IDs and advisory lock. Upsert commit per version with conflict/timeout/commit error modes.
+  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and snapshot+journal recovery. Each upsert performs atomic writes with conflict/timeout/persist error modes.
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace network
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
@@ -66,7 +66,7 @@ Core data model and state
 
 Behaviors and failure modes
 - Graph apply
-  - VERSION_CONFLICT (409), LOCK_TIMEOUT (409), COMMIT_FAILED (500).
+  - VERSION_CONFLICT (409), LOCK_TIMEOUT (409), PERSIST_FAILED (500).
   - Schema validation errors trigger key stripping and up to 3 retries.
 - Container exec
   - executionTimeout and idleTimeout produce structured timeouts with captured tail output; optional killOnTimeout stops container. Benign stop/remove errors swallowed (304/404/409).
@@ -95,10 +95,10 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store is Git-backed by default; legacy Mongo support has been removed.
+- Graph store now uses a filesystem dataset per GRAPH_DATA_PATH/GRAPH_DATASET; legacy git repos require migration via `pnpm --filter @agyn/platform-server graph:migrate-fs`.
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
-- See: docs/graph/git-store.md
+- See: docs/graph/fs-store.md
 
 Configuration matrix (server env vars)
 - Required
@@ -110,8 +110,8 @@ Configuration matrix (server env vars)
   - If `LLM_PROVIDER=litellm`: LITELLM_BASE_URL and LITELLM_MASTER_KEY
   - If `LLM_PROVIDER=openai`: OPENAI_API_KEY (OPENAI_BASE_URL optional)
 - Optional
-  - GRAPH_REPO_PATH (default ./data/graph)
-  - GRAPH_BRANCH (default graph-state)
+  - GRAPH_DATA_PATH (default ./data/graph)
+  - GRAPH_DATASET (default main; falls back to active pointer when unset)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN

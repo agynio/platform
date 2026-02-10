@@ -165,8 +165,8 @@ class StubConfigService extends ConfigService {
       litellmMasterKey: 'sk-test',
       openaiBaseUrl: undefined,
       githubToken: 'test',
-      graphRepoPath: './data/graph',
-      graphBranch: 'graph-state',
+      graphDataPath: './data/graph',
+      graphDataset: 'main',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
       graphLockTimeoutMs: 5000,
@@ -196,7 +196,7 @@ class StubConfigService extends ConfigService {
       ncpsAuthToken: undefined,
       agentsDatabaseUrl: 'postgres://localhost:5432/agents',
       corsOrigins: [],
-    });
+    }, { graphDatasetExplicit: true });
   }
 }
 class StubVaultService extends VaultService {

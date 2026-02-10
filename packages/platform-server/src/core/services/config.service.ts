@@ -25,8 +25,8 @@ export const configSchema = z.object({
     .transform((value) => value.trim()),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
-  graphRepoPath: z.string().default('./data/graph'),
-  graphBranch: z.string().default('graph-state'),
+  graphDataPath: z.string().default('./data/graph'),
+  graphDataset: z.string().default('main'),
   graphAuthorName: z.string().optional(),
   graphAuthorEmail: z.string().optional(),
   graphLockTimeoutMs: z
@@ -169,12 +169,16 @@ export const configSchema = z.object({
 });
 
 export type Config = z.infer<typeof configSchema>;
+type ConfigMeta = {
+  graphDatasetExplicit: boolean;
+};
 
 @Injectable()
 export class ConfigService implements Config {
   private static sharedInstance?: ConfigService;
 
   private _params?: Config;
+  private _meta: ConfigMeta = { graphDatasetExplicit: false };
 
   static register(instance: ConfigService): ConfigService {
     if (!instance.isInitialized()) {
@@ -219,8 +223,11 @@ export class ConfigService implements Config {
     return this._params;
   }
 
-  init(params: Config): this {
+  init(params: Config, meta?: Partial<ConfigMeta>): this {
     this._params = params;
+    this._meta = {
+      graphDatasetExplicit: meta?.graphDatasetExplicit ?? false,
+    } satisfies ConfigMeta;
     return this;
   }
 
@@ -259,11 +266,18 @@ export class ConfigService implements Config {
   }
 
   // Graph config accessors
-  get graphRepoPath(): string {
-    return this.params.graphRepoPath;
+  get graphDataPath(): string {
+    return this.params.graphDataPath;
   }
-  get graphBranch(): string {
-    return this.params.graphBranch;
+  // Deprecated alias retained for compatibility
+  get graphRepoPath(): string {
+    return this.graphDataPath;
+  }
+  get graphDataset(): string {
+    return this.params.graphDataset;
+  }
+  get graphDatasetIsExplicit(): boolean {
+    return this._meta.graphDatasetExplicit;
   }
   get graphAuthorName(): string | undefined {
     return this.params.graphAuthorName;
@@ -377,6 +391,11 @@ export class ConfigService implements Config {
     const legacy = process.env.NCPS_URL;
     const urlServer = process.env.NCPS_URL_SERVER || legacy;
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
+    const legacyGraphPath = process.env.GRAPH_REPO_PATH;
+    const datasetInputRaw = process.env.GRAPH_DATASET ?? process.env.GRAPH_BRANCH;
+    const datasetTrimmed = datasetInputRaw?.trim();
+    const datasetExplicit = !!(datasetTrimmed && datasetTrimmed.length > 0);
+    const datasetValue = datasetExplicit ? datasetTrimmed : undefined;
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -386,8 +405,8 @@ export class ConfigService implements Config {
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
-      graphRepoPath: process.env.GRAPH_REPO_PATH,
-      graphBranch: process.env.GRAPH_BRANCH,
+      graphDataPath: process.env.GRAPH_DATA_PATH ?? legacyGraphPath,
+      graphDataset: datasetValue,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
@@ -421,7 +440,7 @@ export class ConfigService implements Config {
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
     });
-    const config = new ConfigService().init(parsed);
+    const config = new ConfigService().init(parsed, { graphDatasetExplicit: datasetExplicit });
     ConfigService.register(config);
     return config;
   }

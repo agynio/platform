@@ -8,7 +8,7 @@ import { EnvModule } from '../env/env.module';
 import { LLMModule } from '../llm/llm.module';
 import { VaultModule } from '../vault/vault.module';
 import { GraphRepository } from '../graph/graph.repository';
-import { GitGraphRepository } from '../graph/gitGraph.repository';
+import { FsGraphRepository } from '../graph/fsGraph.repository';
 import { NodesModule } from '../nodes/nodes.module';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
@@ -31,7 +31,7 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
       provide: GraphRepository,
       useFactory: async (config: ConfigService, moduleRef: ModuleRef) => {
         const templateRegistry = await moduleRef.resolve(TemplateRegistry, undefined, { strict: false });
-        const repo = new GitGraphRepository(config, templateRegistry);
+        const repo = new FsGraphRepository(config, templateRegistry);
         await repo.initIfNeeded();
         return repo;
       },

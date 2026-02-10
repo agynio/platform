@@ -4,15 +4,17 @@ Runtime for graph-driven agents, tool adapters, triggers, and memory. See docs f
 
 Graph persistence
 - Configure via env:
-  - GRAPH_REPO_PATH: path to the local git repo for graph state (default `./data/graph`)
-  - GRAPH_BRANCH: branch name to use (default `graph-state`)
-  - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
-- On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.yaml` for the active graph name (default `main`), and commits the initial state.
- - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
+  - `GRAPH_DATA_PATH`: base directory for graph datasets (default `./data/graph`).
+  - `GRAPH_DATASET`: active dataset name (default `main`). When unset, the server reads `<GRAPH_DATA_PATH>/active-dataset.txt` to decide which dataset to use.
+  - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: retained for compatibility but no longer used during persistence.
+  - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
+- On startup the server ensures `<GRAPH_DATA_PATH>/datasets/<dataset>` exists with `nodes/`, `edges/`, `variables.yaml`, `graph.meta.yaml`, `journal.ndjson`, and a `snapshots/` directory. The pointer file `active-dataset.txt` is updated to match the active dataset.
+- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field but now acquire a filesystem lock (`.graph.lock`) inside the dataset before writing. Every write performs atomic file updates, produces a snapshot at `snapshots/<version>/`, and appends a JSON line to `journal.ndjson` for recovery.
 - Error responses:
-   - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
-   - 409 LOCK_TIMEOUT when advisory lock not acquired within timeout.
-  - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
+   - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
+   - `409 LOCK_TIMEOUT` if the dataset lock cannot be acquired within the configured timeout.
+   - `500 PERSIST_FAILED` when filesystem writes fail unexpectedly; the in-flight changes are rolled back to the last committed state.
+- Migration: run `pnpm --filter @agyn/platform-server graph:migrate-fs -- [--source ./data/graph] [--target ./data/graph] [--dataset main] [--force]` to copy an existing git-backed working tree into the dataset layout. The tool also archives the legacy `.git` directory to `.git.backup-<timestamp>`.
 
 ## Networking and cache
 
@@ -78,11 +80,11 @@ At runtime the node calls `EnvService.resolveProviderEnv`, which delegates to `R
 The resolved overlay is merged with any base environment and forwarded to Docker exec sessions for both discovery and tool calls, ensuring MCP servers receive the same env regardless of execution path.
 
 Storage layout (format: 2)
-- Preferred working tree layout is root-level per-entity: `graph.meta.yaml`, `nodes/`, `edges/`.
-- Filenames are `encodeURIComponent(id)`; edge id is deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
-- The service can read from historical layouts in HEAD for compatibility: per-graph per-entity under `graphs/<name>/` or legacy monolith `graphs/<name>/graph.yaml`.
-- JSON graph files are no longer read or written at runtime; convert legacy datasets with the `pnpm convert-graphs` CLI before deploying.
-- Robustness: when reading, if an entity file lacks an explicit `id` field, the service decodes it from the filename (see readEntitiesFromDir/readFromHeadRoot).
+- Dataset root: `<GRAPH_DATA_PATH>/datasets/<GRAPH_DATASET>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, `edges/`, `journal.ndjson`, and a `snapshots/` directory.
+- Filenames remain `encodeURIComponent(id)`; edge ids are deterministic `<src>-<srcHandle>__<tgt>-<tgtHandle>`.
+- `snapshots/<version>/` mirrors the working tree for that graph version. Only the latest snapshot is kept; earlier directories are removed after each write.
+- `journal.ndjson` stores JSON lines `{ version, timestamp, graph }` for replay if both the working tree and snapshot become unavailable.
+- Legacy layouts (`graphs/<name>/...` or single `graph.yaml`) are no longer written. Use the `graph:migrate-fs` tool to convert existing git worktrees and archive their `.git` directories.
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.

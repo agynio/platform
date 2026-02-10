@@ -6,5 +6,5 @@ export * from '../graph-core/liveGraph.manager';
 export * from './ports.types';
 export * from './ports.registry';
 export * from './graph.repository';
-export * from './gitGraph.repository';
+export * from './fsGraph.repository';
 export * from './graph-api.module';
