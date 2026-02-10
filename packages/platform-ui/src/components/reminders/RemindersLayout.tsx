@@ -1,6 +1,10 @@
+import { useCallback, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import RemindersScreen from '../screens/RemindersScreen';
 import type { ReminderVm } from '@/features/reminders/types';
+import { cancelReminder } from '@/features/reminders/api';
 import type { CountsByStatus, ListRemindersOrder, ListRemindersSort } from '@/features/reminders/api';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 interface RemindersLayoutProps {
   reminders?: ReminderVm[];
@@ -37,6 +41,50 @@ export function RemindersLayout({
   onViewThread,
   onViewRun,
 }: RemindersLayoutProps) {
+  const queryClient = useQueryClient();
+  const [cancellingReminderIds, setCancellingReminderIds] = useState<Set<string>>(() => new Set());
+
+  const cancelReminderMutation = useMutation({
+    mutationFn: (reminderId: string) => cancelReminder(reminderId),
+    onMutate: (reminderId) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.add(reminderId);
+        return next;
+      });
+    },
+    onError: (error, reminderId) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reminderId);
+        return next;
+      });
+      const message = error instanceof Error && error.message ? error.message : 'Failed to cancel reminder';
+      notifyError(message);
+    },
+    onSuccess: (_result, reminderId) => {
+      setCancellingReminderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reminderId);
+        return next;
+      });
+      notifySuccess('Reminder cancelled');
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'reminders'] });
+    },
+  });
+
+  const handleCancelReminder = useCallback(
+    (reminderId: string) => {
+      cancelReminderMutation.mutate(reminderId);
+    },
+    [cancelReminderMutation],
+  );
+
+  const isCancellingReminder = useCallback(
+    (reminderId: string) => cancellingReminderIds.has(reminderId),
+    [cancellingReminderIds],
+  );
+
   const resolvedCounts = countsByStatus ?? { scheduled: 0, executed: 0, cancelled: 0 };
   const resolvedTotal = totalCount ?? reminders.length;
   const resolvedPageSize = pageSize ?? (reminders.length > 0 ? reminders.length : 20);
@@ -60,7 +108,8 @@ export function RemindersLayout({
         onPageChange={onPageChange}
         onViewThread={onViewThread}
         onViewRun={onViewRun}
-        onDeleteReminder={undefined}
+        onCancelReminder={handleCancelReminder}
+        isCancellingReminder={isCancellingReminder}
       />
 
       {showLoading && (

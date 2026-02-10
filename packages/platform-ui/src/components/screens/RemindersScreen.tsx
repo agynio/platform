@@ -1,7 +1,17 @@
-import { Trash2, ExternalLink, Check, X } from 'lucide-react';
+import { Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { Badge } from '../Badge';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import type { ListRemindersOrder, ListRemindersSort } from '@/features/reminders/api';
+import { Button } from '../Button';
+import {
+  ScreenDialog,
+  ScreenDialogContent,
+  ScreenDialogDescription,
+  ScreenDialogFooter,
+  ScreenDialogHeader,
+  ScreenDialogTitle,
+} from '../Dialog';
 
 export type ReminderStatus = 'scheduled' | 'executed' | 'cancelled';
 
@@ -26,7 +36,8 @@ interface RemindersScreenProps {
   sortApplied?: { key: ListRemindersSort; order: ListRemindersOrder };
   onViewThread?: (threadId: string) => void;
   onViewRun?: (runId: string) => void;
-  onDeleteReminder?: (reminderId: string) => void;
+  onCancelReminder?: (reminderId: string) => void;
+  isCancellingReminder?: (reminderId: string) => boolean;
   onFilterChange?: (filter: 'all' | ReminderStatus) => void;
   onPageChange?: (page: number) => void;
 }
@@ -44,11 +55,13 @@ export default function RemindersScreen({
   filter,
   onViewThread,
   onViewRun,
-  onDeleteReminder,
+  onCancelReminder,
+  isCancellingReminder,
   onFilterChange,
   onPageChange,
   sortApplied: _sortApplied,
 }: RemindersScreenProps) {
+  const [pendingCancelReminder, setPendingCancelReminder] = useState<Reminder | null>(null);
   const allCount = countsByStatus.scheduled + countsByStatus.executed + countsByStatus.cancelled;
   const safePageCount = Math.max(0, pageCount);
   const safePage = safePageCount === 0 ? 1 : Math.min(Math.max(1, page), safePageCount);
@@ -170,6 +183,25 @@ export default function RemindersScreen({
   const scheduledCount = countsByStatus.scheduled;
   const executedCount = countsByStatus.executed;
   const cancelledCount = countsByStatus.cancelled;
+
+  const handleRequestCancel = (reminder: Reminder) => {
+    if (reminder.status !== 'scheduled' || !onCancelReminder) return;
+    setPendingCancelReminder(reminder);
+  };
+
+  const handleCloseDialog = () => {
+    setPendingCancelReminder(null);
+  };
+
+  const handleConfirmCancel = () => {
+    if (!pendingCancelReminder || !onCancelReminder) return;
+    onCancelReminder(pendingCancelReminder.id);
+    setPendingCancelReminder(null);
+  };
+
+  const dialogIsCancelling = pendingCancelReminder
+    ? isCancellingReminder?.(pendingCancelReminder.id) ?? false
+    : false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
@@ -330,27 +362,36 @@ export default function RemindersScreen({
                             </Tooltip.Root>
                           </Tooltip.Provider>
                         )}
-                        <Tooltip.Provider delayDuration={300}>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                onClick={() => onDeleteReminder?.(reminder.id)}
-                                className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-status-failed)]/10 hover:text-[var(--agyn-status-failed)] transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-[var(--agyn-dark)] text-white text-xs px-2 py-1 rounded-md"
-                                sideOffset={5}
-                              >
-                                Delete
-                                <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                        </Tooltip.Provider>
+                        {reminder.status === 'scheduled' && onCancelReminder ? (
+                          <Tooltip.Provider delayDuration={300}>
+                            <Tooltip.Root>
+                              <Tooltip.Trigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestCancel(reminder)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-status-failed)]/10 hover:text-[var(--agyn-status-failed)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  aria-label="Cancel reminder"
+                                  disabled={isCancellingReminder?.(reminder.id)}
+                                >
+                                  {isCancellingReminder?.(reminder.id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </Tooltip.Trigger>
+                              <Tooltip.Portal>
+                                <Tooltip.Content
+                                  className="bg-[var(--agyn-dark)] text-white text-xs px-2 py-1 rounded-md"
+                                  sideOffset={5}
+                                >
+                                  Cancel reminder
+                                  <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
+                                </Tooltip.Content>
+                              </Tooltip.Portal>
+                            </Tooltip.Root>
+                          </Tooltip.Provider>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -402,6 +443,38 @@ export default function RemindersScreen({
           </div>
         </div>
       )}
+
+      <ScreenDialog open={Boolean(pendingCancelReminder)} onOpenChange={(open) => !open && handleCloseDialog()}>
+        <ScreenDialogContent>
+          <ScreenDialogHeader>
+            <ScreenDialogTitle>Cancel reminder?</ScreenDialogTitle>
+            <ScreenDialogDescription>
+              This will prevent this reminder from running. This action can&apos;t be undone.
+            </ScreenDialogDescription>
+          </ScreenDialogHeader>
+          {pendingCancelReminder ? (
+            <div className="mt-4 rounded-lg border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
+              <div className="font-medium text-[var(--agyn-dark)]">{pendingCancelReminder.note}</div>
+              <div className="mt-1 text-xs">
+                Scheduled for {formatScheduledTime(pendingCancelReminder.scheduledAt)}
+              </div>
+            </div>
+          ) : null}
+          <ScreenDialogFooter className="mt-6">
+            <Button variant="outline" onClick={handleCloseDialog} disabled={dialogIsCancelling}>
+              Keep reminder
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmCancel}
+              disabled={dialogIsCancelling}
+              className="font-semibold"
+            >
+              {dialogIsCancelling ? 'Cancelling...' : 'Cancel reminder'}
+            </Button>
+          </ScreenDialogFooter>
+        </ScreenDialogContent>
+      </ScreenDialog>
     </div>
   );
 }
