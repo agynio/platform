@@ -45,13 +45,22 @@ describe('CallToolsLLMReducer tracing instrumentation', () => {
   const runWithSpan = async (fn: () => Promise<unknown>): Promise<ReadableSpan[]> => {
     const tracer = provider.getTracer('call-tools-tracing');
     const span = tracer.startSpan('tool-execution');
-    await context.with(trace.setSpan(context.active(), span), async () => {
-      await fn();
-    });
-    span.end();
-    await provider.forceFlush();
+    let capturedError: unknown;
+    try {
+      await context.with(trace.setSpan(context.active(), span), async () => {
+        await fn();
+      });
+    } catch (err) {
+      capturedError = err;
+    } finally {
+      span.end();
+      await provider.forceFlush();
+    }
     const spans = exporter.getFinishedSpans();
     exporter.reset();
+    if (capturedError) {
+      throw capturedError;
+    }
     return spans;
   };
 
