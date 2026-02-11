@@ -355,19 +355,13 @@ export class LLMSettingsService {
     const masterKey = this.config.litellmMasterKey;
     const hasMasterKey = Boolean(masterKey);
     const sanitizedBaseUrl = baseUrlRaw ? redactBaseUrl(baseUrlRaw) : undefined;
-    const configured = Boolean(provider === 'litellm' && baseUrlRaw && masterKey);
+    const configured = Boolean(baseUrlRaw && masterKey);
     const status: LiteLLMAdminStatus = {
       configured,
       baseUrl: sanitizedBaseUrl,
       hasMasterKey,
       provider,
     };
-
-    if (provider !== 'litellm') {
-      status.configured = false;
-      status.reason = 'provider_mismatch';
-      return status;
-    }
 
     if (!baseUrlRaw || !masterKey) {
       status.configured = false;

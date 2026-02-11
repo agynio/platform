@@ -23,7 +23,7 @@ const REPO_ERROR_MESSAGES: Record<string, string> = {
   repo_not_found: 'Repository not found on GitHub.',
   ref_not_found: 'Branch, tag, or commit could not be resolved.',
   non_flake_repo: 'flake.nix not found in the repository at that ref.',
-  unauthorized_private_repo: 'Configure a GitHub token to access this repository.',
+  unauthorized_private_repo: 'Private GitHub repositories are not supported. Use a public repository.',
   validation_error: 'Invalid repository, ref, or attribute.',
   github_error: 'GitHub API error while resolving repository.',
   timeout: 'Request timed out contacting GitHub.',

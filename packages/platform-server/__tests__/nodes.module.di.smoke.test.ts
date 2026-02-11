@@ -7,7 +7,6 @@ import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true';

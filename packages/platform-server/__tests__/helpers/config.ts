@@ -1,7 +1,6 @@
 import { ConfigService, configSchema } from '../../src/core/services/config.service';
 
 const defaultConfigInput = {
-  llmProvider: 'litellm',
   litellmBaseUrl: 'http://127.0.0.1:4000',
   litellmMasterKey: 'sk-test-master',
   agentsDatabaseUrl: 'postgresql://postgres:postgres@localhost:5432/agents_test',

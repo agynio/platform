@@ -40,7 +40,6 @@ const respondStatus = (status: number, body = '') => new Response(body, { status
 
 const baseConfig = (): ConfigService => {
   const params: Partial<Config> = {
-    llmProvider: 'litellm',
     litellmBaseUrl: 'http://litellm.local:4000',
     litellmMasterKey: 'sk-master',
     agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
@@ -57,15 +56,10 @@ const getUrl = (input: RequestInfo | URL): string => {
 describe('LiteLLMProvisioner', () => {
   beforeEach(() => {
     vi.useRealTimers();
-    process.env.LITELLM_KEY_ALIAS = 'agents/unit-test';
-  });
-
-  afterEach(() => {
-    delete process.env.LITELLM_KEY_ALIAS;
   });
 
   it('revokes persisted key on startup and stores newly issued key', async () => {
-    const store = new InMemoryKeyStore({ alias: 'agents/unit-test', key: 'sk-old', expiresAt: null });
+    const store = new InMemoryKeyStore({ alias: 'agyn_key', key: 'sk-old', expiresAt: null });
     const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = getUrl(input);

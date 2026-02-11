@@ -72,7 +72,6 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
         provide: ConfigService,
         useValue: new ConfigService().init(
           configSchema.parse({
-            llmProvider: 'openai',
             agentsDatabaseUrl: 'postgres://localhost/agents',
             litellmBaseUrl: 'http://localhost:4000',
             litellmMasterKey: 'sk-test',
@@ -367,7 +366,6 @@ describe('ManageTool unit', () => {
           provide: ConfigService,
           useValue: new ConfigService().init(
             configSchema.parse({
-              llmProvider: 'openai',
               agentsDatabaseUrl: 'postgres://localhost/agents',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',
@@ -430,7 +428,6 @@ describe('ManageTool graph wiring', () => {
           provide: ConfigService,
           useValue: new ConfigService().init(
             configSchema.parse({
-              llmProvider: 'openai',
               agentsDatabaseUrl: 'postgres://localhost/agents',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',

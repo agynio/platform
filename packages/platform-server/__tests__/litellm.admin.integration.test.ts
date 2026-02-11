@@ -10,7 +10,6 @@ const MASTER_KEY = 'sk-dev-master-1234';
 const createConfig = () =>
   new ConfigService().init(
     configSchema.parse({
-      llmProvider: 'litellm',
       litellmBaseUrl: LITELLM_BASE,
       litellmMasterKey: MASTER_KEY,
       agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',

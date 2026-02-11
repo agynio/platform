@@ -24,7 +24,6 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 process.env.NCPS_ENABLED = process.env.NCPS_ENABLED || 'false';
 process.env.CONTAINERS_CLEANUP_ENABLED = process.env.CONTAINERS_CLEANUP_ENABLED || 'false';
@@ -164,7 +163,6 @@ describe('App bootstrap smoke test', () => {
 
     const configService = new ConfigService().init(
       configSchema.parse({
-        llmProvider: process.env.LLM_PROVIDER || 'litellm',
         litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
         litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',

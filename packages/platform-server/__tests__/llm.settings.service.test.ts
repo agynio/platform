@@ -8,7 +8,6 @@ import { ConfigService, configSchema, type Config } from '../src/core/services/c
 const BASE_URL = 'http://litellm.test';
 
 const defaultConfig: Partial<Config> = {
-  llmProvider: 'litellm',
   litellmBaseUrl: BASE_URL,
   litellmMasterKey: 'sk-master',
   agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
@@ -739,24 +738,6 @@ describe.sequential('LLMSettingsService', () => {
       hasMasterKey: false,
       provider: 'litellm',
       reason: 'missing_env',
-    });
-  });
-
-  it('reports provider mismatch when LiteLLM mode is disabled', async () => {
-    const config = {
-      llmProvider: 'openai',
-      litellmBaseUrl: BASE_URL,
-      litellmMasterKey: 'sk-master',
-      isInitialized: () => true,
-    } as unknown as ConfigService;
-    const service = new LLMSettingsService(config);
-    const status = await service.getAdminStatus();
-    expect(status).toMatchObject({
-      configured: false,
-      baseUrl: BASE_URL,
-      hasMasterKey: true,
-      provider: 'openai',
-      reason: 'provider_mismatch',
     });
   });
 

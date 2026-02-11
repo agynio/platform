@@ -27,7 +27,6 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
-process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 process.env.NCPS_ENABLED = process.env.NCPS_ENABLED || 'false';
 process.env.CONTAINERS_CLEANUP_ENABLED = process.env.CONTAINERS_CLEANUP_ENABLED || 'false';
@@ -169,7 +168,6 @@ if (!shouldRunDbTests) {
 
       const configServiceStub = new ConfigService().init(
         configSchema.parse({
-          llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
         }),
       );

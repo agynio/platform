@@ -9,9 +9,7 @@ import { SummarizationLLMReducer } from './reducers/summarization.llm.reducer';
 import { StaticLLMRouter } from './routers/static.llm.router';
 import { ConditionalLLMRouter } from './routers/conditional.llm.router';
 import { LLMProvisioner } from './provisioners/llm.provisioner';
-import { ConfigService } from '../core/services/config.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
-import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { CoreModule } from '../core/core.module';
 import { EventsModule } from '../events/events.module';
 import { LiteLLMKeyStore } from './provisioners/litellm.key.store';
@@ -21,21 +19,13 @@ import { LiteLLMKeyStore } from './provisioners/litellm.key.store';
   providers: [
     LiteLLMKeyStore,
     LiteLLMProvisioner,
-    OpenAILLMProvisioner,
     {
       provide: LLMProvisioner,
-      useFactory: async (
-        cfg: ConfigService,
-        liteProvisioner: LiteLLMProvisioner,
-        openaiProvisioner: OpenAILLMProvisioner,
-      ) => {
-        if (cfg.llmProvider === 'openai') {
-          return openaiProvisioner;
-        }
+      useFactory: async (liteProvisioner: LiteLLMProvisioner) => {
         await liteProvisioner.init();
         return liteProvisioner;
       },
-      inject: [ConfigService, LiteLLMProvisioner, OpenAILLMProvisioner],
+      inject: [LiteLLMProvisioner],
     },
     ConversationStateRepository,
     LoadLLMReducer,

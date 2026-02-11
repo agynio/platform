@@ -13,7 +13,6 @@ describe('NixController E2E (Fastify)', () => {
   beforeAll(async () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x',
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
         litellmBaseUrl: 'http://localhost:4000',

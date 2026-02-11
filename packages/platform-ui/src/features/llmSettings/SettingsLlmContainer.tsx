@@ -134,9 +134,6 @@ export function SettingsLlmContainer(): ReactElement {
       const vars = missingEnvKeys?.join(' and ') ?? 'LITELLM_BASE_URL and LITELLM_MASTER_KEY';
       return `LiteLLM administration requires ${vars}. Update the platform server environment and restart.`;
     }
-    if (adminStatusReason === 'provider_mismatch') {
-      return 'Set LLM_PROVIDER=litellm on the platform server to enable LiteLLM administration.';
-    }
     if (adminStatusReason === 'unauthorized') {
       return 'LiteLLM admin authentication failed. Verify the LiteLLM master key.';
     }
@@ -161,22 +158,6 @@ export function SettingsLlmContainer(): ReactElement {
             <code>{`LITELLM_BASE_URL=${LITELLM_SAMPLE_BASE_URL}`}</code>{' '}
             and{' '}
             <code>{`LITELLM_MASTER_KEY=${LITELLM_SAMPLE_MASTER_KEY}`}</code>. Replace the master key with your actual secret if it differs.
-          </p>
-          <p>
-            <a className="underline" href={LITELLM_SETUP_URL} rel="noreferrer" target="_blank">
-              View the server LiteLLM admin setup guide
-            </a>
-            .
-          </p>
-        </div>
-      );
-    }
-    if (adminStatusReason === 'provider_mismatch') {
-      return (
-        <div className="space-y-2">
-          <p>LiteLLM administration is disabled because the platform server is not running in LiteLLM mode.</p>
-          <p>
-            Update the environment to include <code>LLM_PROVIDER=litellm</code> and restart the server.
           </p>
           <p>
             <a className="underline" href={LITELLM_SETUP_URL} rel="noreferrer" target="_blank">

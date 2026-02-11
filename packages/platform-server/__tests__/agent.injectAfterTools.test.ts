@@ -115,7 +115,6 @@ const createAgentFixture = async () => {
         provide: ConfigService,
         useValue: new ConfigService().init(
           configSchema.parse({
-            llmProvider: 'openai',
             agentsDatabaseUrl: 'postgres://user:pass@host/db',
             litellmBaseUrl: 'http://localhost:4000',
             litellmMasterKey: 'sk-test',

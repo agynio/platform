@@ -22,7 +22,6 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { clearTestConfig, registerTestConfig } from './helpers/config';
 
-process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
 process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-test-master';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/agents_test';
@@ -149,7 +148,6 @@ describe('AppModule bootstrap smoke test', () => {
     } satisfies Partial<LLMProvisioner>;
 
     const config = registerTestConfig({
-      llmProvider: process.env.LLM_PROVIDER === 'openai' ? 'openai' : 'litellm',
       litellmBaseUrl: process.env.LITELLM_BASE_URL,
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,

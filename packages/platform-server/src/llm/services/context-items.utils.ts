@@ -54,33 +54,12 @@ const NULL_CHAR = '\u0000';
 
 type SanitizeField = 'contentText' | 'contentJson' | 'metadata' | 'payload';
 
-export class ContextItemNullByteGuardError extends Error {
-  constructor(public readonly info: { field: SanitizeField; path?: string }) {
-    super(`context_item.null_byte_guard: ${info.path ?? info.field}`);
-    this.name = 'ContextItemNullByteGuardError';
-  }
-}
-
-function isNullGuardEnabled(): boolean {
-  const raw = process.env.CONTEXT_ITEM_NULL_GUARD ?? process.env.CONTEXT_ITEM_NUL_GUARD;
-  if (!raw) return false;
-  return raw === '1' || raw.toLowerCase() === 'true';
-}
-
 function sanitizeString(
   value: string,
   logger?: LoggerLike,
   context?: { field: SanitizeField; path?: string[] },
-  guardOverride?: boolean,
 ): string {
   if (!value) return value;
-  const guardEnabled = guardOverride ?? isNullGuardEnabled();
-  if (guardEnabled && value.includes(NULL_CHAR)) {
-    throw new ContextItemNullByteGuardError({
-      field: context?.field ?? 'payload',
-      path: context?.path && context.path.length > 0 ? context.path.join('.') : undefined,
-    });
-  }
   if (!value.includes(NULL_CHAR)) return value;
   const sanitized = value.split(NULL_CHAR).join('');
   logger?.warn?.('context_items.null_bytes_stripped', {
@@ -96,16 +75,15 @@ function sanitizePrismaJson(
   logger: LoggerLike | undefined,
   field: Exclude<SanitizeField, 'contentText'>,
   path: string[] = [],
-  guardOverride?: boolean,
 ): unknown {
   if (typeof value === 'string') {
-    return sanitizeString(value, logger, { field, path }, guardOverride);
+    return sanitizeString(value, logger, { field, path });
   }
 
   if (Array.isArray(value)) {
     let mutated = false;
     const next = value.map((entry, index) => {
-      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(String(index)), guardOverride);
+      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(String(index)));
       if (sanitized !== entry) mutated = true;
       return sanitized;
     });
@@ -121,7 +99,7 @@ function sanitizePrismaJson(
     const entries = Object.entries(value as Record<string, unknown>) as Array<[string, unknown]>;
     const out: Record<string, unknown> = {};
     for (const [key, entry] of entries) {
-      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(key), guardOverride);
+      const sanitized = sanitizePrismaJson(entry, logger, field, path.concat(key));
       out[key] = sanitized;
       if (sanitized !== entry) mutated = true;
     }
@@ -180,17 +158,8 @@ export function deepSanitizeCreateData(
   return sanitizeContextItemPayload(data, logger);
 }
 
-type SanitizePayloadOptions = {
-  guard?: boolean;
-};
-
-export function sanitizeContextItemPayload<TPayload>(
-  payload: TPayload,
-  logger?: LoggerLike,
-  options?: SanitizePayloadOptions,
-): TPayload {
+export function sanitizeContextItemPayload<TPayload>(payload: TPayload, logger?: LoggerLike): TPayload {
   if (payload === null || typeof payload !== 'object') return payload;
-  const guard = options?.guard;
   const seen = new WeakMap<object, unknown>();
 
   const resolveField = (path: string[]): SanitizeField => {
@@ -203,7 +172,7 @@ export function sanitizeContextItemPayload<TPayload>(
 
   function sanitizeValue(value: unknown, path: string[]): unknown {
     if (typeof value === 'string') {
-      return sanitizeString(value, logger, { field: resolveField(path), path }, guard);
+      return sanitizeString(value, logger, { field: resolveField(path), path });
     }
 
     if (Array.isArray(value)) {

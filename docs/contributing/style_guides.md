@@ -82,8 +82,8 @@ Our repo currently uses:
 
 ```ts
 // Bad: implicit any, unvalidated env, side effects in module scope
-const key = process.env.OPENAI_API_KEY; // string | undefined
-export const client = new OpenAI({ apiKey: key });
+const masterKey = process.env.LITELLM_MASTER_KEY; // string | undefined
+export const client = new OpenAI({ apiKey: masterKey, baseURL: process.env.LITELLM_BASE_URL });
 
 export function handle(data) {
   return data.id;
@@ -94,7 +94,10 @@ export function handle(data) {
 // Good: validated config, explicit types, controlled side effects
 import { z } from 'zod';
 
-const Config = z.object({ OPENAI_API_KEY: z.string().min(1) });
+const Config = z.object({
+  LITELLM_BASE_URL: z.string().url(),
+  LITELLM_MASTER_KEY: z.string().min(1),
+});
 const cfg = Config.parse(process.env);
 
 export interface Item { id: string }
@@ -102,7 +105,10 @@ export function getId(item: Item): string {
   return item.id;
 }
 
-export const client = new OpenAI({ apiKey: cfg.OPENAI_API_KEY });
+export const client = new OpenAI({
+  apiKey: cfg.LITELLM_MASTER_KEY,
+  baseURL: `${cfg.LITELLM_BASE_URL.replace(/\/$/, '')}/v1`,
+});
 ```
 
 ## Tooling

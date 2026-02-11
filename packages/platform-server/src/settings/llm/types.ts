@@ -50,5 +50,5 @@ export type LiteLLMAdminStatus = {
   hasMasterKey: boolean;
   provider: string;
   adminReachable?: boolean;
-  reason?: 'missing_env' | 'unauthorized' | 'unreachable' | 'provider_mismatch';
+  reason?: 'missing_env' | 'unauthorized' | 'unreachable';
 };

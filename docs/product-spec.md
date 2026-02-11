@@ -102,14 +102,11 @@ Upgrade and migration
 
 Configuration matrix (server env vars)
 - Required
-  - GITHUB_APP_ID
-  - GITHUB_APP_PRIVATE_KEY (PEM; multiline ok)
-  - GITHUB_INSTALLATION_ID
-  - GH_TOKEN
-  - LLM_PROVIDER (litellm | openai)
-  - If `LLM_PROVIDER=litellm`: LITELLM_BASE_URL and LITELLM_MASTER_KEY
-  - If `LLM_PROVIDER=openai`: OPENAI_API_KEY (OPENAI_BASE_URL optional)
+  - AGENTS_DATABASE_URL
+  - LITELLM_BASE_URL (LiteLLM root without /v1)
+  - LITELLM_MASTER_KEY (admin key; virtual key alias `agyn_key` is managed automatically)
 - Optional
+  - GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_INSTALLATION_ID / GH_TOKEN (only for GitHub App integrations)
   - GRAPH_REPO_PATH (default ./data/graph)
   - GRAPH_BRANCH (default graph-state)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
@@ -131,7 +128,7 @@ HTTP API and sockets (pointers)
 Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Set: AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY. Optional: VAULT_*, DOCKER_MIRROR_URL, GitHub App env vars when integrations are enabled.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev

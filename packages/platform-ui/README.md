@@ -47,7 +47,7 @@ Docs
 
 Model field (Agent)
 - The Agent static configuration view uses a free-text input for model.
-- Enter any valid OpenAI/LiteLLM model identifier or LiteLLM alias.
+- Enter any valid LiteLLM provider identifier or alias (e.g., openai/gpt-4o-mini).
 - Examples: `openai/gpt-4o-mini`, `claude-3-5-sonnet`, or a custom alias like `gpt-5`.
 - The UI trims whitespace and requires a non-empty value; availability is checked at runtime by the provider.
 

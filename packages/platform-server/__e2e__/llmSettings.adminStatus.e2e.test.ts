@@ -11,14 +11,12 @@ import { ConfigService } from '../src/core/services/config.service';
 describe('LLM settings controller (admin-status endpoint)', () => {
   let app: NestFastifyApplication;
   const previousEnv = {
-    llmProvider: process.env.LLM_PROVIDER,
     agentsDbUrl: process.env.AGENTS_DATABASE_URL,
     litellmBaseUrl: process.env.LITELLM_BASE_URL,
     litellmMasterKey: process.env.LITELLM_MASTER_KEY,
   };
 
   beforeAll(async () => {
-    process.env.LLM_PROVIDER = 'litellm';
     process.env.AGENTS_DATABASE_URL = 'postgres://localhost:5432/test';
     process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
     process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234';
@@ -38,7 +36,6 @@ describe('LLM settings controller (admin-status endpoint)', () => {
   afterAll(async () => {
     await app.close();
     ConfigService.clearInstanceForTest();
-    process.env.LLM_PROVIDER = previousEnv.llmProvider;
     process.env.AGENTS_DATABASE_URL = previousEnv.agentsDbUrl;
     process.env.LITELLM_BASE_URL = previousEnv.litellmBaseUrl;
     process.env.LITELLM_MASTER_KEY = previousEnv.litellmMasterKey;

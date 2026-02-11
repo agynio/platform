@@ -4,14 +4,6 @@ import { z } from 'zod';
 dotenv.config();
 
 export const configSchema = z.object({
-  // GitHub settings are optional to allow dev boot without GitHub
-  githubAppId: z.string().min(1).optional(),
-  githubAppPrivateKey: z.string().min(1).optional(),
-  githubInstallationId: z.string().min(1).optional(),
-  // LLM provider selection: must be explicit; no default
-  llmProvider: z.enum(['openai', 'litellm']),
-  openaiApiKey: z.string().optional(),
-  openaiBaseUrl: z.string().optional(),
   // LiteLLM admin configuration (required)
   litellmBaseUrl: z
     .string()
@@ -23,7 +15,11 @@ export const configSchema = z.object({
     .string()
     .min(1, 'LITELLM_MASTER_KEY is required')
     .transform((value) => value.trim()),
-  githubToken: z.string().min(1).optional(),
+  // Optional GitHub credentials (App or PAT)
+  githubAppId: z.string().optional(),
+  githubAppPrivateKey: z.string().optional(),
+  githubInstallationId: z.string().optional(),
+  githubToken: z.string().optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
   graphBranch: z.string().default('graph-state'),
@@ -228,31 +224,25 @@ export class ConfigService implements Config {
     return this._params !== undefined;
   }
 
-  get githubAppId(): string | undefined {
-    return this.params.githubAppId;
-  }
-
-  get githubAppPrivateKey(): string | undefined {
-    return this.params.githubAppPrivateKey;
-  }
-  get githubInstallationId(): string | undefined {
-    return this.params.githubInstallationId;
-  }
-
-  get llmProvider(): 'openai' | 'litellm' {
-    return this.params.llmProvider;
-  }
-  get openaiApiKey(): string | undefined {
-    return this.params.openaiApiKey;
-  }
-  get openaiBaseUrl(): string | undefined {
-    return this.params.openaiBaseUrl;
-  }
   get litellmBaseUrl(): string {
     return this.params.litellmBaseUrl;
   }
   get litellmMasterKey(): string {
     return this.params.litellmMasterKey;
+  }
+
+  get llmProvider(): 'litellm' {
+    return 'litellm';
+  }
+
+  get githubAppId(): string | undefined {
+    return this.params.githubAppId;
+  }
+  get githubAppPrivateKey(): string | undefined {
+    return this.params.githubAppPrivateKey;
+  }
+  get githubInstallationId(): string | undefined {
+    return this.params.githubInstallationId;
   }
   get githubToken(): string | undefined {
     return this.params.githubToken;
@@ -378,12 +368,11 @@ export class ConfigService implements Config {
     const urlServer = process.env.NCPS_URL_SERVER || legacy;
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
     const parsed = configSchema.parse({
+      litellmBaseUrl: process.env.LITELLM_BASE_URL,
+      litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
-      llmProvider: process.env.LLM_PROVIDER,
-      litellmBaseUrl: process.env.LITELLM_BASE_URL,
-      litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
       graphRepoPath: process.env.GRAPH_REPO_PATH,

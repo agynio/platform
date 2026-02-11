@@ -1023,17 +1023,17 @@ describe('Settings/LLM page', () => {
     expect(addModelButton).toBeDisabled();
   });
 
-  it('disables admin actions when the platform is running without LiteLLM provider', async () => {
+  it('disables admin actions when LiteLLM config is missing', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     server.use(
       http.get(abs('/api/settings/llm/admin-status'), () =>
         HttpResponse.json({
           configured: false,
-          baseUrl: 'http://127.0.0.1:4000',
-          hasMasterKey: true,
-          provider: 'openai',
-          reason: 'provider_mismatch',
+          baseUrl: undefined,
+          hasMasterKey: false,
+          provider: 'litellm',
+          reason: 'missing_env',
         }),
       ),
       http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json([])),
@@ -1051,9 +1051,8 @@ describe('Settings/LLM page', () => {
     const banner = await screen.findByRole('alert');
     expect(await within(banner).findByText('LiteLLM administration unavailable')).toBeInTheDocument();
     expect(
-      await within(banner).findByText('LiteLLM administration is disabled because the platform server is not running in LiteLLM mode.'),
+      await within(banner).findByText('LiteLLM administration requires LITELLM_BASE_URL and LITELLM_MASTER_KEY. Update the platform server environment and restart.'),
     ).toBeInTheDocument();
-    expect(await within(banner).findByText('LLM_PROVIDER=litellm', { selector: 'code' })).toBeInTheDocument();
 
     const addCredentialButton = await screen.findByRole('button', { name: 'Add Credential' });
     expect(addCredentialButton).toBeDisabled();

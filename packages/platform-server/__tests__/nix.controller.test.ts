@@ -60,15 +60,14 @@ describe.sequential('NixController', () => {
   beforeEach(() => {
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         githubAppId: 'x',
-      githubAppPrivateKey: 'x',
-      githubInstallationId: 'x',
-      githubToken: 'x',
-      agentsDatabaseUrl: 'postgres://localhost:5432/agents',
-      litellmBaseUrl: 'http://localhost:4000',
-      litellmMasterKey: 'sk-test',
-      graphRepoPath: './data/graph',
+        githubAppPrivateKey: 'x',
+        githubInstallationId: 'x',
+        githubToken: 'x',
+        agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        litellmBaseUrl: 'http://localhost:4000',
+        litellmMasterKey: 'sk-test',
+        graphRepoPath: './data/graph',
         graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000',
         nixAllowedChannels: 'nixpkgs-unstable',

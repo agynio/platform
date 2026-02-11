@@ -13,7 +13,6 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const workspaceNode = new WorkspaceNodeStub(provider);
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai',
         agentsDatabaseUrl: 'postgres://localhost/agents',
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',

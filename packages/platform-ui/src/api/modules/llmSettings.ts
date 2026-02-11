@@ -58,7 +58,7 @@ export type LiteLLMAdminStatus = {
   hasMasterKey: boolean;
   provider: string;
   adminReachable?: boolean;
-  reason?: 'missing_env' | 'unauthorized' | 'unreachable' | 'provider_mismatch';
+  reason?: 'missing_env' | 'unauthorized' | 'unreachable';
 };
 
 export function isLiteLLMMissingConfigError(error: unknown): error is AxiosError<LiteLLMAdminErrorPayload> {

@@ -4,8 +4,8 @@ import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 
 describe('NcpsKeyService', () => {
   const baseEnv = {
-    githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x',
-    llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents',
+    githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x',
+    agentsDatabaseUrl: 'postgres://localhost/agents',
     litellmBaseUrl: 'http://localhost:4000', litellmMasterKey: 'sk-test',
     graphRepoPath: './data/graph', graphBranch: 'graph-state',
     dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',

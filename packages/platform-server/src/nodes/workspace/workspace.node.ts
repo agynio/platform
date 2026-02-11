@@ -178,7 +178,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     if (githubToken && this.hasFlakeRepoConfig()) {
       const hasToken = !!envMerged && typeof envMerged === 'object' && 'GITHUB_TOKEN' in envMerged;
       if (!hasToken) {
-        envMerged = { ...(envMerged ?? {}), GITHUB_TOKEN: githubToken } as Record<string, string>;
+        const nextEnv: Record<string, string> = { ...(envMerged ?? {}), GITHUB_TOKEN: githubToken };
+        envMerged = nextEnv;
       }
     }
 
@@ -190,11 +191,18 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && keys.length > 0) {
       const joined = keys.join(' ');
       const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${joined} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
-      envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
+      const nextEnv: Record<string, string> = { ...(envMerged || {}), NIX_CONFIG: nixConfig };
+      envMerged = nextEnv;
       nixConfigInjected = true;
     }
 
-    const envWithDinD = enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged || undefined;
+    let envWithDinD: Record<string, string> | undefined;
+    if (enableDinD) {
+      const nextEnv: Record<string, string> = { ...(envMerged ?? {}), DOCKER_HOST: DOCKER_HOST_ENV };
+      envWithDinD = nextEnv;
+    } else {
+      envWithDinD = envMerged || undefined;
+    }
     const networkAlias = this.sanitizeNetworkAlias(threadId);
     const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
     const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);

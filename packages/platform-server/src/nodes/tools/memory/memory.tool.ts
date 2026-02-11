@@ -137,8 +137,6 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     })();
     if (typeof serviceOrEnvelope === 'string') return serviceOrEnvelope;
     const service = serviceOrEnvelope as MemoryToolService;
-    const logger = this.deps.logger;
-    if (isMemoryDebugEnabled()) logger.debug(`memory tool invoke command=${command} path=${path} threadId=${threadId ?? 'n/a'}`);
 
     try {
       switch (command) {
@@ -199,9 +197,4 @@ function normalizePathRuntime(input: string): string {
   if (p.includes('..')) throw new Error('invalid path: ".." not allowed');
   if (p.includes('$')) throw new Error('invalid path: "$" not allowed');
   return p;
-}
-
-function isMemoryDebugEnabled(): boolean {
-  const v = String(process.env.DEBUG_MEMORY || '').toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
 }

@@ -104,8 +104,7 @@ Persistent conversation state (Prisma)
   - `pnpm --filter @agyn/platform-server prisma studio`
 - Best-effort: if AGENTS_DATABASE_URL is not set or DB errors occur, reducers fall back to in-memory only.
 - Local dev:
-  - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
-  - When `LLM_PROVIDER=litellm`, the server expects `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY`.
+  - Provide `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` for LiteLLM administration.
     - In docker-compose development the admin base defaults to `http://127.0.0.1:4000` if unset.
     - For all other environments, set an explicit `LITELLM_BASE_URL` and master key.
 
@@ -118,16 +117,13 @@ LITELLM_BASE_URL=http://127.0.0.1:4000
 LITELLM_MASTER_KEY=sk-dev-master-1234
 ```
 
-Replace `sk-dev-master-1234` with your actual LiteLLM master key if it differs.
+Replace `sk-dev-master-1234` with your actual LiteLLM master key if it differs. The server provisions a virtual key using the fixed alias `agyn_key`; override TTL, allowed models, and rate limits via `LITELLM_KEY_DURATION`, `LITELLM_MODELS`, `LITELLM_MAX_BUDGET`, `LITELLM_RPM_LIMIT`, `LITELLM_TPM_LIMIT`, and `LITELLM_TEAM_ID`.
 
 ## Context item payload guard
 
 LiteLLM call logging, summarization, and tool execution persist context items as JSON blobs inside Postgres. The persistence layer now strips all `\u0000` (null bytes) from `contentText`, `contentJson`, and `metadata` prior to writes so Prisma does not reject the payload.
 
-- Sanitization runs automatically for every `contextItem.create`/`update`.
-- Enable a hard guard during development by setting `CONTEXT_ITEM_NULL_GUARD=1`. When the guard is active the server throws `ContextItemNullByteGuardError` if any unsanitized payload reaches the repository, ensuring new call sites cannot bypass the sanitizer.
-
-Set the flag while running targeted tests or during local debugging to immediately catch regressions that would otherwise surface as Prisma `null byte in string` errors at runtime.
+- Sanitization runs automatically for every `contextItem.create`/`update`, and the null-byte guard is always enforced (no runtime toggle).
   - GitHub integration is optional. If no GitHub env is provided, the server boots and logs that GitHub is disabled. Any GitHub-dependent feature will error at runtime until credentials are configured.
 - Shell tool streaming persistence:
   - Tool stdout/stderr chunks are stored via Prisma when the `tool_output_*` tables exist.

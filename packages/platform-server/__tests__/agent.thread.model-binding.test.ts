@@ -30,7 +30,6 @@ class StubProvisioner extends LLMProvisioner {
 
 describe('Agent thread model binding', () => {
   const baseConfig = {
-    llmProvider: 'openai',
     litellmBaseUrl: 'http://localhost:4000',
     litellmMasterKey: 'sk-test',
   } as Partial<ConfigService>;

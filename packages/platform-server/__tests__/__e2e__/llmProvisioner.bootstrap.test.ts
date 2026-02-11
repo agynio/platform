@@ -14,7 +14,6 @@ const respondJson = (payload: unknown, init?: ResponseInit) =>
 
 describe('LiteLLMProvisioner bootstrap (DI smoke)', () => {
   const requiredEnv: Record<string, string> = {
-    LLM_PROVIDER: 'litellm',
     LITELLM_BASE_URL: 'http://127.0.0.1:4000',
     LITELLM_MASTER_KEY: 'sk-test',
     AGENTS_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/agents_test',

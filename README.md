@@ -29,7 +29,7 @@ Intended use cases:
     - .env.example — UI env variables (VITE_API_BASE_URL, etc.)
     - Dockerfile — Builds static assets; serves via nginx with API upstream templating
     - docker/entrypoint.sh, docker/nginx.conf.template — Runtime nginx config
-  - llm/ — Internal library for LLM interactions (OpenAI client, zod).
+  - llm/ — Internal library for LLM interactions (LiteLLM-compatible OpenAI client, zod).
   - shared/ — Shared types/helpers for UI/Server.
   - json-schema-to-zod/ — Internal helper library.
 - docs/ — Platform documentation
@@ -58,7 +58,7 @@ Intended use cases:
   - React 19, Vite 7, Tailwind CSS 4.1, Radix UI
   - Storybook 10 for component documentation
 - LLM:
-  - LiteLLM server (ghcr.io/berriai/litellm) or OpenAI (@langchain/* tooling)
+  - LiteLLM server (ghcr.io/berriai/litellm) providing adapters for upstream providers
 - Tooling:
   - pnpm 10.5 (corepack-enabled), Node.js 20
   - Vitest 3 for testing; ESLint; Prettier
@@ -98,8 +98,7 @@ pnpm install
 2) Configure environments:
 - Server: copy packages/platform-server/.env.example to .env, then set:
   - AGENTS_DATABASE_URL (required) — e.g. postgresql://agents:agents@localhost:5443/agents
-  - LLM_PROVIDER — litellm or openai (no default)
-  - LITELLM_BASE_URL, LITELLM_MASTER_KEY (required for LiteLLM path)
+  - LITELLM_BASE_URL, LITELLM_MASTER_KEY (required for LiteLLM provisioning)
   - Optional: CORS_ORIGINS, VAULT_* (see packages/platform-server/src/core/services/config.service.ts and .env.example)
 - UI: copy packages/platform-ui/.env.example to .env and set:
   - VITE_API_BASE_URL — e.g. http://localhost:3010
@@ -135,11 +134,10 @@ Server listens on PORT (default 3010; see packages/platform-server/src/index.ts 
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):
     - ghcr.io/agynio/platform-server
     - ghcr.io/agynio/platform-ui
-  - Example: server (env must include AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY):
+  - Example: server (env must include AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY):
 ```bash
 docker run --rm -p 3010:3010 \
   -e AGENTS_DATABASE_URL=postgresql://agents:agents@host.docker.internal:5443/agents \
-  -e LLM_PROVIDER=litellm \
   -e LITELLM_BASE_URL=http://host.docker.internal:4000 \
   -e LITELLM_MASTER_KEY=sk-dev-master-1234 \
   ghcr.io/agynio/platform-server:latest
@@ -156,11 +154,10 @@ docker run --rm -p 8080:80 \
 Key environment variables (server) from packages/platform-server/.env.example and src/core/services/config.service.ts:
 - Required:
   - AGENTS_DATABASE_URL — Postgres connection for platform-server
-  - LLM_PROVIDER — litellm or openai
   - LITELLM_BASE_URL — LiteLLM root URL (must not include /v1; default host in docker-compose is 127.0.0.1:4000)
-  - LITELLM_MASTER_KEY — admin key for LiteLLM
-- Optional LLM:
-  - OPENAI_API_KEY, OPENAI_BASE_URL
+  - LITELLM_MASTER_KEY — admin key for LiteLLM (virtual key alias `agyn_key` is provisioned automatically)
+- Optional LiteLLM tuning:
+  - LITELLM_MODELS, LITELLM_KEY_DURATION, LITELLM_MAX_BUDGET, LITELLM_RPM_LIMIT, LITELLM_TPM_LIMIT, LITELLM_TEAM_ID
 - Graph store:
   - GRAPH_REPO_PATH (default ./data/graph)
   - GRAPH_BRANCH (default graph-state)
@@ -176,6 +173,7 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)
   - NCPS_PUBKEY_PATH (default /pubkey), fetch/refresh/backoff settings
   - NIX_ALLOWED_CHANNELS, NIX_* cache limits
+  - `/api/nix/resolve-repo` supports public GitHub repositories only; private repositories are not supported.
 - CORS:
   - CORS_ORIGINS — comma-separated allowed origins
 - Misc:
@@ -259,7 +257,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 - Local compose: docker-compose.yml includes all supporting services required for dev workflows.
 - Server container:
   - Image: ghcr.io/agynio/platform-server
-  - Required env: AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY, optional Vault and CORS
+  - Required env: AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY (optional Vault and CORS vars supported)
   - Exposes 3010; healthcheck verifies TCP connectivity
 - UI container:
   - Image: ghcr.io/agynio/platform-ui
