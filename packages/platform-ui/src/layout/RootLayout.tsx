@@ -35,7 +35,7 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Agents',
     icon: <Network className="w-5 h-5" />,
     items: [
-      { id: 'graph', label: 'Graph', icon: <GitBranch className="w-4 h-4" /> },
+      { id: 'graph', label: 'Team', icon: <GitBranch className="w-4 h-4" /> },
       { id: 'threads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
       { id: 'reminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
       { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
