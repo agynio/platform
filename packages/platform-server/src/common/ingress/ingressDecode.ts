@@ -1,13 +1,17 @@
 import iconv from 'iconv-lite';
-import type { Decoder } from 'iconv-lite';
 
 export type IngressDecoderEncoding = 'utf-8' | 'utf-16le' | 'utf-16be';
 
 export type IngressDecodeStreamState = {
   encoding: IngressDecoderEncoding;
-  decoder: Decoder;
+  decoder: IngressStreamDecoder;
   inspected: boolean;
   pending: Buffer | null;
+};
+
+type IngressStreamDecoder = {
+  write: (chunk: Buffer) => string;
+  end: () => string;
 };
 
 type DecodeOptions = {
@@ -72,8 +76,48 @@ export function flushIngressDecoder(state: IngressDecodeStreamState): string {
   return output;
 }
 
-function createDecoder(encoding: IngressDecoderEncoding): Decoder {
-  return iconv.getDecoder(encoding, { stripBOM: false });
+function createDecoder(encoding: IngressDecoderEncoding): IngressStreamDecoder {
+  const stream = iconv.decodeStream(encoding, { stripBOM: false });
+  let collected = '';
+  let pendingError: unknown = null;
+
+  stream.on('data', (chunk: unknown) => {
+    if (typeof chunk !== 'string') {
+      pendingError = new Error('Ingress decoder emitted non-string data');
+      return;
+    }
+    collected += chunk;
+  });
+
+  stream.on('error', (error: unknown) => {
+    pendingError = error;
+  });
+
+  const drainOutput = (): string => {
+    if (pendingError) {
+      const currentError = pendingError;
+      pendingError = null;
+      collected = '';
+      if (currentError instanceof Error) throw currentError;
+      throw new Error(String(currentError));
+    }
+    if (!collected) return '';
+    const output = collected;
+    collected = '';
+    return output;
+  };
+
+  return {
+    write(chunk: Buffer): string {
+      if (!chunk.length) return '';
+      stream.write(chunk);
+      return drainOutput();
+    },
+    end(): string {
+      stream.end();
+      return drainOutput();
+    },
+  };
 }
 
 function detectEncoding(buffer: Buffer): { encoding: IngressDecoderEncoding; bomBytes: number } | null {

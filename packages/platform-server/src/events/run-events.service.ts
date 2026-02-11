@@ -567,7 +567,7 @@ export class RunEventsService {
   private sanitizeToolCallRecords(records?: ToolCallRecord[]): ToolCallRecord[] | undefined {
     if (!records || records.length === 0) return undefined;
     return records.map((call, idx) => {
-      const normalized = call.arguments === Prisma.JsonNull ? null : call.arguments;
+      const normalized = call.arguments === null || this.isJsonNull(call.arguments) ? null : call.arguments;
       const sanitized = sanitizePrismaJson(normalized, this.logger, 'payload', ['toolCalls', String(idx), 'arguments'], false);
       return {
         callId: call.callId,
