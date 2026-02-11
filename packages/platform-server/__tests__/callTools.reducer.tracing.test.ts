@@ -53,6 +53,7 @@ describe('CallToolsLLMReducer tracing via run events', () => {
     const [completion] = runEvents.completeToolExecution.mock.calls[0];
     expect(completion.status).toBe('error');
     expect(String(completion.errorMessage ?? '')).toContain('upstream failure');
+    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
   });
 
   it('marks MCP logical failures as failed tool executions', async () => {
@@ -76,6 +77,7 @@ describe('CallToolsLLMReducer tracing via run events', () => {
     const [completion] = runEvents.completeToolExecution.mock.calls[0];
     expect(completion.status).toBe('error');
     expect(String(completion.errorMessage ?? '')).toContain('longer than 50000');
+    expect(completion.errorCode).toBe('TOOL_OUTPUT_TOO_LARGE');
   });
 
   it('keeps shell command tracing flagged on non-zero exit codes', async () => {
@@ -112,5 +114,6 @@ describe('CallToolsLLMReducer tracing via run events', () => {
     const [completion] = runEvents.completeToolExecution.mock.calls[0];
     expect(completion.status).toBe('error');
     expect(String(completion.errorMessage ?? '')).toContain('exit code 2');
+    expect(completion.errorCode ?? null).toBeNull();
   });
 });

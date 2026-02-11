@@ -10,6 +10,7 @@ import type { ResponseFunctionCallOutputItemList } from 'openai/resources/respon
 import { contextItemInputFromMessage } from '../services/context-items.utils';
 import { persistContextItems } from '../services/context-items.append';
 import { ShellCommandTool } from '../../nodes/tools/shell_command/shell_command.tool';
+import { LocalMCPServerTool } from '../../nodes/mcp/localMcpServer.tool';
 
 type ToolCallErrorCode =
   | 'BAD_JSON_ARGS'
@@ -32,10 +33,25 @@ type ToolCallErrorPayload = {
 };
 type ToolCallStructuredOutput = ToolCallRaw | ToolCallErrorPayload;
 
+const isToolCallErrorPayload = (value: unknown): value is ToolCallErrorPayload => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<ToolCallErrorPayload>;
+  return candidate.status === 'error' && typeof candidate.error_code === 'string';
+};
+
 type ToolCallResult = {
   status: 'success' | 'error';
   raw: ToolCallRaw;
   output: ToolCallStructuredOutput;
+};
+
+type ToolTracingFailure = {
+  toolCallId: string;
+  toolName: string;
+  toolSource?: string;
+  errorCode?: string;
+  errorMessage: string;
+  retriable?: boolean;
 };
 
 const isToolCallRaw = (value: unknown): value is ToolCallRaw =>
@@ -177,6 +193,15 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     let startedEventId: string | null = null;
     let caughtError: unknown | null = null;
     let response: ToolCallResult | undefined;
+    let traceFailure: ToolTracingFailure | null = null;
+
+    const finalizeResponse = (result: ToolCallResult): ToolCallResult => {
+      const trace = this.buildToolTracingFailure({ response: result, tool, toolCall });
+      if (trace) {
+        traceFailure = trace;
+      }
+      return result;
+    };
 
     const createErrorResponse = (args: {
       code: ToolCallErrorCode;
@@ -212,7 +237,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           message: `Tool ${toolCall.name} is not registered.`,
           originalArgs: toolCall.args,
         });
-        return response;
+        return finalizeResponse(response);
       }
 
       let parsedArgs: unknown;
@@ -233,7 +258,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           originalArgs: toolCall.args,
           details,
         });
-        return response;
+        return finalizeResponse(response);
       }
 
       const validation = tool.schema.safeParse(parsedArgs);
@@ -245,7 +270,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           originalArgs: parsedArgs,
           details: issues,
         });
-        return response;
+        return finalizeResponse(response);
       }
       const input = validation.data;
 
@@ -349,14 +374,14 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         throw new Error('tool_response_missing');
       }
 
-      return response;
+      return finalizeResponse(response);
     } catch (err) {
       caughtError = err;
       throw err instanceof Error ? err : new Error(String(err));
     } finally {
       if (startedEventId) {
         try {
-          await this.finalizeToolExecutionEvent(startedEventId, response, caughtError);
+          await this.finalizeToolExecutionEvent(startedEventId, response, caughtError, traceFailure);
         } catch (finalizeErr: unknown) {
           this.logger.warn(
             `Failed to finalize tool execution event${this.format({
@@ -443,6 +468,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     eventId: string,
     response: ToolCallResult | undefined,
     caughtError: unknown | null,
+    traceFailure: ToolTracingFailure | null,
   ): Promise<void> {
     if (caughtError !== null) {
       const errorMessage = caughtError instanceof Error ? caughtError.message : String(caughtError);
@@ -450,6 +476,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         eventId,
         status: ToolExecStatus.error,
         errorMessage,
+        errorCode: traceFailure?.errorCode ?? null,
         raw: null,
       });
       await this.eventsBus.publishEvent(eventId, 'update');
@@ -459,13 +486,50 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     if (!response) return;
 
     const status = response.status === 'success' ? ToolExecStatus.success : ToolExecStatus.error;
+    const resolvedErrorMessage =
+      status === ToolExecStatus.success ? null : traceFailure?.errorMessage ?? this.extractErrorMessage(response);
+    const resolvedErrorCode =
+      status === ToolExecStatus.success ? null : traceFailure?.errorCode ?? this.extractErrorCode(response);
     await this.runEvents.completeToolExecution({
       eventId,
       status,
       output: this.toJson(response.output ?? response.raw),
       raw: this.toJson(response.raw),
-      errorMessage: status === ToolExecStatus.success ? null : this.extractErrorMessage(response),
+      errorMessage: resolvedErrorMessage,
+      errorCode: resolvedErrorCode,
     });
     await this.eventsBus.publishEvent(eventId, 'update');
+  }
+
+  private buildToolTracingFailure(params: {
+    response: ToolCallResult;
+    tool: FunctionTool | undefined;
+    toolCall: ToolCallMessage;
+  }): ToolTracingFailure | null {
+    if (params.response.status !== 'error') return null;
+    const errorPayload = isToolCallErrorPayload(params.response.output) ? params.response.output : null;
+    const message = errorPayload?.message ?? this.extractErrorMessage(params.response) ?? 'Tool execution failed';
+    const errorCode = errorPayload?.error_code;
+    return {
+      toolCallId: params.toolCall.callId,
+      toolName: params.tool?.name ?? params.toolCall.name,
+      toolSource: this.resolveToolSource(params.tool),
+      errorCode,
+      errorMessage: message,
+      retriable: errorPayload?.retriable,
+    };
+  }
+
+  private extractErrorCode(response: ToolCallResult | undefined): string | null {
+    if (!response) return null;
+    const payload = isToolCallErrorPayload(response.output) ? response.output : null;
+    return payload?.error_code ?? null;
+  }
+
+  private resolveToolSource(tool: FunctionTool | undefined): string | undefined {
+    if (!tool) return undefined;
+    if (tool instanceof LocalMCPServerTool) return 'mcp';
+    if (tool instanceof ShellCommandTool) return 'shell';
+    return undefined;
   }
 }

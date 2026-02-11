@@ -61,6 +61,7 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
     const [completionPayload] = runEvents.completeToolExecution.mock.calls[0];
     expect(completionPayload.status).toBe('error');
     expect(completionPayload.errorMessage).toContain('apply_patch failed (code=PATCH_FAIL retriable=false)');
+    expect(completionPayload.errorCode).toBe('MCP_CALL_ERROR');
 
     const lastMessage = result.messages.at(-1) as ToolCallOutputMessage;
     expect(lastMessage).toBeInstanceOf(ToolCallOutputMessage);
