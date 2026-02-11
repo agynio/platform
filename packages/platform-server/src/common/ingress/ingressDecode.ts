@@ -18,10 +18,12 @@ type DecodeOptions = {
   onEncodingChange?: (encoding: IngressDecoderEncoding) => void;
 };
 
-const MIN_SAMPLE_BYTES = 4;
+const MIN_FINALIZE_BYTES = 2;
+const MIN_HEURISTIC_SAMPLE_BYTES = 4;
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const UTF16LE_BOM = Buffer.from([0xff, 0xfe]);
 const UTF16BE_BOM = Buffer.from([0xfe, 0xff]);
+const BOM_PREFIXES = [UTF8_BOM, UTF16LE_BOM, UTF16BE_BOM];
 
 export function createIngressDecodeStreamState(): IngressDecodeStreamState {
   return {
@@ -43,7 +45,7 @@ export function decodeIngressChunk(
   if (!state.inspected) {
     buffer = state.pending ? Buffer.concat([state.pending, chunk]) : chunk;
     const detection = detectEncoding(buffer);
-    if (!detection && buffer.length < MIN_SAMPLE_BYTES) {
+    if (shouldBufferForDetection(buffer, detection)) {
       state.pending = buffer;
       return '';
     }
@@ -141,7 +143,7 @@ function detectEncoding(buffer: Buffer): { encoding: IngressDecoderEncoding; bom
 
 function detectBomlessUtf16(buffer: Buffer): IngressDecoderEncoding | null {
   const sampleLength = Math.min(buffer.length, 64);
-  if (sampleLength < MIN_SAMPLE_BYTES) return null;
+  if (sampleLength < MIN_HEURISTIC_SAMPLE_BYTES) return null;
 
   let evenNulls = 0;
   let oddNulls = 0;
@@ -161,4 +163,21 @@ function detectBomlessUtf16(buffer: Buffer): IngressDecoderEncoding | null {
     return 'utf-16be';
   }
   return null;
+}
+
+function shouldBufferForDetection(
+  buffer: Buffer,
+  detection: { encoding: IngressDecoderEncoding; bomBytes: number } | null,
+): boolean {
+  if (detection) return false;
+  if (buffer.length < MIN_FINALIZE_BYTES) return true;
+  if (isBomPrefix(buffer)) return true;
+  const containsNull = buffer.includes(0x00);
+  if (containsNull && buffer.length < MIN_HEURISTIC_SAMPLE_BYTES) return true;
+  return false;
+}
+
+function isBomPrefix(buffer: Buffer): boolean {
+  if (!buffer.length) return false;
+  return BOM_PREFIXES.some((bom) => buffer.length < bom.length && bom.subarray(0, buffer.length).equals(buffer));
 }

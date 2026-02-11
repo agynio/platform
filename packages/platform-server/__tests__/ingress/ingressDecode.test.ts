@@ -43,4 +43,17 @@ describe('ingressDecode', () => {
     const tail = flushIngressDecoder(state);
     expect(tail).toBe('');
   });
+
+  it('keeps buffering when bomless UTF-16 chunks arrive without enough bytes', () => {
+    const state = createIngressDecodeStreamState();
+
+    const partial = decodeIngressChunk(state, Buffer.from([0x61, 0x00, 0x62]));
+    expect(partial).toBe('');
+
+    const decoded = decodeIngressChunk(state, Buffer.from([0x00]));
+    expect(decoded).toBe('ab');
+
+    const tail = flushIngressDecoder(state);
+    expect(tail).toBe('');
+  });
 });
