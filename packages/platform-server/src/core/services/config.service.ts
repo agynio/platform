@@ -50,10 +50,6 @@ export const configSchema = z.object({
     .min(1, 'DOCKER_RUNNER_BASE_URL is required')
     .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
     .transform((value) => value.trim().replace(/\/+$/, '')),
-  dockerRunnerAccessKey: z
-    .string()
-    .min(1, 'DOCKER_RUNNER_ACCESS_KEY is required')
-    .transform((value) => value.trim()),
   dockerRunnerSharedSecret: z
     .string()
     .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
@@ -315,10 +311,6 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerBaseUrl;
   }
 
-  get dockerRunnerAccessKey(): string {
-    return this.params.dockerRunnerAccessKey;
-  }
-
   get dockerRunnerSharedSecret(): string {
     return this.params.dockerRunnerSharedSecret;
   }
@@ -329,10 +321,6 @@ export class ConfigService implements Config {
 
   getDockerRunnerBaseUrl(): string {
     return this.dockerRunnerBaseUrl;
-  }
-
-  getDockerRunnerAccessKey(): string {
-    return this.dockerRunnerAccessKey;
   }
 
   getDockerRunnerSharedSecret(): string {
@@ -448,7 +436,6 @@ export class ConfigService implements Config {
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
       dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
-      dockerRunnerAccessKey: process.env.DOCKER_RUNNER_ACCESS_KEY,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,

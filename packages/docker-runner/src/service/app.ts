@@ -249,7 +249,6 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       method: request.method,
       path: request.raw.url ?? request.url ?? '',
       body: request.body ?? '',
-      accessKey: config.accessKey,
       secret: config.sharedSecret,
       nonceCache,
     });

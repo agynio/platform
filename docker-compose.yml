@@ -253,7 +253,6 @@ services:
       dockerfile: packages/docker-runner/Dockerfile
     restart: unless-stopped
     environment:
-      DOCKER_RUNNER_ACCESS_KEY: ${DOCKER_RUNNER_ACCESS_KEY:-dev-access-key}
       DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
       DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
     volumes:

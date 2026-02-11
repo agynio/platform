@@ -9,7 +9,6 @@ const runnerConfigSchema = z.object({
       return Number.isFinite(num) ? num : 7071;
     }),
   host: z.string().default('0.0.0.0'),
-  accessKey: z.string().min(1, 'DOCKER_RUNNER_ACCESS_KEY is required'),
   sharedSecret: z.string().min(1, 'DOCKER_RUNNER_SHARED_SECRET is required'),
   signatureTtlMs: z
     .union([z.string(), z.number()])
@@ -28,7 +27,6 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerCo
   const parsed = runnerConfigSchema.safeParse({
     port: env.DOCKER_RUNNER_PORT,
     host: env.DOCKER_RUNNER_HOST,
-    accessKey: env.DOCKER_RUNNER_ACCESS_KEY,
     sharedSecret: env.DOCKER_RUNNER_SHARED_SECRET,
     signatureTtlMs: env.DOCKER_RUNNER_SIGNATURE_TTL_MS,
     dockerSocket: env.DOCKER_SOCKET ?? env.DOCKER_RUNNER_SOCKET,
