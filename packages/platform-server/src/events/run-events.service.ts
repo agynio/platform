@@ -319,7 +319,7 @@ export interface LLMCallContextItemsAppendArgs {
 export interface ToolCallRecord {
   callId: string;
   name: string;
-  arguments: Prisma.InputJsonValue;
+  arguments: Prisma.InputJsonValue | typeof Prisma.JsonNull;
 }
 
 export interface LLMCallUsageMetrics {
@@ -567,12 +567,18 @@ export class RunEventsService {
   private sanitizeToolCallRecords(records?: ToolCallRecord[]): ToolCallRecord[] | undefined {
     if (!records || records.length === 0) return undefined;
     return records.map((call, idx) => {
-      const normalized = call.arguments === null || this.isJsonNull(call.arguments) ? null : call.arguments;
-      const sanitized = sanitizePrismaJson(normalized, this.logger, 'payload', ['toolCalls', String(idx), 'arguments'], false);
+      const normalized =
+        call.arguments === null || call.arguments === undefined || this.isJsonNull(call.arguments)
+          ? Prisma.JsonNull
+          : call.arguments;
+      const sanitized =
+        normalized === Prisma.JsonNull
+          ? Prisma.JsonNull
+          : sanitizePrismaJson(normalized, this.logger, 'payload', ['toolCalls', String(idx), 'arguments'], false);
       return {
         callId: call.callId,
         name: call.name,
-        arguments: toPrismaJsonValue(sanitized),
+        arguments: sanitized === Prisma.JsonNull ? Prisma.JsonNull : toPrismaJsonValue(sanitized),
       };
     });
   }
