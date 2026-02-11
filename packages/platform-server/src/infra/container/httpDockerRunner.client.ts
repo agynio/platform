@@ -36,7 +36,6 @@ import type { DockerClient } from './dockerClient.token';
 
 type RunnerClientConfig = {
   baseUrl: string;
-  accessKey: string;
   sharedSecret: string;
   requestTimeoutMs?: number;
   maxRetries?: number;
@@ -78,14 +77,12 @@ export class DockerRunnerRequestError extends Error {
 
 export class HttpDockerRunnerClient implements DockerClient {
   private readonly baseUrl: URL;
-  private readonly accessKey: string;
   private readonly sharedSecret: string;
   private readonly requestTimeoutMs: number;
   private readonly maxRetries: number;
 
   constructor(config: RunnerClientConfig) {
     this.baseUrl = new URL(config.baseUrl);
-    this.accessKey = config.accessKey;
     this.sharedSecret = config.sharedSecret;
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.maxRetries = config.maxRetries ?? 2;
@@ -146,7 +143,6 @@ export class HttpDockerRunnerClient implements DockerClient {
       method: options.method,
       path: pathWithQuery,
       body: bodyString,
-      accessKey: this.accessKey,
       secret: this.sharedSecret,
     });
 
@@ -232,7 +228,6 @@ export class HttpDockerRunnerClient implements DockerClient {
       method: 'GET',
       path: `/v1/exec/interactive/ws?${query.toString()}`,
       body: '',
-      accessKey: this.accessKey,
       secret: this.sharedSecret,
     });
 
@@ -353,7 +348,6 @@ export class HttpDockerRunnerClient implements DockerClient {
       method: 'GET',
       path: queryString ? `${path}?${queryString}` : path,
       body: '',
-      accessKey: this.accessKey,
       secret: this.sharedSecret,
     });
 
@@ -519,7 +513,6 @@ export class HttpDockerRunnerClient implements DockerClient {
       method: 'GET',
       path: queryString ? `${path}?${queryString}` : path,
       body: '',
-      accessKey: this.accessKey,
       secret: this.sharedSecret,
     });
     const response = await fetch(url, { method: 'GET', headers });

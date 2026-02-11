@@ -2,7 +2,6 @@ import { ConfigService, configSchema } from '../../src/core/services/config.serv
 
 export const runnerConfigDefaults = {
   dockerRunnerBaseUrl: 'http://docker-runner:7071',
-  dockerRunnerAccessKey: 'test-access-key',
   dockerRunnerSharedSecret: 'test-shared-secret',
 } as const;
 

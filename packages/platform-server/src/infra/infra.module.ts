@@ -42,7 +42,6 @@ import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
       useFactory: (config: ConfigService) =>
         new HttpDockerRunnerClient({
           baseUrl: config.getDockerRunnerBaseUrl(),
-          accessKey: config.getDockerRunnerAccessKey(),
           sharedSecret: config.getDockerRunnerSharedSecret(),
           requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
         }),

@@ -182,7 +182,7 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
-  - DOCKER_RUNNER_ACCESS_KEY / DOCKER_RUNNER_SHARED_SECRET (required HMAC credentials)
+  - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
