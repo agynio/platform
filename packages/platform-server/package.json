@@ -21,7 +21,6 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0",
     "@agyn/shared": "workspace:*",
     "@agyn/json-schema-to-zod": "workspace:*",
     "@agyn/llm": "workspace:*",
@@ -69,8 +68,6 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
-    "@opentelemetry/context-async-hooks": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.1.0",
     "@eslint/js": "^9.13.0",
     "@langchain/langgraph-cli": "0.0.66",
     "@nestjs/testing": "^11.1.8",

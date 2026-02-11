@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
+import { describe, it, expect, vi } from 'vitest';
+import { ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { createEventsBusStub, createRunEventsStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
@@ -8,10 +8,6 @@ import { McpError } from '../src/nodes/mcp/types';
 import { LocalMCPServerTool } from '../src/nodes/mcp/localMcpServer.tool';
 import type { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { ShellCommandTool } from '../src/nodes/tools/shell_command/shell_command.tool';
-import { context, trace, SpanStatusCode } from '@opentelemetry/api';
-import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 const buildState = (toolName: string, callId: string, args: string) => {
   const call = new ToolCallMessage({ type: 'function_call', name: toolName, call_id: callId, arguments: args } as any);
@@ -37,56 +33,13 @@ const createMcpNode = (callTool: ReturnType<typeof vi.fn>) =>
     callTool,
   }) as unknown as LocalMCPServerNode;
 
-describe('CallToolsLLMReducer tracing instrumentation', () => {
-  let exporter: InMemorySpanExporter;
-  let provider: BasicTracerProvider;
-  let contextManager: AsyncLocalStorageContextManager | undefined;
-
-  const runWithSpan = async (fn: () => Promise<unknown>): Promise<ReadableSpan[]> => {
-    const tracer = provider.getTracer('call-tools-tracing');
-    const span = tracer.startSpan('tool-execution');
-    let capturedError: unknown;
-    try {
-      await context.with(trace.setSpan(context.active(), span), async () => {
-        await fn();
-      });
-    } catch (err) {
-      capturedError = err;
-    } finally {
-      span.end();
-      await provider.forceFlush();
-    }
-    const spans = exporter.getFinishedSpans();
-    exporter.reset();
-    if (capturedError) {
-      throw capturedError;
-    }
-    return spans;
-  };
-
-  beforeEach(() => {
-    exporter = new InMemorySpanExporter();
-    provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
-    contextManager = new AsyncLocalStorageContextManager().enable();
-    context.setGlobalContextManager(contextManager);
-  });
-
-  afterEach(async () => {
-    await provider.shutdown();
-    exporter.reset();
-    context.disable();
-    contextManager?.disable();
-  });
-
-  it('records MCP exceptions as error spans with metadata', async () => {
-    const tool = {
-      name: 'mcp_demo',
-      description: 'demo tool',
-      schema: z.object({}),
-      async execute() {
-        throw new McpError('upstream failure', { code: 'BAD_INPUT' });
-      },
-    };
+describe('CallToolsLLMReducer tracing via run events', () => {
+  it('marks MCP exceptions as failed tool executions', async () => {
+    const callTool = vi.fn(async () => {
+      throw new McpError('upstream failure', { code: 'BAD_INPUT' });
+    });
+    const node = createMcpNode(callTool);
+    const tool = new LocalMCPServerTool('codex_apply_patch', 'Patch tool', z.object({}), node);
 
     const runEvents = createRunEventsStub();
     const eventsBus = createEventsBusStub();
@@ -94,20 +47,15 @@ describe('CallToolsLLMReducer tracing instrumentation', () => {
     const ctx = createCtx();
     const state = buildState(tool.name, 'call-mcp-throw', JSON.stringify({}));
 
-    const spans = await runWithSpan(() => reducer.invoke(state, ctx as any));
-    expect(spans).toHaveLength(1);
-    const span = spans[0];
-    expect(span.status.code).toBe(SpanStatusCode.ERROR);
-    expect(span.attributes['tool.name']).toBe(tool.name);
-    expect(span.attributes['tool.call_id']).toBe('call-mcp-throw');
-    expect(span.attributes['tool.source']).toBe('mcp');
-    expect(span.attributes['error.type']).toBe('McpError');
-    expect(span.attributes['error.message']).toContain('upstream failure');
-    expect(span.attributes['mcp.error_code']).toBe('BAD_INPUT');
-    expect(span.events.some((event) => event.name === 'exception')).toBe(true);
+    await reducer.invoke(state, ctx as any);
+
+    expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
+    const [completion] = runEvents.completeToolExecution.mock.calls[0];
+    expect(completion.status).toBe('error');
+    expect(String(completion.errorMessage ?? '')).toContain('upstream failure');
   });
 
-  it('marks MCP logical failures as error spans with tool error metadata', async () => {
+  it('marks MCP logical failures as failed tool executions', async () => {
     const largeOutput = 'x'.repeat(60000);
     const callTool = vi.fn(async () => ({ isError: false, content: largeOutput }));
     const node = createMcpNode(callTool);
@@ -119,19 +67,18 @@ describe('CallToolsLLMReducer tracing instrumentation', () => {
     const ctx = createCtx();
     const state = buildState(tool.name, 'call-mcp-logical', JSON.stringify({}));
 
-    const spans = await runWithSpan(() => reducer.invoke(state, ctx as any));
-    const span = spans[0];
-    expect(span.status.code).toBe(SpanStatusCode.ERROR);
-    expect(span.attributes['tool.name']).toBe(tool.name);
-    expect(span.attributes['tool.source']).toBe('mcp');
-    expect(span.attributes['tool.error_code']).toBe('TOOL_OUTPUT_TOO_LARGE');
-    expect(span.attributes['tool.retriable']).toBe(false);
-    const errorEvent = span.events.find((event) => event.name === 'tool.error');
-    expect(errorEvent?.attributes?.['tool.error_code']).toBe('TOOL_OUTPUT_TOO_LARGE');
-    expect(String(errorEvent?.attributes?.['tool.error_message'] ?? '')).toContain('longer than 50000');
+    const result = await reducer.invoke(state, ctx as any);
+    const output = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(output).toBeInstanceOf(ToolCallOutputMessage);
+    expect(output.text).toContain('longer than 50000');
+
+    expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
+    const [completion] = runEvents.completeToolExecution.mock.calls[0];
+    expect(completion.status).toBe('error');
+    expect(String(completion.errorMessage ?? '')).toContain('longer than 50000');
   });
 
-  it('keeps shell command error spans flagged on non-zero exit', async () => {
+  it('keeps shell command tracing flagged on non-zero exit codes', async () => {
     const runEvents = createRunEventsStub();
     const eventsBus = createEventsBusStub();
     const archiveStub = { createSingleFileTar: vi.fn(async () => Buffer.from('')) };
@@ -157,11 +104,13 @@ describe('CallToolsLLMReducer tracing instrumentation', () => {
     const ctx = createCtx();
     const state = buildState(tool.name, 'call-shell-span', JSON.stringify({ command: 'fail' }));
 
-    const spans = await runWithSpan(() => reducer.invoke(state, ctx as any));
-    const span = spans[0];
-    expect(span.status.code).toBe(SpanStatusCode.ERROR);
-    expect(span.attributes['tool.source']).toBe('shell');
-    const errorEvent = span.events.find((event) => event.name === 'tool.error');
-    expect(String(errorEvent?.attributes?.['tool.error_message'] ?? '')).toContain('exit code 2');
+    const result = await reducer.invoke(state, ctx as any);
+    const message = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(message.text).toContain('exit code 2');
+
+    expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
+    const [completion] = runEvents.completeToolExecution.mock.calls[0];
+    expect(completion.status).toBe('error');
+    expect(String(completion.errorMessage ?? '')).toContain('exit code 2');
   });
 });
