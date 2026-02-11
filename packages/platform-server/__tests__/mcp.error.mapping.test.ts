@@ -73,3 +73,61 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
     );
   });
 });
+
+describe('CallToolsLLMReducer MCP logical failure heuristic', () => {
+  const invokeWithPayload = async (payload: Record<string, unknown>) => {
+    const callTool = vi.fn(async () => ({ isError: false, content: JSON.stringify(payload) }));
+    const node = createNode(callTool);
+    const tool = new LocalMCPServerTool('codex_apply_patch', 'Codex patch', z.object({}), node);
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool as any] });
+    const state = buildState(tool.name, `call-${Math.random().toString(36).slice(2, 6)}`, JSON.stringify({}));
+    const ctx = createContext();
+    const result = await reducer.invoke(state, ctx as any);
+    const completion = runEvents.completeToolExecution.mock.calls[0]?.[0];
+    return { result, completion };
+  };
+
+  it('classifies payloads with status>=400 and error string as failures', async () => {
+    const { result, completion } = await invokeWithPayload({ status: 401, error: 'Search failed' });
+    expect(completion.status).toBe('error');
+    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
+    expect(String(completion.errorMessage ?? '')).toContain('status=401');
+
+    const last = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(last).toBeInstanceOf(ToolCallOutputMessage);
+    const payload = JSON.parse(last.text);
+    expect(payload.status).toBe('error');
+    expect(payload.error_code).toBe('MCP_CALL_ERROR');
+  });
+
+  it('uses statusCode field as fallback for logical failures', async () => {
+    const { completion } = await invokeWithPayload({ statusCode: 403, message: 'Forbidden' });
+    expect(completion.status).toBe('error');
+    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
+    expect(String(completion.errorMessage ?? '')).toContain('status=403');
+  });
+
+  it('ignores payloads without status metadata', async () => {
+    const { result, completion } = await invokeWithPayload({ error: 'domain data' });
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+    expect(completion.errorMessage).toBeNull();
+
+    const last = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(last.text).toContain('domain data');
+  });
+
+  it('ignores payloads with non-error status codes', async () => {
+    const { completion } = await invokeWithPayload({ status: 200, error: 'none' });
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+  });
+
+  it('ignores non-numeric status strings', async () => {
+    const { completion } = await invokeWithPayload({ status: 'error', error: 'Bad' });
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+  });
+});

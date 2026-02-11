@@ -54,6 +54,12 @@ type ToolTracingFailure = {
   retriable?: boolean;
 };
 
+type McpLogicalFailure = {
+  status: number;
+  errorText: string;
+  payload: Record<string, unknown>;
+};
+
 const isToolCallRaw = (value: unknown): value is ToolCallRaw =>
   typeof value === 'string' || Array.isArray(value);
 
@@ -193,6 +199,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     let startedEventId: string | null = null;
     let caughtError: unknown | null = null;
     let response: ToolCallResult | undefined;
+    let normalizedRaw: ToolCallRaw | undefined;
     let traceFailure: ToolTracingFailure | null = null;
 
     const finalizeResponse = (result: ToolCallResult): ToolCallResult => {
@@ -341,14 +348,27 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             details: { receivedType: typeof raw },
           });
         } else {
+          normalizedRaw = raw;
           const shouldFlagNonZeroShellExit =
-            tool instanceof ShellCommandTool && isNonZeroShellExitMessage(raw);
+            tool instanceof ShellCommandTool && isNonZeroShellExitMessage(normalizedRaw);
 
           response = {
             status: shouldFlagNonZeroShellExit ? 'error' : 'success',
-            raw,
-            output: raw,
+            raw: normalizedRaw,
+            output: normalizedRaw,
           };
+        }
+
+        if (response?.status === 'success' && normalizedRaw !== undefined) {
+          const logicalFailure = this.detectMcpLogicalFailure({ tool, raw: normalizedRaw });
+          if (logicalFailure) {
+            response = createErrorResponse({
+              code: 'MCP_CALL_ERROR',
+              message: `MCP tool returned error payload (status=${logicalFailure.status}): ${logicalFailure.errorText}`,
+              originalArgs: input,
+              details: { payload: logicalFailure.payload },
+            });
+          }
         }
       } catch (err) {
         this.logger.error(
@@ -531,5 +551,85 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     if (tool instanceof LocalMCPServerTool) return 'mcp';
     if (tool instanceof ShellCommandTool) return 'shell';
     return undefined;
+  }
+
+  private detectMcpLogicalFailure(params: { tool: FunctionTool | undefined; raw: ToolCallRaw }): McpLogicalFailure | null {
+    if (!(params.tool instanceof LocalMCPServerTool)) return null;
+    if (typeof params.raw !== 'string') return null;
+    const parsed = this.safeParseJsonObject(params.raw);
+    if (!parsed) return null;
+    const status = this.extractNumericStatusCode(parsed);
+    if (status === null || status < 400) return null;
+    const errorText = this.extractMcpErrorMessage(parsed);
+    if (!errorText) return null;
+    return { status, errorText, payload: parsed };
+  }
+
+  private safeParseJsonObject(value: string): Record<string, unknown> | null {
+    const trimmed = value.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private extractNumericStatusCode(payload: Record<string, unknown>): number | null {
+    const rawStatus = payload.status ?? payload.statusCode;
+    const numeric = this.toNumber(rawStatus);
+    if (numeric === null || Number.isNaN(numeric)) return null;
+    return numeric;
+  }
+
+  private toNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parsed = Number.parseInt(trimmed, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  private extractMcpErrorMessage(payload: Record<string, unknown>): string | null {
+    const direct = this.normalizeErrorText(payload.error) ?? this.normalizeErrorText(payload.message);
+    if (direct) return direct;
+    if ('detail' in payload) {
+      return this.extractDetailError(payload.detail as unknown);
+    }
+    return null;
+  }
+
+  private extractDetailError(detail: unknown): string | null {
+    if (!detail) return null;
+    if (typeof detail === 'string') return this.normalizeErrorText(detail);
+    if (Array.isArray(detail)) {
+      for (const entry of detail) {
+        const text = this.extractDetailError(entry);
+        if (text) return text;
+      }
+      return null;
+    }
+    if (typeof detail === 'object') {
+      const record = detail as Record<string, unknown>;
+      const nested = this.normalizeErrorText(record.error) ?? this.normalizeErrorText(record.message);
+      if (nested) return nested;
+      if ('detail' in record) {
+        return this.extractDetailError(record.detail as unknown);
+      }
+    }
+    return null;
+  }
+
+  private normalizeErrorText(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 }
