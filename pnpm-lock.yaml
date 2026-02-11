@@ -138,6 +138,9 @@ importers:
       '@slack/web-api':
         specifier: ^7.10.0
         version: 7.10.0
+      iconv-lite:
+        specifier: ^0.6.3
+        version: 0.6.3
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15

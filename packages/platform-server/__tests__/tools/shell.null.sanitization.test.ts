@@ -130,4 +130,53 @@ describe('ShellCommandTool NUL sanitization', () => {
     expect(result).toBe('alphabeta');
     expect(result.includes('\u0000')).toBe(false);
   });
+
+  it('decodes UTF-16 tail output and strips embedded NUL characters', async () => {
+    const append = vi.fn(async (payload: any) => ({ ...payload, id: 'chunk-id' }));
+    const finalize = vi.fn(async (payload: any) => ({ ...payload, id: 'terminal-id' }));
+
+    const utf16 = (text: string, includeBom = false) => {
+      const body = Buffer.from(text, 'utf16le');
+      return includeBom ? Buffer.concat([Buffer.from([0xff, 0xfe]), body]) : body;
+    };
+
+    const header = utf16('==> /tmp/next-dev.log <==\n', true);
+    const chunks = [
+      header.subarray(0, 5),
+      header.subarray(5),
+      utf16('line\u0000one\n'),
+      utf16('line two\n'),
+    ];
+
+    const { tool, runEvents } = createTool({
+      execImpl: async (_command, opts) => {
+        chunks.forEach((chunk) => opts?.onOutput?.('stdout', chunk));
+        return { stdout: '==> /tmp/next-dev.log <==\nline\u0000one\nline two\n', stderr: '', exitCode: 0 };
+      },
+      runEventsOverrides: {
+        appendToolOutputChunk: append,
+        finalizeToolOutputTerminal: finalize,
+      },
+    });
+
+    const result = await tool.executeStreaming({ command: 'tail-next-dev' }, streamingCtx as any, {
+      runId: 'run-utf16',
+      threadId: 'thread-utf16',
+      eventId: 'event-utf16',
+    });
+
+    expect(result.includes('\u0000')).toBe(false);
+    expect(result).toContain('==> /tmp/next-dev.log <==\n');
+
+    expect(append).toHaveBeenCalled();
+    append.mock.calls.forEach(([payload]) => {
+      expect(payload.data.includes('\u0000')).toBe(false);
+      expect(payload.data).toContain('/tmp/next-dev.log');
+    });
+
+    expect(finalize).toHaveBeenCalled();
+    const terminalPayload = finalize.mock.calls[0][0];
+    expect((terminalPayload.message ?? '').includes('\u0000')).toBe(false);
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalled();
+  });
 });

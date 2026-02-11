@@ -7,7 +7,7 @@ class FakeLLM {
   lastInput: Array<SystemMessage | { toJSON: () => unknown }> = [];
   async call(opts: { model: string; input: Array<SystemMessage | { toJSON: () => unknown }> }) {
     this.lastInput = opts.input;
-    return { text: 'ok', output: [] };
+    return ResponseMessage.fromText('ok');
   }
 }
 
