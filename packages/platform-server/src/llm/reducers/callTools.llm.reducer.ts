@@ -580,10 +580,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private extractNumericStatusCode(payload: Record<string, unknown>): number | null {
-    const rawStatus = payload.status ?? payload.statusCode;
-    const numeric = this.toNumber(rawStatus);
-    if (numeric === null || Number.isNaN(numeric)) return null;
-    return numeric;
+    const status = this.toNumber(payload.status);
+    if (status !== null && !Number.isNaN(status)) {
+      return status;
+    }
+
+    const statusCode = this.toNumber(payload.statusCode);
+    if (statusCode !== null && !Number.isNaN(statusCode)) {
+      return statusCode;
+    }
+
+    return null;
   }
 
   private toNumber(value: unknown): number | null {

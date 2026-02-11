@@ -109,6 +109,13 @@ describe('CallToolsLLMReducer MCP logical failure heuristic', () => {
     expect(String(completion.errorMessage ?? '')).toContain('status=403');
   });
 
+  it('falls back to statusCode when status is non-numeric', async () => {
+    const { completion } = await invokeWithPayload({ status: 'error', statusCode: 500, message: 'Internal error' });
+    expect(completion.status).toBe('error');
+    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
+    expect(String(completion.errorMessage ?? '')).toContain('status=500');
+  });
+
   it('ignores payloads without status metadata', async () => {
     const { result, completion } = await invokeWithPayload({ error: 'domain data' });
     expect(completion.status).toBe('success');
