@@ -40,7 +40,6 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private graphRoot?: string;
-  private lastCommitted?: PersistedGraph;
 
   async initIfNeeded(): Promise<void> {
     this.graphRoot = this.config.graphRepoPath;
@@ -48,7 +47,7 @@ export class FsGraphRepository extends GraphRepository {
     await fs.mkdir(root, { recursive: true });
     await fs.mkdir(path.join(root, 'nodes'), { recursive: true });
     await fs.mkdir(path.join(root, 'edges'), { recursive: true });
-    await fs.mkdir(path.join(root, 'snapshots'), { recursive: true });
+
 
     const metaPath = path.join(root, this.metaPath());
     if (!(await this.pathExists(metaPath))) {
@@ -60,31 +59,8 @@ export class FsGraphRepository extends GraphRepository {
 
   async get(name: string): Promise<PersistedGraph | null> {
     this.assertReady();
-    try {
-      const working = await this.readFromWorkingTree(name);
-      if (working) {
-        this.lastCommitted = this.cloneGraph(working);
-        return working;
-      }
-    } catch {
-      // fall through to snapshot/journal
-    }
-
-    if (this.lastCommitted) return this.cloneGraph(this.lastCommitted);
-
-    const snapshot = await this.readLatestSnapshot(name);
-    if (snapshot) {
-      this.lastCommitted = this.cloneGraph(snapshot);
-      return snapshot;
-    }
-
-    const fromJournal = await this.readLatestJournalEntry();
-    if (fromJournal && fromJournal.name === name) {
-      this.lastCommitted = this.cloneGraph(fromJournal);
-      return fromJournal;
-    }
-
-    return null;
+    const working = await this.readFromWorkingTree(name);
+    return working ? this.cloneGraph(working) : null;
   }
 
   async upsert(req: PersistedGraphUpsertRequest, _author?: GraphAuthor): Promise<PersistedGraphUpsertResponse> {
@@ -144,7 +120,6 @@ export class FsGraphRepository extends GraphRepository {
 
       try {
         await this.persistGraph(current, target);
-        this.lastCommitted = this.cloneGraph(target);
       } catch (err) {
         await this.restoreWorkingTree(existing ?? null);
         const msg = err instanceof Error ? err.message : String(err);
@@ -222,25 +197,6 @@ export class FsGraphRepository extends GraphRepository {
     };
     await this.writeYamlEntity(this.metaPath(), meta);
 
-    const cleanupTasks: Array<() => Promise<void>> = [];
-    try {
-      const snapshotHandle = await this.writeSnapshot(target);
-      cleanupTasks.push(snapshotHandle.rollback);
-
-      const revertJournal = await this.appendJournal(target);
-      cleanupTasks.push(revertJournal);
-
-      try {
-        await snapshotHandle.pruneOlder();
-      } catch {
-        // best effort; leftover historical snapshots are acceptable
-      }
-
-      cleanupTasks.length = 0;
-    } catch (err) {
-      await Promise.allSettled(cleanupTasks.map((task) => task()));
-      throw err;
-    }
   }
 
   private async readFromWorkingTree(name: string): Promise<PersistedGraph | null> {
@@ -261,137 +217,6 @@ export class FsGraphRepository extends GraphRepository {
       variables,
     };
   }
-
-  private async readLatestSnapshot(name: string): Promise<PersistedGraph | null> {
-    const snapshotsDir = path.join(this.ensureGraphRoot(), 'snapshots');
-    let entries: string[] = [];
-    try {
-      entries = await fs.readdir(snapshotsDir);
-    } catch {
-      return null;
-    }
-    let latest: { version: number; dir: string } | null = null;
-    for (const entry of entries) {
-      const version = Number(entry);
-      if (!Number.isFinite(version)) continue;
-      if (!latest || version > latest.version) {
-        latest = { version, dir: path.join(snapshotsDir, entry) };
-      }
-    }
-    if (!latest) return null;
-    try {
-      return await this.readGraphFromBase(latest.dir, name);
-    } catch {
-      return null;
-    }
-  }
-
-  private async readGraphFromBase(baseDir: string, fallbackName: string): Promise<PersistedGraph | null> {
-    const meta = await this.readMetaAt(path.join(baseDir, this.metaPath()), fallbackName);
-    if (!meta) return null;
-    const nodesRes = await this.readEntitiesFromDir<PersistedGraphNode>(path.join(baseDir, 'nodes'));
-    const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(path.join(baseDir, 'edges'));
-    if (nodesRes.hadError || edgesRes.hadError) {
-      throw new Error('Snapshot read error');
-    }
-    const variables = await this.readVariablesFromBase(baseDir);
-    return {
-      name: meta.name,
-      version: meta.version,
-      updatedAt: meta.updatedAt,
-      nodes: nodesRes.items,
-      edges: edgesRes.items,
-      variables,
-    };
-  }
-
-  private async readLatestJournalEntry(): Promise<PersistedGraph | null> {
-    const journalPath = path.join(this.ensureGraphRoot(), 'journal.ndjson');
-    let raw: string;
-    try {
-      raw = await fs.readFile(journalPath, 'utf8');
-    } catch {
-      return null;
-    }
-    const lines = raw.split('\n').filter((line) => line.trim().length > 0);
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      try {
-        const parsed = JSON.parse(lines[i]) as { graph?: PersistedGraph };
-        if (parsed?.graph) return parsed.graph;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  }
-
-  private async writeSnapshot(graph: PersistedGraph): Promise<{ rollback: () => Promise<void>; pruneOlder: () => Promise<void> }> {
-    const snapshotsDir = path.join(this.ensureGraphRoot(), 'snapshots');
-    await fs.mkdir(snapshotsDir, { recursive: true });
-    const tempDir = path.join(
-      snapshotsDir,
-      `.tmp-${graph.version}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`,
-    );
-    await fs.mkdir(path.join(tempDir, 'nodes'), { recursive: true });
-    await fs.mkdir(path.join(tempDir, 'edges'), { recursive: true });
-
-    const meta: GraphMeta = { name: graph.name, version: graph.version, updatedAt: graph.updatedAt, format: 2 };
-    await this.writeYamlAtBase(tempDir, this.metaPath(), meta);
-    await this.writeYamlAtBase(tempDir, this.variablesPath(), graph.variables ?? []);
-
-    for (const node of graph.nodes) {
-      await this.writeYamlAtBase(tempDir, this.nodePath(node.id), node);
-    }
-    for (const edge of graph.edges) {
-      await this.writeYamlAtBase(tempDir, this.edgePath(edge.id!), edge);
-    }
-
-    const finalDir = path.join(snapshotsDir, String(graph.version));
-    await fs.rm(finalDir, { recursive: true, force: true });
-    try {
-      await fs.rename(tempDir, finalDir);
-    } catch (err) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
-      throw err;
-    }
-
-    const rollback = async () => {
-      await fs.rm(finalDir, { recursive: true, force: true }).catch(() => undefined);
-    };
-    const pruneOlder = async () => {
-      const entries = await fs.readdir(snapshotsDir);
-      await Promise.all(
-        entries
-          .filter((entry) => entry !== String(graph.version))
-          .map((entry) => fs.rm(path.join(snapshotsDir, entry), { recursive: true, force: true }).catch(() => undefined)),
-      );
-    };
-    return { rollback, pruneOlder };
-  }
-
-  private async appendJournal(graph: PersistedGraph): Promise<() => Promise<void>> {
-    const journalPath = path.join(this.ensureGraphRoot(), 'journal.ndjson');
-    await fs.mkdir(path.dirname(journalPath), { recursive: true });
-    const fd = await fs.open(journalPath, 'a+');
-    try {
-      const { size: previousSize } = await fd.stat();
-      const record = { version: graph.version, timestamp: graph.updatedAt, graph };
-      await fd.writeFile(`${JSON.stringify(record)}\n`);
-      await fd.sync();
-      return async () => {
-        const rollbackFd = await fs.open(journalPath, 'r+');
-        try {
-          await rollbackFd.truncate(previousSize);
-          await rollbackFd.sync();
-        } finally {
-          await rollbackFd.close();
-        }
-      };
-    } finally {
-      await fd.close();
-    }
-  }
-
 
   private stripInternalNode(node: PersistedGraphNode): PersistedGraphNode {
     return {

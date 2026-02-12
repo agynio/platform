@@ -8,8 +8,8 @@ Graph persistence
   - `GRAPH_BRANCH`: logical branch label retained for compatibility/telemetry (default `main`).
   - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: optional metadata forwarded to audit logs.
   - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
-- On startup the server ensures `GRAPH_REPO_PATH` exists with `nodes/`, `edges/`, `variables.yaml`, `graph.meta.yaml`, `journal.ndjson`, and a `snapshots/` directory. There is no dataset indirection or Git requirement; `.git` directories are ignored if present.
-- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire `.graph.lock` inside `GRAPH_REPO_PATH` before writing. Each write performs atomic updates, produces a snapshot at `snapshots/<version>/`, and appends a JSON line to `journal.ndjson` for recovery.
+- On startup the server ensures `GRAPH_REPO_PATH` exists with `nodes/`, `edges/`, `variables.yaml`, and `graph.meta.yaml`. There is no dataset indirection or Git requirement; `.git` directories are ignored if present.
+- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire `.graph.lock` inside `GRAPH_REPO_PATH` before writing. Each write performs atomic updates directly against the working tree using temp files + rename.
 - Error responses:
    - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
    - `409 LOCK_TIMEOUT` if the repository lock cannot be acquired within the configured timeout.
@@ -79,11 +79,9 @@ At runtime the node calls `EnvService.resolveProviderEnv`, which delegates to `R
 The resolved overlay is merged with any base environment and forwarded to Docker exec sessions for both discovery and tool calls, ensuring MCP servers receive the same env regardless of execution path.
 
 Storage layout (format: 2)
-- Repository root: `<GRAPH_REPO_PATH>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, `edges/`, `journal.ndjson`, and a `snapshots/` directory.
+- Repository root: `<GRAPH_REPO_PATH>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, and `edges/`.
 - Filenames remain `encodeURIComponent(id)`; edge ids are deterministic `<src>-<srcHandle>__<tgt>-<tgtHandle>`.
-- `snapshots/<version>/` mirrors the working tree for that graph version. Only the latest snapshot is kept; earlier directories are removed after each write.
-- `journal.ndjson` stores JSON lines `{ version, timestamp, graph }` for replay if both the working tree and snapshot become unavailable.
-- Legacy git working trees are no longer supported; keep `.git` directories out of `GRAPH_REPO_PATH` or delete them after copying the data.
+- Writes update the working tree in-place; there are no recovery artifacts or side directories. Keep `.git` directories out of `GRAPH_REPO_PATH` or delete them after copying the data.
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -71,55 +71,7 @@ describe('FsGraphRepository filesystem persistence', () => {
     expect(await pathExists(path.join(tempDir, '.git'))).toBe(false);
   });
 
-  it('rolls back snapshot artifacts when persistence fails', async () => {
-    const cfg = new ConfigService().init(
-      configSchema.parse({
-        ...baseConfigEnv,
-        graphRepoPath: tempDir,
-      }),
-    );
-    const repo = new FsGraphRepository(cfg, templateRegistryStub);
-    await repo.initIfNeeded();
-
-    await repo.upsert(
-      {
-        name: 'main',
-        version: 0,
-        nodes: [{ id: 'start', template: 'trigger' }],
-        edges: [],
-      },
-      undefined,
-    );
-
-    const appendSpy = vi.spyOn(repo as any, 'appendJournal').mockImplementation(async () => {
-      throw new Error('fail-journal');
-    });
-
-    await expect(
-      repo.upsert(
-        {
-          name: 'main',
-          version: 1,
-          nodes: [
-            { id: 'start', template: 'trigger', position: { x: 1, y: 1 } },
-            { id: 'next', template: 'trigger' },
-          ],
-          edges: [],
-        },
-        undefined,
-      ),
-    ).rejects.toMatchObject({ code: 'PERSIST_FAILED' });
-
-    appendSpy.mockRestore();
-
-    const snapshotEntries = await fs.readdir(repoPath('snapshots'));
-    expect(snapshotEntries).toEqual(['1']);
-    const journalContents = await fs.readFile(repoPath('journal.ndjson'), 'utf8');
-    const lines = journalContents.trim().length ? journalContents.trim().split('\n') : [];
-    expect(lines).toHaveLength(1);
-  });
-
-  it('falls back to journal when snapshot read fails', async () => {
+  it('does not create recovery directories when graph changes', async () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseConfigEnv,
@@ -152,14 +104,9 @@ describe('FsGraphRepository filesystem persistence', () => {
       undefined,
     );
 
-    await fs.writeFile(repoPath('nodes', 'start.yaml'), '{ not: yaml');
-    await fs.writeFile(repoPath('snapshots', '2', 'nodes', 'branch.yaml'), '{ invalid');
-
-    const repoAfterRestart = new FsGraphRepository(cfg, templateRegistryStub);
-    await repoAfterRestart.initIfNeeded();
-    const loaded = await repoAfterRestart.get('main');
-    expect(loaded?.version).toBe(2);
-    expect(loaded?.nodes).toHaveLength(2);
+    expect(await pathExists(repoPath('snapshots'))).toBe(false);
+    expect(await pathExists(repoPath('journal'))).toBe(false);
+    expect(await pathExists(repoPath('journal.ndjson'))).toBe(false);
   });
 
   it('ignores leftover git directories in the repo path', async () => {

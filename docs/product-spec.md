@@ -35,7 +35,7 @@ Architecture and components
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and snapshot+journal recovery. Each upsert performs atomic writes with conflict/timeout/persist error modes.
+  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and direct working-tree persistence. Each upsert performs atomic writes with conflict/timeout/persist error modes.
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace network
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
