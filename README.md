@@ -162,9 +162,8 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Optional LLM:
   - OPENAI_API_KEY, OPENAI_BASE_URL
 - Graph store:
-  - GRAPH_DATA_PATH (default ./data/graph)
-  - GRAPH_DATASET (default main; falls back to active-dataset.txt when unset)
-  - GRAPH_AUTO_MIGRATE (default false; set to 1 to auto-migrate legacy git layouts on boot instead of failing)
+  - GRAPH_REPO_PATH (default ./data/graph)
+  - GRAPH_BRANCH (default main)
   - GRAPH_AUTHOR_NAME, GRAPH_AUTHOR_EMAIL (deprecated; retained for compatibility)
   - GRAPH_LOCK_TIMEOUT_MS (default 5000)
 - Vault:
@@ -313,5 +312,5 @@ Secrets handling:
 - Production Vault: dev auto-init script (vault/auto-init.sh) is not suitable; confirm production secret management approach and policies.
 - UI Storybook deployment: CI builds and smoke-tests Storybook, but no public hosting config is present. Confirm desired publishing workflow.
 - NCPS in production: ops/k8s manifests are examples; confirm production deployment/monitoring design.
-- Filesystem-backed graph store (GRAPH_DATA_PATH=./data/graph, GRAPH_DATASET=main) assumes the path is writable and durable. Confirm persistence strategy in production (persistent volumes/NFS) and rotate datasets via the active-dataset pointer when needed. If the server blocks on startup with a legacy git warning, rerun `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source <path> --target <path> --dataset <name>` or set `GRAPH_AUTO_MIGRATE=1` to let boot-time migration handle it.
+- Filesystem-backed graph store (GRAPH_REPO_PATH=./data/graph, GRAPH_BRANCH=main) assumes the path is writable and durable. Confirm persistence strategy in production (persistent volumes/NFS) and keep legacy git repos out of the configured path; the server now reads/writes directly to the working tree without migrations.
 - Confirm whether the general postgres service (5442) is used by other components or is purely for convenience; server uses agents-db (5443).

@@ -1,20 +1,19 @@
 # Filesystem-backed Graph Store (format: 2)
 
 Overview
-- Graph persistence now writes directly to the filesystem under `GRAPH_DATA_PATH` without relying on Git commits.
-- Each dataset lives under `<GRAPH_DATA_PATH>/datasets/<GRAPH_DATASET>` and contains the full working tree plus recovery artifacts.
-- The file `active-dataset.txt` at the root of `GRAPH_DATA_PATH` records the active dataset name. When `GRAPH_DATASET` is not explicitly set, the server reads this pointer to decide which dataset to load.
-- If `GRAPH_DATA_PATH` already points to a dataset root (e.g. `/data/graph/datasets/prod`), the server skips pointer management and loads the dataset in-place.
-- Legacy git working trees (presence of `.git` + `graph.meta.yaml` + `nodes/` + `edges/`) are blocked at boot with an actionable error. Set `GRAPH_AUTO_MIGRATE=1` to auto-run the migration, or execute the CLI manually (see below).
+- Graph persistence writes directly to the filesystem under `GRAPH_REPO_PATH` (default `./data/graph`).
+- The layout matches the legacy git working tree: `graph.meta.yaml`, `nodes/`, `edges/`, `variables.yaml`, `journal.ndjson`, and a `snapshots/` directory live at the path root.
+- `GRAPH_BRANCH` is retained as metadata for observability but does not influence the filesystem layout.
+- `.git` directories are ignored; the repository no longer shells out to git or runs migrations.
 
-Dataset layout (format: 2)
+Working tree layout (format: 2)
 - `graph.meta.yaml`: `{ name, version, updatedAt, format: 2 }`
 - `variables.yaml`: optional list of `{ key, value }`
 - `nodes/`: one YAML file per node (`nodes/<urlencoded nodeId>.yaml`)
 - `edges/`: one YAML file per edge (`edges/<urlencoded edgeId>.yaml`)
-- `journal.ndjson`: append-only JSON lines `{ version, timestamp, graph }` for recovery if working tree + snapshot fail
-- `snapshots/<version>/`: latest snapshot of the dataset (same layout as working tree)
-- `.graph.lock`: dataset-scoped advisory lock used during writes
+- `journal.ndjson`: append-only JSON lines `{ version, timestamp, graph }` for recovery if the working tree and snapshot fail
+- `snapshots/<version>/`: latest snapshot of the repository (same layout as working tree)
+- `.graph.lock`: repository-scoped advisory lock used during writes
 
 Deterministic edge IDs
 - Edge id format remains `${source}-${sourceHandle}__${target}-${targetHandle}`.
@@ -38,11 +37,6 @@ Error behaviors
 Optimistic locking
 - `version` increments monotonically. Clients must send the latest version on every POST `/api/graph`. Stale versions receive `409 { error: 'VERSION_CONFLICT', current }`.
 
-Migration tooling
-- Convert an existing git-backed working tree by running `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source ./data/graph --target ./data/graph --dataset main` (adjust paths/names as needed).
-- Setting `GRAPH_AUTO_MIGRATE=1` allows the server to invoke the same CLI automatically during bootstrap. Use this only when you trust the migration target path; otherwise leave it unset so start-up fails with the command above.
-- The tool copies `graph.meta.yaml`, `nodes/`, `edges/`, `variables.yaml` into the dataset layout, creates an initial snapshot, and renames `.git` to `.git.backup-<timestamp>` for manual archival.
-
 Notes
-- YAML remains the only supported on-disk format. Convert any legacy JSON files before pointing the server at them.
+- YAML remains the only supported on-disk format. Convert any legacy JSON files before pointing the server at the directory.
 - Filename decoding is preserved: if a node/edge YAML omits an explicit `id`, the server derives it from the file name.

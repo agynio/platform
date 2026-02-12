@@ -18,8 +18,7 @@
     "prepare": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio",
-    "graph:migrate-fs": "tsx tools/graph-migrate-fs.ts"
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@agyn/shared": "workspace:*",

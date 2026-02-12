@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -30,7 +30,7 @@ const baseConfigEnv = {
   nixAllowedChannels: 'nixpkgs-unstable',
 };
 
-describe('FsGraphRepository without git directory', () => {
+describe('FsGraphRepository filesystem persistence', () => {
   let tempDir: string;
 
   beforeEach(async () => {
@@ -41,22 +41,18 @@ describe('FsGraphRepository without git directory', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  function datasetPath(...segments: string[]): string {
-    return path.join(tempDir, 'datasets', 'fs-test', ...segments);
+  function repoPath(...segments: string[]): string {
+    return path.join(tempDir, ...segments);
   }
 
-  it('initializes, upserts, and reads graph data without .git present', async () => {
+  it('initializes, upserts, and reads graph data without git involvement', async () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseConfigEnv,
-        graphDataPath: tempDir,
-        graphDataset: 'fs-test',
+        graphRepoPath: tempDir,
       }),
-      { graphDatasetExplicit: true },
     );
     const repo = new FsGraphRepository(cfg, templateRegistryStub);
-
-    expect(await pathExists(path.join(tempDir, '.git'))).toBe(false);
 
     await repo.initIfNeeded();
     const saved = await repo.upsert(
@@ -79,10 +75,8 @@ describe('FsGraphRepository without git directory', () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseConfigEnv,
-        graphDataPath: tempDir,
-        graphDataset: 'fs-test',
+        graphRepoPath: tempDir,
       }),
-      { graphDatasetExplicit: true },
     );
     const repo = new FsGraphRepository(cfg, templateRegistryStub);
     await repo.initIfNeeded();
@@ -118,9 +112,9 @@ describe('FsGraphRepository without git directory', () => {
 
     appendSpy.mockRestore();
 
-    const snapshotEntries = await fs.readdir(datasetPath('snapshots'));
+    const snapshotEntries = await fs.readdir(repoPath('snapshots'));
     expect(snapshotEntries).toEqual(['1']);
-    const journalContents = await fs.readFile(datasetPath('journal.ndjson'), 'utf8');
+    const journalContents = await fs.readFile(repoPath('journal.ndjson'), 'utf8');
     const lines = journalContents.trim().length ? journalContents.trim().split('\n') : [];
     expect(lines).toHaveLength(1);
   });
@@ -129,10 +123,8 @@ describe('FsGraphRepository without git directory', () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseConfigEnv,
-        graphDataPath: tempDir,
-        graphDataset: 'fs-test',
+        graphRepoPath: tempDir,
       }),
-      { graphDatasetExplicit: true },
     );
     const repo = new FsGraphRepository(cfg, templateRegistryStub);
     await repo.initIfNeeded();
@@ -160,9 +152,8 @@ describe('FsGraphRepository without git directory', () => {
       undefined,
     );
 
-    // Corrupt working tree and snapshot
-    await fs.writeFile(datasetPath('nodes', 'start.yaml'), '{ not: yaml');
-    await fs.writeFile(datasetPath('snapshots', '2', 'nodes', 'branch.yaml'), '{ invalid');
+    await fs.writeFile(repoPath('nodes', 'start.yaml'), '{ not: yaml');
+    await fs.writeFile(repoPath('snapshots', '2', 'nodes', 'branch.yaml'), '{ invalid');
 
     const repoAfterRestart = new FsGraphRepository(cfg, templateRegistryStub);
     await repoAfterRestart.initIfNeeded();
@@ -170,88 +161,34 @@ describe('FsGraphRepository without git directory', () => {
     expect(loaded?.version).toBe(2);
     expect(loaded?.nodes).toHaveLength(2);
   });
-});
 
-describe('FsGraphRepository storage layout detection', () => {
-  let workDir: string;
+  it('ignores leftover git directories in the repo path', async () => {
+    await fs.mkdir(path.join(tempDir, '.git', 'objects'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, '.git', 'HEAD'), 'ref: refs/heads/main');
 
-  beforeEach(async () => {
-    workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'graph-layout-'));
-  });
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        ...baseConfigEnv,
+        graphRepoPath: tempDir,
+        graphBranch: 'feature/x',
+      }),
+    );
+    const repo = new FsGraphRepository(cfg, templateRegistryStub);
 
-  afterEach(async () => {
-    await fs.rm(workDir, { recursive: true, force: true });
-  });
-
-  it('loads a populated dataset when GRAPH_DATA_PATH points to the dataset root', async () => {
-    const datasetRoot = await seedGraph(workDir, 'fs-test');
-    const repo = new FsGraphRepository(makeConfig(datasetRoot, { dataset: 'fs-test' }), templateRegistryStub);
     await repo.initIfNeeded();
+    await repo.upsert(
+      {
+        name: 'main',
+        version: 0,
+        nodes: [{ id: 'start', template: 'trigger' }],
+        edges: [],
+      },
+      undefined,
+    );
 
     const loaded = await repo.get('main');
-    expect(loaded?.version).toBe(1);
     expect(loaded?.nodes).toHaveLength(1);
-  });
-
-  it('fails fast with migration instructions for legacy working trees without auto-migrate', async () => {
-    const datasetRoot = await seedGraph(workDir, 'fs-test');
-    const legacyPath = path.join(workDir, 'legacy');
-    await fs.mkdir(legacyPath, { recursive: true });
-    await fs.cp(datasetRoot, legacyPath, { recursive: true });
-    await fs.mkdir(path.join(legacyPath, '.git'));
-
-    const repo = new FsGraphRepository(makeConfig(legacyPath, { dataset: 'fs-test' }), templateRegistryStub);
-    await expect(repo.initIfNeeded()).rejects.toMatchObject({
-      code: 'LEGACY_GRAPH_REPO',
-      message: expect.stringContaining('graph:migrate-fs'),
-    });
-  });
-
-  it('auto-migrates legacy working trees when GRAPH_AUTO_MIGRATE is enabled', async () => {
-    const datasetRoot = await seedGraph(workDir, 'fs-test');
-    const legacyPath = path.join(workDir, 'legacy-auto');
-    await fs.mkdir(legacyPath, { recursive: true });
-    await fs.cp(datasetRoot, legacyPath, { recursive: true });
-    await fs.mkdir(path.join(legacyPath, '.git'));
-
-    const repo = new FsGraphRepository(
-      makeConfig(legacyPath, { dataset: 'fs-test', autoMigrate: true }),
-      templateRegistryStub,
-    );
-    await repo.initIfNeeded();
-    const loaded = await repo.get('main');
-
-    expect(loaded?.version).toBe(1);
-    expect(await pathExists(path.join(legacyPath, '.git'))).toBe(false);
-    expect(await pathExists(path.join(legacyPath, 'datasets', 'fs-test', 'graph.meta.yaml'))).toBe(true);
-  });
-
-  it('continues reading from the canonical dataset after migration restarts', async () => {
-    const datasetRoot = await seedGraph(workDir, 'fs-restart');
-    const legacyPath = path.join(workDir, 'legacy-restart');
-    await fs.mkdir(legacyPath, { recursive: true });
-    await fs.cp(datasetRoot, legacyPath, { recursive: true });
-    await fs.mkdir(path.join(legacyPath, '.git'));
-
-    const repo = new FsGraphRepository(
-      makeConfig(legacyPath, { dataset: 'fs-restart', autoMigrate: true }),
-      templateRegistryStub,
-    );
-    await repo.initIfNeeded();
-    const migrated = await repo.get('main');
-    expect(migrated?.version).toBe(1);
-
-    await fs.writeFile(path.join(legacyPath, 'nodes', 'start.yaml'), 'id: start\ntemplate: legacy\n');
-
-    const restartRepo = new FsGraphRepository(
-      makeConfig(legacyPath, { dataset: 'fs-restart', autoMigrate: false }),
-      templateRegistryStub,
-    );
-    await restartRepo.initIfNeeded();
-    const loaded = await restartRepo.get('main');
-
-    expect(loaded?.nodes).toEqual([{ id: 'start', template: 'trigger' }]);
-    expect(await pathExists(path.join(legacyPath, 'datasets', 'fs-restart', 'nodes', 'start.yaml'))).toBe(true);
+    expect(await pathExists(path.join(tempDir, '.git', 'HEAD'))).toBe(true);
   });
 });
 
@@ -262,33 +199,4 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function makeConfig(
-  graphPath: string,
-  opts: { dataset?: string; autoMigrate?: boolean; explicit?: boolean } = {},
-): ConfigService {
-  const dataset = opts.dataset ?? 'fs-test';
-  const parsed = configSchema.parse({
-    ...baseConfigEnv,
-    graphDataPath: graphPath,
-    graphDataset: dataset,
-    graphAutoMigrate: opts.autoMigrate ?? false,
-  });
-  return new ConfigService().init(parsed, { graphDatasetExplicit: opts.explicit ?? true });
-}
-
-async function seedGraph(basePath: string, dataset = 'fs-test'): Promise<string> {
-  const repo = new FsGraphRepository(makeConfig(basePath, { dataset }), templateRegistryStub);
-  await repo.initIfNeeded();
-  await repo.upsert(
-    {
-      name: 'main',
-      version: 0,
-      nodes: [{ id: 'start', template: 'trigger' }],
-      edges: [],
-    },
-    undefined,
-  );
-  return path.join(basePath, 'datasets', dataset);
 }

@@ -95,7 +95,7 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store now uses a filesystem dataset per GRAPH_DATA_PATH/GRAPH_DATASET; legacy git repos trigger a startup guard that instructs operators to run `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source <path> --target <path> --dataset <name>` (or set GRAPH_AUTO_MIGRATE=1 to auto-run the same tool).
+- Graph store now writes directly to the working tree at `GRAPH_REPO_PATH`; legacy git guards and migration tooling have been removed. Ensure any old `.git` directories are deleted or copied elsewhere before pointing the server at the path.
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/fs-store.md
@@ -110,9 +110,8 @@ Configuration matrix (server env vars)
   - If `LLM_PROVIDER=litellm`: LITELLM_BASE_URL and LITELLM_MASTER_KEY
   - If `LLM_PROVIDER=openai`: OPENAI_API_KEY (OPENAI_BASE_URL optional)
 - Optional
-  - GRAPH_DATA_PATH (default ./data/graph)
-  - GRAPH_DATASET (default main; falls back to active pointer when unset)
-  - GRAPH_AUTO_MIGRATE (default false; set to 1 to auto-migrate detected legacy git layouts during boot)
+  - GRAPH_REPO_PATH (default ./data/graph)
+  - GRAPH_BRANCH (default main)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN

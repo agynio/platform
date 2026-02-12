@@ -13,7 +13,6 @@ import { GraphRepository } from './graph.repository';
 import type { GraphAuthor } from './graph.repository';
 import { ConfigService } from '../core/services/config.service';
 import { parseYaml, stringifyYaml } from './yaml.util';
-import { migrateLegacyWorkingTree } from './fsGraph.migrator';
 
 interface GraphMeta {
   name: string;
@@ -32,11 +31,6 @@ function codeError<T = unknown>(code: string, message: string, current?: T): Cod
 
 type LockHandle = { lockPath: string } | null;
 
-type StorageLayout =
-  | { kind: 'standard' }
-  | { kind: 'legacy-working-tree'; legacyPath: string }
-  | { kind: 'dataset-root'; datasetPath: string; datasetName?: string };
-
 export class FsGraphRepository extends GraphRepository {
   constructor(
     private readonly config: ConfigService,
@@ -45,47 +39,12 @@ export class FsGraphRepository extends GraphRepository {
     super();
   }
 
-  private datasetName?: string;
+  private graphRoot?: string;
   private lastCommitted?: PersistedGraph;
-  private datasetRootOverride?: string;
-  private skipPointerUpdate = false;
 
   async initIfNeeded(): Promise<void> {
-    let dataset = await this.resolveDatasetName();
-    this.datasetName = dataset;
-
-    const layout = await this.detectStorageLayout(dataset);
-
-    if (layout.kind === 'dataset-root') {
-      this.datasetRootOverride = layout.datasetPath;
-      this.skipPointerUpdate = true;
-      if (layout.datasetName) {
-        this.datasetName = layout.datasetName;
-        dataset = layout.datasetName;
-      }
-    } else if (layout.kind === 'legacy-working-tree') {
-      if (!this.config.graphAutoMigrate) {
-        const command = `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source ${layout.legacyPath} --target ${this.config.graphDataPath} --dataset ${dataset}`;
-        throw codeError(
-          'LEGACY_GRAPH_REPO',
-          `Legacy git-backed graph detected at ${layout.legacyPath}. Run "${command}" or set GRAPH_AUTO_MIGRATE=1 to auto-migrate during bootstrap.`,
-        );
-      }
-      await migrateLegacyWorkingTree({
-        source: layout.legacyPath,
-        target: this.config.graphDataPath,
-        dataset,
-        force: true,
-        log: (message) => console.info(`[FsGraphRepository] ${message}`),
-      });
-    }
-
-    if (!this.skipPointerUpdate) {
-      await fs.mkdir(this.config.graphDataPath, { recursive: true });
-      await this.writeActiveDatasetPointer(this.datasetName);
-    }
-
-    const root = this.datasetRoot();
+    this.graphRoot = this.config.graphRepoPath;
+    const root = this.ensureGraphRoot();
     await fs.mkdir(root, { recursive: true });
     await fs.mkdir(path.join(root, 'nodes'), { recursive: true });
     await fs.mkdir(path.join(root, 'edges'), { recursive: true });
@@ -209,7 +168,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async persistGraph(current: PersistedGraph, target: PersistedGraph): Promise<void> {
-    const root = this.datasetRoot();
+    const root = this.ensureGraphRoot();
     const nodesDir = path.join(root, 'nodes');
     const edgesDir = path.join(root, 'edges');
     await fs.mkdir(nodesDir, { recursive: true });
@@ -292,7 +251,7 @@ export class FsGraphRepository extends GraphRepository {
     if (nodesRes.hadError || edgesRes.hadError) {
       throw new Error('Working tree read error');
     }
-    const variables = await this.readVariablesFromBase(this.datasetRoot());
+    const variables = await this.readVariablesFromBase(this.ensureGraphRoot());
     return {
       name: meta.name,
       version: meta.version,
@@ -304,7 +263,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async readLatestSnapshot(name: string): Promise<PersistedGraph | null> {
-    const snapshotsDir = path.join(this.datasetRoot(), 'snapshots');
+    const snapshotsDir = path.join(this.ensureGraphRoot(), 'snapshots');
     let entries: string[] = [];
     try {
       entries = await fs.readdir(snapshotsDir);
@@ -347,7 +306,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async readLatestJournalEntry(): Promise<PersistedGraph | null> {
-    const journalPath = path.join(this.datasetRoot(), 'journal.ndjson');
+    const journalPath = path.join(this.ensureGraphRoot(), 'journal.ndjson');
     let raw: string;
     try {
       raw = await fs.readFile(journalPath, 'utf8');
@@ -367,7 +326,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async writeSnapshot(graph: PersistedGraph): Promise<{ rollback: () => Promise<void>; pruneOlder: () => Promise<void> }> {
-    const snapshotsDir = path.join(this.datasetRoot(), 'snapshots');
+    const snapshotsDir = path.join(this.ensureGraphRoot(), 'snapshots');
     await fs.mkdir(snapshotsDir, { recursive: true });
     const tempDir = path.join(
       snapshotsDir,
@@ -411,7 +370,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async appendJournal(graph: PersistedGraph): Promise<() => Promise<void>> {
-    const journalPath = path.join(this.datasetRoot(), 'journal.ndjson');
+    const journalPath = path.join(this.ensureGraphRoot(), 'journal.ndjson');
     await fs.mkdir(path.dirname(journalPath), { recursive: true });
     const fd = await fs.open(journalPath, 'a+');
     try {
@@ -433,50 +392,6 @@ export class FsGraphRepository extends GraphRepository {
     }
   }
 
-  private async detectStorageLayout(activeDataset: string): Promise<StorageLayout> {
-    const graphPath = this.config.graphDataPath;
-    const datasetCandidate = path.join(graphPath, 'datasets', activeDataset);
-    if (await this.pathExists(datasetCandidate)) {
-      return { kind: 'standard' };
-    }
-
-    const datasetsDir = path.join(graphPath, 'datasets');
-    if (await this.pathExists(datasetsDir)) {
-      return { kind: 'standard' };
-    }
-
-    const metaPath = path.join(graphPath, this.metaPath());
-    const nodesPath = path.join(graphPath, 'nodes');
-    const edgesPath = path.join(graphPath, 'edges');
-    const hasMeta = await this.pathExists(metaPath);
-    const hasNodes = await this.pathExists(nodesPath);
-    const hasEdges = await this.pathExists(edgesPath);
-    const datasetNameFromPath = this.detectDatasetNameFromPath(graphPath);
-
-    if (hasMeta && hasNodes && hasEdges) {
-      const gitDir = path.join(graphPath, '.git');
-      if (await this.pathExists(gitDir)) {
-        return { kind: 'legacy-working-tree', legacyPath: graphPath };
-      }
-      return { kind: 'dataset-root', datasetPath: graphPath, datasetName: datasetNameFromPath };
-    }
-
-    if (datasetNameFromPath) {
-      return { kind: 'dataset-root', datasetPath: graphPath, datasetName: datasetNameFromPath };
-    }
-
-    return { kind: 'standard' };
-  }
-
-  private detectDatasetNameFromPath(candidate: string): string | undefined {
-    const normalized = path.normalize(candidate);
-    const segments = normalized.split(path.sep).filter((segment) => segment.length > 0);
-    const idx = segments.lastIndexOf('datasets');
-    if (idx >= 0 && idx + 1 < segments.length) {
-      return segments[idx + 1];
-    }
-    return undefined;
-  }
 
   private stripInternalNode(node: PersistedGraphNode): PersistedGraphNode {
     return {
@@ -509,7 +424,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async writeYamlEntity(relPath: string, data: unknown): Promise<void> {
-    await this.writeYamlAtBase(this.datasetRoot(), relPath, data);
+    await this.writeYamlAtBase(this.ensureGraphRoot(), relPath, data);
   }
 
   private async writeYamlAtBase(baseDir: string, relPath: string, data: unknown): Promise<void> {
@@ -676,52 +591,25 @@ export class FsGraphRepository extends GraphRepository {
     return JSON.parse(JSON.stringify(graph)) as PersistedGraph;
   }
 
-  private datasetRoot(dataset?: string): string {
-    if (this.datasetRootOverride) {
-      return this.datasetRootOverride;
+  private ensureGraphRoot(): string {
+    if (!this.graphRoot) {
+      throw new Error('FsGraphRepository not initialized');
     }
-    const name = dataset ?? this.datasetName;
-    if (!name) throw new Error('FsGraphRepository not initialized');
-    return path.join(this.config.graphDataPath, 'datasets', name);
+    return this.graphRoot;
   }
 
   private absolutePath(relPath: string): string {
-    return path.join(this.datasetRoot(), relPath);
-  }
-
-  private pointerPath(): string {
-    return path.join(this.config.graphDataPath, 'active-dataset.txt');
-  }
-
-  private async resolveDatasetName(): Promise<string> {
-    const configured = (this.config.graphDataset ?? 'main').trim() || 'main';
-    if (this.config.graphDatasetIsExplicit) return configured;
-    const pointer = await this.readActiveDatasetPointer();
-    return pointer ?? configured;
-  }
-
-  private async readActiveDatasetPointer(): Promise<string | null> {
-    try {
-      const raw = await fs.readFile(this.pointerPath(), 'utf8');
-      const value = raw.trim();
-      return value.length ? value : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async writeActiveDatasetPointer(dataset: string): Promise<void> {
-    await this.atomicWriteFile(this.pointerPath(), `${dataset}\n`);
+    return path.join(this.ensureGraphRoot(), relPath);
   }
 
   private assertReady(): void {
-    if (!this.datasetName) {
+    if (!this.graphRoot) {
       throw new Error('FsGraphRepository used before initialization');
     }
   }
 
   private async acquireLock(): Promise<LockHandle> {
-    const lockPath = path.join(this.datasetRoot(), '.graph.lock');
+    const lockPath = path.join(this.ensureGraphRoot(), '.graph.lock');
     const timeout = this.config.graphLockTimeoutMs ?? 5000;
     const start = Date.now();
     while (true) {

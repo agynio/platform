@@ -61,15 +61,15 @@ describe.sequential('NixController', () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         llmProvider: 'openai',
-      githubAppId: 'x',
-      githubAppPrivateKey: 'x',
-      githubInstallationId: 'x',
-      githubToken: 'x',
-      agentsDatabaseUrl: 'postgres://localhost:5432/agents',
-      litellmBaseUrl: 'http://localhost:4000',
-      litellmMasterKey: 'sk-test',
-      graphDataPath: './data/graph',
-      graphDataset: 'main',
+        githubAppId: 'x',
+        githubAppPrivateKey: 'x',
+        githubInstallationId: 'x',
+        githubToken: 'x',
+        agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        litellmBaseUrl: 'http://localhost:4000',
+        litellmMasterKey: 'sk-test',
+        graphRepoPath: './data/graph',
+        graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
         nixAllowedChannels: 'nixpkgs-unstable',
         nixHttpTimeoutMs: String(200),
@@ -79,7 +79,7 @@ describe.sequential('NixController', () => {
         ncpsEnabled: 'false',
         ncpsUrl: 'http://ncps:8501',
         ncpsRefreshIntervalMs: '0',
-      })
+      }),
     );
     controller = new NixController(cfg);
     reply = createReply();

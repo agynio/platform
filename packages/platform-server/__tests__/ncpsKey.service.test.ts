@@ -7,7 +7,7 @@ describe('NcpsKeyService', () => {
     githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x',
     llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents',
     litellmBaseUrl: 'http://localhost:4000', litellmMasterKey: 'sk-test',
-    graphDataPath: './data/graph', graphDataset: 'main',
+    graphRepoPath: './data/graph', graphBranch: 'main',
     dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
     mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',
     ncpsRefreshIntervalMs: '0', // disable periodic refresh for most tests

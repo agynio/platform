@@ -37,11 +37,9 @@ function createTemplateRegistry(): TemplateRegistry {
   } as unknown as TemplateRegistry;
 }
 
-function createConfig(graphDataPath: string): ConfigService {
+function createConfig(graphRepoPath: string): ConfigService {
   const base = {
-    graphDataPath,
-    graphDataset: 'main',
-    graphDatasetIsExplicit: true,
+    graphRepoPath,
     graphLockTimeoutMs: 1000,
   } as const;
   return base as unknown as ConfigService;
@@ -58,8 +56,8 @@ describe('FsGraphRepository YAML storage', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  function datasetPath(...segments: string[]): string {
-    return path.join(tempDir, 'datasets', 'main', ...segments);
+  function repoPath(...segments: string[]): string {
+    return path.join(tempDir, ...segments);
   }
 
   it('writes YAML files by default', async () => {
@@ -68,14 +66,14 @@ describe('FsGraphRepository YAML storage', () => {
     await repo.initIfNeeded();
     await repo.upsert(defaultGraph, undefined);
 
-    const metaYaml = datasetPath('graph.meta.yaml');
-    const metaJson = datasetPath('graph.meta.json');
-    const nodeYaml = datasetPath('nodes', 'trigger.yaml');
-    const nodeJson = datasetPath('nodes', 'trigger.json');
-    const edgeYaml = datasetPath('edges', `${encodeURIComponent('trigger-out__agent-in')}.yaml`);
-    const edgeJson = datasetPath('edges', `${encodeURIComponent('trigger-out__agent-in')}.json`);
-    const varsYaml = datasetPath('variables.yaml');
-    const varsJson = datasetPath('variables.json');
+    const metaYaml = repoPath('graph.meta.yaml');
+    const metaJson = repoPath('graph.meta.json');
+    const nodeYaml = repoPath('nodes', 'trigger.yaml');
+    const nodeJson = repoPath('nodes', 'trigger.json');
+    const edgeYaml = repoPath('edges', `${encodeURIComponent('trigger-out__agent-in')}.yaml`);
+    const edgeJson = repoPath('edges', `${encodeURIComponent('trigger-out__agent-in')}.json`);
+    const varsYaml = repoPath('variables.yaml');
+    const varsJson = repoPath('variables.json');
 
     expect(await pathExists(metaYaml)).toBe(true);
     expect(await pathExists(metaJson)).toBe(false);
@@ -98,12 +96,12 @@ describe('FsGraphRepository YAML storage', () => {
     await repo.initIfNeeded();
     await repo.upsert(defaultGraph, undefined);
 
-    await fs.writeFile(datasetPath('graph.meta.json'), '{ invalid json', 'utf8');
-    await fs.writeFile(datasetPath('nodes', 'trigger.json'), '{ invalid json', 'utf8');
+    await fs.writeFile(repoPath('graph.meta.json'), '{ invalid json', 'utf8');
+    await fs.writeFile(repoPath('nodes', 'trigger.json'), '{ invalid json', 'utf8');
 
     const stored = await repo.get('main');
     expect(stored?.version).toBeGreaterThan(0);
     expect(stored?.nodes).toHaveLength(2);
-    expect(await pathExists(datasetPath('graph.meta.yaml'))).toBe(true);
+    expect(await pathExists(repoPath('graph.meta.yaml'))).toBe(true);
   });
 });
