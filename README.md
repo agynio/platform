@@ -1,4 +1,6 @@
 # Agyn Platform
+> Quick setup: follow the [Bootstrap guide](https://github.com/agynio/bootstrap) to set up prerequisites and a local dev environment for this repo.
+
 A multi-service agents platform with a NestJS API, React UI, and Git-backed graph orchestration.
 
 ## Overview
