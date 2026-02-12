@@ -74,7 +74,7 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
   });
 });
 
-describe('CallToolsLLMReducer MCP logical failure heuristic', () => {
+describe('CallToolsLLMReducer MCP payload handling (protocol-only)', () => {
   const invokeWithPayload = async (payload: Record<string, unknown>) => {
     const callTool = vi.fn(async () => ({ isError: false, content: JSON.stringify(payload) }));
     const node = createNode(callTool);
@@ -89,34 +89,32 @@ describe('CallToolsLLMReducer MCP logical failure heuristic', () => {
     return { result, completion };
   };
 
-  it('classifies payloads with status>=400 and error string as failures', async () => {
+  it('treats HTTP-looking payloads as success when isError is false', async () => {
     const { result, completion } = await invokeWithPayload({ status: 401, error: 'Search failed' });
-    expect(completion.status).toBe('error');
-    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
-    expect(String(completion.errorMessage ?? '')).toContain('status=401');
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+    expect(completion.errorMessage).toBeNull();
 
     const last = result.messages.at(-1) as ToolCallOutputMessage;
     expect(last).toBeInstanceOf(ToolCallOutputMessage);
-    const payload = JSON.parse(last.text);
-    expect(payload.status).toBe('error');
-    expect(payload.error_code).toBe('MCP_CALL_ERROR');
+    expect(last.text).toContain('Search failed');
   });
 
-  it('uses statusCode field as fallback for logical failures', async () => {
+  it('does not infer failures from statusCode when isError is false', async () => {
     const { completion } = await invokeWithPayload({ statusCode: 403, message: 'Forbidden' });
-    expect(completion.status).toBe('error');
-    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
-    expect(String(completion.errorMessage ?? '')).toContain('status=403');
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+    expect(completion.errorMessage).toBeNull();
   });
 
-  it('falls back to statusCode when status is non-numeric', async () => {
+  it('does not treat string status with numeric statusCode as failure without isError', async () => {
     const { completion } = await invokeWithPayload({ status: 'error', statusCode: 500, message: 'Internal error' });
-    expect(completion.status).toBe('error');
-    expect(completion.errorCode).toBe('MCP_CALL_ERROR');
-    expect(String(completion.errorMessage ?? '')).toContain('status=500');
+    expect(completion.status).toBe('success');
+    expect(completion.errorCode ?? null).toBeNull();
+    expect(completion.errorMessage).toBeNull();
   });
 
-  it('ignores payloads without status metadata', async () => {
+  it('still returns success for payloads without status metadata', async () => {
     const { result, completion } = await invokeWithPayload({ error: 'domain data' });
     expect(completion.status).toBe('success');
     expect(completion.errorCode ?? null).toBeNull();
@@ -126,13 +124,13 @@ describe('CallToolsLLMReducer MCP logical failure heuristic', () => {
     expect(last.text).toContain('domain data');
   });
 
-  it('ignores payloads with non-error status codes', async () => {
+  it('keeps success for payloads with non-error status codes', async () => {
     const { completion } = await invokeWithPayload({ status: 200, error: 'none' });
     expect(completion.status).toBe('success');
     expect(completion.errorCode ?? null).toBeNull();
   });
 
-  it('ignores non-numeric status strings', async () => {
+  it('treats non-numeric status strings as success without isError flags', async () => {
     const { completion } = await invokeWithPayload({ status: 'error', error: 'Bad' });
     expect(completion.status).toBe('success');
     expect(completion.errorCode ?? null).toBeNull();

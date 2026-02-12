@@ -56,9 +56,9 @@ describe('CallToolsLLMReducer tracing via run events', () => {
     expect(completion.errorCode).toBe('MCP_CALL_ERROR');
   });
 
-  it('marks MCP logical failures as failed tool executions', async () => {
-    const largeOutput = 'x'.repeat(60000);
-    const callTool = vi.fn(async () => ({ isError: false, content: largeOutput }));
+  it('does not reclassify MCP payloads without isError flags', async () => {
+    const payload = JSON.stringify({ status: 500, error: 'Search failed' });
+    const callTool = vi.fn(async () => ({ isError: false, content: payload }));
     const node = createMcpNode(callTool);
     const tool = new LocalMCPServerTool('codex_apply_patch', 'Patch tool', z.object({}), node);
 
@@ -71,13 +71,13 @@ describe('CallToolsLLMReducer tracing via run events', () => {
     const result = await reducer.invoke(state, ctx as any);
     const output = result.messages.at(-1) as ToolCallOutputMessage;
     expect(output).toBeInstanceOf(ToolCallOutputMessage);
-    expect(output.text).toContain('longer than 50000');
+    expect(output.text).toContain('Search failed');
 
     expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
     const [completion] = runEvents.completeToolExecution.mock.calls[0];
-    expect(completion.status).toBe('error');
-    expect(String(completion.errorMessage ?? '')).toContain('longer than 50000');
-    expect(completion.errorCode).toBe('TOOL_OUTPUT_TOO_LARGE');
+    expect(completion.status).toBe('success');
+    expect(completion.errorMessage).toBeNull();
+    expect(completion.errorCode ?? null).toBeNull();
   });
 
   it('keeps shell command tracing flagged on non-zero exit codes', async () => {
