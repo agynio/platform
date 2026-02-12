@@ -112,6 +112,72 @@ describe('FsGraphRepository filesystem persistence', () => {
     expect(artifacts.backups).toHaveLength(0);
   });
 
+  it('keeps the lock active throughout staged swaps', async () => {
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        ...baseConfigEnv,
+        graphRepoPath: tempDir,
+        graphLockTimeoutMs: 100,
+      }),
+    );
+    const repo = new FsGraphRepository(cfg, templateRegistryStub);
+    await repo.initIfNeeded();
+
+    await repo.upsert(
+      {
+        name: 'main',
+        version: 0,
+        nodes: [{ id: 'start', template: 'trigger' }],
+        edges: [],
+      },
+      undefined,
+    );
+
+    const originalSwap = (repo as any).swapWorkingTree.bind(repo);
+    let swapStarted!: () => void;
+    const swapReady = new Promise<void>((resolve) => {
+      swapStarted = resolve;
+    });
+    const swapSpy = vi.spyOn(repo as any, 'swapWorkingTree').mockImplementation(async (...args: unknown[]) => {
+      swapStarted();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return originalSwap(...args);
+    });
+
+    const firstWrite = repo.upsert(
+      {
+        name: 'main',
+        version: 1,
+        nodes: [
+          { id: 'start', template: 'trigger' },
+          { id: 'next', template: 'trigger' },
+        ],
+        edges: [],
+      },
+      undefined,
+    );
+
+    await swapReady;
+
+    await expect(
+      repo.upsert(
+        {
+          name: 'main',
+          version: 1,
+          nodes: [
+            { id: 'start', template: 'trigger' },
+            { id: 'branch', template: 'trigger' },
+          ],
+          edges: [],
+        },
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'LOCK_TIMEOUT' });
+
+    swapSpy.mockRestore();
+    await firstWrite;
+  });
+
   it('restores the previous tree if a staged swap fails', async () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
@@ -201,8 +267,9 @@ describe('FsGraphRepository filesystem persistence', () => {
     );
 
     const parent = path.dirname(tempDir);
-    const orphanBackup = path.join(parent, `.graph-backup-test-${Date.now().toString(36)}`);
-    const orphanStaging = path.join(parent, `.graph-staging-test-${Date.now().toString(36)}`);
+    const baseName = sanitizeBaseName(tempDir);
+    const orphanBackup = path.join(parent, `.graph-backup-${baseName}-${Date.now().toString(36)}`);
+    const orphanStaging = path.join(parent, `.graph-staging-${baseName}-${Date.now().toString(36)}`);
     await fs.rename(tempDir, orphanBackup);
     await fs.mkdir(orphanStaging, { recursive: true });
 
@@ -215,6 +282,36 @@ describe('FsGraphRepository filesystem persistence', () => {
     const artifacts = await listTempArtifacts(tempDir);
     expect(artifacts.staging).toHaveLength(0);
     expect(artifacts.backups).toHaveLength(0);
+  });
+
+  it('scopes artifact cleanup to this repo only', async () => {
+    const baseName = sanitizeBaseName(tempDir);
+    const parent = path.dirname(tempDir);
+    const oursStaging = path.join(parent, `.graph-staging-${baseName}-dangling`);
+    const oursBackup = path.join(parent, `.graph-backup-${baseName}-dangling`);
+    const otherStaging = path.join(parent, `.graph-staging-otherrepo-dangling`);
+    const otherBackup = path.join(parent, `.graph-backup-otherrepo-dangling`);
+    await fs.mkdir(oursStaging, { recursive: true });
+    await fs.mkdir(oursBackup, { recursive: true });
+    await fs.mkdir(otherStaging, { recursive: true });
+    await fs.mkdir(otherBackup, { recursive: true });
+
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        ...baseConfigEnv,
+        graphRepoPath: tempDir,
+      }),
+    );
+    const repo = new FsGraphRepository(cfg, templateRegistryStub);
+    await repo.initIfNeeded();
+
+    expect(await pathExists(oursStaging)).toBe(false);
+    expect(await pathExists(oursBackup)).toBe(false);
+    expect(await pathExists(otherStaging)).toBe(true);
+    expect(await pathExists(otherBackup)).toBe(true);
+
+    await fs.rm(otherStaging, { recursive: true, force: true });
+    await fs.rm(otherBackup, { recursive: true, force: true });
   });
 
   it('ignores leftover git directories in the repo path', async () => {
@@ -258,7 +355,7 @@ async function pathExists(p: string): Promise<boolean> {
 
 async function listTempArtifacts(root: string): Promise<{ staging: string[]; backups: string[] }> {
   const parent = path.dirname(root);
-  const baseName = path.basename(root).replace(/[^a-zA-Z0-9.-]/g, '_');
+  const baseName = sanitizeBaseName(root);
   const stagingPrefix = `.graph-staging-${baseName}-`;
   const backupPrefix = `.graph-backup-${baseName}-`;
   try {
@@ -270,4 +367,9 @@ async function listTempArtifacts(root: string): Promise<{ staging: string[]; bac
   } catch {
     return { staging: [], backups: [] };
   }
+}
+
+function sanitizeBaseName(root: string): string {
+  const base = path.basename(root).replace(/[^a-zA-Z0-9.-]/g, '_');
+  return base.length ? base : 'graph';
 }

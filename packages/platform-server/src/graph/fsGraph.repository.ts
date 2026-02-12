@@ -174,7 +174,7 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async createStagingTree(graph: PersistedGraph): Promise<string> {
-    const stagingDir = this.tempDirPath(STAGING_PREFIX);
+    const stagingDir = this.tempDirPath(this.stagingDirPrefix());
     await fs.mkdir(path.dirname(stagingDir), { recursive: true });
     await fs.mkdir(stagingDir, { recursive: true });
     await fs.mkdir(path.join(stagingDir, 'nodes'), { recursive: true });
@@ -204,8 +204,8 @@ export class FsGraphRepository extends GraphRepository {
 
   private async swapWorkingTree(stagingDir: string): Promise<void> {
     const root = this.ensureGraphRoot();
-    const parent = path.dirname(root);
-    const backupDir = this.tempDirPath(BACKUP_PREFIX);
+    const parent = this.repoParentDir();
+    const backupDir = this.tempDirPath(this.backupDirPrefix());
     let rootRenamed = false;
     let newTreeActive = false;
     try {
@@ -214,7 +214,6 @@ export class FsGraphRepository extends GraphRepository {
       rootRenamed = true;
       await fs.rename(stagingDir, root);
       newTreeActive = true;
-      await this.recreateLockFile(path.join(root, '.graph.lock'));
       await this.restoreAuxiliaryEntries(backupDir, root);
       await this.syncDirectory(parent);
     } catch (err) {
@@ -340,13 +339,6 @@ export class FsGraphRepository extends GraphRepository {
     }
     return out.length ? out : undefined;
   }
-
-  private async recreateLockFile(lockPath: string): Promise<void> {
-    await fs.mkdir(path.dirname(lockPath), { recursive: true });
-    await fs.writeFile(lockPath, `${process.pid} ${new Date().toISOString()}\n`);
-    await this.syncDirectory(path.dirname(lockPath));
-  }
-
   private async restoreAuxiliaryEntries(backupDir: string, root: string): Promise<void> {
     const preserve = ['.git'];
     for (const entry of preserve) {
@@ -359,10 +351,30 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private tempDirPath(prefix: string): string {
-    const parent = path.dirname(this.ensureGraphRoot());
-    const baseName = path.basename(this.ensureGraphRoot()).replace(/[^a-zA-Z0-9.-]/g, '_');
+    const parent = this.repoParentDir();
     const uniqueId = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-    return path.join(parent, `${prefix}${baseName}-${uniqueId}`);
+    return path.join(parent, `${prefix}${uniqueId}`);
+  }
+
+  private repoParentDir(): string {
+    return path.dirname(this.ensureGraphRoot());
+  }
+
+  private repoBaseName(): string {
+    const base = path.basename(this.ensureGraphRoot()).replace(/[^a-zA-Z0-9.-]/g, '_');
+    return base.length ? base : 'graph';
+  }
+
+  private stagingDirPrefix(): string {
+    return `${STAGING_PREFIX}${this.repoBaseName()}-`;
+  }
+
+  private backupDirPrefix(): string {
+    return `${BACKUP_PREFIX}${this.repoBaseName()}-`;
+  }
+
+  private lockFilePath(): string {
+    return path.join(this.repoParentDir(), `.${this.repoBaseName()}.graph.lock`);
   }
 
   private async discardTempDir(dir: string): Promise<void> {
@@ -371,7 +383,7 @@ export class FsGraphRepository extends GraphRepository {
 
   private async cleanupSwapArtifacts(): Promise<void> {
     const root = this.ensureGraphRoot();
-    const parent = path.dirname(root);
+    const parent = this.repoParentDir();
     await fs.mkdir(parent, { recursive: true });
     let entries: Dirent[] = [];
     try {
@@ -379,8 +391,10 @@ export class FsGraphRepository extends GraphRepository {
     } catch {
       return;
     }
-    const stagingDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(STAGING_PREFIX));
-    const backupDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(BACKUP_PREFIX));
+    const stagingPrefix = this.stagingDirPrefix();
+    const backupPrefix = this.backupDirPrefix();
+    const stagingDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(stagingPrefix));
+    const backupDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(backupPrefix));
     const rootExists = await this.pathExists(root);
     if (!rootExists && backupDirs.length) {
       const candidate = await this.selectNewestDir(parent, backupDirs);
@@ -483,7 +497,8 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private async acquireLock(): Promise<LockHandle> {
-    const lockPath = path.join(this.ensureGraphRoot(), '.graph.lock');
+    const lockPath = this.lockFilePath();
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
     const timeout = this.config.graphLockTimeoutMs ?? 5000;
     const start = Date.now();
     while (true) {

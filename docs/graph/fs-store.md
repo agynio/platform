@@ -12,7 +12,7 @@ Working tree layout (format: 2)
 - `variables.yaml`: optional list of `{ key, value }`
 - `nodes/`: one YAML file per node (`nodes/<urlencoded nodeId>.yaml`)
 - `edges/`: one YAML file per edge (`edges/<urlencoded edgeId>.yaml`)
-- `.graph.lock`: repository-scoped advisory lock used during writes
+- `.<basename>.graph.lock` (stored beside the repo path): repository-scoped advisory lock used during writes
 
 Deterministic edge IDs
 - Edge id format remains `${source}-${sourceHandle}__${target}-${targetHandle}`.
@@ -20,7 +20,7 @@ Deterministic edge IDs
 
 Apply lifecycle
 1. Validate the upsert payload against the template registry (unknown config keys are stripped prior to persistence).
-2. Acquire a filesystem lock by creating `.graph.lock`. If the lock cannot be obtained within `GRAPH_LOCK_TIMEOUT_MS` (default 5s), the server returns `LOCK_TIMEOUT`.
+2. Acquire a filesystem lock by creating `.<basename>.graph.lock` next to `GRAPH_REPO_PATH`. If the lock cannot be obtained within `GRAPH_LOCK_TIMEOUT_MS` (default 5s), the server returns `LOCK_TIMEOUT`.
 3. Load the current graph from the working tree.
 4. Build a complete graph tree inside a sibling `.graph-staging-*` directory using atomic temp-file writes, fsync the staged tree, then atomically swap it with the live working tree (the previous tree is moved to `.graph-backup-*` and deleted after success; `.git` is moved back if present).
 5. On any failure, swap rolls back to the previous working tree and surfaces `PERSIST_FAILED`. Startup removes any orphaned staging/backup directories left over from crashes.

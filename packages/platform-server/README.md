@@ -9,7 +9,7 @@ Graph persistence
   - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: optional metadata forwarded to audit logs.
   - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
 - On startup the server ensures `GRAPH_REPO_PATH` exists with `nodes/`, `edges/`, `variables.yaml`, and `graph.meta.yaml`. There is no dataset indirection or Git requirement; `.git` directories are ignored if present.
-- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire `.graph.lock` inside `GRAPH_REPO_PATH` before writing. Each write builds a staged working tree in a sibling directory, fsyncs it, and atomically swaps it into place so readers only see committed graphs; old trees move to `.graph-backup-*` temporarily and are deleted immediately.
+- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire a lock file named `.<basename>.graph.lock` next to `GRAPH_REPO_PATH` before writing. Each write builds a staged working tree in a sibling directory, fsyncs it, and atomically swaps it into place so readers only see committed graphs; old trees move to `.graph-backup-*` temporarily and are deleted immediately.
 - Error responses:
    - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
    - `409 LOCK_TIMEOUT` if the repository lock cannot be acquired within the configured timeout.
@@ -81,7 +81,7 @@ The resolved overlay is merged with any base environment and forwarded to Docker
 Storage layout (format: 2)
 - Repository root: `<GRAPH_REPO_PATH>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, and `edges/`.
 - Filenames remain `encodeURIComponent(id)`; edge ids are deterministic `<src>-<srcHandle>__<tgt>-<tgtHandle>`.
-- Writes stage a complete working tree in a sibling `.graph-staging-*` directory, atomically swap it into `<GRAPH_REPO_PATH>`, and delete the previous tree (which briefly lives at `.graph-backup-*`). No persistent recovery directories are created, and `.git` directories are moved back into place after each swap if present.
+- Writes stage a complete working tree in a sibling `.graph-staging-*` directory, atomically swap it into `<GRAPH_REPO_PATH>`, and delete the previous tree (which briefly lives at `.graph-backup-*`). The advisory lock file lives beside the repo path as `.<basename>.graph.lock`, and `.git` directories are moved back into place after each swap if present.
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.
