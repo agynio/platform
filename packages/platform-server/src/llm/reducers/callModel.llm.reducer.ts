@@ -20,6 +20,7 @@ import {
   contextItemInputFromMessage,
   contextItemInputFromSummary,
   contextItemInputFromSystem,
+  sanitizePrismaJson,
 } from '../services/context-items.utils';
 import { persistContextItems } from '../services/context-items.append';
 import type { ContextItemInput } from '../services/context-items.utils';
@@ -29,6 +30,8 @@ type SequenceEntry =
   | { kind: 'summary'; message: HumanMessage }
   | { kind: 'memory'; message: SystemMessage; place: 'after_system' | 'last_message' }
   | { kind: 'conversation'; message: LLMMessage; index: number };
+
+type ResponseMessagePlain = ReturnType<ResponseMessage['toPlain']>;
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -143,23 +146,24 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
 
     try {
       const rawMessage = await this.callModel(input);
-      const usageMetrics = this.extractUsage(rawMessage);
+      const sanitizedMessage = this.sanitizeResponseMessage(rawMessage);
+      const usageMetrics = this.extractUsage(sanitizedMessage);
 
       if (ctx.terminateSignal?.isActive) {
-        return cancelAndReturn({ rawResponse: this.trySerialize(rawMessage), usage: usageMetrics });
+        return cancelAndReturn({ rawResponse: this.trySerialize(sanitizedMessage), usage: usageMetrics });
       }
 
       const toolCalls = this.serializeToolCalls(
-        rawMessage.output.filter((m) => m instanceof ToolCallMessage) as ToolCallMessage[],
+        sanitizedMessage.output.filter((m) => m instanceof ToolCallMessage) as ToolCallMessage[],
       );
-      const rawResponse = this.trySerialize(rawMessage);
+      const rawResponse = this.trySerialize(sanitizedMessage);
 
       let assistantContextId: string | null = null;
       await persistContextItems({
         runEvents: this.runEvents,
         entries: [
           {
-            input: contextItemInputFromMessage(rawMessage),
+            input: contextItemInputFromMessage(sanitizedMessage),
             assign: (id) => {
               assistantContextId = id;
             },
@@ -182,8 +186,8 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.success,
-        responseText: rawMessage.text ?? null,
-        stopReason: this.extractStopReason(rawMessage),
+        responseText: this.sanitizeResponseText(sanitizedMessage.text ?? null),
+        stopReason: this.extractStopReason(sanitizedMessage),
         rawResponse,
         toolCalls,
         usage: usageMetrics,
@@ -192,7 +196,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
 
       const updated: LLMState = {
         ...state,
-        messages: [...state.messages, rawMessage],
+        messages: [...state.messages, sanitizedMessage],
         context: contextWithAssistant,
         meta: {
           ...state.meta,
@@ -455,19 +459,42 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private serializeToolCalls(calls: ToolCallMessage[]): ToolCallRecord[] {
-    return calls.map((call) => {
+    return calls.map((call, index) => {
+      const argPath = ['toolCalls', String(index), 'arguments'];
       let parsed: unknown;
       try {
         parsed = JSON.parse(call.args);
       } catch {
         parsed = { raw: call.args };
       }
+      const sanitized = this.sanitizeToolCallArguments(parsed, argPath);
       return {
         callId: call.callId,
         name: call.name,
-        arguments: toPrismaJsonValue(parsed),
+        arguments: toPrismaJsonValue(sanitized),
       };
     });
+  }
+
+  private sanitizeToolCallArguments(value: unknown, path: string[]): unknown {
+    return sanitizePrismaJson(value, this.logger, 'payload', path, false);
+  }
+
+  private sanitizeResponseMessage(message: ResponseMessage): ResponseMessage {
+    const plain = message.toPlain();
+    const sanitized = sanitizePrismaJson(plain, this.logger, 'payload', ['response'], false) as ResponseMessagePlain;
+    if (sanitized === plain) {
+      return message;
+    }
+    return new ResponseMessage({ output: sanitized.output, usage: sanitized.usage ?? null });
+  }
+
+  private sanitizeResponseText(text: string | null): string | null {
+    if (text === null || text === undefined) {
+      return null;
+    }
+    const sanitized = sanitizePrismaJson(text, this.logger, 'payload', ['responseText'], false);
+    return typeof sanitized === 'string' ? sanitized : text;
   }
 
   private trySerialize(value: unknown): Prisma.InputJsonValue | null {

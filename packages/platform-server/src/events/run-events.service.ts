@@ -16,8 +16,9 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
-import { ContextItemInput, NormalizedContextItem, normalizeContextItems } from '../llm/services/context-items.utils';
+import { ContextItemInput, NormalizedContextItem, normalizeContextItems, sanitizePrismaJson } from '../llm/services/context-items.utils';
 import { ContextItemsRepository, upsertNormalizedContextItems } from '../llm/services/context-items.repository';
+import { sanitizeIngressText } from '../common/sanitize/ingressText.sanitize';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -318,7 +319,7 @@ export interface LLMCallContextItemsAppendArgs {
 export interface ToolCallRecord {
   callId: string;
   name: string;
-  arguments: Prisma.InputJsonValue;
+  arguments: Prisma.InputJsonValue | typeof Prisma.JsonNull;
 }
 
 export interface LLMCallUsageMetrics {
@@ -556,6 +557,30 @@ export class RunEventsService {
       this.logger.warn('RunEventsService payload serialization failed; storing null', err);
       return Prisma.JsonNull;
     }
+  }
+
+  private sanitizeInlineText(value: string | null | undefined): string | null {
+    if (value === undefined || value === null) return value ?? null;
+    return sanitizeIngressText(value).text;
+  }
+
+  private sanitizeToolCallRecords(records?: ToolCallRecord[]): ToolCallRecord[] | undefined {
+    if (!records || records.length === 0) return undefined;
+    return records.map((call, idx) => {
+      const normalized =
+        call.arguments === null || call.arguments === undefined || this.isJsonNull(call.arguments)
+          ? Prisma.JsonNull
+          : call.arguments;
+      const sanitized =
+        normalized === Prisma.JsonNull
+          ? Prisma.JsonNull
+          : sanitizePrismaJson(normalized, this.logger, 'payload', ['toolCalls', String(idx), 'arguments'], false);
+      return {
+        callId: call.callId,
+        name: call.name,
+        arguments: sanitized === Prisma.JsonNull ? Prisma.JsonNull : toPrismaJsonValue(sanitized),
+      };
+    });
   }
 
   private isJsonNull(value: unknown): boolean {
@@ -1328,6 +1353,10 @@ export class RunEventsService {
     const endedAt = args.endedAt ?? new Date();
     const status = args.status;
     const patchMetadata = this.ensureJson(args.metadataPatch);
+    const sanitizedErrorMessage = this.sanitizeInlineText(args.errorMessage);
+    const sanitizedStopReason = this.sanitizeInlineText(args.stopReason);
+    const sanitizedResponseText = this.truncate(this.sanitizeInlineText(args.responseText));
+    const sanitizedToolCalls = this.sanitizeToolCallRecords(args.toolCalls);
     const existing = await tx.runEvent.findUnique({ where: { id: args.eventId }, select: { startedAt: true } });
     const durationMs = existing?.startedAt ? Math.max(0, endedAt.getTime() - existing.startedAt.getTime()) : null;
     await tx.runEvent.update({
@@ -1337,7 +1366,7 @@ export class RunEventsService {
         endedAt,
         durationMs,
         errorCode: args.errorCode ?? null,
-        errorMessage: args.errorMessage ?? null,
+        errorMessage: sanitizedErrorMessage,
         metadata: patchMetadata ?? undefined,
       },
     });
@@ -1345,8 +1374,8 @@ export class RunEventsService {
     await tx.lLMCall.update({
       where: { eventId: args.eventId },
       data: {
-        stopReason: args.stopReason ?? null,
-        responseText: this.truncate(args.responseText ?? null),
+        stopReason: sanitizedStopReason,
+        responseText: sanitizedResponseText,
         rawResponse: this.jsonOrNull(args.rawResponse ?? null),
         inputTokens: args.usage?.inputTokens ?? null,
         cachedInputTokens: args.usage?.cachedInputTokens ?? null,
@@ -1356,10 +1385,10 @@ export class RunEventsService {
       },
     });
 
-    if (Array.isArray(args.toolCalls) && args.toolCalls.length > 0) {
+    if (sanitizedToolCalls && sanitizedToolCalls.length > 0) {
       await tx.toolCall.deleteMany({ where: { llmCallEventId: args.eventId } });
       await tx.toolCall.createMany({
-        data: args.toolCalls.map((call, idx) => ({
+        data: sanitizedToolCalls.map((call, idx) => ({
           llmCallEventId: args.eventId,
           callId: call.callId,
           name: call.name,

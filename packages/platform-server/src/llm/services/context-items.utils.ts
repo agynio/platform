@@ -91,7 +91,7 @@ function sanitizeString(
   return sanitized;
 }
 
-function sanitizePrismaJson(
+export function sanitizePrismaJson(
   value: unknown,
   logger: LoggerLike | undefined,
   field: Exclude<SanitizeField, 'contentText'>,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SystemMessage, HumanMessage } from '@agyn/llm';
+import { SystemMessage, HumanMessage, ResponseMessage } from '@agyn/llm';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
@@ -7,7 +7,7 @@ class FakeLLM {
   lastInput: Array<SystemMessage | HumanMessage | { toJSON?: () => unknown; toPlain?: () => unknown }> = [];
   async call(opts: { model: string; input: Array<SystemMessage | HumanMessage | { toJSON?: () => unknown }> }) {
     this.lastInput = opts.input as any[];
-    return { text: 'ok', output: [] } as any;
+    return ResponseMessage.fromText('ok');
   }
 }
 

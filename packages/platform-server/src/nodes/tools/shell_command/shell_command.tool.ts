@@ -17,6 +17,18 @@ import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
 import { ToolOutputStatus } from '@prisma/client';
 import { PrismaService } from '../../../core/services/prisma.service';
+import {
+  createIngressDecodeStreamState,
+  decodeIngressChunk,
+  flushIngressDecoder,
+  type IngressDecodeStreamState,
+} from '../../../common/ingress/ingressDecode';
+import {
+  createIngressSanitizeState,
+  sanitizeIngressChunk,
+  sanitizeIngressText,
+  type IngressSanitizeState,
+} from '../../../common/sanitize/ingressText.sanitize';
 
 // Schema for tool arguments
 export const bashCommandSchema = z.object({
@@ -176,77 +188,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       .replace(NUL_CHAR_REGEX, '');
   }
 
-  private createBomAwareDecoder(
-    onEncodingChange?: (source: OutputSource, encoding: 'utf-8' | 'utf-16le' | 'utf-16be') => void,
-  ) {
-    type DecoderEncoding = 'utf-8' | 'utf-16le' | 'utf-16be';
-    type DecoderState = {
-      decoder: TextDecoder;
-      encoding: DecoderEncoding;
-      inspected: boolean;
-      pending: Buffer | null;
-    };
-
-    const states: Record<OutputSource, DecoderState> = {
-      stdout: { decoder: new TextDecoder('utf-8'), encoding: 'utf-8', inspected: false, pending: null },
-      stderr: { decoder: new TextDecoder('utf-8'), encoding: 'utf-8', inspected: false, pending: null },
-    };
-
-    const notifyEncodingChange = (source: OutputSource, encoding: DecoderEncoding) => {
-      if (onEncodingChange) onEncodingChange(source, encoding);
-    };
-
-    const decodeChunk = (source: OutputSource, chunk: Buffer): string => {
-      if (!chunk || chunk.length === 0) return '';
-      const state = states[source];
-      if (!state.inspected) {
-        const combined = state.pending ? Buffer.concat([state.pending, chunk]) : chunk;
-        if (combined.length < 2) {
-          state.pending = combined;
-          return '';
-        }
-        state.inspected = true;
-        state.pending = null;
-        if (combined[0] === 0xff && combined[1] === 0xfe) {
-          state.encoding = 'utf-16le';
-          state.decoder = new TextDecoder('utf-16le');
-          notifyEncodingChange(source, state.encoding);
-          const remainder = combined.subarray(2);
-          if (remainder.length === 0) return '';
-          return state.decoder.decode(remainder, { stream: true });
-        }
-        if (combined[0] === 0xfe && combined[1] === 0xff) {
-          state.encoding = 'utf-16be';
-          state.decoder = new TextDecoder('utf-16be');
-          notifyEncodingChange(source, state.encoding);
-          const remainder = combined.subarray(2);
-          if (remainder.length === 0) return '';
-          return state.decoder.decode(remainder, { stream: true });
-        }
-        return state.decoder.decode(combined, { stream: true });
-      }
-      return state.decoder.decode(chunk, { stream: true });
-    };
-
-    const flushDecoder = (source: OutputSource): string => {
-      const state = states[source];
-      let output = '';
-      if (!state.inspected) {
-        state.inspected = true;
-        if (state.pending && state.pending.length > 0) {
-          output += state.decoder.decode(state.pending, { stream: true });
-          state.pending = null;
-        }
-      }
-      output += state.decoder.decode();
-      return output;
-    };
-
-    return {
-      decodeChunk,
-      flushDecoder,
-    };
-  }
+  // shared decode helpers located in src/common/ingress/ingressDecode.ts
 
   private getResolvedConfig() {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
@@ -362,13 +304,21 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const timeoutMs = cfg.executionTimeoutMs;
     const idleTimeoutMs = cfg.idleTimeoutMs;
 
-    const decoders = this.createBomAwareDecoder((source, encoding) => {
-      this.logger.debug('ShellCommandTool detected UTF-16 output', {
-        source,
-        encoding,
-        command,
+    const streamDecoders: Record<OutputSource, IngressDecodeStreamState> = {
+      stdout: createIngressDecodeStreamState(),
+      stderr: createIngressDecodeStreamState(),
+    };
+    const decodeChunkFor = (source: OutputSource, chunk: Buffer): string =>
+      decodeIngressChunk(streamDecoders[source], chunk, {
+        onEncodingChange: (encoding) => {
+          if (encoding === 'utf-8') return;
+          this.logger.debug('ShellCommandTool detected UTF-16 output', {
+            source,
+            encoding,
+            command,
+          });
+        },
       });
-    });
 
     const cleanBySource: Record<OutputSource, string> = { stdout: '', stderr: '' };
     const orderedSegments: Array<{ source: OutputSource; text: string }> = [];
@@ -376,11 +326,20 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       stdout: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
       stderr: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
     };
+    const streamSanitizeStates: Record<OutputSource, IngressSanitizeState> = {
+      stdout: createIngressSanitizeState(),
+      stderr: createIngressSanitizeState(),
+    };
+    const getSanitizeState = (source: OutputSource): IngressSanitizeState =>
+      source === 'stdout' ? streamSanitizeStates.stdout : streamSanitizeStates.stderr;
+    const sanitizePlainText = (value?: string | null): string => sanitizeIngressText(value ?? '').text;
 
     const pushSegment = (source: OutputSource, text: string) => {
       if (!text) return;
-      orderedSegments.push({ source, text });
-      cleanBySource[source] += text;
+      const sanitized = sanitizeIngressChunk(text, getSanitizeState(source));
+      if (!sanitized) return;
+      orderedSegments.push({ source, text: sanitized });
+      cleanBySource[source] += sanitized;
     };
 
     const consumeDecoded = (source: OutputSource, decoded: string) => {
@@ -392,7 +351,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const flushDecoderRemainder = () => {
       (['stdout', 'stderr'] as OutputSource[]).forEach((source) => {
-        const tail = decoders.flushDecoder(source);
+        const tail = flushIngressDecoder(streamDecoders[source]);
         if (tail) consumeDecoded(source, tail);
         const flushed = cleaners[source].flush();
         if (flushed) pushSegment(source, flushed);
@@ -401,29 +360,31 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
-      const decoded = decoders.decodeChunk(source, chunk);
+      const decoded = decodeChunkFor(source, chunk);
       if (!decoded) return;
       consumeDecoded(source, decoded);
     };
 
     let response: { stdout: string; stderr: string; exitCode: number };
     const getCombinedOutput = (fallback?: { stdout?: string; stderr?: string }): string => {
+      let combined = '';
       if (orderedSegments.length > 0) {
-        return orderedSegments.map((segment) => segment.text).join('');
-      }
-      if (cleanBySource.stdout.length || cleanBySource.stderr.length) {
-        return cleanBySource.stdout + cleanBySource.stderr;
-      }
-      if (fallback) {
-        const stdoutClean = this.stripAnsi(fallback.stdout ?? '');
-        const stderrClean = this.stripAnsi(fallback.stderr ?? '');
+        combined = orderedSegments.map((segment) => segment.text).join('');
+      } else if (cleanBySource.stdout.length || cleanBySource.stderr.length) {
+        combined = cleanBySource.stdout + cleanBySource.stderr;
+      } else if (fallback) {
+        const stdoutClean = this.stripAnsi(sanitizePlainText(fallback.stdout));
+        const stderrClean = this.stripAnsi(sanitizePlainText(fallback.stderr));
         if (stdoutClean.length || stderrClean.length) {
-          return stdoutClean + stderrClean;
+          combined = stdoutClean + stderrClean;
         }
       }
-      const stdoutClean = this.stripAnsi(response?.stdout ?? '');
-      const stderrClean = this.stripAnsi(response?.stderr ?? '');
-      return stdoutClean + stderrClean;
+      if (!combined) {
+        const stdoutClean = this.stripAnsi(sanitizePlainText(response?.stdout));
+        const stderrClean = this.stripAnsi(sanitizePlainText(response?.stderr));
+        combined = stdoutClean + stderrClean;
+      }
+      return sanitizePlainText(combined);
     };
 
     try {
@@ -541,19 +502,34 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const clientBufferLimitBytes = Math.max(0, Math.trunc(cfg.clientBufferLimitBytes));
     const outputLimit = cfg.outputLimitChars;
 
-    const decoders = this.createBomAwareDecoder((source, encoding) => {
-      this.logger.debug('ShellCommandTool detected UTF-16 output', {
-        runId: options.runId,
-        eventId: options.eventId,
-        source,
-        encoding,
-        command,
+    const streamDecoders: Record<OutputSource, IngressDecodeStreamState> = {
+      stdout: createIngressDecodeStreamState(),
+      stderr: createIngressDecodeStreamState(),
+    };
+    const decodeChunkFor = (source: OutputSource, chunk: Buffer): string =>
+      decodeIngressChunk(streamDecoders[source], chunk, {
+        onEncodingChange: (encoding) => {
+          if (encoding === 'utf-8') return;
+          this.logger.debug('ShellCommandTool detected UTF-16 output', {
+            runId: options.runId,
+            eventId: options.eventId,
+            source,
+            encoding,
+            command,
+          });
+        },
       });
-    });
     const cleaners: Record<OutputSource, AnsiSequenceCleaner> = {
       stdout: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
       stderr: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
     };
+    const streamSanitizeStates: Record<OutputSource, IngressSanitizeState> = {
+      stdout: createIngressSanitizeState(),
+      stderr: createIngressSanitizeState(),
+    };
+    const getSanitizeState = (source: OutputSource): IngressSanitizeState =>
+      source === 'stdout' ? streamSanitizeStates.stdout : streamSanitizeStates.stderr;
+    const sanitizePlainText = (value?: string | null): string => sanitizeIngressText(value ?? '').text;
 
     type BufferState = { text: string; bytes: number; timer: NodeJS.Timeout | null };
     const buffers: Record<OutputSource, BufferState> = {
@@ -630,6 +606,15 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         if (segmentsForFlush.length > 0) {
           orderedOutput.push(...segmentsForFlush);
         }
+        const chunkContainsNull = text.includes('\u0000');
+        this.logger.debug('ShellCommandTool chunk NUL scan before appendToolOutputChunk', {
+          eventId: options.eventId,
+          runId: options.runId,
+          source,
+          seqGlobal,
+          seqStream: seqPerSource[source],
+          containsNull: chunkContainsNull,
+        });
         try {
           const payload = await this.runEvents.appendToolOutputChunk({
             runId: options.runId,
@@ -661,18 +646,21 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       buffer.timer = timer;
     };
 
-    const handleDecoratedChunk = (source: OutputSource, cleaned: string, byteLength: number) => {
+    const handleDecoratedChunk = (source: OutputSource, cleaned: string) => {
       if (!cleaned) return;
-      if (source === 'stdout') cleanedStdout += cleaned;
-      else cleanedStderr += cleaned;
+      const sanitized = sanitizeIngressChunk(cleaned, getSanitizeState(source));
+      if (!sanitized) return;
+      const byteLength = Buffer.byteLength(sanitized, 'utf8');
+      if (source === 'stdout') cleanedStdout += sanitized;
+      else cleanedStderr += sanitized;
       bytesBySource[source] += byteLength;
 
       const buffer = buffers[source];
-      buffer.text += cleaned;
+      buffer.text += sanitized;
       buffer.bytes += byteLength;
 
       segmentOrder += 1;
-      pendingSegments[source].push({ order: segmentOrder, text: cleaned });
+      pendingSegments[source].push({ order: segmentOrder, text: sanitized });
 
       if (buffer.bytes >= chunkSizeBytes || buffer.text.length >= chunkSizeBytes) {
         flushBuffer(source);
@@ -693,23 +681,23 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
-      const decoded = decoders.decodeChunk(source, chunk);
+      const decoded = decodeChunkFor(source, chunk);
       if (!decoded) return;
       const cleaned = cleaners[source].consume(decoded);
       if (!cleaned) return;
-      const byteLength = Buffer.byteLength(cleaned, 'utf8');
-      handleDecoratedChunk(source, cleaned, byteLength);
+      handleDecoratedChunk(source, cleaned);
     };
 
     const getCombinedOutput = (): string => {
-      if (orderedOutput.length > 0) {
-        return orderedOutput
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((entry) => entry.text)
-          .join('');
-      }
-      return `${cleanedStdout}${cleanedStderr}`;
+      const joined =
+        orderedOutput.length > 0
+          ? orderedOutput
+              .slice()
+              .sort((a, b) => a.order - b.order)
+              .map((entry) => entry.text)
+              .join('')
+          : `${cleanedStdout}${cleanedStderr}`;
+      return sanitizePlainText(joined);
     };
 
     let execError: unknown = null;
@@ -736,8 +724,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       if (err instanceof ExecTimeoutError) {
         terminalStatus = 'timeout';
         exitCode = null;
-        const stdoutClean = this.stripAnsi(err.stdout ?? '');
-        const stderrClean = this.stripAnsi(err.stderr ?? '');
+        const stdoutClean = this.stripAnsi(sanitizePlainText(err.stdout));
+        const stderrClean = this.stripAnsi(sanitizePlainText(err.stderr));
         cleanedStdout = stdoutClean;
         cleanedStderr = stderrClean;
         bytesBySource.stdout = Buffer.byteLength(stdoutClean, 'utf8');
@@ -746,8 +734,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       } else if (err instanceof ExecIdleTimeoutError) {
         terminalStatus = 'idle_timeout';
         exitCode = null;
-        const stdoutClean = this.stripAnsi(err.stdout ?? '');
-        const stderrClean = this.stripAnsi(err.stderr ?? '');
+        const stdoutClean = this.stripAnsi(sanitizePlainText(err.stdout));
+        const stderrClean = this.stripAnsi(sanitizePlainText(err.stderr));
         cleanedStdout = stdoutClean;
         cleanedStderr = stderrClean;
         bytesBySource.stdout = Buffer.byteLength(stdoutClean, 'utf8');
@@ -757,27 +745,27 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         terminalStatus = 'error';
       }
     } finally {
-      const stdoutTail = decoders.flushDecoder('stdout');
+      const stdoutTail = flushIngressDecoder(streamDecoders.stdout);
       if (stdoutTail) {
         const cleanedTail = cleaners.stdout.consume(stdoutTail);
         if (cleanedTail) {
-          handleDecoratedChunk('stdout', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+          handleDecoratedChunk('stdout', cleanedTail);
         }
       }
       const flushedStdout = cleaners.stdout.flush();
       if (flushedStdout) {
-        handleDecoratedChunk('stdout', flushedStdout, Buffer.byteLength(flushedStdout, 'utf8'));
+        handleDecoratedChunk('stdout', flushedStdout);
       }
-      const stderrTail = decoders.flushDecoder('stderr');
+      const stderrTail = flushIngressDecoder(streamDecoders.stderr);
       if (stderrTail) {
         const cleanedTail = cleaners.stderr.consume(stderrTail);
         if (cleanedTail) {
-          handleDecoratedChunk('stderr', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+          handleDecoratedChunk('stderr', cleanedTail);
         }
       }
       const flushedStderr = cleaners.stderr.flush();
       if (flushedStderr) {
-        handleDecoratedChunk('stderr', flushedStderr, Buffer.byteLength(flushedStderr, 'utf8'));
+        handleDecoratedChunk('stderr', flushedStderr);
       }
       flushBuffer('stdout', { force: true });
       flushBuffer('stderr', { force: true });
@@ -789,8 +777,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       if (response) {
-        const cleanedStdoutFinal = this.stripAnsi(response.stdout ?? '');
-        const cleanedStderrFinal = this.stripAnsi(response.stderr ?? '');
+        const cleanedStdoutFinal = this.stripAnsi(sanitizePlainText(response.stdout ?? ''));
+        const cleanedStderrFinal = this.stripAnsi(sanitizePlainText(response.stderr ?? ''));
         cleanedStdout = cleanedStdoutFinal;
         cleanedStderr = cleanedStderrFinal;
         exitCode = response.exitCode;
@@ -806,6 +794,12 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       finalCombinedOutput = getCombinedOutput();
+      this.logger.debug('ShellCommandTool finalCombinedOutput NUL scan', {
+        eventId: options.eventId,
+        runId: options.runId,
+        containsNull: finalCombinedOutput.includes('\u0000'),
+        length: finalCombinedOutput.length,
+      });
 
       const ensureTruncationMessageIncludesPath = (path: string) => {
         if (!path) return;
@@ -871,7 +865,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             truncationMessage: truncationMessage ?? undefined,
             defaultTailLimit: OUTPUT_TAIL_LIMIT,
           });
-          formattedExecErrorMessage = result.message;
+          formattedExecErrorMessage = sanitizePlainText(result.message);
           savedPath = result.savedPath;
           if (!truncationMessage && result.truncationMessage) {
             truncationMessage = result.truncationMessage;
@@ -879,7 +873,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         } catch (formatErr) {
           const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
           this.logger.warn(`ShellCommandTool failed to format streaming exec error eventId=${options.eventId} error=${errMessage}`);
-          formattedExecErrorMessage = `[exit code ${exitCodeForExecError}] ${headline}`;
+          formattedExecErrorMessage = sanitizePlainText(`[exit code ${exitCodeForExecError}] ${headline}`);
         }
 
         if (terminalStatus !== 'timeout' && terminalStatus !== 'idle_timeout') {
@@ -897,7 +891,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             savedPath,
             truncationMessage: truncationMessage ?? undefined,
           });
-          formattedExitCodeMessage = result.message;
+          formattedExitCodeMessage = sanitizePlainText(result.message);
           if (result.savedPath && !savedPath) {
             savedPath = result.savedPath;
             ensureTruncationMessageIncludesPath(result.savedPath);
@@ -913,7 +907,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         } catch (formatErr) {
           const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
           this.logger.warn(`ShellCommandTool failed to format exit code error eventId=${options.eventId} error=${errMessage}`);
-          formattedExitCodeMessage = `[exit code ${exitCode}]`;
+          formattedExitCodeMessage = sanitizePlainText(`[exit code ${exitCode}]`);
         }
       }
 
