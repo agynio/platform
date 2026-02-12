@@ -6,15 +6,17 @@ Graph persistence
 - Configure via env:
   - `GRAPH_DATA_PATH`: base directory for graph datasets (default `./data/graph`).
   - `GRAPH_DATASET`: active dataset name (default `main`). When unset, the server reads `<GRAPH_DATA_PATH>/active-dataset.txt` to decide which dataset to use.
+  - `GRAPH_AUTO_MIGRATE`: set to `1` to automatically migrate detected legacy git layouts during boot (default `0`).
   - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: retained for compatibility but no longer used during persistence.
   - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
 - On startup the server ensures `<GRAPH_DATA_PATH>/datasets/<dataset>` exists with `nodes/`, `edges/`, `variables.yaml`, `graph.meta.yaml`, `journal.ndjson`, and a `snapshots/` directory. The pointer file `active-dataset.txt` is updated to match the active dataset.
+- When `GRAPH_DATA_PATH` already points directly to a dataset root (for example, `./data/graph/datasets/prod`), the repository skips pointer management and uses that directory in place without creating a nested `datasets/` tree.
 - `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field but now acquire a filesystem lock (`.graph.lock`) inside the dataset before writing. Every write performs atomic file updates, produces a snapshot at `snapshots/<version>/`, and appends a JSON line to `journal.ndjson` for recovery.
 - Error responses:
    - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
    - `409 LOCK_TIMEOUT` if the dataset lock cannot be acquired within the configured timeout.
    - `500 PERSIST_FAILED` when filesystem writes fail unexpectedly; the in-flight changes are rolled back to the last committed state.
-- Migration: run `pnpm --filter @agyn/platform-server graph:migrate-fs -- [--source ./data/graph] [--target ./data/graph] [--dataset main] [--force]` to copy an existing git-backed working tree into the dataset layout. The tool also archives the legacy `.git` directory to `.git.backup-<timestamp>`.
+- Migration: run `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source ./data/graph --target ./data/graph --dataset main` to copy an existing git-backed working tree into the dataset layout. The tool also archives the legacy `.git` directory to `.git.backup-<timestamp>`. When the server detects a legacy layout at boot it fails fast with this command in the error message unless `GRAPH_AUTO_MIGRATE=1`, in which case the same CLI is invoked automatically.
 
 ## Networking and cache
 

@@ -13,6 +13,7 @@ import { GraphRepository } from './graph.repository';
 import type { GraphAuthor } from './graph.repository';
 import { ConfigService } from '../core/services/config.service';
 import { parseYaml, stringifyYaml } from './yaml.util';
+import { migrateLegacyWorkingTree } from './fsGraph.migrator';
 
 interface GraphMeta {
   name: string;
@@ -31,6 +32,11 @@ function codeError<T = unknown>(code: string, message: string, current?: T): Cod
 
 type LockHandle = { lockPath: string } | null;
 
+type StorageLayout =
+  | { kind: 'standard' }
+  | { kind: 'legacy-working-tree'; legacyPath: string }
+  | { kind: 'dataset-root'; datasetPath: string; datasetName?: string };
+
 export class FsGraphRepository extends GraphRepository {
   constructor(
     private readonly config: ConfigService,
@@ -41,13 +47,43 @@ export class FsGraphRepository extends GraphRepository {
 
   private datasetName?: string;
   private lastCommitted?: PersistedGraph;
+  private datasetRootOverride?: string;
+  private skipPointerUpdate = false;
 
   async initIfNeeded(): Promise<void> {
-    const dataset = await this.resolveDatasetName();
+    let dataset = await this.resolveDatasetName();
     this.datasetName = dataset;
 
-    await fs.mkdir(this.config.graphDataPath, { recursive: true });
-    await this.writeActiveDatasetPointer(dataset);
+    const layout = await this.detectStorageLayout();
+
+    if (layout.kind === 'dataset-root') {
+      this.datasetRootOverride = layout.datasetPath;
+      this.skipPointerUpdate = true;
+      if (layout.datasetName) {
+        this.datasetName = layout.datasetName;
+        dataset = layout.datasetName;
+      }
+    } else if (layout.kind === 'legacy-working-tree') {
+      if (!this.config.graphAutoMigrate) {
+        const command = `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source ${layout.legacyPath} --target ${this.config.graphDataPath} --dataset ${dataset}`;
+        throw codeError(
+          'LEGACY_GRAPH_REPO',
+          `Legacy git-backed graph detected at ${layout.legacyPath}. Run "${command}" or set GRAPH_AUTO_MIGRATE=1 to auto-migrate during bootstrap.`,
+        );
+      }
+      await migrateLegacyWorkingTree({
+        source: layout.legacyPath,
+        target: this.config.graphDataPath,
+        dataset,
+        force: true,
+        log: (message) => console.info(`[FsGraphRepository] ${message}`),
+      });
+    }
+
+    if (!this.skipPointerUpdate) {
+      await fs.mkdir(this.config.graphDataPath, { recursive: true });
+      await this.writeActiveDatasetPointer(this.datasetName);
+    }
 
     const root = this.datasetRoot();
     await fs.mkdir(root, { recursive: true });
@@ -397,6 +433,46 @@ export class FsGraphRepository extends GraphRepository {
     }
   }
 
+  private async detectStorageLayout(): Promise<StorageLayout> {
+    const graphPath = this.config.graphDataPath;
+    const metaPath = path.join(graphPath, this.metaPath());
+    const nodesPath = path.join(graphPath, 'nodes');
+    const edgesPath = path.join(graphPath, 'edges');
+    const hasMeta = await this.pathExists(metaPath);
+    const hasNodes = await this.pathExists(nodesPath);
+    const hasEdges = await this.pathExists(edgesPath);
+    const datasetNameFromPath = this.detectDatasetNameFromPath(graphPath);
+
+    if (hasMeta && hasNodes && hasEdges) {
+      const gitDir = path.join(graphPath, '.git');
+      if (await this.pathExists(gitDir)) {
+        return { kind: 'legacy-working-tree', legacyPath: graphPath };
+      }
+      return { kind: 'dataset-root', datasetPath: graphPath, datasetName: datasetNameFromPath };
+    }
+
+    const datasetsDir = path.join(graphPath, 'datasets');
+    if (await this.pathExists(datasetsDir)) {
+      return { kind: 'standard' };
+    }
+
+    if (datasetNameFromPath) {
+      return { kind: 'dataset-root', datasetPath: graphPath, datasetName: datasetNameFromPath };
+    }
+
+    return { kind: 'standard' };
+  }
+
+  private detectDatasetNameFromPath(candidate: string): string | undefined {
+    const normalized = path.normalize(candidate);
+    const segments = normalized.split(path.sep).filter((segment) => segment.length > 0);
+    const idx = segments.lastIndexOf('datasets');
+    if (idx >= 0 && idx + 1 < segments.length) {
+      return segments[idx + 1];
+    }
+    return undefined;
+  }
+
   private stripInternalNode(node: PersistedGraphNode): PersistedGraphNode {
     return {
       id: node.id,
@@ -596,6 +672,9 @@ export class FsGraphRepository extends GraphRepository {
   }
 
   private datasetRoot(dataset?: string): string {
+    if (this.datasetRootOverride) {
+      return this.datasetRootOverride;
+    }
     const name = dataset ?? this.datasetName;
     if (!name) throw new Error('FsGraphRepository not initialized');
     return path.join(this.config.graphDataPath, 'datasets', name);

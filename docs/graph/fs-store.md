@@ -4,6 +4,8 @@ Overview
 - Graph persistence now writes directly to the filesystem under `GRAPH_DATA_PATH` without relying on Git commits.
 - Each dataset lives under `<GRAPH_DATA_PATH>/datasets/<GRAPH_DATASET>` and contains the full working tree plus recovery artifacts.
 - The file `active-dataset.txt` at the root of `GRAPH_DATA_PATH` records the active dataset name. When `GRAPH_DATASET` is not explicitly set, the server reads this pointer to decide which dataset to load.
+- If `GRAPH_DATA_PATH` already points to a dataset root (e.g. `/data/graph/datasets/prod`), the server skips pointer management and loads the dataset in-place.
+- Legacy git working trees (presence of `.git` + `graph.meta.yaml` + `nodes/` + `edges/`) are blocked at boot with an actionable error. Set `GRAPH_AUTO_MIGRATE=1` to auto-run the migration, or execute the CLI manually (see below).
 
 Dataset layout (format: 2)
 - `graph.meta.yaml`: `{ name, version, updatedAt, format: 2 }`
@@ -38,6 +40,7 @@ Optimistic locking
 
 Migration tooling
 - Convert an existing git-backed working tree by running `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source ./data/graph --target ./data/graph --dataset main` (adjust paths/names as needed).
+- Setting `GRAPH_AUTO_MIGRATE=1` allows the server to invoke the same CLI automatically during bootstrap. Use this only when you trust the migration target path; otherwise leave it unset so start-up fails with the command above.
 - The tool copies `graph.meta.yaml`, `nodes/`, `edges/`, `variables.yaml` into the dataset layout, creates an initial snapshot, and renames `.git` to `.git.backup-<timestamp>` for manual archival.
 
 Notes

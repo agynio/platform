@@ -95,7 +95,7 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store now uses a filesystem dataset per GRAPH_DATA_PATH/GRAPH_DATASET; legacy git repos require migration via `pnpm --filter @agyn/platform-server graph:migrate-fs`.
+- Graph store now uses a filesystem dataset per GRAPH_DATA_PATH/GRAPH_DATASET; legacy git repos trigger a startup guard that instructs operators to run `pnpm --filter @agyn/platform-server graph:migrate-fs -- --source <path> --target <path> --dataset <name>` (or set GRAPH_AUTO_MIGRATE=1 to auto-run the same tool).
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/fs-store.md
@@ -112,6 +112,7 @@ Configuration matrix (server env vars)
 - Optional
   - GRAPH_DATA_PATH (default ./data/graph)
   - GRAPH_DATASET (default main; falls back to active pointer when unset)
+  - GRAPH_AUTO_MIGRATE (default false; set to 1 to auto-migrate detected legacy git layouts during boot)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN

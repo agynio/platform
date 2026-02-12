@@ -27,6 +27,14 @@ export const configSchema = z.object({
   // Graph persistence
   graphDataPath: z.string().default('./data/graph'),
   graphDataset: z.string().default('main'),
+  graphAutoMigrate: z
+    .union([z.boolean(), z.string()])
+    .default('false')
+    .transform((v) => {
+      if (typeof v === 'boolean') return v;
+      const normalized = v.trim().toLowerCase();
+      return normalized === '1' || normalized === 'true';
+    }),
   graphAuthorName: z.string().optional(),
   graphAuthorEmail: z.string().optional(),
   graphLockTimeoutMs: z
@@ -279,6 +287,9 @@ export class ConfigService implements Config {
   get graphDatasetIsExplicit(): boolean {
     return this._meta.graphDatasetExplicit;
   }
+  get graphAutoMigrate(): boolean {
+    return this.params.graphAutoMigrate ?? false;
+  }
   get graphAuthorName(): string | undefined {
     return this.params.graphAuthorName;
   }
@@ -407,6 +418,7 @@ export class ConfigService implements Config {
       // Pass raw env; schema will validate/assign default
       graphDataPath: process.env.GRAPH_DATA_PATH ?? legacyGraphPath,
       graphDataset: datasetValue,
+      graphAutoMigrate: process.env.GRAPH_AUTO_MIGRATE,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
