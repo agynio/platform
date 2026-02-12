@@ -3,7 +3,7 @@
 Overview
 - Graph persistence writes directly to the filesystem under `GRAPH_REPO_PATH` (default `./data/graph`).
 - The layout matches the legacy git working tree: `graph.meta.yaml`, `nodes/`, `edges/`, and `variables.yaml` live at the path root.
-- No journal or snapshot directories are created; atomic temp-write + rename updates the working files in place.
+- No journal or snapshot directories are created; writes build a full staged tree in a sibling `.graph-staging-*` directory and atomically swap it into place.
 - `GRAPH_BRANCH` is retained as metadata for observability but does not influence the filesystem layout.
 - `.git` directories are ignored; the repository no longer shells out to git or runs migrations.
 
@@ -22,8 +22,8 @@ Apply lifecycle
 1. Validate the upsert payload against the template registry (unknown config keys are stripped prior to persistence).
 2. Acquire a filesystem lock by creating `.graph.lock`. If the lock cannot be obtained within `GRAPH_LOCK_TIMEOUT_MS` (default 5s), the server returns `LOCK_TIMEOUT`.
 3. Load the current graph from the working tree.
-4. Compute diffs between the stored graph and the request. Write changed nodes, edges, variables, and `graph.meta.yaml` via temp files + rename + directory fsync.
-5. On any failure, restore the working tree from the last known good graph before surfacing `PERSIST_FAILED`.
+4. Build a complete graph tree inside a sibling `.graph-staging-*` directory using atomic temp-file writes, fsync the staged tree, then atomically swap it with the live working tree (the previous tree is moved to `.graph-backup-*` and deleted after success; `.git` is moved back if present).
+5. On any failure, swap rolls back to the previous working tree and surfaces `PERSIST_FAILED`. Startup removes any orphaned staging/backup directories left over from crashes.
 
 Error behaviors
 - `VERSION_CONFLICT (409)`: supplied version is stale; response includes `{ error, current }`.

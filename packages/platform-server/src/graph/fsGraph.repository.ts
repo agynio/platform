@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import { Dirent, promises as fs } from 'fs';
 import path from 'path';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import type {
@@ -20,6 +20,9 @@ interface GraphMeta {
   updatedAt: string;
   format: 2;
 }
+
+const STAGING_PREFIX = '.graph-staging-';
+const BACKUP_PREFIX = '.graph-backup-';
 
 type CodeError<T = unknown> = Error & { code: string; current?: T };
 function codeError<T = unknown>(code: string, message: string, current?: T): CodeError<T> {
@@ -43,12 +46,11 @@ export class FsGraphRepository extends GraphRepository {
 
   async initIfNeeded(): Promise<void> {
     this.graphRoot = this.config.graphRepoPath;
+    await this.cleanupSwapArtifacts();
     const root = this.ensureGraphRoot();
     await fs.mkdir(root, { recursive: true });
     await fs.mkdir(path.join(root, 'nodes'), { recursive: true });
     await fs.mkdir(path.join(root, 'edges'), { recursive: true });
-
-
     const metaPath = path.join(root, this.metaPath());
     if (!(await this.pathExists(metaPath))) {
       const now = new Date().toISOString();
@@ -142,61 +144,14 @@ export class FsGraphRepository extends GraphRepository {
     await this.upsert({ name, version: base.version, nodes, edges: base.edges }, undefined);
   }
 
-  private async persistGraph(current: PersistedGraph, target: PersistedGraph): Promise<void> {
-    const root = this.ensureGraphRoot();
-    const nodesDir = path.join(root, 'nodes');
-    const edgesDir = path.join(root, 'edges');
-    await fs.mkdir(nodesDir, { recursive: true });
-    await fs.mkdir(edgesDir, { recursive: true });
-
-    const { nodeAdds, nodeUpdates, nodeDeletes } = this.diffNodes(current.nodes, target.nodes);
-    const { edgeAdds, edgeUpdates, edgeDeletes } = this.diffEdges(current.edges, target.edges);
-
-    const writeNode = async (node: PersistedGraphNode) => {
-      await this.writeYamlEntity(this.nodePath(node.id), node);
-    };
-    const writeEdge = async (edge: PersistedGraphEdge) => {
-      await this.writeYamlEntity(this.edgePath(edge.id!), edge);
-    };
-
-    for (const id of nodeAdds) {
-      const node = target.nodes.find((n) => n.id === id);
-      if (node) await writeNode(node);
+  private async persistGraph(_current: PersistedGraph, target: PersistedGraph): Promise<void> {
+    const stagingDir = await this.createStagingTree(target);
+    try {
+      await this.swapWorkingTree(stagingDir);
+    } catch (err) {
+      await this.discardTempDir(stagingDir);
+      throw err;
     }
-    for (const id of nodeUpdates) {
-      const node = target.nodes.find((n) => n.id === id);
-      if (node) await writeNode(node);
-    }
-    for (const id of nodeDeletes) {
-      await this.removeGraphPath(this.nodePath(id));
-    }
-
-    for (const id of edgeAdds) {
-      const edge = target.edges.find((e) => e.id === id);
-      if (edge) await writeEdge(edge);
-    }
-    for (const id of edgeUpdates) {
-      const edge = target.edges.find((e) => e.id === id);
-      if (edge) await writeEdge(edge);
-    }
-    for (const id of edgeDeletes) {
-      await this.removeGraphPath(this.edgePath(id));
-    }
-
-    const prevVars = JSON.stringify(current.variables ?? []);
-    const nextVars = JSON.stringify(target.variables ?? []);
-    if (prevVars !== nextVars) {
-      await this.writeYamlEntity(this.variablesPath(), target.variables ?? []);
-    }
-
-    const meta: GraphMeta = {
-      name: target.name,
-      version: target.version,
-      updatedAt: target.updatedAt,
-      format: 2,
-    };
-    await this.writeYamlEntity(this.metaPath(), meta);
-
   }
 
   private async readFromWorkingTree(name: string): Promise<PersistedGraph | null> {
@@ -216,6 +171,64 @@ export class FsGraphRepository extends GraphRepository {
       edges: edgesRes.items,
       variables,
     };
+  }
+
+  private async createStagingTree(graph: PersistedGraph): Promise<string> {
+    const stagingDir = this.tempDirPath(STAGING_PREFIX);
+    await fs.mkdir(path.dirname(stagingDir), { recursive: true });
+    await fs.mkdir(stagingDir, { recursive: true });
+    await fs.mkdir(path.join(stagingDir, 'nodes'), { recursive: true });
+    await fs.mkdir(path.join(stagingDir, 'edges'), { recursive: true });
+
+    for (const node of graph.nodes) {
+      await this.writeYamlAtBase(stagingDir, this.nodePath(node.id), node);
+    }
+    for (const edge of graph.edges) {
+      await this.writeYamlAtBase(stagingDir, this.edgePath(edge.id!), edge);
+    }
+    await this.writeYamlAtBase(stagingDir, this.variablesPath(), graph.variables ?? []);
+    const meta: GraphMeta = {
+      name: graph.name,
+      version: graph.version,
+      updatedAt: graph.updatedAt,
+      format: 2,
+    };
+    await this.writeYamlAtBase(stagingDir, this.metaPath(), meta);
+
+    await this.syncDirectory(path.join(stagingDir, 'nodes'));
+    await this.syncDirectory(path.join(stagingDir, 'edges'));
+    await this.syncDirectory(stagingDir);
+    await this.syncDirectory(path.dirname(stagingDir));
+    return stagingDir;
+  }
+
+  private async swapWorkingTree(stagingDir: string): Promise<void> {
+    const root = this.ensureGraphRoot();
+    const parent = path.dirname(root);
+    const backupDir = this.tempDirPath(BACKUP_PREFIX);
+    let rootRenamed = false;
+    let newTreeActive = false;
+    try {
+      await fs.mkdir(parent, { recursive: true });
+      await fs.rename(root, backupDir);
+      rootRenamed = true;
+      await fs.rename(stagingDir, root);
+      newTreeActive = true;
+      await this.recreateLockFile(path.join(root, '.graph.lock'));
+      await this.restoreAuxiliaryEntries(backupDir, root);
+      await this.syncDirectory(parent);
+    } catch (err) {
+      if (newTreeActive) {
+        await fs.rm(root, { recursive: true, force: true }).catch(() => undefined);
+      }
+      if (rootRenamed) {
+        await fs.rename(backupDir, root).catch(() => undefined);
+      }
+      throw err;
+    } finally {
+      await this.discardTempDir(stagingDir);
+      await this.discardTempDir(backupDir);
+    }
   }
 
   private stripInternalNode(node: PersistedGraphNode): PersistedGraphNode {
@@ -255,51 +268,6 @@ export class FsGraphRepository extends GraphRepository {
   private async writeYamlAtBase(baseDir: string, relPath: string, data: unknown): Promise<void> {
     const abs = path.join(baseDir, relPath);
     await this.atomicWriteFile(abs, stringifyYaml(data));
-  }
-
-  private async removeGraphPath(relPath: string): Promise<void> {
-    const abs = this.absolutePath(relPath);
-    try {
-      await fs.unlink(abs);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
-    }
-  }
-
-  private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
-    const encode = (node: PersistedGraphNode) =>
-      JSON.stringify({ id: node.id, template: node.template, config: node.config, state: node.state, position: node.position });
-    const b = new Map(before.map((n) => [n.id, encode(n)]));
-    const a = new Map(after.map((n) => [n.id, encode(n)]));
-    const nodeAdds: string[] = [];
-    const nodeUpdates: string[] = [];
-    const nodeDeletes: string[] = [];
-    for (const id of a.keys()) {
-      if (!b.has(id)) nodeAdds.push(id);
-      else if (b.get(id) !== a.get(id)) nodeUpdates.push(id);
-    }
-    for (const id of b.keys()) {
-      if (!a.has(id)) nodeDeletes.push(id);
-    }
-    return { nodeAdds, nodeUpdates, nodeDeletes };
-  }
-
-  private diffEdges(before: PersistedGraphEdge[], after: PersistedGraphEdge[]) {
-    const encode = (edge: PersistedGraphEdge) =>
-      JSON.stringify({ ...edge, id: String(edge.id ?? this.edgeId(edge)) });
-    const b = new Map(before.map((e) => [String(e.id ?? this.edgeId(e)), encode(e)]));
-    const a = new Map(after.map((e) => [String(e.id ?? this.edgeId(e)), encode(e)]));
-    const edgeAdds: string[] = [];
-    const edgeUpdates: string[] = [];
-    const edgeDeletes: string[] = [];
-    for (const id of a.keys()) {
-      if (!b.has(id)) edgeAdds.push(id);
-      else if (b.get(id) !== a.get(id)) edgeUpdates.push(id);
-    }
-    for (const id of b.keys()) {
-      if (!a.has(id)) edgeDeletes.push(id);
-    }
-    return { edgeAdds, edgeUpdates, edgeDeletes };
   }
 
   private edgeId(edge: PersistedGraphEdge): string {
@@ -371,6 +339,87 @@ export class FsGraphRepository extends GraphRepository {
       out.push({ key, value });
     }
     return out.length ? out : undefined;
+  }
+
+  private async recreateLockFile(lockPath: string): Promise<void> {
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    await fs.writeFile(lockPath, `${process.pid} ${new Date().toISOString()}\n`);
+    await this.syncDirectory(path.dirname(lockPath));
+  }
+
+  private async restoreAuxiliaryEntries(backupDir: string, root: string): Promise<void> {
+    const preserve = ['.git'];
+    for (const entry of preserve) {
+      const source = path.join(backupDir, entry);
+      if (!(await this.pathExists(source))) continue;
+      const dest = path.join(root, entry);
+      await fs.rm(dest, { recursive: true, force: true }).catch(() => undefined);
+      await fs.rename(source, dest).catch(() => undefined);
+    }
+  }
+
+  private tempDirPath(prefix: string): string {
+    const parent = path.dirname(this.ensureGraphRoot());
+    const baseName = path.basename(this.ensureGraphRoot()).replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueId = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+    return path.join(parent, `${prefix}${baseName}-${uniqueId}`);
+  }
+
+  private async discardTempDir(dir: string): Promise<void> {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  private async cleanupSwapArtifacts(): Promise<void> {
+    const root = this.ensureGraphRoot();
+    const parent = path.dirname(root);
+    await fs.mkdir(parent, { recursive: true });
+    let entries: Dirent[] = [];
+    try {
+      entries = await fs.readdir(parent, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const stagingDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(STAGING_PREFIX));
+    const backupDirs = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(BACKUP_PREFIX));
+    const rootExists = await this.pathExists(root);
+    if (!rootExists && backupDirs.length) {
+      const candidate = await this.selectNewestDir(parent, backupDirs);
+      if (candidate) {
+        await fs.rename(path.join(parent, candidate.name), root).catch(() => undefined);
+        const idx = backupDirs.findIndex((entry) => entry.name === candidate.name);
+        if (idx >= 0) backupDirs.splice(idx, 1);
+      }
+    }
+    await Promise.all(stagingDirs.map((entry) => this.discardTempDir(path.join(parent, entry.name))));
+    await Promise.all(backupDirs.map((entry) => this.discardTempDir(path.join(parent, entry.name))));
+  }
+
+  private async selectNewestDir(base: string, entries: Dirent[]): Promise<Dirent | null> {
+    let newest: { entry: Dirent; mtime: number } | null = null;
+    for (const entry of entries) {
+      try {
+        const stat = await fs.stat(path.join(base, entry.name));
+        if (!newest || stat.mtimeMs > newest.mtime) {
+          newest = { entry, mtime: stat.mtimeMs };
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return newest?.entry ?? null;
+  }
+
+  private async syncDirectory(dir: string): Promise<void> {
+    try {
+      const fd = await fs.open(dir, 'r');
+      try {
+        await fd.sync();
+      } finally {
+        await fd.close();
+      }
+    } catch {
+      // ignore
+    }
   }
 
   private async appendDefaultMeta(name: string): Promise<void> {
@@ -445,7 +494,7 @@ export class FsGraphRepository extends GraphRepository {
         return { lockPath };
       } catch (err) {
         const code = (err as NodeJS.ErrnoException)?.code;
-        if (code !== 'EEXIST') throw err;
+        if (code !== 'EEXIST' && code !== 'ENOENT') throw err;
         if (Date.now() - start > timeout) throw codeError('LOCK_TIMEOUT', 'Lock timeout');
         await new Promise((resolve) => setTimeout(resolve, 50));
       }

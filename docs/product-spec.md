@@ -35,7 +35,7 @@ Architecture and components
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and direct working-tree persistence. Each upsert performs atomic writes with conflict/timeout/persist error modes.
+  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and staged working-tree swaps. Each upsert builds a full graph tree in a sibling directory, fsyncs it, and atomically swaps it into place (conflict/timeout/persist error modes preserved).
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace network
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
@@ -95,7 +95,7 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store now writes directly to the working tree at `GRAPH_REPO_PATH`; legacy git guards and migration tooling have been removed. Ensure any old `.git` directories are deleted or copied elsewhere before pointing the server at the path.
+- Graph store now writes directly to the working tree at `GRAPH_REPO_PATH` using staged swaps; legacy git guards and migration tooling have been removed. Ensure any old `.git` directories are deleted or copied elsewhere before pointing the server at the path.
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/fs-store.md

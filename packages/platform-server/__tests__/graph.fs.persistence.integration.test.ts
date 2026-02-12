@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -107,6 +107,114 @@ describe('FsGraphRepository filesystem persistence', () => {
     expect(await pathExists(repoPath('snapshots'))).toBe(false);
     expect(await pathExists(repoPath('journal'))).toBe(false);
     expect(await pathExists(repoPath('journal.ndjson'))).toBe(false);
+    const artifacts = await listTempArtifacts(tempDir);
+    expect(artifacts.staging).toHaveLength(0);
+    expect(artifacts.backups).toHaveLength(0);
+  });
+
+  it('restores the previous tree if a staged swap fails', async () => {
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        ...baseConfigEnv,
+        graphRepoPath: tempDir,
+      }),
+    );
+    const repo = new FsGraphRepository(cfg, templateRegistryStub);
+    await repo.initIfNeeded();
+
+    await repo.upsert(
+      {
+        name: 'main',
+        version: 0,
+        nodes: [{ id: 'start', template: 'trigger' }],
+        edges: [],
+      },
+      undefined,
+    );
+
+    const realRename = fs.rename;
+    let shouldFail = true;
+    const renameSpy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (shouldFail && typeof to === 'string' && to === repoPath()) {
+        shouldFail = false;
+        throw new Error('rename-fail');
+      }
+      return realRename.call(fs, from, to);
+    });
+
+    await expect(
+      repo.upsert(
+        {
+          name: 'main',
+          version: 1,
+          nodes: [
+            { id: 'start', template: 'trigger' },
+            { id: 'next', template: 'trigger' },
+          ],
+          edges: [],
+        },
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'PERSIST_FAILED' });
+
+    renameSpy.mockRestore();
+
+    const loaded = await repo.get('main');
+    expect(loaded?.version).toBe(1);
+    expect(loaded?.nodes).toHaveLength(1);
+    const artifacts = await listTempArtifacts(tempDir);
+    expect(artifacts.staging).toHaveLength(0);
+    expect(artifacts.backups).toHaveLength(0);
+  });
+
+  it('repairs orphaned staging artifacts on startup', async () => {
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        ...baseConfigEnv,
+        graphRepoPath: tempDir,
+      }),
+    );
+    const repo = new FsGraphRepository(cfg, templateRegistryStub);
+    await repo.initIfNeeded();
+
+    await repo.upsert(
+      {
+        name: 'main',
+        version: 0,
+        nodes: [{ id: 'start', template: 'trigger' }],
+        edges: [],
+      },
+      undefined,
+    );
+
+    await repo.upsert(
+      {
+        name: 'main',
+        version: 1,
+        nodes: [
+          { id: 'start', template: 'trigger' },
+          { id: 'branch', template: 'trigger' },
+        ],
+        edges: [],
+      },
+      undefined,
+    );
+
+    const parent = path.dirname(tempDir);
+    const orphanBackup = path.join(parent, `.graph-backup-test-${Date.now().toString(36)}`);
+    const orphanStaging = path.join(parent, `.graph-staging-test-${Date.now().toString(36)}`);
+    await fs.rename(tempDir, orphanBackup);
+    await fs.mkdir(orphanStaging, { recursive: true });
+
+    const repoAfterCrash = new FsGraphRepository(cfg, templateRegistryStub);
+    await repoAfterCrash.initIfNeeded();
+    const loaded = await repoAfterCrash.get('main');
+    expect(loaded?.version).toBe(2);
+    expect(loaded?.nodes).toHaveLength(2);
+
+    const artifacts = await listTempArtifacts(tempDir);
+    expect(artifacts.staging).toHaveLength(0);
+    expect(artifacts.backups).toHaveLength(0);
   });
 
   it('ignores leftover git directories in the repo path', async () => {
@@ -145,5 +253,21 @@ async function pathExists(p: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function listTempArtifacts(root: string): Promise<{ staging: string[]; backups: string[] }> {
+  const parent = path.dirname(root);
+  const baseName = path.basename(root).replace(/[^a-zA-Z0-9.-]/g, '_');
+  const stagingPrefix = `.graph-staging-${baseName}-`;
+  const backupPrefix = `.graph-backup-${baseName}-`;
+  try {
+    const entries = await fs.readdir(parent);
+    return {
+      staging: entries.filter((name) => name.startsWith(stagingPrefix)),
+      backups: entries.filter((name) => name.startsWith(backupPrefix)),
+    };
+  } catch {
+    return { staging: [], backups: [] };
   }
 }
