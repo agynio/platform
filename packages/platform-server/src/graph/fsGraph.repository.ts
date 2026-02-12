@@ -54,7 +54,7 @@ export class FsGraphRepository extends GraphRepository {
     let dataset = await this.resolveDatasetName();
     this.datasetName = dataset;
 
-    const layout = await this.detectStorageLayout();
+    const layout = await this.detectStorageLayout(dataset);
 
     if (layout.kind === 'dataset-root') {
       this.datasetRootOverride = layout.datasetPath;
@@ -433,8 +433,18 @@ export class FsGraphRepository extends GraphRepository {
     }
   }
 
-  private async detectStorageLayout(): Promise<StorageLayout> {
+  private async detectStorageLayout(activeDataset: string): Promise<StorageLayout> {
     const graphPath = this.config.graphDataPath;
+    const datasetCandidate = path.join(graphPath, 'datasets', activeDataset);
+    if (await this.pathExists(datasetCandidate)) {
+      return { kind: 'standard' };
+    }
+
+    const datasetsDir = path.join(graphPath, 'datasets');
+    if (await this.pathExists(datasetsDir)) {
+      return { kind: 'standard' };
+    }
+
     const metaPath = path.join(graphPath, this.metaPath());
     const nodesPath = path.join(graphPath, 'nodes');
     const edgesPath = path.join(graphPath, 'edges');
@@ -449,11 +459,6 @@ export class FsGraphRepository extends GraphRepository {
         return { kind: 'legacy-working-tree', legacyPath: graphPath };
       }
       return { kind: 'dataset-root', datasetPath: graphPath, datasetName: datasetNameFromPath };
-    }
-
-    const datasetsDir = path.join(graphPath, 'datasets');
-    if (await this.pathExists(datasetsDir)) {
-      return { kind: 'standard' };
     }
 
     if (datasetNameFromPath) {

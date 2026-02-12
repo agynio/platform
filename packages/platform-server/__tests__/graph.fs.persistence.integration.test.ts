@@ -225,6 +225,34 @@ describe('FsGraphRepository storage layout detection', () => {
     expect(await pathExists(path.join(legacyPath, '.git'))).toBe(false);
     expect(await pathExists(path.join(legacyPath, 'datasets', 'fs-test', 'graph.meta.yaml'))).toBe(true);
   });
+
+  it('continues reading from the canonical dataset after migration restarts', async () => {
+    const datasetRoot = await seedGraph(workDir, 'fs-restart');
+    const legacyPath = path.join(workDir, 'legacy-restart');
+    await fs.mkdir(legacyPath, { recursive: true });
+    await fs.cp(datasetRoot, legacyPath, { recursive: true });
+    await fs.mkdir(path.join(legacyPath, '.git'));
+
+    const repo = new FsGraphRepository(
+      makeConfig(legacyPath, { dataset: 'fs-restart', autoMigrate: true }),
+      templateRegistryStub,
+    );
+    await repo.initIfNeeded();
+    const migrated = await repo.get('main');
+    expect(migrated?.version).toBe(1);
+
+    await fs.writeFile(path.join(legacyPath, 'nodes', 'start.yaml'), 'id: start\ntemplate: legacy\n');
+
+    const restartRepo = new FsGraphRepository(
+      makeConfig(legacyPath, { dataset: 'fs-restart', autoMigrate: false }),
+      templateRegistryStub,
+    );
+    await restartRepo.initIfNeeded();
+    const loaded = await restartRepo.get('main');
+
+    expect(loaded?.nodes).toEqual([{ id: 'start', template: 'trigger' }]);
+    expect(await pathExists(path.join(legacyPath, 'datasets', 'fs-restart', 'nodes', 'start.yaml'))).toBe(true);
+  });
 });
 
 async function pathExists(p: string): Promise<boolean> {
