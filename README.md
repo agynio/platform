@@ -4,6 +4,11 @@
 # Agyn Platform
 A multi-service agents platform with a NestJS API, React UI, and Git-backed graph orchestration.
 
+## Results on SWE-bench Verified
+Using a coordinated multi-agent team, agyn achieved **72.2% fully automated issue resolution** on SWE-bench Verified, the highest result among GPT-5–based systems.
+
+Full paper: https://arxiv.org/pdf/2602.01465
+
 ## Overview
 Agyn Platform is a TypeScript monorepo that provides:
 - A Fastify/NestJS server exposing HTTP and Socket.IO APIs for agent graphs, runs, context items, and persistence.
