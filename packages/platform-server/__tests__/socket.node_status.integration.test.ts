@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 import Node from '../src/nodes/base/Node';
 
 class DummyNode extends Node<Record<string, unknown>> { getPortConfig() { return { sourcePorts: { $self: { kind: 'instance' } } } as const; } }
@@ -29,7 +31,9 @@ describe('Gateway node_status integration', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub as any, eventsBusStub as any);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }) } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub as any, eventsBusStub as any, configStub, authStub);
     gateway.init({ server: fastify.server });
     const node = new DummyNode();
     node.init({ nodeId: 'nX' });

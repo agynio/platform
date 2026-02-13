@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { PrismaService } from '../src/core/services/prisma.service';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 
 describe('SQL: WITH RECURSIVE and UUID casts', () => {
   it('getThreadsMetrics uses WITH RECURSIVE and ::uuid[] and returns expected aggregation', async () => {
@@ -64,7 +66,9 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) };
     const runtimeStub = { subscribe: () => () => {} } as any;
     const eventsBusStub = {} as any;
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub, eventsBusStub);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authStub = { resolvePrincipalFromCookieHeader: vi.fn() } as unknown as AuthService;
+    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, configStub, authStub);
 
     const scheduled: string[] = [];
     // Spy/override scheduleThreadMetrics to capture scheduled ids

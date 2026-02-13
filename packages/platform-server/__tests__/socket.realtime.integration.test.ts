@@ -7,6 +7,8 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import type { PrismaService } from '../src/core/services/prisma.service';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
@@ -15,6 +17,7 @@ import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { UserService } from '../src/auth/user.service';
 
 type MetricsPayload = { activity: 'working' | 'waiting' | 'idle'; remindersCount: number };
 
@@ -61,6 +64,12 @@ const createPrismaStub = () =>
       $queryRaw: async () => [],
     }),
   }) as unknown as PrismaService;
+
+const createConfigStub = (): ConfigService => ({ corsOrigins: [] } as unknown as ConfigService);
+const createAuthStub = (): AuthService =>
+  ({
+    resolvePrincipalFromCookieHeader: async () => ({ userId: 'test-user' }),
+  }) as unknown as AuthService;
 
 const createLinkingStub = () =>
   ({
@@ -144,7 +153,14 @@ if (!shouldRunRealtimeTests) {
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
     const eventsBus = createEventsBusNoop();
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaStub, eventsBus);
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaStub,
+      eventsBus,
+      createConfigStub(),
+      createAuthStub(),
+    );
     gateway.onModuleInit();
     gateway.init({ server });
 
@@ -166,6 +182,7 @@ if (!shouldRunRealtimeTests) {
       createdAt: new Date(),
       parentId: null,
       channelNodeId: null,
+      ownerUserId: 'test-user',
     });
     const createdPayload = await createdPromise;
     expect(createdPayload.thread.id).toBe(threadId);
@@ -179,6 +196,7 @@ if (!shouldRunRealtimeTests) {
       createdAt: new Date(),
       parentId: null,
       channelNodeId: null,
+      ownerUserId: 'test-user',
     });
     const updatedPayload = await updatedPromise;
     expect(updatedPayload.thread.summary).toBe('Updated summary');
@@ -203,7 +221,14 @@ if (!shouldRunRealtimeTests) {
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaService,
+      eventsBus,
+      createConfigStub(),
+      createAuthStub(),
+    );
     gateway.onModuleInit();
 
     const server = createServer();
@@ -222,6 +247,7 @@ if (!shouldRunRealtimeTests) {
 
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
+    const userService = new UserService(prismaService);
     const agents = new AgentsPersistenceService(
       prismaService,
       metricsDouble.service,
@@ -230,6 +256,7 @@ if (!shouldRunRealtimeTests) {
       runEvents,
       createLinkingStub(),
       eventsBus,
+      userService,
     );
 
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('hello')]);
@@ -267,7 +294,14 @@ if (!shouldRunRealtimeTests) {
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaService,
+      eventsBus,
+      createConfigStub(),
+      createAuthStub(),
+    );
     gateway.onModuleInit();
 
     const server = createServer();
@@ -277,6 +311,7 @@ if (!shouldRunRealtimeTests) {
 
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
+    const userService = new UserService(prismaService);
     const agents = new AgentsPersistenceService(
       prismaService,
       metricsDouble.service,
@@ -285,6 +320,7 @@ if (!shouldRunRealtimeTests) {
       runEvents,
       createLinkingStub(),
       eventsBus,
+      userService,
     );
 
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'timeline' } });

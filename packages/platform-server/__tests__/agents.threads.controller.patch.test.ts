@@ -9,6 +9,8 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 const runEventsStub = {
   getRunSummary: async () => ({
     status: 'unknown',
@@ -61,9 +63,9 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await ctrl.patchThread('t1', { summary: null });
+    await ctrl.patchThread('t1', { summary: null }, principal);
     expect(closeCascade).not.toHaveBeenCalled();
-    await ctrl.patchThread('t2', { status: 'closed' });
+    await ctrl.patchThread('t2', { status: 'closed' }, principal);
 
     expect(updates).toEqual([
       { id: 't1', data: { summary: null } },
@@ -99,9 +101,9 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await ctrl.patchThread('closed-thread', { status: 'closed' });
+    await ctrl.patchThread('closed-thread', { status: 'closed' }, principal);
 
-    expect(updateThread).toHaveBeenCalledWith('closed-thread', { status: 'closed' });
+    expect(updateThread).toHaveBeenCalledWith('closed-thread', { status: 'closed' }, { ownerUserId: principal.userId });
     expect(closeCascade).toHaveBeenCalledWith('closed-thread');
   });
 
@@ -131,7 +133,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await ctrl.patchThread('already-closed', { status: 'closed' });
+    await ctrl.patchThread('already-closed', { status: 'closed' }, principal);
 
     expect(closeCascade).not.toHaveBeenCalled();
   });

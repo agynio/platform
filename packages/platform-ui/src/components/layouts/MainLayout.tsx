@@ -6,6 +6,12 @@ interface MainLayoutProps {
   menuItems: MenuItem[];
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
+  currentUser?: {
+    name: string | null;
+    email: string | null;
+    avatarUrl?: string | null;
+  };
+  onLogout?: () => void;
 }
 
 export function MainLayout({
@@ -13,6 +19,8 @@ export function MainLayout({
   menuItems,
   selectedMenuItem,
   onMenuItemSelect,
+  currentUser,
+  onLogout,
 }: MainLayoutProps) {
   return (
     <div className="h-screen bg-[var(--agyn-bg-light)] flex">
@@ -20,7 +28,9 @@ export function MainLayout({
         <Sidebar 
           menuItems={menuItems}
           selectedMenuItem={selectedMenuItem} 
+          currentUser={currentUser}
           onMenuItemSelect={onMenuItemSelect} 
+          onLogout={onLogout}
         />
         <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden">
           {children}

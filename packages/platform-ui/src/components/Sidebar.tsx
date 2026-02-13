@@ -20,19 +20,21 @@ export interface SubMenuItem {
 interface SidebarProps {
   menuItems: MenuItem[];
   currentUser?: {
-    name: string;
-    email: string;
-    avatar?: string;
+    name: string | null;
+    email: string | null;
+    avatarUrl?: string | null;
   };
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
+  onLogout?: () => void;
 }
 
 export default function Sidebar({ 
   menuItems,
-  currentUser = { name: 'John Doe', email: 'john@agyn.io' },
+  currentUser = { name: 'John Doe', email: 'john@agyn.io', avatarUrl: null },
   selectedMenuItem = 'graph',
-  onMenuItemSelect
+  onMenuItemSelect,
+  onLogout,
 }: SidebarProps) {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set(['agents']));
 
@@ -133,20 +135,29 @@ export default function Sidebar({
       </nav>
 
       {/* User Footer */}
-      <div className="p-4 border-t border-[var(--agyn-border-subtle)]">
+      <div className="p-4 border-t border-[var(--agyn-border-subtle)] space-y-3">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="w-10 h-10 rounded-full bg-[var(--agyn-blue)] flex items-center justify-center text-white">
-            {currentUser.avatar ? (
-              <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full rounded-full" />
+            {currentUser.avatarUrl ? (
+              <img src={currentUser.avatarUrl} alt={currentUser.name ?? 'User'} className="w-full h-full rounded-full" />
             ) : (
               <User className="w-5 h-5" />
             )}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm truncate text-[var(--agyn-dark)]">{currentUser.name}</p>
-            <p className="text-xs text-[var(--agyn-gray)] truncate">{currentUser.email}</p>
+            <p className="text-sm truncate text-[var(--agyn-dark)]">{currentUser.name ?? currentUser.email ?? 'Agyn User'}</p>
+            <p className="text-xs text-[var(--agyn-gray)] truncate">{currentUser.email ?? '—'}</p>
           </div>
         </div>
+        {onLogout ? (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full h-10 rounded-lg border border-[var(--agyn-border-subtle)] text-sm text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)]"
+          >
+            Sign out
+          </button>
+        ) : null}
       </div>
     </div>
   );

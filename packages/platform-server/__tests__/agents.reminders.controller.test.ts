@@ -9,11 +9,14 @@ import { RemindersService } from '../src/agents/reminders.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createUserServiceStub } from './helpers/userService.stub';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
   get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
 } as any;
+
+const principal = { userId: 'user-1' } as any;
 
 const createLinkingStub = () =>
   ({
@@ -53,6 +56,7 @@ function createPersistenceWithTx(tx: { reminder: { findMany: any; count: any }; 
     createRunEventsStub() as any,
     createLinkingStub(),
     createEventsBusStub(),
+    createUserServiceStub(),
   );
 }
 
@@ -71,9 +75,9 @@ describe('AgentsRemindersController', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
-    const res = await ctrl.listReminders({});
+    const res = await ctrl.listReminders({}, principal);
 
-    expect(svc.listReminders).toHaveBeenCalledWith('active', 100, undefined);
+    expect(svc.listReminders).toHaveBeenCalledWith('active', 100, undefined, principal.userId);
     expect(svc.listRemindersPaginated).not.toHaveBeenCalled();
     expect(res).toEqual({ items: [{ id: '1' }] });
   });
@@ -91,6 +95,7 @@ describe('AgentsRemindersController', () => {
     const svc = {
       listReminders: vi.fn(),
       listRemindersPaginated: vi.fn(async () => paginatedResponse),
+      getThreadById: vi.fn(async () => ({ id: 'aaaa1111-1111-1111-1111-111111111111', ownerUserId: principal.userId })),
     } as unknown as AgentsPersistenceService;
     const module = await Test.createTestingModule({
       controllers: [AgentsRemindersController],
@@ -101,7 +106,7 @@ describe('AgentsRemindersController', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
-    const result = await ctrl.listReminders({ page: 2, threadId: 'aaaa1111-1111-1111-1111-111111111111' });
+    const result = await ctrl.listReminders({ page: 2, threadId: 'aaaa1111-1111-1111-1111-111111111111' }, principal);
 
     expect(svc.listReminders).not.toHaveBeenCalled();
     expect(svc.listRemindersPaginated).toHaveBeenCalledWith({
@@ -111,6 +116,7 @@ describe('AgentsRemindersController', () => {
       sort: 'latest',
       order: 'desc',
       threadId: 'aaaa1111-1111-1111-1111-111111111111',
+      ownerUserId: principal.userId,
     });
     expect(result).toEqual(paginatedResponse);
   });
@@ -132,9 +138,9 @@ describe('AgentsRemindersController', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
-    const res = await ctrl.cancelReminder('rem-1');
+    const res = await ctrl.cancelReminder('rem-1', principal);
 
-    expect(reminders.cancelReminder).toHaveBeenCalledWith({ reminderId: 'rem-1', emitMetrics: true });
+    expect(reminders.cancelReminder).toHaveBeenCalledWith({ reminderId: 'rem-1', emitMetrics: true, ownerUserId: principal.userId });
     expect(res).toEqual({ ok: true, threadId: 'thread-9' });
   });
 
@@ -156,7 +162,7 @@ describe('AgentsRemindersController', () => {
 
     const ctrl = await module.resolve(AgentsRemindersController);
 
-    await expect(ctrl.cancelReminder('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ctrl.cancelReminder('missing', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('throws 404 when reminders service omits thread id', async () => {
@@ -177,7 +183,7 @@ describe('AgentsRemindersController', () => {
 
     const ctrl = await module.resolve(AgentsRemindersController);
 
-    await expect(ctrl.cancelReminder('rem-2')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ctrl.cancelReminder('rem-2', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -227,6 +233,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       createRunEventsStub() as any,
       createLinkingStub(),
       eventsBusStub,
+      createUserServiceStub(),
     );
 
     await svc.listReminders('active', 50);
@@ -264,6 +271,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       createRunEventsStub() as any,
       createLinkingStub(),
       eventsBusStub,
+      createUserServiceStub(),
     );
 
     const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});

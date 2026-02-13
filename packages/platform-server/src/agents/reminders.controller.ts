@@ -1,8 +1,10 @@
-import { Controller, Get, Inject, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, Min, Max, IsOptional, IsUUID } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { RemindersService } from './reminders.service';
+import { CurrentPrincipal } from '../auth/principal.decorator';
+import type { Principal } from '../auth/auth.types';
 
 export class ListRemindersQueryDto {
   @IsOptional()
@@ -49,8 +51,23 @@ export class AgentsRemindersController {
     @Inject(RemindersService) private readonly reminders: RemindersService,
   ) {}
 
+  private requirePrincipal(principal: Principal | null): Principal {
+    if (!principal) {
+      throw new UnauthorizedException({ error: 'unauthorized' });
+    }
+    return principal;
+  }
+
   @Get('reminders')
-  async listReminders(@Query() query: ListRemindersQueryDto) {
+  async listReminders(@Query() query: ListRemindersQueryDto, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    if (query.threadId) {
+      const thread = await this.persistence.getThreadById(query.threadId, { ownerUserId });
+      if (!thread) {
+        throw new NotFoundException({ error: 'thread_not_found' });
+      }
+    }
     const wantsPagination =
       query.page !== undefined ||
       query.pageSize !== undefined ||
@@ -65,19 +82,22 @@ export class AgentsRemindersController {
         sort: query.sort ?? 'latest',
         order: query.order ?? 'desc',
         threadId: query.threadId,
+        ownerUserId,
       });
       return result;
     }
 
     const filter = query.filter ?? 'active';
     const take = query.take ?? 100;
-    const items = await this.persistence.listReminders(filter, take, query.threadId);
+    const items = await this.persistence.listReminders(filter, take, query.threadId, ownerUserId);
     return { items };
   }
 
   @Post('reminders/:reminderId/cancel')
-  async cancelReminder(@Param('reminderId') reminderId: string) {
-    const result = await this.reminders.cancelReminder({ reminderId, emitMetrics: true });
+  async cancelReminder(@Param('reminderId') reminderId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    const result = await this.reminders.cancelReminder({ reminderId, emitMetrics: true, ownerUserId });
     if (!result) {
       throw new NotFoundException({ error: 'reminder_not_found' });
     }

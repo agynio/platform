@@ -18,6 +18,7 @@ interface CancelReminderOptions {
   reminderId: string;
   prismaOverride?: PrismaExecutor;
   emitMetrics?: boolean;
+  ownerUserId?: string;
 }
 
 @Injectable()
@@ -89,7 +90,7 @@ export class RemindersService {
     return { cancelledDb, clearedRuntime };
   }
 
-  async cancelReminder({ reminderId, prismaOverride, emitMetrics }: CancelReminderOptions): Promise<
+  async cancelReminder({ reminderId, prismaOverride, emitMetrics, ownerUserId }: CancelReminderOptions): Promise<
     | {
         threadId: string;
         cancelledDb: boolean;
@@ -101,9 +102,13 @@ export class RemindersService {
 
     const reminder = await prisma.reminder.findUnique({
       where: { id: reminderId },
-      select: { id: true, threadId: true, completedAt: true, cancelledAt: true },
+      select: { id: true, threadId: true, completedAt: true, cancelledAt: true, thread: { select: { ownerUserId: true } } },
     });
     if (!reminder) {
+      return null;
+    }
+
+    if (ownerUserId && reminder.thread?.ownerUserId !== ownerUserId) {
       return null;
     }
 

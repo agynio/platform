@@ -11,6 +11,8 @@ import type { ThreadStatus } from '@prisma/client';
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 const runEventsStub = {
   getRunSummary: async () => null,
   listRunEvents: async () => ({ items: [], nextCursor: null }),
@@ -84,7 +86,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
   it('dispatches message to agent runtime when thread is open', async () => {
     const { controller, invoke, getLatestAgentNodeIdForThread, ensureAssignedAgent } = await setup();
 
-    const result = await controller.sendThreadMessage('thread-1', { text: '  hello world  ' });
+    const result = await controller.sendThreadMessage('thread-1', { text: '  hello world  ' }, principal);
 
     expect(result).toEqual({ ok: true });
     expect(getLatestAgentNodeIdForThread).not.toHaveBeenCalled();
@@ -98,7 +100,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
 
   it('rejects when message body is invalid', async () => {
     const { controller } = await setup();
-    await expect(controller.sendThreadMessage('thread-1', { text: '   ' })).rejects.toMatchObject({
+    await expect(controller.sendThreadMessage('thread-1', { text: '   ' }, principal)).rejects.toMatchObject({
       status: 400,
       response: { error: 'bad_message_payload' },
     });
@@ -108,7 +110,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     const { controller } = await setup();
     const overLimit = 'a'.repeat(100001);
 
-    await expect(controller.sendThreadMessage('thread-1', { text: overLimit })).rejects.toMatchObject({
+    await expect(controller.sendThreadMessage('thread-1', { text: overLimit }, principal)).rejects.toMatchObject({
       status: 400,
       response: { error: 'bad_message_payload' },
     });
@@ -118,7 +120,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     const { controller } = await setup({ thread: null, latestAgentNodeId: null });
     expect.assertions(2);
     try {
-      await controller.sendThreadMessage('missing-thread', { text: 'hello' });
+      await controller.sendThreadMessage('missing-thread', { text: 'hello' }, principal);
       throw new Error('expected NotFoundException');
     } catch (error) {
       expect(error).toBeInstanceOf(NotFoundException);
@@ -128,7 +130,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
 
   it('rejects when thread is closed', async () => {
     const { controller } = await setup({ thread: { id: 'thread-1', status: 'closed' as ThreadStatus } });
-    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' })).rejects.toMatchObject({
+    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' }, principal)).rejects.toMatchObject({
       status: 409,
       response: { error: 'thread_closed' },
     });
@@ -141,7 +143,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     });
     expect.assertions(2);
     try {
-      await controller.sendThreadMessage('thread-1', { text: 'hello' });
+      await controller.sendThreadMessage('thread-1', { text: 'hello' }, principal);
       throw new Error('expected ServiceUnavailableException');
     } catch (error) {
       expect(error).toBeInstanceOf(ServiceUnavailableException);
@@ -151,7 +153,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
 
   it('rejects when thread is missing an assigned agent', async () => {
     const { controller } = await setup({ thread: { id: 'thread-1', status: 'open' as ThreadStatus, assignedAgentNodeId: null } });
-    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' })).rejects.toMatchObject({
+    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' }, principal)).rejects.toMatchObject({
       status: 503,
       response: { error: 'agent_unavailable' },
     });
@@ -162,7 +164,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     const { controller } = await setup({
       nodes: [{ id: 'agent-1', template: 'agent', instance: { status: 'not_ready', invoke } }],
     });
-    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' })).rejects.toMatchObject({
+    await expect(controller.sendThreadMessage('thread-1', { text: 'hello' }, principal)).rejects.toMatchObject({
       status: 503,
       response: { error: 'agent_unready' },
     });
@@ -176,7 +178,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
       templateMeta: { 'custom.agent': { kind: 'agent', title: 'Custom Agent' } },
     });
 
-    await controller.sendThreadMessage('thread-1', { text: 'hello meta agent' });
+    await controller.sendThreadMessage('thread-1', { text: 'hello meta agent' }, principal);
 
     expect(getLatestAgentNodeIdForThread).not.toHaveBeenCalled();
     expect(ensureAssignedAgent).not.toHaveBeenCalled();

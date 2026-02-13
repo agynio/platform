@@ -15,10 +15,13 @@ const runEventsStub = {
   getToolOutputSnapshot: async () => null,
 };
 
+const principal = { userId: 'user-1' } as any;
+
 type SetupOptions = {
   nodes?: Array<{ id: string; template: string; instance: { status: string; invoke: ReturnType<typeof vi.fn> } }>;
   templateMeta?: Record<string, { kind: 'agent' | 'tool'; title: string }>;
   createThreadWithInitialMessage?: ReturnType<typeof vi.fn>;
+  getThreadById?: ReturnType<typeof vi.fn>;
 };
 
 async function setup(options: SetupOptions = {}) {
@@ -45,6 +48,8 @@ async function setup(options: SetupOptions = {}) {
       assignedAgentNodeId: 'agent-1',
     }));
 
+  const getThreadById = options.getThreadById ?? vi.fn(async () => null);
+
   const templateRegistryStub = {
     getMeta: (template: string) => options.templateMeta?.[template] ?? { kind: 'agent', title: template },
   } satisfies Pick<TemplateRegistry, 'getMeta'>;
@@ -62,7 +67,7 @@ async function setup(options: SetupOptions = {}) {
           getThreadsMetrics: async () => ({}),
           getThreadsAgentTitles: async () => ({}),
           updateThread: async () => ({ previousStatus: 'open', status: 'open' }),
-          getThreadById: async () => null,
+          getThreadById,
           getLatestAgentNodeIdForThread: async () => null,
           getRunById: async () => null,
           ensureAssignedAgent: async () => {},
@@ -90,7 +95,7 @@ describe('AgentsThreadsController POST /api/agents/threads', () => {
   it('returns bad_message_payload when text is missing', async () => {
     const { controller, createThreadWithInitialMessage } = await setup();
 
-    await expect(controller.createThread({ agentNodeId: 'agent-1' } as any)).rejects.toMatchObject({
+    await expect(controller.createThread({ agentNodeId: 'agent-1' } as any, principal)).rejects.toMatchObject({
       status: 400,
       response: { error: 'bad_message_payload' },
     });
@@ -101,7 +106,7 @@ describe('AgentsThreadsController POST /api/agents/threads', () => {
   it('returns bad_message_payload when agentNodeId is missing', async () => {
     const { controller, createThreadWithInitialMessage } = await setup();
 
-    await expect(controller.createThread({ text: 'hello there' } as any)).rejects.toMatchObject({
+    await expect(controller.createThread({ text: 'hello there' } as any, principal)).rejects.toMatchObject({
       status: 400,
       response: { error: 'bad_message_payload' },
     });
@@ -113,7 +118,7 @@ describe('AgentsThreadsController POST /api/agents/threads', () => {
     const { controller, createThreadWithInitialMessage } = await setup();
 
     await expect(
-      controller.createThread({ text: 'a'.repeat(100001), agentNodeId: 'agent-1' } as any),
+      controller.createThread({ text: 'a'.repeat(100001), agentNodeId: 'agent-1' } as any, principal),
     ).rejects.toMatchObject({
       status: 400,
       response: { error: 'bad_message_payload' },
@@ -126,10 +131,26 @@ describe('AgentsThreadsController POST /api/agents/threads', () => {
     const createThreadWithInitialMessage = vi.fn(async () => {
       throw new ThreadParentNotFoundError();
     });
-    const { controller } = await setup({ createThreadWithInitialMessage });
+    const getThreadById = vi.fn(async () => ({ id: 'parent', ownerUserId: principal.userId }));
+    const { controller } = await setup({ createThreadWithInitialMessage, getThreadById });
 
     await expect(
-      controller.createThread({ text: 'hello', agentNodeId: 'agent-1', parentId: 'missing-parent' } as any),
+      controller.createThread({ text: 'hello', agentNodeId: 'agent-1', parentId: 'missing-parent' } as any, principal),
+    ).rejects.toMatchObject({
+      status: 404,
+      response: { error: 'parent_not_found' },
+    });
+  });
+
+  it('maps thread_parent_owner_mismatch errors to parent_not_found', async () => {
+    const createThreadWithInitialMessage = vi.fn(async () => {
+      throw new Error('thread_parent_owner_mismatch');
+    });
+    const getThreadById = vi.fn(async () => ({ id: 'parent', ownerUserId: principal.userId }));
+    const { controller } = await setup({ createThreadWithInitialMessage, getThreadById });
+
+    await expect(
+      controller.createThread({ text: 'hello', agentNodeId: 'agent-1', parentId: 'parent-1' } as any, principal),
     ).rejects.toMatchObject({
       status: 404,
       response: { error: 'parent_not_found' },

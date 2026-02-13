@@ -10,6 +10,8 @@ import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 const runEventsStub = {
   getRunSummary: async () => null,
   listRunEvents: async () => ({ items: [], nextCursor: null }),
@@ -113,7 +115,7 @@ describe('AgentsThreadsController GET /api/agents/threads/:threadId/queued-messa
       nodes: [{ id: 'agent-1', template: 'agent', instance: { status: 'ready', invoke: vi.fn(), listQueuedPreview } }],
     });
 
-    const result = await controller.listQueuedMessages('thread-1');
+    const result = await controller.listQueuedMessages('thread-1', principal);
 
     expect(result.items).toEqual([
       { id: 'msg-1', text: 'hello', enqueuedAt: new Date(1700000000000).toISOString() },
@@ -127,7 +129,7 @@ describe('AgentsThreadsController GET /api/agents/threads/:threadId/queued-messa
       nodes: [],
     });
 
-    const result = await controller.listQueuedMessages('thread-1');
+    const result = await controller.listQueuedMessages('thread-1', principal);
 
     expect(result).toEqual({ items: [] });
   });
@@ -135,7 +137,7 @@ describe('AgentsThreadsController GET /api/agents/threads/:threadId/queued-messa
   it('throws when thread does not exist', async () => {
     const { controller } = await setup({ thread: null });
 
-    await expect(controller.listQueuedMessages('missing-thread')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(controller.listQueuedMessages('missing-thread', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('normalizes missing text fields to empty string', async () => {
@@ -145,7 +147,7 @@ describe('AgentsThreadsController GET /api/agents/threads/:threadId/queued-messa
       nodes: [{ id: 'agent-1', template: 'agent', instance: { status: 'ready', invoke: vi.fn(), listQueuedPreview } }],
     });
 
-    const result = await controller.listQueuedMessages('thread-1');
+    const result = await controller.listQueuedMessages('thread-1', principal);
 
     expect(result.items).toEqual([
       { id: 'msg-2', text: '', enqueuedAt: new Date(1700000001000).toISOString() },
@@ -172,7 +174,7 @@ describe('AgentsThreadsController DELETE /api/agents/threads/:threadId/queued-me
       ],
     });
 
-    const result = await controller.clearQueuedMessages('thread-1');
+    const result = await controller.clearQueuedMessages('thread-1', principal);
 
     expect(result).toEqual({ clearedCount: 5 });
     expect(clearQueuedMessages).toHaveBeenCalledWith('thread-1');
@@ -190,7 +192,7 @@ describe('AgentsThreadsController DELETE /api/agents/threads/:threadId/queued-me
       ],
     });
 
-    const result = await controller.clearQueuedMessages('thread-1');
+    const result = await controller.clearQueuedMessages('thread-1', principal);
 
     expect(result).toEqual({ clearedCount: 0 });
   });
@@ -215,13 +217,13 @@ describe('AgentsThreadsController DELETE /api/agents/threads/:threadId/queued-me
       ],
     });
 
-    await expect(controller.clearQueuedMessages('thread-1')).rejects.toBeInstanceOf(InternalServerErrorException);
+    await expect(controller.clearQueuedMessages('thread-1', principal)).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 
   it('throws when thread is missing', async () => {
     const { controller } = await setup({ thread: null });
 
-    await expect(controller.clearQueuedMessages('thread-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(controller.clearQueuedMessages('thread-1', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -230,7 +232,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/reminders/c
     const cancelThreadReminders = vi.fn(async () => ({ cancelledDb: 2, clearedRuntime: 1 }));
     const { controller } = await setup({ remindersService: { cancelThreadReminders } });
 
-    const result = await controller.cancelThreadReminders('thread-1');
+    const result = await controller.cancelThreadReminders('thread-1', principal);
 
     expect(cancelThreadReminders).toHaveBeenCalledWith({ threadId: 'thread-1', emitMetrics: true });
     expect(result).toEqual({ cancelledDb: 2, clearedRuntime: 1 });
@@ -240,7 +242,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/reminders/c
     const cancelThreadReminders = vi.fn();
     const { controller } = await setup({ thread: null, remindersService: { cancelThreadReminders } });
 
-    await expect(controller.cancelThreadReminders('missing-thread')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(controller.cancelThreadReminders('missing-thread', principal)).rejects.toBeInstanceOf(NotFoundException);
     expect(cancelThreadReminders).not.toHaveBeenCalled();
   });
 
@@ -250,7 +252,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/reminders/c
     });
     const { controller } = await setup({ remindersService: { cancelThreadReminders } });
 
-    await expect(controller.cancelThreadReminders('thread-1')).rejects.toBeInstanceOf(InternalServerErrorException);
+    await expect(controller.cancelThreadReminders('thread-1', principal)).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 });
 
@@ -259,7 +261,7 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/reminders/c
     const { controller, reminders } = await setup();
     const spy = vi.spyOn(reminders, 'cancelThreadReminders').mockResolvedValue({ cancelledDb: 2, clearedRuntime: 1 });
 
-    const result = await controller.cancelThreadReminders('thread-1');
+    const result = await controller.cancelThreadReminders('thread-1', principal);
 
     expect(result).toEqual({ cancelledDb: 2, clearedRuntime: 1 });
     expect(spy).toHaveBeenCalledWith({ threadId: 'thread-1', emitMetrics: true });
@@ -268,14 +270,14 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/reminders/c
   it('throws 404 when thread missing', async () => {
     const { controller } = await setup({ thread: null });
 
-    await expect(controller.cancelThreadReminders('thread-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(controller.cancelThreadReminders('thread-1', principal)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('bubbles errors from service as 500', async () => {
     const { controller, reminders } = await setup();
     vi.spyOn(reminders, 'cancelThreadReminders').mockRejectedValue(new Error('fail'));
 
-    await expect(controller.cancelThreadReminders('thread-1')).rejects.toBeInstanceOf(
+    await expect(controller.cancelThreadReminders('thread-1', principal)).rejects.toBeInstanceOf(
       InternalServerErrorException,
     );
   });

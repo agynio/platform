@@ -16,6 +16,7 @@ import {
   Post,
   Query,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
@@ -32,6 +33,8 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { hasQueueManagementCapability, hasQueuedPreviewCapability, isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
 import { randomUUID } from 'node:crypto';
 import { ThreadParentNotFoundError } from './agents.persistence.service';
+import { CurrentPrincipal } from '../auth/principal.decorator';
+import type { Principal } from '../auth/auth.types';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -227,9 +230,41 @@ export class AgentsThreadsController {
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
   ) {}
 
+  private requirePrincipal(principal: Principal | null): Principal {
+    if (!principal) {
+      throw new UnauthorizedException({ error: 'unauthorized' });
+    }
+    return principal;
+  }
+
+  private async getThreadOrThrow(
+    threadId: string,
+    ownerUserId: string,
+    opts?: { includeMetrics?: boolean; includeAgentTitles?: boolean },
+  ) {
+    const thread = await this.persistence.getThreadById(threadId, { ...opts, ownerUserId });
+    if (!thread) {
+      throw new NotFoundException({ error: 'thread_not_found' });
+    }
+    return thread;
+  }
+
+  private async getRunOrThrow(runId: string, ownerUserId: string) {
+    const run = await this.persistence.getRunById(runId, { ownerUserId });
+    if (!run) {
+      throw new NotFoundException('run_not_found');
+    }
+    return run;
+  }
+
   @Post('threads')
   @HttpCode(201)
-  async createThread(@Body() body: CreateThreadBody | null | undefined): Promise<{ id: string }> {
+  async createThread(
+    @Body() body: CreateThreadBody | null | undefined,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ id: string }> {
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
+    const ownerUserId = currentPrincipal.userId;
     const textValue = typeof body?.text === 'string' ? body.text : '';
     const text = textValue.trim();
     if (text.length === 0 || text.length > AgentsThreadsController.MAX_MESSAGE_LENGTH) {
@@ -246,6 +281,9 @@ export class AgentsThreadsController {
     const alias = aliasCandidate.length > 0 ? aliasCandidate : `ui:${randomUUID()}`;
     const parentIdCandidate = typeof body?.parentId === 'string' ? body.parentId.trim() : '';
     const parentId = parentIdCandidate.length > 0 ? parentIdCandidate : null;
+    if (parentId) {
+      await this.getThreadOrThrow(parentId, ownerUserId);
+    }
 
     const liveNodes = this.runtime.getNodes();
     const agentNodes = liveNodes.filter((node) => isAgentLiveNode(node, this.templateRegistry));
@@ -272,11 +310,15 @@ export class AgentsThreadsController {
         alias,
         text,
         agentNodeId,
+        ownerUserId,
         parentId,
       });
       threadId = created.id;
     } catch (error) {
       if (error instanceof ThreadParentNotFoundError || (error instanceof Error && error.message === 'parent_not_found')) {
+        throw new NotFoundException({ error: 'parent_not_found' });
+      }
+      if (error instanceof Error && error.message === 'thread_parent_owner_mismatch') {
         throw new NotFoundException({ error: 'parent_not_found' });
       }
       if (error instanceof Error && (error.message === 'thread_alias_required' || error.message === 'agent_node_id_required')) {
@@ -303,11 +345,13 @@ export class AgentsThreadsController {
   }
 
   @Get('threads')
-  async listThreads(@Query() query: ListThreadsQueryDto) {
+  async listThreads(@Query() query: ListThreadsQueryDto, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
+    const ownerUserId = currentPrincipal.userId;
     const rootsOnly = (query.rootsOnly ?? 'false') === 'true';
     const status = query.status ?? 'all';
-    const limit = Number(query.limit) ?? 100;
-    const threads = await this.persistence.listThreads({ rootsOnly, status, limit });
+    const limit = typeof query.limit === 'number' ? query.limit : 100;
+    const threads = await this.persistence.listThreads({ rootsOnly, status, limit, ownerUserId });
     const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
     const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
     const ids = threads.map((t) => t.id);
@@ -335,7 +379,9 @@ export class AgentsThreadsController {
   }
 
   @Get('threads/tree')
-  async listThreadsTree(@Query() query: ListThreadsTreeQueryDto) {
+  async listThreadsTree(@Query() query: ListThreadsTreeQueryDto, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
+    const ownerUserId = currentPrincipal.userId;
     const status = query.status ?? 'all';
     const limit = query.limit ?? 50;
     const depth = (query.depth ?? 2) as 0 | 1 | 2;
@@ -351,13 +397,21 @@ export class AgentsThreadsController {
       includeAgentTitles,
       childrenStatus,
       perParentChildrenLimit,
+      ownerUserId,
     });
     return { items };
   }
 
   @Get('threads/:threadId/children')
-  async listChildren(@Param('threadId') threadId: string, @Query() query: ListChildrenQueryDto) {
-    const items = await this.persistence.listChildren(threadId, query.status ?? 'all');
+  async listChildren(
+    @Param('threadId') threadId: string,
+    @Query() query: ListChildrenQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getThreadOrThrow(threadId, ownerUserId);
+    const items = await this.persistence.listChildren(threadId, query.status ?? 'all', ownerUserId);
     const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
     const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
     const ids = items.map((t) => t.id);
@@ -386,11 +440,16 @@ export class AgentsThreadsController {
   }
 
   @Get('threads/:threadId')
-  async getThread(@Param('threadId') threadId: string, @Query() query: GetThreadQueryDto) {
+  async getThread(
+    @Param('threadId') threadId: string,
+    @Query() query: GetThreadQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
     const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
     const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
-    const thread = await this.persistence.getThreadById(threadId, { includeMetrics, includeAgentTitles });
-    if (!thread) throw new NotFoundException('thread_not_found');
+    const thread = await this.getThreadOrThrow(threadId, ownerUserId, { includeMetrics, includeAgentTitles });
     if (!includeMetrics && !includeAgentTitles) return thread;
     const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
     const fallbackTitle = '(unknown agent)';
@@ -404,15 +463,19 @@ export class AgentsThreadsController {
   }
 
   @Get('threads/:threadId/runs')
-  async listRuns(@Param('threadId') threadId: string) {
+  async listRuns(@Param('threadId') threadId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getThreadOrThrow(threadId, ownerUserId);
     const runs = await this.persistence.listRuns(threadId);
     return { items: runs };
   }
 
   @Get('threads/:threadId/queued-messages')
-  async listQueuedMessages(@Param('threadId') threadId: string) {
-    const thread = await this.persistence.getThreadById(threadId);
-    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+  async listQueuedMessages(@Param('threadId') threadId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    const thread = await this.getThreadOrThrow(threadId, ownerUserId);
 
     const assignedAgentNodeId = typeof thread.assignedAgentNodeId === 'string' ? thread.assignedAgentNodeId.trim() : '';
     if (!assignedAgentNodeId) {
@@ -451,9 +514,10 @@ export class AgentsThreadsController {
   }
 
   @Delete('threads/:threadId/queued-messages')
-  async clearQueuedMessages(@Param('threadId') threadId: string) {
-    const thread = await this.persistence.getThreadById(threadId);
-    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+  async clearQueuedMessages(@Param('threadId') threadId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    const thread = await this.getThreadOrThrow(threadId, ownerUserId);
 
     const assignedAgentNodeId = typeof thread.assignedAgentNodeId === 'string' ? thread.assignedAgentNodeId.trim() : '';
     if (!assignedAgentNodeId) {
@@ -491,9 +555,10 @@ export class AgentsThreadsController {
   }
 
   @Post('threads/:threadId/reminders/cancel')
-  async cancelThreadReminders(@Param('threadId') threadId: string) {
-    const thread = await this.persistence.getThreadById(threadId);
-    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+  async cancelThreadReminders(@Param('threadId') threadId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getThreadOrThrow(threadId, ownerUserId);
 
     try {
       const result = await this.reminders.cancelThreadReminders({ threadId, emitMetrics: true });
@@ -506,13 +571,23 @@ export class AgentsThreadsController {
   }
 
   @Get('runs/:runId/messages')
-  async listRunMessages(@Param('runId') runId: string, @Query() query: ListRunMessagesQueryDto) {
+  async listRunMessages(
+    @Param('runId') runId: string,
+    @Query() query: ListRunMessagesQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getRunOrThrow(runId, ownerUserId);
     const items = await this.persistence.listRunMessages(runId, query.type);
     return { items };
   }
 
   @Get('runs/:runId/summary')
-  async getRunTimelineSummary(@Param('runId') runId: string) {
+  async getRunTimelineSummary(@Param('runId') runId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getRunOrThrow(runId, ownerUserId);
     const summary = await this.runEvents.getRunSummary(runId);
     if (!summary) throw new NotFoundException('run_not_found');
     return summary;
@@ -524,7 +599,11 @@ export class AgentsThreadsController {
     @Query() query: RunTimelineEventsQueryDto,
     @Query('type') typeFilter?: string | string[],
     @Query('status') statusFilter?: string | string[],
+    @CurrentPrincipal() principal?: Principal | null,
   ) {
+    const currentPrincipal = this.requirePrincipal(principal ?? null);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getRunOrThrow(runId, ownerUserId);
     const collect = (input?: string | string[]) => {
       if (!input) return [] as string[];
       const values = Array.isArray(input) ? input : [input];
@@ -575,7 +654,11 @@ export class AgentsThreadsController {
     @Param('runId') runId: string,
     @Param('eventId') eventId: string,
     @Query() query: RunEventOutputQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
   ) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getRunOrThrow(runId, ownerUserId);
     try {
       const snapshot = await this.runEvents.getToolOutputSnapshot({
         runId,
@@ -595,11 +678,25 @@ export class AgentsThreadsController {
   }
 
   @Patch('threads/:threadId')
-  async patchThread(@Param('threadId') threadId: string, @Body() body: PatchThreadBodyDto) {
+  async patchThread(
+    @Param('threadId') threadId: string,
+    @Body() body: PatchThreadBodyDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
     const update: { summary?: string | null; status?: ThreadStatus } = {};
     if (body.summary !== undefined) update.summary = body.summary;
     if (body.status !== undefined) update.status = body.status;
-    const result = await this.persistence.updateThread(threadId, update);
+    let result;
+    try {
+      result = await this.persistence.updateThread(threadId, update, { ownerUserId });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'thread_not_found') {
+        throw new NotFoundException({ error: 'thread_not_found' });
+      }
+      throw error;
+    }
 
     if (result.status === 'closed' && result.previousStatus !== 'closed') {
       void this.cleanupCoordinator.closeThreadWithCascade(threadId);
@@ -609,16 +706,19 @@ export class AgentsThreadsController {
 
   @Post('threads/:threadId/messages')
   @HttpCode(202)
-  async sendThreadMessage(@Param('threadId') threadId: string, @Body() body: unknown): Promise<{ ok: true }> {
+  async sendThreadMessage(
+    @Param('threadId') threadId: string,
+    @Body() body: unknown,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ ok: true }> {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
     const text = this.extractMessageText(body);
     if (!text) {
       throw new BadRequestException({ error: 'bad_message_payload' });
     }
 
-    const thread = await this.persistence.getThreadById(threadId);
-    if (!thread) {
-      throw new NotFoundException({ error: 'thread_not_found' });
-    }
+    const thread = await this.getThreadOrThrow(threadId, ownerUserId);
     if (thread.status === 'closed') {
       throw new ConflictException({ error: 'thread_closed' });
     }
@@ -671,15 +771,19 @@ export class AgentsThreadsController {
   }
 
   @Get('threads/:threadId/metrics')
-  async getThreadMetrics(@Param('threadId') threadId: string) {
+  async getThreadMetrics(@Param('threadId') threadId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    await this.getThreadOrThrow(threadId, ownerUserId);
     const metrics = await this.persistence.getThreadsMetrics([threadId]);
     return metrics[threadId] ?? { remindersCount: 0, containersCount: 0, activity: 'idle' as const, runsCount: 0 };
   }
 
   @Post('runs/:runId/terminate')
-  async terminateRun(@Param('runId') runId: string) {
-    const run = await this.persistence.getRunById(runId);
-    if (!run) throw new NotFoundException('run_not_found');
+  async terminateRun(@Param('runId') runId: string, @CurrentPrincipal() principal: Principal | null) {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
+    const run = await this.getRunOrThrow(runId, ownerUserId);
     if (run.status !== 'running') {
       return { ok: true };
     }

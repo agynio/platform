@@ -121,7 +121,7 @@ class GraphSocket {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      withCredentials: false,
+      withCredentials: true,
     };
     this.socketCleanup = [];
     this.managerCleanup = [];

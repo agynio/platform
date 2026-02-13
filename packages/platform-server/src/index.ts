@@ -51,7 +51,7 @@ async function bootstrap() {
     origin: allowedOrigins.length ? allowedOrigins : true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-    credentials: false,
+    credentials: true,
   };
   // Enable CORS via Nest to avoid Fastify type-provider generic mismatches
 

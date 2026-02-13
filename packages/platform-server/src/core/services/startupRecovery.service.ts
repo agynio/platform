@@ -12,6 +12,7 @@ type RecoveredRun = {
   status: RunStatus;
   createdAt: Date;
   updatedAt: Date;
+  ownerUserId: string;
 };
 
 type RecoveredReminder = {
@@ -132,9 +133,16 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
     const updated = await runDelegate.findMany({
       where: { id: { in: ids }, status: RunStatusEnum.terminated },
-      select: { id: true, threadId: true, status: true, createdAt: true, updatedAt: true },
+      select: { id: true, threadId: true, status: true, createdAt: true, updatedAt: true, thread: { select: { ownerUserId: true } } },
     });
-    return updated.map((run) => ({ ...run }));
+    return updated.map((run) => ({
+      id: run.id,
+      threadId: run.threadId,
+      status: run.status,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+      ownerUserId: run.thread?.ownerUserId ?? '',
+    }));
   }
 
   private async completePendingReminders(tx: TransactionClient): Promise<RecoveredReminder[]> {
@@ -211,9 +219,14 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
     for (const run of runs) {
       metricThreads.add(run.threadId);
+      if (!run.ownerUserId) {
+        this.logger.warn('Skipping run_status_changed emission due to missing owner', { runId: run.id, threadId: run.threadId });
+        continue;
+      }
       try {
         this.eventsBus.emitRunStatusChanged({
           threadId: run.threadId,
+          ownerUserId: run.ownerUserId,
           run: {
             id: run.id,
             status: runStatus,

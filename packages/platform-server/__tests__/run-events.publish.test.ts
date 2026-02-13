@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from 'vites
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
+import type { ConfigService } from '../src/core/services/config.service';
+import type { AuthService } from '../src/auth/auth.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
@@ -37,7 +39,9 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     const runtime = { subscribe: vi.fn() } as any;
     const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
     const prismaStub = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
-    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus);
+    const configStub = { corsOrigins: [] } as unknown as ConfigService;
+    const authServiceStub = { resolvePrincipalFromCookieHeader: vi.fn() } as unknown as AuthService;
+    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus, configStub, authServiceStub);
     emitRunEventSpy = vi.spyOn(gateway, 'emitRunEvent');
     await gateway.onModuleInit();
   });

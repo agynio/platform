@@ -1,7 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Inject, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Inject,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import type { MemoryScope } from '../../nodes/memory/memory.types';
 import { MemoryService } from '../../nodes/memory/memory.service';
+import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
+import { CurrentPrincipal } from '../../auth/principal.decorator';
+import type { Principal } from '../../auth/auth.types';
 
 class DocParamsDto {
   @IsString()
@@ -70,7 +87,17 @@ class EnsureDirBodyDto extends ThreadAwareDto {
 
 @Controller('api/memory')
 export class MemoryController {
-  constructor(@Inject(MemoryService) private readonly memoryService: MemoryService) {}
+  constructor(
+    @Inject(MemoryService) private readonly memoryService: MemoryService,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+  ) {}
+
+  private requirePrincipal(principal: Principal | null): Principal {
+    if (!principal) {
+      throw new UnauthorizedException({ error: 'unauthorized' });
+    }
+    return principal;
+  }
 
   private resolveThreadId(scope: MemoryScope, ...candidates: Array<string | undefined>): string | undefined {
     if (scope !== 'perThread') return undefined;
@@ -83,34 +110,93 @@ export class MemoryController {
     throw new HttpException({ error: 'threadId required for perThread scope' }, HttpStatus.BAD_REQUEST);
   }
 
+  private async resolveAuthorizedThreadId(
+    scope: MemoryScope,
+    ownerUserId: string,
+    ...candidates: Array<string | undefined>
+  ): Promise<string | undefined> {
+    if (scope !== 'perThread') return undefined;
+    const threadId = this.resolveThreadId(scope, ...candidates);
+    if (!threadId) {
+      throw new HttpException({ error: 'threadId required for perThread scope' }, HttpStatus.BAD_REQUEST);
+    }
+    const thread = await this.persistence.getThreadById(threadId, { ownerUserId });
+    if (!thread) {
+      throw new NotFoundException({ error: 'thread_not_found' });
+    }
+    return threadId;
+  }
+
+  private async filterDocsForPrincipal(
+    items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }>,
+    ownerUserId: string,
+  ): Promise<Array<{ nodeId: string; scope: MemoryScope; threadId?: string }>> {
+    const cache = new Map<string, boolean>();
+    const filtered: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> = [];
+    for (const item of items) {
+      if (!item.threadId) {
+        filtered.push(item);
+        continue;
+      }
+      if (!cache.has(item.threadId)) {
+        const thread = await this.persistence.getThreadById(item.threadId, { ownerUserId });
+        cache.set(item.threadId, !!thread);
+      }
+      if (cache.get(item.threadId)) {
+        filtered.push(item);
+      }
+    }
+    return filtered;
+  }
+
   @Get('docs')
-  async listDocs(): Promise<{ items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> }> {
+  async listDocs(
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> }> {
+    const currentPrincipal = this.requirePrincipal(principal);
+    const ownerUserId = currentPrincipal.userId;
     const items = await this.memoryService.listDocs();
-    return { items };
+    const filtered = await this.filterDocsForPrincipal(items, ownerUserId);
+    return { items: filtered };
   }
 
   @Get(':nodeId/:scope/list')
-  async list(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ items: Array<{ name: string; hasSubdocs: boolean }> }> {
+  async list(
+    @Param() params: DocParamsDto,
+    @Query() query: PathWithThreadQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ items: Array<{ name: string; hasSubdocs: boolean }> }> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
     const path = query.path ?? '/';
-    const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, query.threadId);
     const items = await this.memoryService.list(nodeId, scope, threadId, path || '/');
     return { items };
   }
 
   @Get(':nodeId/:scope/stat')
-  async stat(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ exists: boolean; hasSubdocs: boolean; contentLength: number }> {
+  async stat(
+    @Param() params: DocParamsDto,
+    @Query() query: PathWithThreadQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ exists: boolean; hasSubdocs: boolean; contentLength: number }> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
     const path = query.path;
-    const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, query.threadId);
     return this.memoryService.stat(nodeId, scope, threadId, path);
   }
 
   @Get(':nodeId/:scope/read')
-  async read(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ content: string }> {
+  async read(
+    @Param() params: DocParamsDto,
+    @Query() query: PathWithThreadQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ content: string }> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
     const path = query.path;
-    const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, query.threadId);
     try {
       const content = await this.memoryService.read(nodeId, scope, threadId, path);
       return { content };
@@ -123,16 +209,28 @@ export class MemoryController {
 
   @Post(':nodeId/:scope/append')
   @HttpCode(204)
-  async append(@Param() params: DocParamsDto, @Body() body: AppendBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<void> {
+  async append(
+    @Param() params: DocParamsDto,
+    @Body() body: AppendBodyDto,
+    @Query() query: ThreadOnlyQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<void> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
-    const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, body.threadId, query.threadId);
     await this.memoryService.append(nodeId, scope, threadId, body.path, body.data);
   }
 
   @Post(':nodeId/:scope/update')
-  async update(@Param() params: DocParamsDto, @Body() body: UpdateBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<{ replaced: number }> {
+  async update(
+    @Param() params: DocParamsDto,
+    @Body() body: UpdateBodyDto,
+    @Query() query: ThreadOnlyQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ replaced: number }> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
-    const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, body.threadId, query.threadId);
     try {
       const replaced = await this.memoryService.update(nodeId, scope, threadId, body.path, body.oldStr, body.newStr);
       return { replaced };
@@ -145,23 +243,39 @@ export class MemoryController {
 
   @Post(':nodeId/:scope/ensure-dir')
   @HttpCode(204)
-  async ensureDir(@Param() params: DocParamsDto, @Body() body: EnsureDirBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<void> {
+  async ensureDir(
+    @Param() params: DocParamsDto,
+    @Body() body: EnsureDirBodyDto,
+    @Query() query: ThreadOnlyQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<void> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
-    const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, body.threadId, query.threadId);
     await this.memoryService.ensureDir(nodeId, scope, threadId, body.path);
   }
 
   @Delete(':nodeId/:scope')
-  async remove(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ removed: number }> {
+  async remove(
+    @Param() params: DocParamsDto,
+    @Query() query: PathWithThreadQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<{ removed: number }> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
-    const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, query.threadId);
     return this.memoryService.delete(nodeId, scope, threadId, query.path);
   }
 
   @Get(':nodeId/:scope/dump')
-  async dump(@Param() params: DocParamsDto, @Query() query: ThreadOnlyQueryDto): Promise<unknown> {
+  async dump(
+    @Param() params: DocParamsDto,
+    @Query() query: ThreadOnlyQueryDto,
+    @CurrentPrincipal() principal: Principal | null,
+  ): Promise<unknown> {
+    const currentPrincipal = this.requirePrincipal(principal);
     const { nodeId, scope } = params;
-    const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
+    const threadId = await this.resolveAuthorizedThreadId(scope, currentPrincipal.userId, params.threadId, query.threadId);
     return this.memoryService.dump(nodeId, scope, threadId);
   }
 }

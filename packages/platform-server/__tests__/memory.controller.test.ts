@@ -3,6 +3,7 @@ import { MemoryController } from '../src/graph/controllers/memory.controller';
 import { HttpException } from '@nestjs/common';
 import type { MemoryScope } from '../src/nodes/memory/memory.types';
 import type { MemoryService } from '../src/nodes/memory/memory.service';
+import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 
 type MemoryServiceStub = {
   listDocs: ReturnType<typeof vi.fn>;
@@ -30,11 +31,16 @@ const createServiceStub = (): MemoryServiceStub => ({
 
 describe('MemoryController', () => {
   let service: MemoryServiceStub;
+  let persistence: { getThreadById: ReturnType<typeof vi.fn> };
   let controller: MemoryController;
+  const principal = { userId: 'user-1' } as any;
 
   beforeEach(() => {
     service = createServiceStub();
-    controller = new MemoryController(service as unknown as MemoryService);
+    persistence = {
+      getThreadById: vi.fn(async () => ({ id: 'thread-1', ownerUserId: principal.userId })),
+    } satisfies Pick<AgentsPersistenceService, 'getThreadById'>;
+    controller = new MemoryController(service as unknown as MemoryService, persistence as AgentsPersistenceService);
   });
 
   it('listDocs returns service payload', async () => {
@@ -43,9 +49,30 @@ describe('MemoryController', () => {
       { nodeId: 'b', scope: 'perThread' as MemoryScope, threadId: 'thread-1' },
     ]);
 
-    const result = await controller.listDocs();
+    const result = await controller.listDocs(principal);
 
     expect(service.listDocs).toHaveBeenCalledTimes(1);
+    expect(persistence.getThreadById).toHaveBeenCalledWith('thread-1', { ownerUserId: principal.userId });
+    expect(result).toEqual({
+      items: [
+        { nodeId: 'a', scope: 'global' },
+        { nodeId: 'b', scope: 'perThread', threadId: 'thread-1' },
+      ],
+    });
+  });
+
+  it('listDocs filters out threads not owned by principal', async () => {
+    service.listDocs.mockResolvedValue([
+      { nodeId: 'a', scope: 'global' as MemoryScope },
+      { nodeId: 'b', scope: 'perThread' as MemoryScope, threadId: 'thread-1' },
+      { nodeId: 'b', scope: 'perThread' as MemoryScope, threadId: 'thread-2' },
+    ]);
+    persistence.getThreadById.mockImplementation(async (threadId: string) =>
+      threadId === 'thread-1' ? { id: 'thread-1', ownerUserId: principal.userId } : null,
+    );
+
+    const result = await controller.listDocs(principal);
+
     expect(result).toEqual({
       items: [
         { nodeId: 'a', scope: 'global' },
@@ -56,7 +83,12 @@ describe('MemoryController', () => {
 
   it('append requires thread id for perThread scope', async () => {
     await expect(
-      controller.append({ nodeId: 'node', scope: 'perThread' } as any, { path: '/note.txt', data: 'hello' } as any, {} as any),
+      controller.append(
+        { nodeId: 'node', scope: 'perThread' } as any,
+        { path: '/note.txt', data: 'hello' } as any,
+        {} as any,
+        principal,
+      ),
     ).rejects.toBeInstanceOf(HttpException);
     expect(service.append).not.toHaveBeenCalled();
   });
@@ -68,15 +100,17 @@ describe('MemoryController', () => {
       { nodeId: 'node', scope: 'perThread' } as any,
       { path: '/note.txt', data: 'hello', threadId: ' thread-1 ' } as any,
       {} as any,
+      principal,
     );
 
+    expect(persistence.getThreadById).toHaveBeenCalledWith('thread-1', { ownerUserId: principal.userId });
     expect(service.append).toHaveBeenCalledWith('node', 'perThread', 'thread-1', '/note.txt', 'hello');
   });
 
   it('list forwards defaults and thread resolution for global scope', async () => {
     service.list.mockResolvedValue([{ name: 'logs', hasSubdocs: true }]);
 
-    const result = await controller.list({ nodeId: 'node', scope: 'global' } as any, {} as any);
+    const result = await controller.list({ nodeId: 'node', scope: 'global' } as any, {} as any, principal);
 
     expect(service.list).toHaveBeenCalledWith('node', 'global', undefined, '/');
     expect(result).toEqual({ items: [{ name: 'logs', hasSubdocs: true }] });
@@ -84,14 +118,14 @@ describe('MemoryController', () => {
 
   it('read passes through content', async () => {
     service.read.mockResolvedValueOnce('hello world');
-    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/note.txt' } as any);
+    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/note.txt' } as any, principal);
     expect(ok).toEqual({ content: 'hello world' });
   });
 
   it('read allows root path', async () => {
     service.read.mockResolvedValueOnce('');
 
-    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/' } as any);
+    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/' } as any, principal);
 
     expect(service.read).toHaveBeenCalledWith('node', 'global', undefined, '/');
     expect(ok).toEqual({ content: '' });
@@ -100,7 +134,7 @@ describe('MemoryController', () => {
   it('read maps ENOENT to 404', async () => {
     service.read.mockRejectedValueOnce(new Error('ENOENT: missing'));
 
-    await expect(controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/missing' } as any)).rejects.toSatisfy((err) => {
+    await expect(controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/missing' } as any, principal)).rejects.toSatisfy((err) => {
       expect(err).toBeInstanceOf(HttpException);
       expect((err as HttpException).getStatus()).toBe(404);
       return true;
@@ -113,6 +147,7 @@ describe('MemoryController', () => {
       { nodeId: 'node', scope: 'perThread' } as any,
       { path: '/note.txt', oldStr: 'a', newStr: 'b', threadId: ' thread-1 ' } as any,
       {} as any,
+      principal,
     );
     expect(ok).toEqual({ replaced: 2 });
     expect(service.update).toHaveBeenCalledWith('node', 'perThread', 'thread-1', '/note.txt', 'a', 'b');
@@ -123,6 +158,7 @@ describe('MemoryController', () => {
         { nodeId: 'node', scope: 'perThread' } as any,
         { path: '/note.txt', oldStr: 'a', newStr: 'b', threadId: 'thread-1' } as any,
         {} as any,
+        principal,
       ),
     ).rejects.toSatisfy((err) => {
       expect(err).toBeInstanceOf(HttpException);
@@ -134,7 +170,7 @@ describe('MemoryController', () => {
   it('delete delegates to service', async () => {
     service.delete.mockResolvedValue({ removed: 1 });
 
-    const result = await controller.remove({ nodeId: 'node', scope: 'global' } as any, { path: '/file.txt' } as any);
+    const result = await controller.remove({ nodeId: 'node', scope: 'global' } as any, { path: '/file.txt' } as any, principal);
 
     expect(service.delete).toHaveBeenCalledWith('node', 'global', undefined, '/file.txt');
     expect(result).toEqual({ removed: 1 });
@@ -144,9 +180,18 @@ describe('MemoryController', () => {
     const payload = { nodeId: 'node', scope: 'perThread' as MemoryScope, threadId: 'thread-1', data: {}, dirs: {} };
     service.dump.mockResolvedValue(payload);
 
-    const result = await controller.dump({ nodeId: 'node', scope: 'perThread' } as any, { threadId: ' thread-1 ' } as any);
+    const result = await controller.dump({ nodeId: 'node', scope: 'perThread' } as any, { threadId: ' thread-1 ' } as any, principal);
 
     expect(service.dump).toHaveBeenCalledWith('node', 'perThread', 'thread-1');
     expect(result).toBe(payload);
+  });
+
+  it('rejects per-thread requests for threads not owned by principal', async () => {
+    persistence.getThreadById.mockResolvedValue(null);
+
+    await expect(
+      controller.read({ nodeId: 'node', scope: 'perThread' } as any, { path: '/note.txt', threadId: 't-2' } as any, principal),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(service.read).not.toHaveBeenCalled();
   });
 });

@@ -37,6 +37,7 @@ export type ThreadBroadcast = {
   summary: string | null;
   status: ThreadStatus;
   createdAt: Date;
+  ownerUserId: string;
   parentId?: string | null;
   channelNodeId?: string | null;
   assignedAgentNodeId?: string | null;
@@ -51,6 +52,12 @@ export type MessageBroadcast = {
   runId?: string;
 };
 
+export type MessageCreatedEvent = {
+  threadId: string;
+  ownerUserId: string;
+  message: MessageBroadcast;
+};
+
 export type ThreadMetricsEvent = {
   threadId: string;
 };
@@ -61,6 +68,7 @@ export type ThreadMetricsAncestorsEvent = {
 
 export type RunStatusBroadcast = {
   threadId: string;
+  ownerUserId: string;
   run: {
     id: string;
     status: RunStatus;
@@ -77,7 +85,7 @@ type EventsBusEvents = {
   node_state: [NodeStateBusEvent];
   thread_created: [ThreadBroadcast];
   thread_updated: [ThreadBroadcast];
-  message_created: [{ threadId: string; message: MessageBroadcast }];
+  message_created: [MessageCreatedEvent];
   run_status_changed: [RunStatusBroadcast];
   thread_metrics: [ThreadMetricsEvent];
   thread_metrics_ancestors: [ThreadMetricsAncestorsEvent];
@@ -174,14 +182,14 @@ export class EventsBusService implements OnModuleDestroy {
     this.emitter.emit('thread_updated', thread);
   }
 
-  subscribeToMessageCreated(listener: (payload: { threadId: string; message: MessageBroadcast }) => void): () => void {
+  subscribeToMessageCreated(listener: (payload: MessageCreatedEvent) => void): () => void {
     this.emitter.on('message_created', listener);
     return () => {
       this.emitter.off('message_created', listener);
     };
   }
 
-  emitMessageCreated(payload: { threadId: string; message: MessageBroadcast }): void {
+  emitMessageCreated(payload: MessageCreatedEvent): void {
     this.emitter.emit('message_created', payload);
   }
 

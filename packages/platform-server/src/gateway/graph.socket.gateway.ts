@@ -3,10 +3,10 @@ import type { IncomingHttpHeaders, Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, type ServerOptions, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
-import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
+import type { MessageKind } from '@prisma/client';
 import {
   EventsBusService,
-  type MessageBroadcast,
+  type MessageCreatedEvent,
   type NodeStateBusEvent,
   type ReminderCountEvent as ReminderCountBusEvent,
   type RunEventBroadcast,
@@ -19,6 +19,8 @@ import {
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../events/run-events.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { PrismaService } from '../core/services/prisma.service';
+import { ConfigService } from '../core/services/config.service';
+import { AuthService } from '../auth/auth.service';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -101,6 +103,15 @@ function toDate(value: string): Date | null {
   return Number.isNaN(ts.getTime()) ? null : ts;
 }
 
+const RoomSchema = z.union([
+  z.literal('threads'),
+  z.literal('graph'),
+  z.string().regex(/^thread:[0-9a-z-]{1,64}$/i),
+  z.string().regex(/^run:[0-9a-z-]{1,64}$/i),
+  z.string().regex(/^node:[0-9a-z-]{1,64}$/i),
+]);
+const SubscribeSchema = z.object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() }).strict();
+
 @Injectable({ scope: Scope.DEFAULT })
 export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GraphSocketGateway.name);
@@ -110,13 +121,19 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   private metricsTimer: NodeJS.Timeout | null = null;
   private readonly COALESCE_MS = 100;
   private readonly cleanup: Array<() => void> = [];
+  private readonly allowedOrigins: string[];
+  private readonly threadOwnerCache = new Map<string, string>();
 
   constructor(
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
-  ) {}
+    @Inject(ConfigService) private readonly config: ConfigService,
+    @Inject(AuthService) private readonly authService: AuthService,
+  ) {
+    this.allowedOrigins = this.config.corsOrigins ?? [];
+  }
 
   onModuleInit(): void {
     this.cleanup.push(this.eventsBus.subscribeToRunEvents(this.handleRunEvent));
@@ -151,60 +168,113 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     const options: Partial<ServerOptions> = {
       path: '/socket.io',
       transports: ['websocket'] as ServerOptions['transports'],
-      cors: { origin: '*' },
-      allowRequest: (_req, callback) => {
-        callback(null, true);
+      cors: {
+        origin: this.allowedOrigins.length ? this.allowedOrigins : true,
+        credentials: true,
+      },
+      allowRequest: (req, callback) => {
+        if (this.allowedOrigins.length === 0) {
+          callback(null, true);
+          return;
+        }
+        const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+        if (!originHeader || this.allowedOrigins.includes(originHeader)) {
+          callback(null, true);
+          return;
+        }
+        callback('forbidden_origin', false);
       },
     };
     this.io = new SocketIOServer(server, options);
     this.io.on('connection', (socket: Socket) => {
-      // Room subscription
-      const RoomSchema = z.union([
-        z.literal('threads'),
-        z.literal('graph'),
-        z.string().regex(/^thread:[0-9a-z-]{1,64}$/i),
-        z.string().regex(/^run:[0-9a-z-]{1,64}$/i),
-        z.string().regex(/^node:[0-9a-z-]{1,64}$/i),
-      ]);
-      const SubscribeSchema = z
-        .object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() })
-        .strict();
-      socket.on('subscribe', (payload: unknown, ack?: (response: unknown) => void) => {
-        const parsed = SubscribeSchema.safeParse(payload);
-        if (!parsed.success) {
-          const details = parsed.error.issues.map((issue) => ({
-            path: issue.path,
-            message: issue.message,
-            code: issue.code,
-          }));
-          this.logger.warn(
-            `GraphSocketGateway: subscribe invalid${this.formatContext({ socketId: socket.id, issues: details })}`,
-          );
-          if (typeof ack === 'function') {
-            ack({ ok: false, error: 'invalid_payload', issues: details });
-          }
-          return;
-        }
-        const p = parsed.data;
-        const rooms: string[] = p.rooms ?? (p.room ? [p.room] : []);
-        for (const r of rooms) if (r.length > 0) socket.join(r);
-        if (typeof ack === 'function') {
-          ack({ ok: true, rooms });
-        }
-      });
-      socket.on('error', (e: unknown) => {
-        this.logger.warn(
-          `GraphSocketGateway: socket error${this.formatContext({
-            socketId: socket.id,
-            error: this.toSafeError(e),
-          })}`,
-        );
-      });
+      void this.initializeSocket(socket);
     });
     this.initialized = true;
     // Wire runtime status events to socket broadcast
     this.attachRuntimeSubscriptions();
     return this;
+  }
+
+  private async initializeSocket(socket: Socket): Promise<void> {
+    try {
+      const principal = await this.authService.resolvePrincipalFromCookieHeader(
+        socket.request.headers.cookie,
+      );
+      if (!principal) {
+        this.logger.warn(
+          `GraphSocketGateway: unauthorized connection${this.formatContext({ socketId: socket.id })}`,
+        );
+        socket.emit('error', { error: 'unauthorized' });
+        socket.disconnect(true);
+        return;
+      }
+      this.setupSocketHandlers(socket, principal.userId);
+    } catch (error) {
+      this.logger.warn(
+        `GraphSocketGateway: connection setup failed${this.formatContext({
+          socketId: socket.id,
+          error: this.toSafeError(error),
+        })}`,
+      );
+      socket.disconnect(true);
+    }
+  }
+
+  private setupSocketHandlers(socket: Socket, userId: string): void {
+    socket.on('subscribe', (payload: unknown, ack?: (response: unknown) => void) => {
+      const parsed = SubscribeSchema.safeParse(payload);
+      if (!parsed.success) {
+        const details = parsed.error.issues.map((issue) => ({
+          path: issue.path,
+          message: issue.message,
+          code: issue.code,
+        }));
+        this.logger.warn(
+          `GraphSocketGateway: subscribe invalid${this.formatContext({ socketId: socket.id, issues: details })}`,
+        );
+        if (typeof ack === 'function') {
+          ack({ ok: false, error: 'invalid_payload', issues: details });
+        }
+        return;
+      }
+      const request = parsed.data;
+      const requestedRooms: string[] = request.rooms ?? (request.room ? [request.room] : []);
+      const joined: string[] = [];
+      for (const room of requestedRooms) {
+        if (!room) continue;
+        const resolved = this.resolveRoomForUser(room, userId);
+        if (!resolved) continue;
+        socket.join(resolved);
+        joined.push(room);
+      }
+      if (typeof ack === 'function') {
+        ack({ ok: true, rooms: joined });
+      }
+    });
+    socket.on('error', (e: unknown) => {
+      this.logger.warn(
+        `GraphSocketGateway: socket error${this.formatContext({
+          socketId: socket.id,
+          error: this.toSafeError(e),
+        })}`,
+      );
+    });
+  }
+
+  private resolveRoomForUser(room: string, userId: string): string | null {
+    if (this.isThreadScopedRoom(room)) {
+      if (!userId) return null;
+      return this.formatUserRoom(userId, room);
+    }
+    return room;
+  }
+
+  private isThreadScopedRoom(room: string): boolean {
+    return room === 'threads' || room.startsWith('thread:') || room.startsWith('run:');
+  }
+
+  private formatUserRoom(userId: string, room: string): string {
+    return `user:${userId}:${room}`;
   }
 
   private readonly handleRunEvent = (payload: RunEventBusPayload): void => {
@@ -218,14 +288,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    try {
-      const broadcast: RunEventBroadcast = {
-        runId: event.runId,
-        mutation: payload.mutation,
-        event,
-      };
-      this.emitRunEvent(event.runId, event.threadId, broadcast);
-    } catch (err) {
+    const broadcast: RunEventBroadcast = {
+      runId: event.runId,
+      mutation: payload.mutation,
+      event,
+    };
+    void this.emitRunEvent(event.runId, event.threadId, broadcast).catch((err) => {
       this.logger.warn(
         `GraphSocketGateway failed to emit run event${this.formatContext({
           eventId: payload.eventId,
@@ -233,7 +301,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
           error: this.toSafeError(err),
         })}`,
       );
-    }
+    });
   };
 
   private readonly handleToolOutputChunk = (payload: ToolOutputChunkPayload): void => {
@@ -247,8 +315,8 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    try {
-      this.emitToolOutputChunk({
+    void this
+      .emitToolOutputChunk({
         runId: payload.runId,
         threadId: payload.threadId,
         eventId: payload.eventId,
@@ -257,15 +325,15 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         source: payload.source,
         ts,
         data: payload.data,
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `GraphSocketGateway failed to emit tool_output_chunk${this.formatContext({
+            eventId: payload.eventId,
+            error: this.toSafeError(err),
+          })}`,
+        );
       });
-    } catch (err) {
-      this.logger.warn(
-        `GraphSocketGateway failed to emit tool_output_chunk${this.formatContext({
-          eventId: payload.eventId,
-          error: this.toSafeError(err),
-        })}`,
-      );
-    }
   };
 
   private readonly handleToolOutputTerminal = (payload: ToolOutputTerminalPayload): void => {
@@ -279,8 +347,8 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    try {
-      this.emitToolOutputTerminal({
+    void this
+      .emitToolOutputTerminal({
         runId: payload.runId,
         threadId: payload.threadId,
         eventId: payload.eventId,
@@ -293,15 +361,15 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         savedPath: payload.savedPath ?? undefined,
         message: payload.message ?? undefined,
         ts,
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `GraphSocketGateway failed to emit tool_output_terminal${this.formatContext({
+            eventId: payload.eventId,
+            error: this.toSafeError(err),
+          })}`,
+        );
       });
-    } catch (err) {
-      this.logger.warn(
-        `GraphSocketGateway failed to emit tool_output_terminal${this.formatContext({
-          eventId: payload.eventId,
-          error: this.toSafeError(err),
-        })}`,
-      );
-    }
   };
 
   private readonly handleReminderCount = (payload: ReminderCountBusEvent): void => {
@@ -384,7 +452,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     }
   };
 
-  private readonly handleMessageCreated = (payload: { threadId: string; message: MessageBroadcast }): void => {
+  private readonly handleMessageCreated = (payload: MessageCreatedEvent): void => {
     try {
       this.logger.log(
         `new message${this.formatContext({
@@ -394,7 +462,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
           runId: payload.message.runId ?? null,
         })}`,
       );
-      this.emitMessageCreated(payload.threadId, payload.message);
+      this.emitMessageCreated(payload.threadId, payload.ownerUserId, payload.message);
     } catch (err) {
       this.logger.warn(
         `GraphSocketGateway failed to emit message_created${this.formatContext({
@@ -408,7 +476,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
 
   private readonly handleRunStatusChanged = (payload: RunStatusBroadcast): void => {
     try {
-      this.emitRunStatusChanged(payload.threadId, payload.run);
+      this.emitRunStatusChanged(payload);
     } catch (err) {
       this.logger.warn(
         `GraphSocketGateway failed to emit run_status_changed${this.formatContext({
@@ -508,51 +576,43 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   // Threads realtime events
-  emitThreadCreated(thread: {
-    id: string;
-    alias: string;
-    summary: string | null;
-    status: ThreadStatus;
-    createdAt: Date;
-    parentId?: string | null;
-    channelNodeId?: string | null;
-  }) {
+  emitThreadCreated(thread: ThreadBroadcast) {
+    this.rememberThreadOwner(thread.id, thread.ownerUserId);
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
-    this.emitToRooms(['threads'], 'thread_created', payload);
+    this.emitToUserRooms(thread.ownerUserId, ['threads'], 'thread_created', payload);
   }
-  emitThreadUpdated(thread: {
-    id: string;
-    alias: string;
-    summary: string | null;
-    status: ThreadStatus;
-    createdAt: Date;
-    parentId?: string | null;
-    channelNodeId?: string | null;
-  }) {
+  emitThreadUpdated(thread: ThreadBroadcast) {
+    this.rememberThreadOwner(thread.id, thread.ownerUserId);
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
-    this.emitToRooms(['threads'], 'thread_updated', payload);
+    this.emitToUserRooms(thread.ownerUserId, ['threads', `thread:${thread.id}`], 'thread_updated', payload);
   }
-  emitMessageCreated(threadId: string, message: { id: string; kind: MessageKind; text: string | null; source: import('type-fest').JsonValue | unknown; createdAt: Date; runId?: string }) {
+  emitMessageCreated(
+    threadId: string,
+    ownerUserId: string,
+    message: { id: string; kind: MessageKind; text: string | null; source: import('type-fest').JsonValue | unknown; createdAt: Date; runId?: string },
+  ) {
     const payload = { threadId, message: { ...message, createdAt: message.createdAt.toISOString() } };
-    this.emitToRooms([`thread:${threadId}`], 'message_created', payload);
+    this.rememberThreadOwner(threadId, ownerUserId);
+    this.emitToUserRooms(ownerUserId, [`thread:${threadId}`], 'message_created', payload);
   }
-  emitRunStatusChanged(threadId: string, run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date }) {
-    const payload = {
-      threadId,
+  emitRunStatusChanged(payload: RunStatusBroadcast) {
+    const eventPayload = {
+      threadId: payload.threadId,
       run: {
-        ...run,
-        threadId,
-        createdAt: run.createdAt.toISOString(),
-        updatedAt: run.updatedAt.toISOString(),
+        ...payload.run,
+        threadId: payload.threadId,
+        createdAt: payload.run.createdAt.toISOString(),
+        updatedAt: payload.run.updatedAt.toISOString(),
       },
     };
-    this.emitToRooms([`thread:${threadId}`, `run:${run.id}`], 'run_status_changed', payload);
+    this.rememberThreadOwner(payload.threadId, payload.ownerUserId);
+    this.emitToUserRooms(payload.ownerUserId, [`thread:${payload.threadId}`, `run:${payload.run.id}`], 'run_status_changed', eventPayload);
   }
-  emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast) {
+  async emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast) {
     const eventName = payload.mutation === 'update' ? 'run_event_updated' : 'run_event_appended';
-    this.emitToRooms([`run:${runId}`, `thread:${threadId}`], eventName, payload);
+    await this.emitThreadRooms(threadId, [`run:${runId}`, `thread:${threadId}`], eventName, payload);
   }
-  emitToolOutputChunk(payload: {
+  async emitToolOutputChunk(payload: {
     runId: string;
     threadId: string;
     eventId: string;
@@ -579,9 +639,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    this.emitToRooms([`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_chunk', eventPayload);
+    await this.emitThreadRooms(eventPayload.threadId, [`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_chunk', eventPayload);
   }
-  emitToolOutputTerminal(payload: {
+  async emitToolOutputTerminal(payload: {
     runId: string;
     threadId: string;
     eventId: string;
@@ -616,7 +676,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    this.emitToRooms([`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_terminal', eventPayload);
+    await this.emitThreadRooms(eventPayload.threadId, [`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_terminal', eventPayload);
   }
   private flushMetricsQueue = async () => {
     // De-duplicate pending thread IDs per flush (preserve insertion order)
@@ -629,10 +689,13 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       for (const id of ids) {
         const m = map[id];
         if (!m) continue;
+        const ownerUserId = await this.getThreadOwnerId(id);
+        if (!ownerUserId) continue;
         const activityPayload = { threadId: id, activity: m.activity };
-        this.emitToRooms(['threads', `thread:${id}`], 'thread_activity_changed', activityPayload);
         const remindersPayload = { threadId: id, remindersCount: m.remindersCount };
-        this.emitToRooms(['threads', `thread:${id}`], 'thread_reminders_count', remindersPayload);
+        const rooms = ['threads', `thread:${id}`];
+        this.emitToUserRooms(ownerUserId, rooms, 'thread_activity_changed', activityPayload);
+        this.emitToUserRooms(ownerUserId, rooms, 'thread_reminders_count', remindersPayload);
       }
     } catch (e) {
       this.logger.error(`flushMetricsQueue error${this.formatContext({ error: this.toSafeError(e) })}`);
@@ -700,6 +763,41 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+  }
+
+  private emitToUserRooms(userId: string, rooms: string[], event: string, payload: unknown): void {
+    if (!userId) return;
+    const resolved = rooms.map((room) => this.formatUserRoom(userId, room));
+    this.emitToRooms(resolved, event, payload);
+  }
+
+  private async emitThreadRooms(
+    threadId: string,
+    rooms: string[],
+    event: string,
+    payload: unknown,
+  ): Promise<void> {
+    const ownerUserId = await this.getThreadOwnerId(threadId);
+    if (!ownerUserId) return;
+    this.emitToUserRooms(ownerUserId, rooms, event, payload);
+  }
+
+  private async getThreadOwnerId(threadId: string): Promise<string | null> {
+    if (!threadId) return null;
+    const cached = this.threadOwnerCache.get(threadId);
+    if (cached) return cached;
+    const prisma = this.prismaService.getClient();
+    const repository = prisma?.thread;
+    if (!repository?.findUnique) return null;
+    const row = await repository.findUnique({ where: { id: threadId }, select: { ownerUserId: true } });
+    if (!row?.ownerUserId) return null;
+    this.threadOwnerCache.set(threadId, row.ownerUserId);
+    return row.ownerUserId;
+  }
+
+  private rememberThreadOwner(threadId: string, ownerUserId: string | null | undefined): void {
+    if (!threadId || !ownerUserId) return;
+    this.threadOwnerCache.set(threadId, ownerUserId);
   }
 
   private formatContext(context: Record<string, unknown>): string {

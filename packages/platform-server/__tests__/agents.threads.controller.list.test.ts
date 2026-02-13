@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
@@ -13,6 +14,8 @@ const runEventsStub = {
   getRunSummary: vi.fn(async () => null),
   listRunEvents: vi.fn(async () => []),
 } as unknown as RunEventsService;
+
+const principal = { userId: 'user-1' } as any;
 
 describe('AgentsThreadsController list endpoints', () => {
   it('requests metrics and agent titles when flags are enabled', async () => {
@@ -43,9 +46,9 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.listThreads({ includeMetrics: 'true', includeAgentTitles: 'true' } as any);
+    const res = await ctrl.listThreads({ includeMetrics: 'true', includeAgentTitles: 'true' } as any, principal);
 
-    expect((persistence.listThreads as any).mock.calls.length).toBe(1);
+    expect(persistence.listThreads).toHaveBeenCalledWith({ rootsOnly: false, status: 'all', limit: 100, ownerUserId: principal.userId });
     expect((persistence.getThreadsMetrics as any).mock.calls[0][0]).toEqual(['t1']);
     expect((persistence.getThreadsAgentDescriptors as any).mock.calls[0][0]).toEqual(['t1']);
     expect(res).toMatchObject({
@@ -94,7 +97,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.listThreads({} as any);
+    const res = await ctrl.listThreads({} as any, principal);
 
     expect((persistence.getThreadsMetrics as any).mock?.calls?.length ?? 0).toBe(0);
     expect(res.items[0]).toMatchObject({ agentRole: 'Support', agentName: 'Beta' });
@@ -114,6 +117,7 @@ describe('AgentsThreadsController list endpoints', () => {
       listRuns: vi.fn(),
       listRunMessages: vi.fn(),
       updateThread: vi.fn(),
+      getThreadById: vi.fn(async () => ({ id: 't1', ownerUserId: principal.userId })),
     } as unknown as AgentsPersistenceService;
 
     const module = await Test.createTestingModule({
@@ -130,7 +134,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.listChildren('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any);
+    const res = await ctrl.listChildren('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any, principal);
 
     expect(res.items[0].metrics).toEqual({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 });
     expect(res.items[0].agentTitle).toBe('(unknown agent)');
@@ -150,6 +154,7 @@ describe('AgentsThreadsController list endpoints', () => {
       listRuns: vi.fn(),
       listRunMessages: vi.fn(),
       updateThread: vi.fn(),
+      getThreadById: vi.fn(async () => ({ id: 't1', ownerUserId: principal.userId })),
     } as unknown as AgentsPersistenceService;
 
     const module = await Test.createTestingModule({
@@ -166,7 +171,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.listChildren('t1', {} as any);
+    const res = await ctrl.listChildren('t1', {} as any, principal);
 
     expect(res.items[0]).toMatchObject({ agentName: 'Child', agentRole: 'Helper' });
     expect(res.items[0].createdAt).toBeInstanceOf(Date);
@@ -181,7 +186,7 @@ describe('AgentsThreadsController list endpoints', () => {
       listRunMessages: vi.fn(),
       updateThread: vi.fn(),
       getThreadsAgentDescriptors: vi.fn(),
-      getThreadById: vi.fn(),
+      getThreadById: vi.fn(async () => ({ id: 't-miss', ownerUserId: principal.userId })),
     } as unknown as AgentsPersistenceService;
 
     const module = await Test.createTestingModule({
@@ -198,15 +203,15 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.getThreadMetrics('t-miss');
+    const res = await ctrl.getThreadMetrics('t-miss', principal);
     expect(res).toEqual({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 });
   });
 
   it('getThread returns defaults for metrics and titles when missing', async () => {
     const now = new Date();
     const persistence = {
-      getThreadById: vi.fn(async (_id: string, opts: { includeMetrics?: boolean; includeAgentTitles?: boolean }) => {
-        expect(opts).toEqual({ includeMetrics: true, includeAgentTitles: true });
+      getThreadById: vi.fn(async (_id: string, opts: { includeMetrics?: boolean; includeAgentTitles?: boolean; ownerUserId?: string }) => {
+        expect(opts).toEqual({ includeMetrics: true, includeAgentTitles: true, ownerUserId: principal.userId });
         return {
           id: 't1',
           alias: 'alias',
@@ -241,7 +246,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const result = await ctrl.getThread('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any);
+    const result = await ctrl.getThread('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any, principal);
 
     expect(result).toMatchObject({
       id: 't1',
@@ -258,7 +263,7 @@ describe('AgentsThreadsController list endpoints', () => {
   it('getThread forwards agent name and role without optional flags', async () => {
     const now = new Date();
     const persistence = {
-      getThreadById: vi.fn(async () => ({
+      getThreadById: vi.fn(async (_id: string, opts: { ownerUserId?: string }) => ({
         id: 't2',
         alias: 'alias',
         summary: 'Summary',
@@ -267,6 +272,7 @@ describe('AgentsThreadsController list endpoints', () => {
         parentId: null,
         agentName: 'Agent X',
         agentRole: 'Planner',
+        ownerUserId: opts.ownerUserId,
       })),
       listThreads: vi.fn(),
       listChildren: vi.fn(),
@@ -291,7 +297,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const result = await ctrl.getThread('t2', {} as any);
+    const result = await ctrl.getThread('t2', {} as any, principal);
 
     expect(result).toMatchObject({ agentName: 'Agent X', agentRole: 'Planner' });
   });
@@ -322,7 +328,7 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await expect(ctrl.getThread('missing', {} as any)).rejects.toThrowError('thread_not_found');
+    await expect(ctrl.getThread('missing', {} as any, principal)).rejects.toThrow(NotFoundException);
   });
 
 });

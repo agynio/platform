@@ -4,6 +4,7 @@ import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createUserServiceStub } from './helpers/userService.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -40,6 +41,7 @@ function createService() {
     createRunEventsStub() as any,
     createLinkingStub(),
     createEventsBusStub(),
+    createUserServiceStub(),
   );
   return { prismaStub, svc };
 }

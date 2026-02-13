@@ -50,6 +50,32 @@ model UserProfile {
   updatedAt DateTime @updatedAt
 }
 
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String?   @unique
+  name        String?
+  oidcIssuer  String?
+  oidcSubject String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  threads  Thread[]
+  sessions Session[]
+
+  @@unique([oidcIssuer, oidcSubject])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
 enum MemoryScope {
   global
   perThread
@@ -107,6 +133,8 @@ model Thread {
   alias     String       @unique
   summary   String?
   status    ThreadStatus @default(open)
+  ownerUserId String      @db.Uuid
+  owner      User        @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
   channelNodeId String? @map("channel_node_id") @db.Uuid
   assignedAgentNodeId String? @map("assigned_agent_node_id") @db.Uuid
   // Channel descriptor for replying to origin channel
@@ -117,12 +145,14 @@ model Thread {
   runs       Run[]
   containers Container[]
   runEvents  RunEvent[]
+  reminders  Reminder[]
 
   // Index parentId to accelerate parent-child lookups
   @@index([parentId])
   // Filter by thread status (open/closed)
   @@index([status])
   @@index([assignedAgentNodeId])
+  @@index([ownerUserId])
 }
 
 enum ThreadStatus {
@@ -512,6 +542,7 @@ model ContainerEvent {
 model Reminder {
   id          String    @id @default(uuid()) @db.Uuid
   threadId    String    @db.Uuid
+  thread      Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
   note        String
   at          DateTime
   createdAt   DateTime  @default(now())

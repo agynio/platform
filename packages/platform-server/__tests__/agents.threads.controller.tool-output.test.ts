@@ -10,6 +10,8 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { RemindersService } from '../src/agents/reminders.service';
 
+const principal = { userId: 'user-1' } as any;
+
 describe('AgentsThreadsController tool output snapshot endpoint', () => {
   it('returns 501 when tool output persistence is unavailable', async () => {
     const runEventsStub = {
@@ -19,7 +21,12 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
       providers: [
-        { provide: AgentsPersistenceService, useValue: {} },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            getRunById: vi.fn(async () => ({ id: 'run-1', threadId: 'thread-1' })),
+          },
+        },
         { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
@@ -32,7 +39,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
     const ctrl = await module.resolve(AgentsThreadsController);
 
     await expect(
-      ctrl.getRunEventOutput('run-1', 'event-1', { order: 'asc' } as any),
+      ctrl.getRunEventOutput('run-1', 'event-1', { order: 'asc' } as any, principal),
     ).rejects.toThrowError(
       new NotImplementedException(
         'Tool output persistence unavailable. Run `pnpm --filter @agyn/platform-server prisma migrate deploy` followed by `pnpm --filter @agyn/platform-server prisma generate` to install the latest schema.',
@@ -56,7 +63,12 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
       providers: [
-        { provide: AgentsPersistenceService, useValue: {} },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            getRunById: vi.fn(async () => ({ id: 'run-1', threadId: 'thread-1' })),
+          },
+        },
         { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
@@ -68,7 +80,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
 
     const ctrl = await module.resolve(AgentsThreadsController);
 
-    const result = await ctrl.getRunEventOutput('run-1', 'event-1', { order: 'asc' } as any);
+    const result = await ctrl.getRunEventOutput('run-1', 'event-1', { order: 'asc' } as any, principal);
     expect(result).toBe(snapshot);
     expect(runEventsStub.getToolOutputSnapshot).toHaveBeenCalledWith({
       runId: 'run-1',

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
+import { useUser } from '@/user/user.runtime';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
   graph: '/agents/graph',
@@ -73,6 +74,7 @@ function getMenuItemFromPath(pathname: string) {
 export function RootLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, mode, authenticated, logout } = useUser();
 
   const selectedMenuItem = getMenuItemFromPath(location.pathname);
 
@@ -88,11 +90,18 @@ export function RootLayout() {
     [location.pathname, navigate],
   );
 
+  const canLogout = mode === 'oidc' && authenticated;
+  const handleLogout = useCallback(() => {
+    void logout();
+  }, [logout]);
+
   return (
     <MainLayout
       menuItems={MENU_ITEMS} //
       selectedMenuItem={selectedMenuItem}
       onMenuItemSelect={handleMenuItemSelect}
+      currentUser={user ?? undefined}
+      onLogout={canLogout ? handleLogout : undefined}
     >
       <Outlet />
     </MainLayout>

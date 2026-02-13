@@ -14,8 +14,10 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { ConfigService } from '../src/core/services/config.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
+import { AuthService } from '../src/auth/auth.service';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -47,18 +49,32 @@ class ThreadsMetricsServiceStub {
 
 class PrismaServiceStub {
   private readonly runEvents = new Map<string, unknown>();
+  private readonly threadOwners = new Map<string, string>();
 
   setRunEvent(event: { id: string }): void {
     this.runEvents.set(event.id, event);
   }
 
+  setThreadOwner(threadId: string, ownerUserId: string): void {
+    this.threadOwners.set(threadId, ownerUserId);
+  }
+
   clear(): void {
     this.runEvents.clear();
+    this.threadOwners.clear();
   }
 
   getClient() {
     return {
       $queryRaw: async () => [],
+      thread: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          const id = where?.id;
+          if (!id) return null;
+          const ownerUserId = this.threadOwners.get(id);
+          return ownerUserId ? { id, ownerUserId } : null;
+        },
+      },
       runEvent: {
         findUnique: async ({ where }: { where: { id: string } }) => {
           const id = where?.id;
@@ -152,6 +168,17 @@ class WorkspaceProviderStub extends WorkspaceProvider {
   async putArchive(): Promise<void> {
     return;
   }
+}
+
+class AuthServiceStub {
+  async resolvePrincipalFromCookieHeader(): Promise<{ userId: string }> {
+    return { userId: 'test-user' };
+  }
+}
+
+class ConfigServiceStub {
+  corsOrigins: string[] | null = null;
+  isProduction = false;
 }
 
 class TerminalSessionsServiceStub {
@@ -322,6 +349,8 @@ describe('Socket gateway real server handshakes', () => {
         { provide: WorkspaceProvider, useClass: WorkspaceProviderStub },
         EventsBusService,
         RunEventsService,
+        { provide: AuthService, useClass: AuthServiceStub },
+        { provide: ConfigService, useClass: ConfigServiceStub },
       ],
     }).compile();
 
@@ -389,6 +418,8 @@ describe('Socket gateway real server handshakes', () => {
 
       const threadId = 'thread-123';
       const runId = 'run-456';
+      const ownerUserId = 'test-user';
+      prismaStub.setThreadOwner(threadId, ownerUserId);
 
       const messagePromise = new Promise<Record<string, unknown>>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -448,7 +479,7 @@ describe('Socket gateway real server handshakes', () => {
       expect(ack.rooms).toEqual(expect.arrayContaining(['threads', `thread:${threadId}`, `run:${runId}`]));
 
       const createdAt = new Date();
-      graphGateway.emitMessageCreated(threadId, {
+      graphGateway.emitMessageCreated(threadId, ownerUserId, {
         id: 'msg-1',
         kind: 'assistant' as MessageKind,
         text: 'hello world',
@@ -457,11 +488,15 @@ describe('Socket gateway real server handshakes', () => {
         runId,
       });
 
-      graphGateway.emitRunStatusChanged(threadId, {
-        id: runId,
-        status: 'running' as RunStatus,
-        createdAt,
-        updatedAt: createdAt,
+      graphGateway.emitRunStatusChanged({
+        threadId,
+        ownerUserId,
+        run: {
+          id: runId,
+          status: 'running' as RunStatus,
+          createdAt,
+          updatedAt: createdAt,
+        },
       });
 
       const runEventId = 'evt-1';
@@ -620,6 +655,7 @@ describe('Socket gateway real server handshakes', () => {
 
       const threadId = 'thread-999';
       const runId = 'run-999';
+      prismaStub.setThreadOwner(threadId, 'test-user');
 
       const subscribeAck = await new Promise<{ ok: boolean; rooms?: string[]; error?: string }>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Timed out waiting for subscribe ack')), 3000);

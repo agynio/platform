@@ -20,6 +20,7 @@ import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
 import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
+import { UserService } from '../auth/user.service';
 
 export type RunStartResult = { runId: string };
 
@@ -63,6 +64,7 @@ export class AgentsPersistenceService {
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(UserService) private readonly users: UserService,
   ) {}
 
   private format(context?: Record<string, unknown>): string {
@@ -82,6 +84,21 @@ export class AgentsPersistenceService {
 
   private sanitizeSummary(summary: string | null | undefined): string {
     return (summary ?? '').trim().slice(0, 256);
+  }
+
+  private async resolveOwnerId(ownerUserId?: string): Promise<string> {
+    if (ownerUserId) return ownerUserId;
+    const user = await this.users.ensureDefaultUser();
+    return user.id;
+  }
+
+  private async getThreadOwnerId(threadId: string, tx?: Prisma.TransactionClient): Promise<string> {
+    const prisma = tx ?? this.prisma;
+    const thread = await prisma.thread.findUnique({ where: { id: threadId }, select: { ownerUserId: true } });
+    if (!thread) {
+      throw new Error('thread_not_found');
+    }
+    return thread.ownerUserId;
   }
 
   async ensureThreadModel(threadId: string, model: string): Promise<string> {
@@ -127,6 +144,7 @@ export class AgentsPersistenceService {
           parentId: true,
           channelNodeId: true,
           assignedAgentNodeId: true,
+          ownerUserId: true,
         },
       });
     });
@@ -139,6 +157,7 @@ export class AgentsPersistenceService {
       summary: updated.summary ?? null,
       status: updated.status,
       createdAt: updated.createdAt,
+      ownerUserId: updated.ownerUserId,
       parentId: updated.parentId ?? null,
       channelNodeId: updated.channelNodeId ?? null,
       assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
@@ -152,15 +171,17 @@ export class AgentsPersistenceService {
     _source: string,
     alias: string,
     summary: string,
-    options?: { channelNodeId?: string },
+    options?: { channelNodeId?: string; ownerUserId?: string },
   ): Promise<string> {
     const existing = await this.prisma.thread.findUnique({ where: { alias }, select: { id: true } });
     if (existing) return existing.id;
     const sanitized = this.sanitizeSummary(summary);
+    const ownerUserId = await this.resolveOwnerId(options?.ownerUserId);
     const created = await this.prisma.thread.create({
       data: {
         alias,
         summary: sanitized,
+        ownerUserId,
         ...(options?.channelNodeId ? { channelNodeId: options.channelNodeId } : {}),
       },
     });
@@ -170,6 +191,7 @@ export class AgentsPersistenceService {
       summary: created.summary ?? null,
       status: created.status,
       createdAt: created.createdAt,
+      ownerUserId,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
       assignedAgentNodeId: created.assignedAgentNodeId ?? null,
@@ -191,13 +213,28 @@ export class AgentsPersistenceService {
       return;
     }
     const channelJson = toPrismaJsonValue(parsed.data);
-    const updated = await this.prisma.thread.update({ where: { id: threadId }, data: { channel: channelJson } });
+    const updated = await this.prisma.thread.update({
+      where: { id: threadId },
+      data: { channel: channelJson },
+      select: {
+        id: true,
+        alias: true,
+        summary: true,
+        status: true,
+        createdAt: true,
+        parentId: true,
+        channelNodeId: true,
+        assignedAgentNodeId: true,
+        ownerUserId: true,
+      },
+    });
     this.eventsBus.emitThreadUpdated({
       id: updated.id,
       alias: updated.alias,
       summary: updated.summary ?? null,
       status: updated.status,
       createdAt: updated.createdAt,
+      ownerUserId: updated.ownerUserId,
       parentId: updated.parentId ?? null,
       channelNodeId: updated.channelNodeId ?? null,
       assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
@@ -212,14 +249,21 @@ export class AgentsPersistenceService {
     const composed = `${source}:${parentThreadId}:${alias}`;
     const existing = await this.prisma.thread.findUnique({ where: { alias: composed } });
     if (existing) return existing.id;
+    const parent = await this.prisma.thread.findUnique({ where: { id: parentThreadId }, select: { id: true, ownerUserId: true } });
+    if (!parent) {
+      throw new ThreadParentNotFoundError();
+    }
     const sanitized = this.sanitizeSummary(summary);
-    const created = await this.prisma.thread.create({ data: { alias: composed, parentId: parentThreadId, summary: sanitized } });
+    const created = await this.prisma.thread.create({
+      data: { alias: composed, parentId: parentThreadId, summary: sanitized, ownerUserId: parent.ownerUserId },
+    });
     this.eventsBus.emitThreadCreated({
       id: created.id,
       alias: created.alias,
       summary: created.summary ?? null,
       status: created.status,
       createdAt: created.createdAt,
+      ownerUserId: created.ownerUserId,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
       assignedAgentNodeId: created.assignedAgentNodeId ?? null,
@@ -232,6 +276,7 @@ export class AgentsPersistenceService {
     alias: string;
     text: string;
     agentNodeId: string;
+    ownerUserId: string;
     parentId?: string | null;
   }): Promise<{
     id: string;
@@ -242,6 +287,7 @@ export class AgentsPersistenceService {
     parentId: string | null;
     channelNodeId: string | null;
     assignedAgentNodeId: string | null;
+    ownerUserId: string;
   }> {
     const alias = params.alias.trim();
     if (alias.length === 0) {
@@ -253,12 +299,16 @@ export class AgentsPersistenceService {
     }
     const parentId = params.parentId ?? null;
     const sanitizedSummary = this.sanitizeSummary(params.text);
+    const ownerUserId = await this.resolveOwnerId(params.ownerUserId);
 
     const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (parentId) {
-        const parent = await tx.thread.findUnique({ where: { id: parentId }, select: { id: true } });
+        const parent = await tx.thread.findUnique({ where: { id: parentId }, select: { id: true, ownerUserId: true } });
         if (!parent) {
           throw new ThreadParentNotFoundError();
+        }
+        if (parent.ownerUserId !== ownerUserId) {
+          throw new Error('thread_parent_owner_mismatch');
         }
       }
 
@@ -268,6 +318,7 @@ export class AgentsPersistenceService {
           summary: sanitizedSummary,
           parentId,
           assignedAgentNodeId: agentNodeId,
+          ownerUserId,
         },
       });
     });
@@ -278,6 +329,7 @@ export class AgentsPersistenceService {
       summary: created.summary ?? null,
       status: created.status,
       createdAt: created.createdAt,
+      ownerUserId: created.ownerUserId,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
       assignedAgentNodeId: created.assignedAgentNodeId ?? null,
@@ -293,6 +345,7 @@ export class AgentsPersistenceService {
       summary: created.summary ?? null,
       status: created.status,
       createdAt: created.createdAt,
+      ownerUserId: created.ownerUserId,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
       assignedAgentNodeId: created.assignedAgentNodeId ?? null,
@@ -318,6 +371,7 @@ export class AgentsPersistenceService {
         parentId: true,
         channelNodeId: true,
         assignedAgentNodeId: true,
+        ownerUserId: true,
       },
     });
     if (!updated) return;
@@ -327,6 +381,7 @@ export class AgentsPersistenceService {
       summary: updated.summary ?? null,
       status: updated.status,
       createdAt: updated.createdAt,
+      ownerUserId: updated.ownerUserId,
       parentId: updated.parentId ?? null,
       channelNodeId: updated.channelNodeId ?? null,
       assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
@@ -349,6 +404,7 @@ export class AgentsPersistenceService {
     inputMessages: Array<HumanMessage | DeveloperMessage | SystemMessage | AIMessage>,
     agentNodeId?: string,
   ): Promise<RunStartResult> {
+    const ownerUserId = await this.getThreadOwnerId(threadId);
     const { runId, createdMessages, eventIds, patchedEventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Begin run and persist messages
       const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
@@ -394,11 +450,13 @@ export class AgentsPersistenceService {
     });
     this.eventsBus.emitRunStatusChanged({
       threadId,
+      ownerUserId,
       run: { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() },
     });
     for (const m of createdMessages) {
       this.eventsBus.emitMessageCreated({
         threadId,
+        ownerUserId,
         message: { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId },
       });
     }
@@ -477,18 +535,22 @@ export class AgentsPersistenceService {
 
     if (!threadId) return { messageIds: [] };
 
-    for (const m of createdMessages) {
-      this.eventsBus.emitMessageCreated({
-        threadId,
-        message: {
-          id: m.id,
-          kind: m.kind,
-          text: m.text,
-          source: m.source as Prisma.JsonValue,
-          createdAt: m.createdAt,
-          runId,
-        },
-      });
+    if (threadId) {
+      const ownerUserId = await this.getThreadOwnerId(threadId);
+      for (const m of createdMessages) {
+        this.eventsBus.emitMessageCreated({
+          threadId,
+          ownerUserId,
+          message: {
+            id: m.id,
+            kind: m.kind,
+            text: m.text,
+            source: m.source as Prisma.JsonValue,
+            createdAt: m.createdAt,
+            runId,
+          },
+        });
+      }
     }
 
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
@@ -505,6 +567,7 @@ export class AgentsPersistenceService {
   }): Promise<{ messageId: string }> {
     const normalizedThreadId = params.threadId?.trim();
     if (!normalizedThreadId) throw new Error('thread_id_required');
+    const ownerUserId = await this.getThreadOwnerId(normalizedThreadId);
 
     const assistant = AIMessage.fromText(params.text ?? '');
     const sourcePayload = toPrismaJsonValue(assistant.toPlain());
@@ -556,6 +619,7 @@ export class AgentsPersistenceService {
 
     this.eventsBus.emitMessageCreated({
       threadId: normalizedThreadId,
+      ownerUserId,
       message: {
         id: message.id,
         kind: 'assistant' as MessageKind,
@@ -616,13 +680,19 @@ export class AgentsPersistenceService {
       return updated;
     });
     const threadId = run.threadId;
+    const ownerUserId = await this.getThreadOwnerId(threadId);
     for (const m of createdMessages) {
       this.eventsBus.emitMessageCreated({
         threadId,
+        ownerUserId,
         message: { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId },
       });
     }
-    this.eventsBus.emitRunStatusChanged({ threadId, run: { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt } });
+    this.eventsBus.emitRunStatusChanged({
+      threadId,
+      ownerUserId,
+      run: { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt },
+    });
     this.eventsBus.emitThreadMetrics({ threadId });
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
@@ -636,6 +706,7 @@ export class AgentsPersistenceService {
     includeAgentTitles: boolean;
     childrenStatus: 'open' | 'closed' | 'all';
     perParentChildrenLimit: number;
+    ownerUserId?: string;
   }): Promise<ThreadTreeNode[]> {
     const limit = Math.min(Math.max(opts.limit, 1), 1000);
     const depth = Math.min(Math.max(opts.depth, 0), 2) as 0 | 1 | 2;
@@ -645,6 +716,7 @@ export class AgentsPersistenceService {
 
     const rootWhere: Prisma.ThreadWhereInput = { parentId: null };
     if (status !== 'all') rootWhere.status = status as ThreadStatus;
+    if (opts.ownerUserId) rootWhere.ownerUserId = opts.ownerUserId;
 
     const rootRows = await this.prisma.thread.findMany({
       where: rootWhere,
@@ -704,6 +776,7 @@ export class AgentsPersistenceService {
     if (depth >= 1) {
       const childWhere: Prisma.ThreadWhereInput = { parentId: { in: rootIds } };
       if (childrenStatus !== 'all') childWhere.status = childrenStatus as ThreadStatus;
+      if (opts.ownerUserId) childWhere.ownerUserId = opts.ownerUserId;
       const childRows = await this.prisma.thread.findMany({
         where: childWhere,
         select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
@@ -714,6 +787,7 @@ export class AgentsPersistenceService {
     if (depth >= 2 && childIds.length > 0) {
       const grandchildWhere: Prisma.ThreadWhereInput = { parentId: { in: childIds } };
       if (childrenStatus !== 'all') grandchildWhere.status = childrenStatus as ThreadStatus;
+      if (opts.ownerUserId) grandchildWhere.ownerUserId = opts.ownerUserId;
       const grandchildRows = await this.prisma.thread.findMany({
         where: grandchildWhere,
         select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
@@ -793,13 +867,19 @@ export class AgentsPersistenceService {
     return rootNodes.map(clone);
   }
 
-  async listThreads(opts?: { rootsOnly?: boolean; status?: 'open' | 'closed' | 'all'; limit?: number }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
+  async listThreads(opts?: {
+    rootsOnly?: boolean;
+    status?: 'open' | 'closed' | 'all';
+    limit?: number;
+    ownerUserId?: string;
+  }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
     const rootsOnly = opts?.rootsOnly ?? false;
     const status = opts?.status ?? 'all';
     const limit = opts?.limit ?? 100;
     const where: Prisma.ThreadWhereInput = {};
     if (rootsOnly) where.parentId = null;
     if (status !== 'all') where.status = status as ThreadStatus;
+    if (opts?.ownerUserId) where.ownerUserId = opts.ownerUserId;
     return this.prisma.thread.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -810,7 +890,7 @@ export class AgentsPersistenceService {
 
   async getThreadById(
     threadId: string,
-    opts?: { includeMetrics?: boolean; includeAgentTitles?: boolean },
+    opts?: { includeMetrics?: boolean; includeAgentTitles?: boolean; ownerUserId?: string },
   ): Promise<
     | ({
         id: string;
@@ -820,6 +900,7 @@ export class AgentsPersistenceService {
         createdAt: Date;
         parentId: string | null;
         assignedAgentNodeId: string | null;
+        ownerUserId: string;
         metrics?: ThreadMetrics;
         agentTitle?: string;
         agentRole?: string;
@@ -827,8 +908,8 @@ export class AgentsPersistenceService {
       })
     | null
   > {
-    const thread = await this.prisma.thread.findUnique({
-      where: { id: threadId },
+    const thread = await this.prisma.thread.findFirst({
+      where: { id: threadId, ...(opts?.ownerUserId ? { ownerUserId: opts.ownerUserId } : {}) },
       select: {
         id: true,
         alias: true,
@@ -837,6 +918,7 @@ export class AgentsPersistenceService {
         createdAt: true,
         parentId: true,
         assignedAgentNodeId: true,
+        ownerUserId: true,
       },
     });
     if (!thread) return null;
@@ -852,6 +934,7 @@ export class AgentsPersistenceService {
       createdAt: Date;
       parentId: string | null;
       assignedAgentNodeId: string | null;
+      ownerUserId: string;
       metrics?: ThreadMetrics;
       agentTitle?: string;
       agentRole?: string;
@@ -860,6 +943,7 @@ export class AgentsPersistenceService {
       ...thread,
       parentId: thread.parentId ?? null,
       assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
+      ownerUserId: thread.ownerUserId,
     };
 
     const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
@@ -905,22 +989,34 @@ export class AgentsPersistenceService {
     return state?.nodeId ?? null;
   }
 
-  async listChildren(parentId: string, status: 'open' | 'closed' | 'all' = 'all'): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
+  async listChildren(
+    parentId: string,
+    status: 'open' | 'closed' | 'all' = 'all',
+    ownerUserId?: string,
+  ): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
     const where: Prisma.ThreadWhereInput = { parentId };
     if (status !== 'all') where.status = status as ThreadStatus;
+    if (ownerUserId) where.ownerUserId = ownerUserId;
     return this.prisma.thread.findMany({ where, orderBy: { createdAt: 'desc' }, select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true } });
   }
 
   async updateThread(
     threadId: string,
     data: { summary?: string | null; status?: ThreadStatus },
+    scope?: { ownerUserId?: string },
   ): Promise<{ previousStatus: ThreadStatus; status: ThreadStatus }> {
     const patch: Prisma.ThreadUpdateInput = {};
     if (data.summary !== undefined) patch.summary = data.summary;
     if (data.status !== undefined) patch.status = data.status;
 
     const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const current = await tx.thread.findUnique({ where: { id: threadId }, select: { status: true } });
+      const current = await tx.thread.findFirst({
+        where: { id: threadId, ...(scope?.ownerUserId ? { ownerUserId: scope.ownerUserId } : {}) },
+        select: { status: true },
+      });
+      if (!current) {
+        throw new Error('thread_not_found');
+      }
       const updated = await tx.thread.update({ where: { id: threadId }, data: patch });
       return { updated, previousStatus: current?.status ?? updated.status };
     });
@@ -932,6 +1028,7 @@ export class AgentsPersistenceService {
       summary: updated.summary ?? null,
       status: updated.status,
       createdAt: updated.createdAt,
+      ownerUserId: updated.ownerUserId,
       parentId: updated.parentId ?? null,
       channelNodeId: updated.channelNodeId ?? null,
       assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
@@ -1000,11 +1097,19 @@ export class AgentsPersistenceService {
     });
   }
 
-  async getRunById(runId: string): Promise<{ id: string; threadId: string; status: RunStatus } | null> {
-    return this.prisma.run.findUnique({
+  async getRunById(
+    runId: string,
+    scope?: { ownerUserId?: string },
+  ): Promise<{ id: string; threadId: string; status: RunStatus } | null> {
+    const run = await this.prisma.run.findUnique({
       where: { id: runId },
-      select: { id: true, threadId: true, status: true },
+      select: { id: true, threadId: true, status: true, thread: { select: { ownerUserId: true } } },
     });
+    if (!run) return null;
+    if (scope?.ownerUserId && run.thread.ownerUserId !== scope.ownerUserId) {
+      return null;
+    }
+    return { id: run.id, threadId: run.threadId, status: run.status };
   }
 
   async listRunMessages(runId: string, type: RunMessageType): Promise<Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }>> {
@@ -1019,6 +1124,7 @@ export class AgentsPersistenceService {
     filter: 'active' | 'completed' | 'cancelled' | 'all' = 'active',
     take: number = 100,
     threadId?: string,
+    ownerUserId?: string,
   ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>> {
     const limit = Number.isFinite(take) ? Math.min(1000, Math.max(1, Math.trunc(take))) : 100;
     const where: Prisma.ReminderWhereInput = {};
@@ -1031,6 +1137,7 @@ export class AgentsPersistenceService {
       where.NOT = { cancelledAt: null };
     }
     if (threadId) where.threadId = threadId;
+    if (ownerUserId) where.thread = { ownerUserId };
 
     try {
       return await this.prisma.reminder.findMany({
@@ -1059,6 +1166,7 @@ export class AgentsPersistenceService {
     sort = 'latest',
     order = 'desc',
     threadId,
+    ownerUserId,
   }: {
     filter?: 'all' | 'active' | 'completed' | 'cancelled';
     page?: number;
@@ -1066,6 +1174,7 @@ export class AgentsPersistenceService {
     sort?: 'latest' | 'createdAt' | 'at';
     order?: 'asc' | 'desc';
     threadId?: string;
+    ownerUserId?: string;
   }): Promise<{
     items: Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>;
     page: number;
@@ -1086,9 +1195,11 @@ export class AgentsPersistenceService {
     const filterKey: 'all' | 'active' | 'completed' | 'cancelled' = filter ?? 'all';
 
     const skip = (normalizedPage - 1) * normalizedPageSize;
-    const { where, clauses } = this.buildReminderFilter(filterKey, threadId);
+    const { where, clauses } = this.buildReminderFilter(filterKey, threadId, ownerUserId);
     const whereForQuery = Object.keys(where).length === 0 ? undefined : where;
-    const countsBaseWhere: Prisma.ReminderWhereInput = threadId ? { threadId } : {};
+    const countsBaseWhere: Prisma.ReminderWhereInput = {};
+    if (threadId) countsBaseWhere.threadId = threadId;
+    if (ownerUserId) countsBaseWhere.thread = { ownerUserId };
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -1115,8 +1226,9 @@ export class AgentsPersistenceService {
           }),
         ]);
 
+        const useLatestAllOptimization = sortKey === 'latest' && filterKey === 'all' && !ownerUserId;
         const items =
-          sortKey === 'latest' && filterKey === 'all'
+          useLatestAllOptimization
             ? await this.fetchRemindersLatestAll(tx, clauses, skip, normalizedPageSize, sortOrder)
             : await tx.reminder.findMany({
                 where: whereForQuery,
@@ -1159,6 +1271,7 @@ export class AgentsPersistenceService {
           sort: sortKey,
           order: sortOrder,
           threadId,
+          ownerUserId,
           error: this.errorInfo(error),
         })}`,
       );
@@ -1169,6 +1282,7 @@ export class AgentsPersistenceService {
   private buildReminderFilter(
     filter: 'all' | 'active' | 'completed' | 'cancelled',
     threadId?: string,
+    ownerUserId?: string,
   ): { where: Prisma.ReminderWhereInput; clauses: Prisma.Sql[] } {
     const where: Prisma.ReminderWhereInput = {};
     const clauses: Prisma.Sql[] = [];
@@ -1176,6 +1290,10 @@ export class AgentsPersistenceService {
     if (threadId) {
       where.threadId = threadId;
       clauses.push(Prisma.sql`"threadId" = ${threadId}`);
+    }
+
+    if (ownerUserId) {
+      where.thread = { ownerUserId };
     }
 
     switch (filter) {
