@@ -227,4 +227,14 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     expect(row!.terminationReason).toBe('ttl_expired');
     expect(typeof row!.metadata?.lastEventAt).toBe('string');
   });
+
+  it('markDeleted stops container and sets deletedAt', async () => {
+    await registry.registerStart({ containerId: 'z', nodeId: 'n', threadId: '', image: 'img', name: '/z' });
+    await registry.markDeleted('z', 'manual_delete');
+    const row = await prisma.container.findUnique({ where: { containerId: 'z' } });
+    expect(row!.status).toBe('stopped');
+    expect(row!.deletedAt).toBeInstanceOf(Date);
+    expect(row!.terminationReason).toBe('manual_delete');
+    expect(typeof row!.metadata?.lastEventAt).toBe('string');
+  });
 });

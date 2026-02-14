@@ -1,9 +1,10 @@
-import { BadRequestException, Controller, Get, Inject, Query, Logger, Param } from '@nestjs/common';
+import { BadRequestException, Controller, Delete, Get, Inject, Query, Logger, Param } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
+import { ContainerAdminService } from './containerAdmin.service';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -142,6 +143,7 @@ export class ContainersController {
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
+    private readonly containerAdmin: ContainerAdminService,
   ) {
     this.prisma = prismaSvc.getClient();
   }
@@ -497,5 +499,15 @@ export class ContainersController {
         nextAfter,
       },
     };
+  }
+
+  @Delete(':containerId')
+  async delete(@Param('containerId') containerIdParam: string): Promise<{ ok: true }> {
+    const containerId = typeof containerIdParam === 'string' ? containerIdParam.trim() : '';
+    if (!containerId) {
+      throw new BadRequestException('containerId is required');
+    }
+    await this.containerAdmin.deleteContainer(containerId);
+    return { ok: true };
   }
 }
