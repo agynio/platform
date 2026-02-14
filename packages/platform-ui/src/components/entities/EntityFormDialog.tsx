@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,14 @@ import type {
   TemplateOption,
 } from '@/features/entities/types';
 import type { EntityFormValues } from './formTypes';
+
+type ConnectionEntry = {
+  edge: GraphEntityConnectionInput;
+  type: 'outgoing' | 'incoming';
+  index: number;
+};
+
+const DUPLICATE_ERROR_MESSAGE = 'Duplicate connection. Each edge must be unique.';
 
 interface EntityFormDialogProps {
   open: boolean;
@@ -98,6 +106,26 @@ export function EntityFormDialog({
   const outgoingArray = useFieldArray({ control: form.control, name: 'outgoing' });
   const incomingArray = useFieldArray({ control: form.control, name: 'incoming' });
 
+  const clearDuplicateConnectionErrors = (values: EntityFormValues) => {
+    values.outgoing?.forEach((_conn, index) => {
+      form.clearErrors(`outgoing.${index}.targetHandle` as FieldPath<EntityFormValues>);
+    });
+    values.incoming?.forEach((_conn, index) => {
+      form.clearErrors(`incoming.${index}.targetHandle` as FieldPath<EntityFormValues>);
+    });
+  };
+
+  const markDuplicateConnection = (entry: ConnectionEntry) => {
+    const fieldName =
+      entry.type === 'outgoing'
+        ? (`outgoing.${entry.index}.targetHandle` as FieldPath<EntityFormValues>)
+        : (`incoming.${entry.index}.targetHandle` as FieldPath<EntityFormValues>);
+    form.setError(fieldName, {
+      type: 'manual',
+      message: DUPLICATE_ERROR_MESSAGE,
+    });
+  };
+
   useEffect(() => {
     if (open) {
       form.reset(defaultValues);
@@ -126,7 +154,7 @@ export function EntityFormDialog({
   }, [form, mode, selectedTemplateName]);
 
   const handleSubmit = async (values: EntityFormValues) => {
-    form.clearErrors('root');
+    clearDuplicateConnectionErrors(values);
     let parsedConfig: unknown;
     try {
       parsedConfig = JSON.parse(values.configText || '{}');
@@ -139,46 +167,74 @@ export function EntityFormDialog({
       return;
     }
 
-    const outgoingConnections: GraphEntityConnectionInput[] = values.outgoing
-      ?.map((conn) => ({
-        id: conn.edgeId,
-        source: ENTITY_SELF_PLACEHOLDER,
-        sourceHandle: conn.sourceHandle?.trim() ?? '',
-        target: conn.targetNodeId?.trim() ?? '',
-        targetHandle: conn.targetHandle?.trim() ?? '',
-      }))
-      .filter((conn) => conn.target && conn.sourceHandle && conn.targetHandle) ?? [];
+    const connectionEntries: ConnectionEntry[] = [];
 
-    const incomingConnections: GraphEntityConnectionInput[] = values.incoming
-      ?.map((conn) => ({
-        id: conn.edgeId,
-        source: conn.sourceNodeId?.trim() ?? '',
-        sourceHandle: conn.sourceHandle?.trim() ?? '',
-        target: ENTITY_SELF_PLACEHOLDER,
-        targetHandle: conn.targetHandle?.trim() ?? '',
-      }))
-      .filter((conn) => conn.source && conn.sourceHandle && conn.targetHandle) ?? [];
+    values.outgoing?.forEach((conn, index) => {
+      const targetNodeId = conn.targetNodeId?.trim() ?? '';
+      const sourceHandle = conn.sourceHandle?.trim() ?? '';
+      const targetHandle = conn.targetHandle?.trim() ?? '';
+      if (!targetNodeId || !sourceHandle || !targetHandle) {
+        return;
+      }
+      connectionEntries.push({
+        type: 'outgoing',
+        index,
+        edge: {
+          id: conn.edgeId,
+          source: ENTITY_SELF_PLACEHOLDER,
+          sourceHandle,
+          target: targetNodeId,
+          targetHandle,
+        },
+      });
+    });
+
+    values.incoming?.forEach((conn, index) => {
+      const sourceNodeId = conn.sourceNodeId?.trim() ?? '';
+      const sourceHandle = conn.sourceHandle?.trim() ?? '';
+      const targetHandle = conn.targetHandle?.trim() ?? '';
+      if (!sourceNodeId || !sourceHandle || !targetHandle) {
+        return;
+      }
+      connectionEntries.push({
+        type: 'incoming',
+        index,
+        edge: {
+          id: conn.edgeId,
+          source: sourceNodeId,
+          sourceHandle,
+          target: ENTITY_SELF_PLACEHOLDER,
+          targetHandle,
+        },
+      });
+    });
 
     const payload: GraphEntityUpsertInput = {
       id: entity?.id,
       template: entity?.templateName ?? values.template,
       title: values.title.trim(),
       config: parsedConfig as Record<string, unknown>,
-      connections: [...outgoingConnections, ...incomingConnections],
+      connections: connectionEntries.map((entry) => entry.edge),
     };
 
-    if (payload.connections.length > 0) {
-      const seen = new Set<string>();
-      for (const conn of payload.connections) {
-        const key = `${conn.source}|${conn.sourceHandle}|${conn.target}|${conn.targetHandle}`;
-        if (seen.has(key)) {
-          form.setError('root', {
-            type: 'manual',
-            message: 'Duplicate connections detected. Each edge must be unique.',
-          });
-          return;
+    if (connectionEntries.length > 0) {
+      const buckets = new Map<string, ConnectionEntry[]>();
+      for (const entry of connectionEntries) {
+        const { source, sourceHandle, target, targetHandle } = entry.edge;
+        const key = `${source}|${sourceHandle}|${target}|${targetHandle}`;
+        const existing = buckets.get(key);
+        if (existing) {
+          existing.push(entry);
+        } else {
+          buckets.set(key, [entry]);
         }
-        seen.add(key);
+      }
+      const duplicates = Array.from(buckets.values()).filter((group) => group.length > 1);
+      if (duplicates.length > 0) {
+        duplicates.forEach((group) => {
+          group.forEach((entry) => markDuplicateConnection(entry));
+        });
+        return;
       }
     }
 
@@ -203,7 +259,6 @@ export function EntityFormDialog({
 
   const disableTemplateSelect = mode === 'edit';
   const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
-  const rootError = form.formState.errors.root?.message;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -217,11 +272,6 @@ export function EntityFormDialog({
         {templates.length === 0 && (
           <Alert variant="destructive">
             <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
-          </Alert>
-        )}
-        {rootError && (
-          <Alert variant="destructive">
-            <AlertDescription>{rootError}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>

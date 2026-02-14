@@ -297,7 +297,8 @@ describe('Entity list pages', () => {
 
     await user.click(screen.getByRole('button', { name: /create/i }));
 
-    await screen.findByText(/duplicate connections detected/i);
+    const duplicateMessages = await screen.findAllByText(/duplicate connection/i);
+    expect(duplicateMessages).toHaveLength(2);
     expect(postSpy).not.toHaveBeenCalled();
   });
 
