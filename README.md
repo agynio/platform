@@ -138,8 +138,12 @@ pnpm --filter @agyn/platform-server run prisma:generate
 pnpm --filter @agyn/platform-server dev
 # UI (Vite dev server)
 pnpm --filter @agyn/platform-ui dev
+# docker-runner (Fastify dev server)
+pnpm --filter @agyn/docker-runner dev
 ```
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
+
+The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
 
 - Production (Docker):
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):
