@@ -171,6 +171,7 @@ describe('CallToolsLLMReducer error isolation', () => {
     const [payload] = runEvents.completeToolExecution.mock.calls[0];
     expect(payload.status).toBe('error');
     expect(payload.errorMessage).toBe('[exit code 42] compiler error: missing semicolon');
+    expect(payload.errorCode ?? null).toBeNull();
   });
 
   it('invokes manage tool via reducer without relying on instance logger field', async () => {
