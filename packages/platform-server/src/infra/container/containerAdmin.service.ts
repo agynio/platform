@@ -5,6 +5,13 @@ import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 @Injectable()
 export class ContainerAdminService {
   private readonly logger = new Logger(ContainerAdminService.name);
+  private static readonly MISSING_CONTAINER_ERROR_CODES: ReadonlyArray<string> = [
+    'container_not_found',
+    'container_not_running',
+    'container_not_stopped',
+    'no_such_container',
+    'not_found',
+  ];
 
   constructor(
     @Inject(DOCKER_CLIENT) private readonly dockerClient: DockerClient,
@@ -21,10 +28,11 @@ export class ContainerAdminService {
     try {
       await this.dockerClient.stopContainer(containerId, 10);
     } catch (error) {
-      if (this.isBenignDockerError(error, [304, 404, 409])) {
+      if (this.isBenignDockerError(error, [304, 404, 409], ContainerAdminService.MISSING_CONTAINER_ERROR_CODES)) {
         this.logger.debug('Stop container returned benign error', {
           containerId: this.shortId(containerId),
-          errorCode: this.extractStatusCode(error),
+          statusCode: this.extractStatusCode(error),
+          errorCode: this.extractErrorCode(error),
         });
         return;
       }
@@ -40,10 +48,11 @@ export class ContainerAdminService {
     try {
       await this.dockerClient.removeContainer(containerId, { force: true, removeVolumes: true });
     } catch (error) {
-      if (this.isBenignDockerError(error, [404, 409])) {
+      if (this.isBenignDockerError(error, [404, 409], ContainerAdminService.MISSING_CONTAINER_ERROR_CODES)) {
         this.logger.debug('Remove container returned benign error', {
           containerId: this.shortId(containerId),
-          errorCode: this.extractStatusCode(error),
+          statusCode: this.extractStatusCode(error),
+          errorCode: this.extractErrorCode(error),
         });
         return;
       }
@@ -55,15 +64,32 @@ export class ContainerAdminService {
     }
   }
 
-  private isBenignDockerError(err: unknown, allowed: number[]): boolean {
-    const code = this.extractStatusCode(err);
-    return typeof code === 'number' && allowed.includes(code);
+  private isBenignDockerError(err: unknown, allowedStatuses: number[], allowedErrorCodes: ReadonlyArray<string> = []): boolean {
+    const statusCode = this.extractStatusCode(err);
+    if (typeof statusCode === 'number' && allowedStatuses.includes(statusCode)) {
+      return true;
+    }
+    const errorCode = this.extractErrorCode(err);
+    return typeof errorCode === 'string' && allowedErrorCodes.includes(errorCode);
   }
 
   private extractStatusCode(err: unknown): number | undefined {
     if (typeof err === 'object' && err !== null && 'statusCode' in err) {
       const value = (err as { statusCode?: unknown }).statusCode;
       if (typeof value === 'number') return value;
+    }
+    return undefined;
+  }
+
+  private extractErrorCode(err: unknown): string | undefined {
+    if (typeof err === 'object' && err !== null && 'errorCode' in err) {
+      const value = (err as { errorCode?: unknown }).errorCode;
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number') return String(value);
+    }
+    if (typeof err === 'object' && err !== null && 'code' in err) {
+      const value = (err as { code?: unknown }).code;
+      if (typeof value === 'string') return value;
     }
     return undefined;
   }

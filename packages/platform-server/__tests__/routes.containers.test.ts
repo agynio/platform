@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryDto } from '../src/infra/container/containers.controller';
 import type { PrismaClient, ContainerEventType } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
+import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
 type RowMetadata = {
@@ -130,6 +131,11 @@ class InMemoryPrismaClient {
         metadata: r.metadata,
       }));
     },
+    async findUnique(args: { where: { containerId: string } }): Promise<Row | null> {
+      const id = args?.where?.containerId;
+      if (!id) return null;
+      return this.rows.find((row) => row.containerId === id) ?? null;
+    },
   };
   containerEvent = {
     rows: [] as ContainerEventRow[],
@@ -232,7 +238,11 @@ class InMemoryPrismaClient {
 }
 
 type MinimalPrismaClient = {
-  container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] };
+  container: {
+    findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>;
+    findUnique(args: { where: { containerId: string } }): Promise<Row | null>;
+    rows: Row[];
+  };
   containerEvent: { findMany(args: ContainerEventFindManyArgs): Promise<Array<Partial<ContainerEventRow>>>; rows: ContainerEventRow[] };
 };
 class PrismaStub {
@@ -262,11 +272,17 @@ class PrismaStubWithQueryRaw {
 }
 
 describe('ContainersController routes', () => {
-  let fastify: FastifyInstance; let prismaSvc: PrismaStub; let controller: ContainersController;
+  let fastify: FastifyInstance;
+  let prismaSvc: PrismaStub;
+  let controller: ContainersController;
+  let containerAdmin: Pick<ContainerAdminService, 'deleteContainer'>;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc);
+    containerAdmin = {
+      deleteContainer: vi.fn().mockResolvedValue(undefined),
+    } as Pick<ContainerAdminService, 'deleteContainer'>;
+    controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] | 'all' =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed', 'all'].includes(v);
@@ -583,5 +599,15 @@ describe('ContainersController routes', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json() as { message: string };
     expect(body.message).toMatch(/cursor/i);
+  });
+
+  it('calls ContainerAdminService when deleting an existing container', async () => {
+    await expect(controller.delete('cid-1')).resolves.toBeUndefined();
+    expect(containerAdmin.deleteContainer).toHaveBeenCalledWith('cid-1');
+  });
+
+  it('rejects with NotFound when deleting a missing container', async () => {
+    await expect(controller.delete('missing-cid')).rejects.toThrowError('container_not_found');
+    expect(containerAdmin.deleteContainer).not.toHaveBeenCalled();
   });
 });

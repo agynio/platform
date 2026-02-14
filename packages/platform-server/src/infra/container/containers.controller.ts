@@ -1,4 +1,16 @@
-import { BadRequestException, Controller, Delete, Get, Inject, Query, Logger, Param } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Query,
+  Logger,
+  Param,
+  NotFoundException,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
@@ -502,12 +514,16 @@ export class ContainersController {
   }
 
   @Delete(':containerId')
-  async delete(@Param('containerId') containerIdParam: string): Promise<{ ok: true }> {
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Param('containerId') containerIdParam: string): Promise<void> {
     const containerId = typeof containerIdParam === 'string' ? containerIdParam.trim() : '';
     if (!containerId) {
       throw new BadRequestException('containerId is required');
     }
+    const existing = await this.prisma.container.findUnique({ where: { containerId } });
+    if (!existing) {
+      throw new NotFoundException('container_not_found');
+    }
     await this.containerAdmin.deleteContainer(containerId);
-    return { ok: true };
   }
 }
