@@ -515,7 +515,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     }
   });
 
-  app.get('/v1/exec/interactive/ws', { websocket: true }, (async (connection: SocketStream, request: FastifyRequest) => {
+  const interactiveExecWsHandler: WebsocketRouteHandler = async (connection: SocketStream, request: FastifyRequest) => {
     const socket = getWebsocket(connection);
     const querySchema = z.object({
       containerId: z.string().min(1),
@@ -623,7 +623,20 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       );
       closeWebsocket(socket, 1011, 'exec_failed');
     }
-  }) as WebsocketRouteHandler);
+  };
+
+  app.after((err) => {
+    if (err) throw err;
+    app.route({
+      method: 'GET',
+      url: '/v1/exec/interactive/ws',
+      schema: { hide: true },
+      handler: ((_request, reply) => {
+        sendError(reply, 426, 'upgrade_required', 'WebSocket upgrade required');
+      }) as RequestHandler,
+      wsHandler: interactiveExecWsHandler as WebsocketRouteHandler,
+    });
+  });
 
   return app;
 }
