@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import {
+  ScreenDialog,
+  ScreenDialogContent,
+  ScreenDialogDescription,
+  ScreenDialogFooter,
+  ScreenDialogHeader,
+  ScreenDialogTitle,
+} from '@/components/Dialog';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { Textarea } from '@/components/Textarea';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/forms/Form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SelectInput } from '@/components/SelectInput';
 import { ConnectionsEditor } from '@/components/entities/ConnectionsEditor';
 import { ENTITY_SELF_PLACEHOLDER, extractNodeConnections, getTemplatePorts } from '@/features/entities/api/graphEntities';
 import type {
@@ -261,14 +268,14 @@ export function EntityFormDialog({
   const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>
+    <ScreenDialog open={open} onOpenChange={onOpenChange}>
+      <ScreenDialogContent className="max-h-[90vh] overflow-y-auto">
+        <ScreenDialogHeader>
+          <ScreenDialogTitle>{dialogTitle}</ScreenDialogTitle>
+          <ScreenDialogDescription>
             Configure the template, metadata, and graph connections for this {kind}.
-          </DialogDescription>
-        </DialogHeader>
+          </ScreenDialogDescription>
+        </ScreenDialogHeader>
         {templates.length === 0 && (
           <Alert variant="destructive">
             <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
@@ -282,24 +289,16 @@ export function EntityFormDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Template</FormLabel>
-                  <Select
-                    value={field.value ?? ''}
-                    onValueChange={field.onChange}
-                    disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a template" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {templates.map((tpl) => (
-                        <SelectItem key={tpl.name} value={tpl.name}>
-                          {tpl.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SelectInput
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
+                      placeholder="Select a template"
+                      options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
+                      allowEmptyOption
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -369,17 +368,17 @@ export function EntityFormDialog({
               disabled={isSubmitting || (!selectedTemplate && mode === 'create')}
             />
 
-            <DialogFooter>
+            <ScreenDialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting || (mode === 'create' && !form.getValues('template'))}>
                 {mode === 'create' ? 'Create' : 'Save changes'}
               </Button>
-            </DialogFooter>
+            </ScreenDialogFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </ScreenDialogContent>
+    </ScreenDialog>
   );
 }

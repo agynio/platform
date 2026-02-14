@@ -4,10 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
 import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/Button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/Badge';
 
 type MemoryRow = {
   key: string;

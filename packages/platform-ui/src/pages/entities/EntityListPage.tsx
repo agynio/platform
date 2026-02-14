@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, RefreshCw } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Input } from '@/components/Input';
+import { Button } from '@/components/Button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';

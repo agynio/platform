@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 import type {
   Control,
   FieldArrayWithId,
@@ -9,9 +9,9 @@ import type {
 } from 'react-hook-form';
 import { useWatch } from 'react-hook-form';
 import { Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Button } from '@/components/Button';
+import { SelectInput } from '@/components/SelectInput';
+import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/forms/Form';
 import type { EntityPortDefinition, GraphEntitySummary } from '@/features/entities/types';
 import type { EntityFormValues, IncomingConnectionField, OutgoingConnectionField } from './formTypes';
 
@@ -165,38 +165,33 @@ export function ConnectionsEditor({
                         <FormLabel className="text-xs text-[var(--agyn-text-subtle)]">
                           {variant === 'outgoing' ? 'Target node' : 'Source node'}
                         </FormLabel>
-                        <Select
-                          disabled={disabled}
-                          value={nodeValue}
-                          onValueChange={(value) => {
+                        <FormControl>
+                          <SelectInput
+                            value={nodeValue}
+                          onChange={(event) => {
+                            const value = event.target.value;
                             field.onChange(value);
                             setValue(targetHandleFieldName, '');
                             if (variant === 'incoming') {
                               setValue(sourceHandleFieldName, '');
                             }
                           }}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select node" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {otherNodes.map((node) => (
-                              <SelectItem key={node.id} value={node.id}>
-                                <div className="flex flex-col text-left">
-                                  <span className="text-sm font-medium">{node.title}</span>
-                                  <span className="text-xs text-muted-foreground">{node.id}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          disabled={disabled || otherNodes.length === 0}
+                          placeholder={otherNodes.length === 0 ? 'No nodes available' : 'Select node'}
+                            options={otherNodes.map((node) => ({
+                              value: node.id,
+                              label: `${node.title} (${node.id})`,
+                            }))}
+                            size="sm"
+                            allowEmptyOption
+                            aria-label={variant === 'outgoing' ? 'Target node' : 'Source node'}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     );
-                  }}
-                />
+            }}
+          />
 
                 <FormField
                   control={control}
@@ -206,24 +201,23 @@ export function ConnectionsEditor({
                     return (
                       <FormItem>
                         <FormLabel className="text-xs text-[var(--agyn-text-subtle)]">Source handle</FormLabel>
-                        <Select
-                          disabled={disabled || availableSourceHandles.length === 0}
-                          value={handleValue}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={availableSourceHandles.length === 0 ? 'No handles' : 'Select handle'} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {availableSourceHandles.map((handle) => (
-                              <SelectItem key={handle.id} value={handle.id}>
-                                {handle.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SelectInput
+                            value={handleValue}
+                            onChange={(event) => field.onChange(event.target.value)}
+                            disabled={disabled || availableSourceHandles.length === 0}
+                            placeholder={
+                              availableSourceHandles.length === 0 ? 'No handles available' : 'Select handle'
+                            }
+                            options={availableSourceHandles.map((handle) => ({
+                              value: handle.id,
+                              label: handle.label,
+                            }))}
+                            size="sm"
+                            allowEmptyOption
+                            aria-label="Source handle"
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     );
@@ -238,24 +232,23 @@ export function ConnectionsEditor({
                     return (
                       <FormItem>
                         <FormLabel className="text-xs text-[var(--agyn-text-subtle)]">Target handle</FormLabel>
-                        <Select
-                          disabled={disabled || availableTargetHandles.length === 0}
-                          value={handleValue}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={availableTargetHandles.length === 0 ? 'No handles' : 'Select handle'} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {availableTargetHandles.map((handle) => (
-                              <Fragment key={handle.id}>
-                                <SelectItem value={handle.id}>{handle.label}</SelectItem>
-                              </Fragment>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SelectInput
+                            value={handleValue}
+                            onChange={(event) => field.onChange(event.target.value)}
+                            disabled={disabled || availableTargetHandles.length === 0}
+                            placeholder={
+                              availableTargetHandles.length === 0 ? 'No handles available' : 'Select handle'
+                            }
+                            options={availableTargetHandles.map((handle) => ({
+                              value: handle.id,
+                              label: handle.label,
+                            }))}
+                            size="sm"
+                            allowEmptyOption
+                            aria-label="Target handle"
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     );
@@ -265,11 +258,12 @@ export function ConnectionsEditor({
                 <div className="flex items-end justify-end">
                   <Button
                     type="button"
-                    size="icon"
                     variant="ghost"
+                    size="icon"
                     className="text-[var(--agyn-text-subtle)]"
                     onClick={() => remove(index)}
                     disabled={disabled}
+                    aria-label="Remove connection"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

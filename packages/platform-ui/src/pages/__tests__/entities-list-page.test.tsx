@@ -173,9 +173,7 @@ describe('Entity list pages', () => {
     await user.click(screen.getByRole('button', { name: /new agent/i }));
 
     const templateSelect = screen.getByRole('combobox', { name: /template/i });
-    await user.click(templateSelect);
-    const templateOption = await screen.findByRole('option', { name: /support agent/i });
-    await user.click(templateOption);
+    await user.selectOptions(templateSelect, 'support-agent');
 
     const titleInput = screen.getByLabelText('Title');
     await user.clear(titleInput);
@@ -185,16 +183,13 @@ describe('Entity list pages', () => {
     await user.click(screen.getAllByRole('button', { name: 'Add' })[0]);
 
     const targetNodeSelect = screen.getByLabelText('Target node');
-    await user.click(targetNodeSelect);
-    await user.click(screen.getByRole('option', { name: /core agent/i }));
+    await user.selectOptions(targetNodeSelect, 'agent-1');
 
     const sourceHandleSelect = screen.getByLabelText('Source handle');
-    await user.click(sourceHandleSelect);
-    await user.click(screen.getByRole('option', { name: 'output' }));
+    await user.selectOptions(sourceHandleSelect, 'output');
 
     const targetHandleSelect = screen.getByLabelText('Target handle');
-    await user.click(targetHandleSelect);
-    await user.click(screen.getByRole('option', { name: 'input' }));
+    await user.selectOptions(targetHandleSelect, 'input');
 
     await user.click(screen.getByRole('button', { name: /create/i }));
 
@@ -267,8 +262,8 @@ describe('Entity list pages', () => {
     await screen.findByText('Core Agent');
     await user.click(screen.getByRole('button', { name: /new agent/i }));
 
-    await user.click(screen.getByRole('combobox', { name: /template/i }));
-    await user.click(await screen.findByRole('option', { name: /support agent/i }));
+    const templateSelect = screen.getByRole('combobox', { name: /template/i });
+    await user.selectOptions(templateSelect, 'support-agent');
 
     const titleInput = screen.getByLabelText('Title');
     await user.clear(titleInput);
@@ -280,16 +275,13 @@ describe('Entity list pages', () => {
 
     const fillOutgoingRow = async (index: number) => {
       const targetNodeSelects = screen.getAllByLabelText('Target node');
-      await user.click(targetNodeSelects[index]);
-      await user.click(screen.getByRole('option', { name: /core agent/i }));
+      await user.selectOptions(targetNodeSelects[index], 'agent-1');
 
       const sourceHandleSelects = screen.getAllByLabelText('Source handle');
-      await user.click(sourceHandleSelects[index]);
-      await user.click(screen.getByRole('option', { name: 'output' }));
+      await user.selectOptions(sourceHandleSelects[index], 'output');
 
       const targetHandleSelects = screen.getAllByLabelText('Target handle');
-      await user.click(targetHandleSelects[index]);
-      await user.click(screen.getByRole('option', { name: 'input' }));
+      await user.selectOptions(targetHandleSelects[index], 'input');
     };
 
     await fillOutgoingRow(0);
