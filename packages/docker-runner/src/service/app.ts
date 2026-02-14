@@ -68,8 +68,8 @@ const execRunSchema = z.object({
     .object({
       workdir: z.string().optional(),
       env: z.record(z.string(), z.string()).or(z.array(z.string())).optional(),
-      timeoutMs: z.number().int().positive().optional(),
-      idleTimeoutMs: z.number().int().positive().optional(),
+      timeoutMs: z.number().int().nonnegative().optional(),
+      idleTimeoutMs: z.number().int().nonnegative().optional(),
       tty: z.boolean().optional(),
       killOnTimeout: z.boolean().optional(),
       logToPid1: z.boolean().optional(),

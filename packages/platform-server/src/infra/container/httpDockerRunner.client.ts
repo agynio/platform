@@ -53,6 +53,8 @@ type RequestOptions = {
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
 type RunnerErrorBody = { error?: { code?: string; message?: string; retryable?: boolean } };
 
+export const EXEC_REQUEST_TIMEOUT_SLACK_MS = 5_000;
+
 type RunnerExecMessage =
   | { type: 'ready'; execId: string }
   | { type: 'stdout'; data: string }
@@ -193,6 +195,13 @@ export class HttpDockerRunnerClient implements DockerClient {
     throw new DockerRunnerRequestError(0, 'runner_request_failed', true, 'Runner request failed');
   }
 
+  private resolveExecRequestTimeout(options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>): number | undefined {
+    if (!options) return undefined;
+    const requested = Math.max(options.timeoutMs ?? 0, options.idleTimeoutMs ?? 0);
+    if (requested <= 0) return undefined;
+    return Math.max(this.requestTimeoutMs, requested + EXEC_REQUEST_TIMEOUT_SLACK_MS);
+  }
+
   async touchLastUsed(containerId: string): Promise<void> {
     const body: TouchRequest = { containerId };
     await this.send({ method: 'POST', path: '/v1/containers/touch', body, expectedStatus: 204 });
@@ -210,7 +219,8 @@ export class HttpDockerRunnerClient implements DockerClient {
 
   async execContainer(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const body: ExecRunRequest = { containerId, command, options };
-    return this.send<ExecRunResponse>({ method: 'POST', path: '/v1/exec/run', body });
+    const timeoutMs = this.resolveExecRequestTimeout(options);
+    return this.send<ExecRunResponse>({ method: 'POST', path: '/v1/exec/run', body, timeoutMs });
   }
 
   async openInteractiveExec(
