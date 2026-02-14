@@ -6,6 +6,7 @@ import {
   createContainerTerminalSession,
   type CreateTerminalSessionInput,
   type ContainerTerminalSessionResponse,
+  deleteContainer,
 } from '@/api/modules/containers';
 
 export type ContainerStatusFilter = 'running' | 'stopped' | 'terminating' | 'failed' | 'all';
@@ -46,4 +47,10 @@ export function useCreateContainerTerminalSession() {
       mutationFn: ({ containerId, body }) => createContainerTerminalSession(containerId, body),
     },
   );
+}
+
+export function useDeleteContainer() {
+  return useMutation<void, Error, string>({
+    mutationFn: (containerId) => deleteContainer(containerId),
+  });
 }

@@ -4,6 +4,7 @@ import { ConfigService } from '../core/services/config.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';
+import { ContainerAdminService } from './container/containerAdmin.service';
 import { ContainerCleanupService } from './container/containerCleanup.job';
 import { VolumeGcService } from './container/volumeGc.job';
 import { ContainerThreadTerminationService } from './container/containerThreadTermination.service';
@@ -73,6 +74,7 @@ import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
         new DockerWorkspaceRuntimeProvider(dockerClient, registry),
       inject: [DOCKER_CLIENT, ContainerRegistry],
     },
+    ContainerAdminService,
     TerminalSessionsService,
     ContainerTerminalGateway,
     ContainerThreadTerminationService,

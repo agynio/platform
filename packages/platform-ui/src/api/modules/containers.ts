@@ -70,3 +70,8 @@ export function createContainerTerminalSession(containerId: string, body: Create
     http.post<ContainerTerminalSessionResponse>(`/api/containers/${containerId}/terminal/sessions`, body),
   );
 }
+
+export function deleteContainer(containerId: string) {
+  if (!containerId) throw new Error('containerId is required');
+  return asData<void>(http.delete(`/api/containers/${encodeURIComponent(containerId)}`));
+}
