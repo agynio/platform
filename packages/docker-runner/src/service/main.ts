@@ -1,3 +1,5 @@
+import './env';
+
 import { loadRunnerConfig } from './config';
 import { createRunnerApp } from './app';
 
