@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifySchema } from 'fastify';
 import websocket from '@fastify/websocket';
 import { z } from 'zod';
 import type { ContainerCreateOptions, GetEventsOptions } from 'dockerode';
@@ -515,7 +515,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     }
   });
 
-  const interactiveExecWsHandler: WebsocketRouteHandler = async (connection: SocketStream, request: FastifyRequest) => {
+  const interactiveExecWsHandler = async (connection: SocketStream, request: FastifyRequest): Promise<void> => {
     const socket = getWebsocket(connection);
     const querySchema = z.object({
       containerId: z.string().min(1),
@@ -627,14 +627,15 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
 
   app.after((err) => {
     if (err) throw err;
+    const hiddenSchema = { hide: true } as FastifySchema & { hide?: boolean };
     app.route({
       method: 'GET',
       url: '/v1/exec/interactive/ws',
-      schema: { hide: true },
+      schema: hiddenSchema,
       handler: ((_request, reply) => {
         sendError(reply, 426, 'upgrade_required', 'WebSocket upgrade required');
       }) as RequestHandler,
-      wsHandler: interactiveExecWsHandler as WebsocketRouteHandler,
+      wsHandler: interactiveExecWsHandler as unknown as WebsocketRouteHandler,
     });
   });
 
