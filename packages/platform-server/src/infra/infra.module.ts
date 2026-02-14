@@ -69,8 +69,9 @@ import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
     },
     {
       provide: WorkspaceProvider,
-      useFactory: (dockerClient: DockerClient) => new DockerWorkspaceRuntimeProvider(dockerClient),
-      inject: [DOCKER_CLIENT],
+      useFactory: (dockerClient: DockerClient, registry: ContainerRegistry) =>
+        new DockerWorkspaceRuntimeProvider(dockerClient, registry),
+      inject: [DOCKER_CLIENT, ContainerRegistry],
     },
     TerminalSessionsService,
     ContainerTerminalGateway,
