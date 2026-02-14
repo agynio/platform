@@ -128,14 +128,16 @@ function SortableColumnHeader({ label, column, sort, onSortChange }: SortableCol
   const isActive = sort.key === column;
   const Icon = !isActive ? ArrowUpDown : sort.direction === 'asc' ? ArrowUp : ArrowDown;
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={() => onSortChange(column)}
-      className="flex items-center gap-1 text-left font-medium text-muted-foreground"
       aria-label={`Sort by ${label}`}
+      className="h-auto justify-start gap-1 px-0 text-muted-foreground hover:text-foreground"
     >
       <span>{label}</span>
       <Icon className="h-3.5 w-3.5" aria-hidden />
-    </button>
+    </Button>
   );
 }

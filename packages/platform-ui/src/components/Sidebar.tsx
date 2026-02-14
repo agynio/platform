@@ -31,7 +31,7 @@ interface SidebarProps {
 export default function Sidebar({ 
   menuItems,
   currentUser = { name: 'John Doe', email: 'john@agyn.io' },
-  selectedMenuItem = 'graph',
+  selectedMenuItem = 'entitiesAgents',
   onMenuItemSelect
 }: SidebarProps) {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set(['agents']));
