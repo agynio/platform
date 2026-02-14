@@ -179,7 +179,22 @@ export class ContainerTerminalGateway {
           params: { workspaceId },
           query: Object.fromEntries(parsedUrl.searchParams.entries()),
         } as unknown as FastifyRequest;
-        void this.handleConnection(stream, fakeReq);
+        const handleFailure = (error: unknown) => {
+          this.logger.error('terminal websocket handler failed', {
+            path: parsedUrl.pathname,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          safeClose(stream.socket, 1011, 'terminal_internal_error', this.logger);
+        };
+        try {
+          const maybePromise = this.handleConnection(stream, fakeReq);
+          if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === 'function') {
+            void (maybePromise as Promise<unknown>).catch(handleFailure);
+          }
+        } catch (error) {
+          handleFailure(error);
+        }
       });
     });
     this.registered = true;

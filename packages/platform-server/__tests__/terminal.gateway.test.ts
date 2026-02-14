@@ -122,6 +122,46 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     await app.close();
   });
 
+  it('catches handleConnection rejections and closes the socket with error', async () => {
+    const record = createSessionRecord({ workspaceId: 'c'.repeat(64) });
+    const sessionMocks = {
+      validate: vi.fn(),
+      markConnected: vi.fn(),
+      get: vi.fn(),
+      touch: vi.fn(),
+      close: vi.fn(),
+    };
+    const providerMocks = {
+      openInteractiveExec: vi.fn(),
+      resize: vi.fn(),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      sessionMocks as unknown as TerminalSessionsService,
+      providerMocks as unknown as WorkspaceProvider,
+    );
+
+    const handleSpy = vi
+      .spyOn(gateway as unknown as { handleConnection: (...args: unknown[]) => Promise<void> }, 'handleConnection')
+      .mockRejectedValue(new Error('terminal boom'));
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.workspaceId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+
+    const closeInfo = await waitForWsClose(ws, 3000);
+
+    expect(handleSpy).toHaveBeenCalledTimes(1);
+    expect(closeInfo.code).toBe(1011);
+    expect(closeInfo.reason).toBe('terminal_internal_error');
+
+    await app.close();
+  });
+
   it('handles terminal websocket session end-to-end', async () => {
     const record = createSessionRecord({
       shell: '/bin/bash',
