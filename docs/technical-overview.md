@@ -16,7 +16,7 @@ Table of contents
 - Purpose: A TypeScript runtime and UI for building and operating graph-driven AI agents using LangGraph. The system composes Agents, Tools, Triggers, and external MCP servers into a live, reversible graph that can be updated at runtime.
 - Primary use cases:
   - Operate agent graphs that react to external events (Slack messages, PR updates) and call tools (bash, GitHub, Slack) and MCP tools inside containers.
-  - Persist graph definitions to a Git-backed repository and apply diffs live without restarts.
+  - Persist graph definitions to a filesystem-backed dataset and apply diffs live without restarts.
   - Stream checkpoint writes to an interactive UI for observability.
 - Pipeline phases:
   - Persisted graph fetch/validate -> Live graph apply (diff) -> Runtime execution (triggers -> agent graph -> tools) -> Checkpoint stream.

@@ -34,7 +34,7 @@ describe('NixRepoController', () => {
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',
         graphRepoPath: './data/graph',
-        graphBranch: 'graph-state',
+        graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
       }),
     );
@@ -115,7 +115,7 @@ describe('NixRepoController', () => {
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',
         graphRepoPath: './data/graph',
-        graphBranch: 'graph-state',
+        graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
         nixRepoAllowlist: 'allowed/repo',
       }),

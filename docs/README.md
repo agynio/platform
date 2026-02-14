@@ -11,7 +11,7 @@ Index
 - Product Spec: [product-spec.md](product-spec.md)
 - API Reference: [api/index.md](api/index.md)
 - Graph
-  - Git-backed Store: [graph/git-store.md](graph/git-store.md)
+  - Filesystem Store: [graph/fs-store.md](graph/fs-store.md)
   - Status Updates: [graph/status-updates.md](graph/status-updates.md)
 - Containers
   - Workspaces: [containers/workspaces.md](containers/workspaces.md)

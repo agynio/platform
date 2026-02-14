@@ -42,7 +42,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       openaiApiKey: 'test',
       githubToken: 'test',
       graphRepoPath: './data/graph',
-      graphBranch: 'graph-state',
+      graphBranch: 'main',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
       graphLockTimeoutMs: 5000,

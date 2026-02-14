@@ -4,15 +4,16 @@ Runtime for graph-driven agents, tool adapters, triggers, and memory. See docs f
 
 Graph persistence
 - Configure via env:
-  - GRAPH_REPO_PATH: path to the local git repo for graph state (default `./data/graph`)
-  - GRAPH_BRANCH: branch name to use (default `graph-state`)
-  - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
-- On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.yaml` for the active graph name (default `main`), and commits the initial state.
- - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
+  - `GRAPH_REPO_PATH`: filesystem root for the working tree (default `./data/graph`).
+  - `GRAPH_BRANCH`: logical branch label retained for compatibility/telemetry (default `main`).
+  - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: optional metadata forwarded to audit logs.
+  - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
+- On startup the server ensures `GRAPH_REPO_PATH` exists with `nodes/`, `edges/`, `variables.yaml`, and `graph.meta.yaml`. There is no dataset indirection or Git requirement; `.git` directories are ignored if present.
+- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire a lock file named `.<basename>.graph.lock` next to `GRAPH_REPO_PATH` before writing. Each write builds a staged working tree in a sibling directory, fsyncs it, and atomically swaps it into place so readers only see committed graphs; old trees move to `.graph-backup-*` temporarily and are deleted immediately.
 - Error responses:
-   - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
-   - 409 LOCK_TIMEOUT when advisory lock not acquired within timeout.
-  - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
+   - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
+   - `409 LOCK_TIMEOUT` if the repository lock cannot be acquired within the configured timeout.
+   - `500 PERSIST_FAILED` when filesystem writes fail unexpectedly; the in-flight changes are rolled back to the last committed state.
 
 ## Networking and cache
 
@@ -78,11 +79,9 @@ At runtime the node calls `EnvService.resolveProviderEnv`, which delegates to `R
 The resolved overlay is merged with any base environment and forwarded to Docker exec sessions for both discovery and tool calls, ensuring MCP servers receive the same env regardless of execution path.
 
 Storage layout (format: 2)
-- Preferred working tree layout is root-level per-entity: `graph.meta.yaml`, `nodes/`, `edges/`.
-- Filenames are `encodeURIComponent(id)`; edge id is deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
-- The service can read from historical layouts in HEAD for compatibility: per-graph per-entity under `graphs/<name>/` or legacy monolith `graphs/<name>/graph.yaml`.
-- JSON graph files are no longer read or written at runtime; convert legacy datasets with the `pnpm convert-graphs` CLI before deploying.
-- Robustness: when reading, if an entity file lacks an explicit `id` field, the service decodes it from the filename (see readEntitiesFromDir/readFromHeadRoot).
+- Repository root: `<GRAPH_REPO_PATH>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, and `edges/`.
+- Filenames remain `encodeURIComponent(id)`; edge ids are deterministic `<src>-<srcHandle>__<tgt>-<tgtHandle>`.
+- Writes stage a complete working tree in a sibling `.graph-staging-*` directory, atomically swap it into `<GRAPH_REPO_PATH>`, and delete the previous tree (which briefly lives at `.graph-backup-*`). The advisory lock file lives beside the repo path as `.<basename>.graph.lock`, and `.git` directories are moved back into place after each swap if present.
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.

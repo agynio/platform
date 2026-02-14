@@ -102,8 +102,8 @@ async upsertGraph(
       if (err?.code === 'LOCK_TIMEOUT') {
         throw new HttpException({ error: 'LOCK_TIMEOUT' }, HttpStatus.CONFLICT);
       }
-      if (err?.code === 'COMMIT_FAILED') {
-        throw new HttpException({ error: 'COMMIT_FAILED' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      if (err?.code === 'PERSIST_FAILED') {
+        throw new HttpException({ error: 'PERSIST_FAILED' }, HttpStatus.INTERNAL_SERVER_ERROR);
       }
       const msg = e instanceof Error ? e.message : String(e);
       throw new HttpException({ error: msg || 'Bad Request' }, HttpStatus.BAD_REQUEST);

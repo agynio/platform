@@ -81,7 +81,7 @@ class StubConfigService extends ConfigService {
       openaiBaseUrl: undefined,
       githubToken: 'test',
       graphRepoPath: './data/graph',
-      graphBranch: 'graph-state',
+      graphBranch: 'main',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
       graphLockTimeoutMs: 5000,

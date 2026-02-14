@@ -26,7 +26,13 @@ export const configSchema = z.object({
   githubToken: z.string().min(1).optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
-  graphBranch: z.string().default('graph-state'),
+  graphBranch: z
+    .string()
+    .default('main')
+    .transform((value) => {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : 'main';
+    }),
   graphAuthorName: z.string().optional(),
   graphAuthorEmail: z.string().optional(),
   graphLockTimeoutMs: z
@@ -377,6 +383,8 @@ export class ConfigService implements Config {
     const legacy = process.env.NCPS_URL;
     const urlServer = process.env.NCPS_URL_SERVER || legacy;
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
+    const graphRepoPathEnv = process.env.GRAPH_REPO_PATH;
+    const graphBranchEnv = process.env.GRAPH_BRANCH;
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -386,8 +394,8 @@ export class ConfigService implements Config {
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
-      graphRepoPath: process.env.GRAPH_REPO_PATH,
-      graphBranch: process.env.GRAPH_BRANCH,
+      graphRepoPath: graphRepoPathEnv,
+      graphBranch: graphBranchEnv,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,

@@ -14,7 +14,7 @@ Templates
     curl http://localhost:3010/api/templates
     ```
 
-Graph state (Git-backed)
+Graph state (filesystem-backed)
 - GET `/api/graph`
   - 200: Persisted graph document: `{ name, version, updatedAt, nodes, edges }`
   - Example:
@@ -23,17 +23,17 @@ Graph state (Git-backed)
     ```
 - POST `/api/graph`
   - Body: `PersistedGraphUpsertRequest` → `{ name='main', version, nodes, edges }`
-  - Headers (optional): `x-graph-author-name`, `x-graph-author-email` for Git-backed store commits.
+  - Headers (optional): `x-graph-author-name`, `x-graph-author-email` are retained for compatibility but no longer influence persistence.
   - Success: returns updated persisted graph `{ name, version, updatedAt, nodes, edges }`
   - Errors (status → body):
     - 409 `{ error: 'VERSION_CONFLICT', current?: PersistedGraph }`
     - 409 `{ error: 'LOCK_TIMEOUT' }`
     - 409 `{ error: 'MCP_COMMAND_MUTATION_FORBIDDEN' }` (enum value GraphErrorCode.McpCommandMutationForbidden)
-    - 500 `{ error: 'COMMIT_FAILED' }`
-    - 400 `{ error: 'Bad Request' | string }` (includes Git-store deterministic edge check; see notes)
+    - 500 `{ error: 'PERSIST_FAILED' }`
+    - 400 `{ error: 'Bad Request' | string }` (includes deterministic edge check; see notes)
   - Notes:
     - A provided `edge.id` must match the deterministic id `${source}-${sourceHandle}__${target}-${targetHandle}`. If it doesn't, the server returns `400` with `{ error: 'Edge id mismatch: expected <id> got <id>' }`.
-    - Commit failures surface as `500 { error: 'COMMIT_FAILED' }`.
+    - Persistence failures surface as `500 { error: 'PERSIST_FAILED' }`.
     - Lock acquisition timeout surfaces as `409 { error: 'LOCK_TIMEOUT' }`.
   - Example:
     ```bash
@@ -99,7 +99,7 @@ Sockets
 
 Notes
 - Route handlers surface structured errors and emit socket events on state changes.
-- The Git-backed store enforces deterministic edge IDs and advisory locking.
+- The filesystem store enforces deterministic edge IDs and uses a dataset-scoped file lock plus atomic writes.
 - MCP mutation guard prevents unsafe changes to MCP commands.
 - Error codes align with the error envelope described above.
 Nix proxy

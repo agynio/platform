@@ -2,7 +2,7 @@
 > Quick setup: use the Bootstrap repo to run prebuilt Platform Server and UI images locally — https://github.com/agynio/bootstrap
 
 # Agyn Platform
-A multi-service agents platform with a NestJS API, React UI, and Git-backed graph orchestration.
+A multi-service agents platform with a NestJS API, React UI, and filesystem-backed graph orchestration.
 
 ## Results on SWE-bench Verified
 Using a coordinated multi-agent team, agyn achieved **72.2% fully automated issue resolution** on SWE-bench Verified, the highest result among GPT-5–based systems.
@@ -16,7 +16,7 @@ Agyn Platform is a TypeScript monorepo that provides:
 - Local operational components via Docker Compose: Postgres databases, LiteLLM, Vault, a Nix cache proxy (NCPS), and observability (Prometheus, Grafana, cAdvisor).
 
 Intended use cases:
-- Building agent graphs (nodes/edges) and storing them in a Git-backed graph store.
+- Building agent graphs (nodes/edges) and storing them in a filesystem-backed graph dataset.
 - Running, monitoring, and persisting agent interactions and tool executions.
 - Integrating with LLM providers (LiteLLM or OpenAI) while tracking context/history.
 - Operating a local development environment with supporting infra.
@@ -171,8 +171,8 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - OPENAI_API_KEY, OPENAI_BASE_URL
 - Graph store:
   - GRAPH_REPO_PATH (default ./data/graph)
-  - GRAPH_BRANCH (default graph-state)
-  - GRAPH_AUTHOR_NAME, GRAPH_AUTHOR_EMAIL
+  - GRAPH_BRANCH (default main)
+  - GRAPH_AUTHOR_NAME, GRAPH_AUTHOR_EMAIL (deprecated; retained for compatibility)
   - GRAPH_LOCK_TIMEOUT_MS (default 5000)
 - Vault:
   - VAULT_ENABLED (default false), VAULT_ADDR (default http://localhost:8200), VAULT_TOKEN (default dev-root)
@@ -320,5 +320,5 @@ Secrets handling:
 - Production Vault: dev auto-init script (vault/auto-init.sh) is not suitable; confirm production secret management approach and policies.
 - UI Storybook deployment: CI builds and smoke-tests Storybook, but no public hosting config is present. Confirm desired publishing workflow.
 - NCPS in production: ops/k8s manifests are examples; confirm production deployment/monitoring design.
-- Git-backed graph store defaults (GRAPH_REPO_PATH=./data/graph, GRAPH_BRANCH=graph-state) assume a writable path. Confirm persistence strategy in production (volume mounts or external Git repo).
+- Filesystem-backed graph store (GRAPH_REPO_PATH=./data/graph, GRAPH_BRANCH=main) assumes the path is writable and durable. Confirm persistence strategy in production (persistent volumes/NFS) and keep legacy git repos out of the configured path; the server now reads/writes directly to the working tree without migrations.
 - Confirm whether the general postgres service (5442) is used by other components or is purely for convenience; server uses agents-db (5443).
