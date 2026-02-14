@@ -13,6 +13,7 @@ import {
 } from '..';
 import { createDockerEventsParser } from './dockerEvents.parser';
 import type { RunnerConfig } from './config';
+import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util';
 
 const ensureImageSchema = z.object({
   image: z.string().min(1),
@@ -111,20 +112,6 @@ type RequestHandler<TRequest extends FastifyRequest = FastifyRequest> = (
   request: TRequest,
   reply: FastifyReply,
 ) => Promise<void> | void;
-
-type SocketOnFn = {
-  (event: 'message', listener: (raw: RawData) => void | Promise<void>): void;
-  (event: 'close', listener: () => void | Promise<void>): void;
-  (event: string, listener: (...args: unknown[]) => void | Promise<void>): void;
-};
-
-type SocketStream = {
-  socket: {
-    send: (data: string) => void;
-    close: (code?: number, reason?: string) => void;
-    on: SocketOnFn;
-  };
-};
 
 type WebsocketRouteHandler = (socket: unknown, request: FastifyRequest) => void | Promise<void>;
 
@@ -529,6 +516,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
   });
 
   app.get('/v1/exec/interactive/ws', { websocket: true }, (async (connection: SocketStream, request: FastifyRequest) => {
+    const socket = getWebsocket(connection);
     const querySchema = z.object({
       containerId: z.string().min(1),
       command: z.string().min(1),
@@ -539,7 +527,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     });
     const parsed = querySchema.safeParse(request.query);
     if (!parsed.success) {
-      connection.socket.close(4000, 'invalid_query');
+      closeWebsocket(socket, 4000, 'invalid_query');
       return;
     }
     const params = parsed.data;
@@ -573,13 +561,13 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         demuxStderr: params.demux === 'false' ? false : true,
         env,
       });
-      connection.socket.send(JSON.stringify({ type: 'ready', execId: session.execId }));
+      socket.send(JSON.stringify({ type: 'ready', execId: session.execId }));
 
       session.stdout.on('data', (chunk: Buffer) => {
-        connection.socket.send(JSON.stringify({ type: 'stdout', data: chunk.toString('base64') }));
+        socket.send(JSON.stringify({ type: 'stdout', data: chunk.toString('base64') }));
       });
       session.stderr?.on('data', (chunk: Buffer) => {
-        connection.socket.send(JSON.stringify({ type: 'stderr', data: chunk.toString('base64') }));
+        socket.send(JSON.stringify({ type: 'stderr', data: chunk.toString('base64') }));
       });
 
       let exitSent = false;
@@ -588,7 +576,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         exitSent = true;
         try {
           const result = await session.close();
-          connection.socket.send(
+          socket.send(
             JSON.stringify({
               type: 'exit',
               execId: session.execId,
@@ -598,13 +586,13 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
             }),
           );
         } catch (error) {
-          connection.socket.send(
+          socket.send(
             JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
           );
         }
       };
 
-      connection.socket.on('message', async (raw: RawData) => {
+      socket.on('message', async (raw: RawData) => {
         try {
           const payload = JSON.parse(rawDataToString(raw)) as { type: string; data?: string };
           if (payload.type === 'stdin' && payload.data) {
@@ -613,16 +601,16 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
           }
           if (payload.type === 'close') {
             await closeSession();
-            connection.socket.close();
+            closeWebsocket(socket);
           }
         } catch (error) {
-          connection.socket.send(
+          socket.send(
             JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
           );
         }
       });
 
-      connection.socket.on('close', () => {
+      socket.on('close', () => {
         try {
           session.stdin.end();
         } catch {
@@ -630,10 +618,10 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         }
       });
     } catch (error) {
-      connection.socket.send(
+      socket.send(
         JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) }),
       );
-      connection.socket.close(1011, 'exec_failed');
+      closeWebsocket(socket, 1011, 'exec_failed');
     }
   }) as WebsocketRouteHandler);
 
