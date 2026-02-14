@@ -41,8 +41,8 @@ const meta: Meta<typeof MemoryManager> = {
   parameters: {
     layout: 'fullscreen',
     screen: {
-      routePath: '/agents/memory',
-      initialEntry: '/agents/memory',
+      routePath: '/memory',
+      initialEntry: '/memory',
     },
     selectedMenuItem: 'memory',
   },

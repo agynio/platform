@@ -20,6 +20,10 @@ import { SettingsLlm } from './pages/SettingsLlm';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
+import { AgentsListPage } from './pages/AgentsListPage';
+import { TriggersListPage } from './pages/TriggersListPage';
+import { ToolsListPage } from './pages/ToolsListPage';
+import { WorkspacesListPage } from './pages/WorkspacesListPage';
 
 const queryClient = new QueryClient();
 
@@ -29,20 +33,26 @@ function App() {
       <RuntimeTemplatesProvider>
         <TooltipProvider delayDuration={200}>
           <Routes>
-            <Route path="/" element={<Navigate to="/agents/graph" replace />} />
+            <Route path="/" element={<Navigate to="/agents" replace />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
 
             <Route element={<OnboardingGate />}>
               <Route element={<RootLayout />}>
                 {/* Agents */}
+                <Route path="/agents" element={<AgentsListPage />} />
                 <Route path="/agents/graph" element={<AgentsGraphContainer />} />
                 <Route path="/agents/chat" element={<AgentsChat />} />
                 <Route path="/agents/threads" element={<AgentsThreads />} />
                 <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
                 <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunScreen />} />
                 <Route path="/agents/reminders" element={<AgentsReminders />} />
-                <Route path="/agents/memory" element={<AgentsMemoryManager />} />
-                <Route path="/memory/*" element={<Navigate to="/agents/memory" replace />} />
+                <Route path="/agents/memory" element={<Navigate to="/memory" replace />} />
+
+                {/* Entities */}
+                <Route path="/triggers" element={<TriggersListPage />} />
+                <Route path="/tools" element={<ToolsListPage />} />
+                <Route path="/workspaces" element={<WorkspacesListPage />} />
+                <Route path="/memory" element={<AgentsMemoryManager />} />
 
                 {/* Tracing */}
                 <Route path="/tracing/traces" element={<TracingTraces />} />
@@ -70,7 +80,7 @@ function App() {
               </Route>
             </Route>
 
-            <Route path="*" element={<Navigate to="/agents/graph" replace />} />
+            <Route path="*" element={<Navigate to="/agents" replace />} />
           </Routes>
         </TooltipProvider>
       </RuntimeTemplatesProvider>

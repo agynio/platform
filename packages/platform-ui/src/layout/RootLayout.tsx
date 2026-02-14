@@ -13,15 +13,24 @@ import {
   Key,
   Variable,
   Bot,
+  Users,
+  Layers,
+  Zap,
+  Hammer,
+  Building2,
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
+  agentsList: '/agents',
   graph: '/agents/graph',
   threads: '/agents/threads',
   reminders: '/agents/reminders',
-  memory: '/agents/memory',
+  entitiesTriggers: '/triggers',
+  entitiesTools: '/tools',
+  entitiesWorkspaces: '/workspaces',
+  entitiesMemory: '/memory',
   containers: '/monitoring/containers',
   resources: '/monitoring/resources',
   llm: '/settings/llm',
@@ -35,10 +44,21 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Agents',
     icon: <Network className="w-5 h-5" />,
     items: [
-      { id: 'graph', label: 'Team', icon: <GitBranch className="w-4 h-4" /> },
+      { id: 'agentsList', label: 'Directory', icon: <Users className="w-4 h-4" /> },
+      { id: 'graph', label: 'Graph', icon: <GitBranch className="w-4 h-4" /> },
       { id: 'threads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
       { id: 'reminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
-      { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
+    ],
+  },
+  {
+    id: 'entities',
+    label: 'Entities',
+    icon: <Layers className="w-5 h-5" />,
+    items: [
+      { id: 'entitiesTriggers', label: 'Triggers', icon: <Zap className="w-4 h-4" /> },
+      { id: 'entitiesTools', label: 'Tools', icon: <Hammer className="w-4 h-4" /> },
+      { id: 'entitiesWorkspaces', label: 'Workspaces', icon: <Building2 className="w-4 h-4" /> },
+      { id: 'entitiesMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
     ],
   },
   {
@@ -62,7 +82,7 @@ const MENU_ITEMS: MenuItem[] = [
   },
 ];
 
-const DEFAULT_MENU_ITEM = 'graph';
+const DEFAULT_MENU_ITEM = 'agentsList';
 const MENU_ITEM_ENTRIES = Object.entries(MENU_ITEM_ROUTES);
 
 function getMenuItemFromPath(pathname: string) {
