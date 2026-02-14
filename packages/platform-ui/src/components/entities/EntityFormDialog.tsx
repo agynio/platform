@@ -126,6 +126,7 @@ export function EntityFormDialog({
   }, [form, mode, selectedTemplateName]);
 
   const handleSubmit = async (values: EntityFormValues) => {
+    form.clearErrors('root');
     let parsedConfig: unknown;
     try {
       parsedConfig = JSON.parse(values.configText || '{}');
@@ -166,6 +167,21 @@ export function EntityFormDialog({
       connections: [...outgoingConnections, ...incomingConnections],
     };
 
+    if (payload.connections.length > 0) {
+      const seen = new Set<string>();
+      for (const conn of payload.connections) {
+        const key = `${conn.source}|${conn.sourceHandle}|${conn.target}|${conn.targetHandle}`;
+        if (seen.has(key)) {
+          form.setError('root', {
+            type: 'manual',
+            message: 'Duplicate connections detected. Each edge must be unique.',
+          });
+          return;
+        }
+        seen.add(key);
+      }
+    }
+
     if (!payload.template) {
       form.setError('template', { type: 'manual', message: 'Template is required.' });
       return;
@@ -187,6 +203,7 @@ export function EntityFormDialog({
 
   const disableTemplateSelect = mode === 'edit';
   const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
+  const rootError = form.formState.errors.root?.message;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,6 +217,11 @@ export function EntityFormDialog({
         {templates.length === 0 && (
           <Alert variant="destructive">
             <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
+          </Alert>
+        )}
+        {rootError && (
+          <Alert variant="destructive">
+            <AlertDescription>{rootError}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>

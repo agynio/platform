@@ -242,4 +242,105 @@ describe('Entity list pages', () => {
     await user.click(refreshButton);
     await waitFor(() => expect(screen.queryByText('Graph updated elsewhere')).not.toBeInTheDocument());
   });
+
+  it('prevents duplicate connections before submitting the form', async () => {
+    primeGraphHandlers();
+
+    const postSpy = vi.fn();
+    server.use(
+      http.post(abs('/api/graph'), async () => {
+        postSpy();
+        return HttpResponse.json(baseGraph);
+      }),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsListPage />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    await screen.findByText('Core Agent');
+    await user.click(screen.getByRole('button', { name: /new agent/i }));
+
+    await user.click(screen.getByRole('combobox', { name: /template/i }));
+    await user.click(await screen.findByRole('option', { name: /support agent/i }));
+
+    const titleInput = screen.getByLabelText('Title');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Responder');
+
+    const addButtons = screen.getAllByRole('button', { name: 'Add' });
+    await user.click(addButtons[0]);
+    await user.click(addButtons[0]);
+
+    const fillOutgoingRow = async (index: number) => {
+      const targetNodeSelects = screen.getAllByLabelText('Target node');
+      await user.click(targetNodeSelects[index]);
+      await user.click(screen.getByRole('option', { name: /core agent/i }));
+
+      const sourceHandleSelects = screen.getAllByLabelText('Source handle');
+      await user.click(sourceHandleSelects[index]);
+      await user.click(screen.getByRole('option', { name: 'output' }));
+
+      const targetHandleSelects = screen.getAllByLabelText('Target handle');
+      await user.click(targetHandleSelects[index]);
+      await user.click(screen.getByRole('option', { name: 'input' }));
+    };
+
+    await fillOutgoingRow(0);
+    await fillOutgoingRow(1);
+
+    await user.click(screen.getByRole('button', { name: /create/i }));
+
+    await screen.findByText(/duplicate connections detected/i);
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('sorts entity rows by title and template columns', async () => {
+    const alphaAgentTemplate = {
+      name: 'alpha-agent',
+      title: 'Atlas Agent',
+      kind: 'agent',
+      sourcePorts: ['output'],
+      targetPorts: ['input'],
+    };
+    const sortGraph = {
+      ...baseGraph,
+      nodes: [
+        { id: 'agent-zulu', template: 'support-agent', config: { title: 'Zulu Agent' } },
+        { id: 'agent-alpha', template: 'alpha-agent', config: { title: 'Alpha Agent' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(sortGraph);
+    server.use(http.get(abs('/api/graph/templates'), () => HttpResponse.json([...templateSet, alphaAgentTemplate])));
+
+    const user = userEvent.setup();
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsListPage />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    await screen.findByText('Zulu Agent');
+    await screen.findByText('Alpha Agent');
+
+    const readTitles = () => screen.getAllByTestId('entity-title').map((node) => node.textContent ?? '');
+
+    expect(readTitles()).toEqual(['Alpha Agent', 'Zulu Agent']);
+
+    await user.click(screen.getByRole('button', { name: /sort by title/i }));
+    expect(readTitles()).toEqual(['Zulu Agent', 'Alpha Agent']);
+
+    await user.click(screen.getByRole('button', { name: /sort by template/i }));
+    expect(readTitles()).toEqual(['Alpha Agent', 'Zulu Agent']);
+  });
 });

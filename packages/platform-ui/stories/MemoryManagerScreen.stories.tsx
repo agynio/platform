@@ -44,7 +44,7 @@ const meta: Meta<typeof MemoryManager> = {
       routePath: '/memory',
       initialEntry: '/memory',
     },
-    selectedMenuItem: 'memory',
+    selectedMenuItem: 'entitiesMemory',
   },
   args: {
     nodes: [

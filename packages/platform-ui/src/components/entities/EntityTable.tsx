@@ -1,7 +1,16 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { GraphEntitySummary } from '@/features/entities/types';
+
+export type EntityTableSortKey = 'title' | 'template';
+export type EntityTableSortDirection = 'asc' | 'desc';
+
+export interface EntityTableSortState {
+  key: EntityTableSortKey;
+  direction: EntityTableSortDirection;
+}
 
 interface EntityTableProps {
   rows: GraphEntitySummary[];
@@ -9,6 +18,8 @@ interface EntityTableProps {
   emptyLabel: string;
   onEdit: (entity: GraphEntitySummary) => void;
   onDelete: (entity: GraphEntitySummary) => void;
+  sort: EntityTableSortState;
+  onSortChange: (key: EntityTableSortKey) => void;
 }
 
 const kindLabel: Record<GraphEntitySummary['templateKind'], string> = {
@@ -18,7 +29,7 @@ const kindLabel: Record<GraphEntitySummary['templateKind'], string> = {
   workspace: 'Workspace',
 };
 
-export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: EntityTableProps) {
+export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sort, onSortChange }: EntityTableProps) {
   if (!isLoading && rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -31,8 +42,12 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: E
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Template</TableHead>
+          <TableHead>
+            <SortableColumnHeader label="Title" column="title" sort={sort} onSortChange={onSortChange} />
+          </TableHead>
+          <TableHead>
+            <SortableColumnHeader label="Template" column="template" sort={sort} onSortChange={onSortChange} />
+          </TableHead>
           <TableHead>Node ID</TableHead>
           <TableHead>Ports</TableHead>
           <TableHead>Relations</TableHead>
@@ -51,7 +66,9 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: E
             <TableRow key={entity.id}>
               <TableCell>
                 <div className="flex flex-col">
-                  <span className="font-medium">{entity.title}</span>
+                  <span className="font-medium" data-testid="entity-title">
+                    {entity.title}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {typeof entity.config.description === 'string'
                       ? entity.config.description
@@ -97,5 +114,28 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: E
         )}
       </TableBody>
     </Table>
+  );
+}
+
+interface SortableColumnHeaderProps {
+  label: string;
+  column: EntityTableSortKey;
+  sort: EntityTableSortState;
+  onSortChange: (key: EntityTableSortKey) => void;
+}
+
+function SortableColumnHeader({ label, column, sort, onSortChange }: SortableColumnHeaderProps) {
+  const isActive = sort.key === column;
+  const Icon = !isActive ? ArrowUpDown : sort.direction === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSortChange(column)}
+      className="flex items-center gap-1 text-left font-medium text-muted-foreground"
+      aria-label={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      <Icon className="h-3.5 w-3.5" aria-hidden />
+    </button>
   );
 }

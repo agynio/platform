@@ -4,7 +4,7 @@ import { Plus, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { EntityTable } from '@/components/entities/EntityTable';
+import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
 import { getTemplateOptions, toConnectionList } from '@/features/entities/api/graphEntities';
@@ -29,6 +29,7 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   const [search, setSearch] = useState('');
   const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
   const [activeEntity, setActiveEntity] = useState<GraphEntitySummary | undefined>();
+  const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => getTemplateOptions(templatesQuery.data ?? [], kind), [kind, templatesQuery.data]);
   const connections = useMemo(() => toConnectionList(graphQuery.data?.edges), [graphQuery.data?.edges]);
@@ -45,6 +46,17 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
       return haystack.includes(query);
     });
   }, [entities, kind, search]);
+
+  const sortedEntities = useMemo(() => {
+    if (filteredEntities.length === 0) return filteredEntities;
+    const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    return [...filteredEntities].sort((a, b) => {
+      const aValue = sort.key === 'title' ? a.title : a.templateTitle ?? a.templateName;
+      const bValue = sort.key === 'title' ? b.title : b.templateTitle ?? b.templateName;
+      const result = collator.compare(aValue, bValue);
+      return sort.direction === 'asc' ? result : -result;
+    });
+  }, [filteredEntities, sort]);
 
   const isLoading = graphQuery.isLoading || templatesQuery.isLoading;
   const dialogOpen = dialogMode !== null;
@@ -75,6 +87,15 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
 
   const showEmptyLabel = search ? `No ${title.toLowerCase()} match “${search}”.` : emptyLabel;
   const disableCreate = templates.length === 0 || isSaving || templatesQuery.isLoading;
+
+  const handleSortChange = (key: EntityTableSortKey) => {
+    setSort((current) => {
+      if (current.key === key) {
+        return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -128,11 +149,13 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
       )}
 
       <EntityTable
-        rows={filteredEntities}
+        rows={sortedEntities}
         isLoading={isLoading}
         emptyLabel={showEmptyLabel}
         onEdit={handleEditClick}
         onDelete={handleDeleteClick}
+        sort={sort}
+        onSortChange={handleSortChange}
       />
 
       <EntityFormDialog
