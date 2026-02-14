@@ -37,4 +37,21 @@ describe('ContainerAdminService', () => {
     expect(docker.removeContainer).toHaveBeenCalledWith('cid-missing', { force: true, removeVolumes: true });
     expect(registry.markDeleted).toHaveBeenCalledWith('cid-missing', 'manual_delete');
   });
+
+  it('treats runner container_not_found errors as benign even when status is 500', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'container_not_found' }),
+      removeContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'container_not_found' }),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-maybe-gone')).resolves.toBeUndefined();
+
+    expect(docker.stopContainer).toHaveBeenCalled();
+    expect(docker.removeContainer).toHaveBeenCalled();
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-maybe-gone', 'manual_delete');
+  });
 });
