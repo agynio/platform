@@ -41,10 +41,10 @@ const meta: Meta<typeof MemoryManager> = {
   parameters: {
     layout: 'fullscreen',
     screen: {
-      routePath: '/memory',
-      initialEntry: '/memory',
+      routePath: '/agents/memory',
+      initialEntry: '/agents/memory',
     },
-    selectedMenuItem: 'entitiesMemory',
+    selectedMenuItem: 'agentsMemory',
   },
   args: {
     nodes: [

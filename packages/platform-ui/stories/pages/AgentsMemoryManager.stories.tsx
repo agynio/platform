@@ -23,10 +23,10 @@ const meta: Meta<typeof AgentsMemoryManager> = {
   parameters: {
     layout: 'fullscreen',
     screen: {
-      routePath: '/memory',
-      initialEntry: '/memory',
+      routePath: '/agents/memory',
+      initialEntry: '/agents/memory',
     },
-    selectedMenuItem: 'entitiesMemory',
+    selectedMenuItem: 'agentsMemory',
   },
 };
 

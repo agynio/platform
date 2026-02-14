@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { 
   ChevronRight,
   User
@@ -34,7 +34,36 @@ export default function Sidebar({
   selectedMenuItem = 'entitiesAgents',
   onMenuItemSelect
 }: SidebarProps) {
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set(['agents']));
+  const parentByChild = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of menuItems) {
+      if (!item.items) continue;
+      for (const sub of item.items) {
+        map.set(sub.id, item.id);
+      }
+    }
+    return map;
+  }, [menuItems]);
+
+  const defaultExpandedSection = 'agents';
+
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    const parent = parentByChild.get(selectedMenuItem ?? '');
+    initial.add(parent ?? defaultExpandedSection);
+    return initial;
+  });
+
+  useEffect(() => {
+    const parent = parentByChild.get(selectedMenuItem ?? '');
+    if (!parent) return;
+    setExpandedItems((prev) => {
+      if (prev.has(parent)) return prev;
+      const next = new Set(prev);
+      next.add(parent);
+      return next;
+    });
+  }, [selectedMenuItem, parentByChild]);
 
   const toggleExpand = (id: string) => {
     setExpandedItems(prev => {
