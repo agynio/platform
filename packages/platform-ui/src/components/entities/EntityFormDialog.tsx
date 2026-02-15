@@ -44,6 +44,20 @@ type TemplateFormValues = {
 
 const DEFAULT_NODE_STATE: NodeState = { status: 'not_ready' };
 
+function randomSegment() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    const [segment] = crypto.randomUUID().split('-');
+    if (segment) {
+      return segment;
+    }
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function generatePreviewNodeId() {
+  return `entity-preview-${randomSegment()}`;
+}
+
 function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeConfig['kind'] {
   switch ((rawKind ?? '').toString().toLowerCase()) {
     case 'trigger':
@@ -140,10 +154,14 @@ export function EntityFormDialog({
 
   const [config, setConfig] = useState<NodeConfig | null>(() => (mode === 'edit' && entity ? buildConfigFromEntity(entity) : null));
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [previewNodeId, setPreviewNodeId] = useState<string>(() => generatePreviewNodeId());
 
   useEffect(() => {
     if (!open) {
       return;
+    }
+    if (mode === 'create') {
+      setPreviewNodeId(generatePreviewNodeId());
     }
     setSubmitError(null);
     form.reset({ template: entity?.templateName ?? '' });
@@ -242,6 +260,7 @@ export function EntityFormDialog({
   const disableTemplateSelect = mode === 'edit';
   const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
   const actionDisabled = isSubmitting || !config;
+  const resolvedNodeId = entity?.id ?? previewNodeId;
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
@@ -291,6 +310,7 @@ export function EntityFormDialog({
                 config={config}
                 state={DEFAULT_NODE_STATE}
                 onConfigChange={handleConfigChange}
+                nodeId={resolvedNodeId}
                 secretKeys={secretKeys}
                 variableKeys={variableKeys}
                 ensureSecretKeys={ensureSecretKeys}
