@@ -818,6 +818,8 @@ export class ContainerService implements DockerClientPort {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 304) {
         this.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
+      } else if (sc === 404) {
+        this.debug(`Container missing during stop cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
         // Conflict typically indicates removal already in progress; treat as benign
         this.warn(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);

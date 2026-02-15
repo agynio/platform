@@ -117,11 +117,38 @@ type WebsocketRouteHandler = (socket: unknown, request: FastifyRequest) => void 
 
 const authExemptPaths = new Set(['/v1/health', '/v1/ready']);
 
-const validationError = (reply: FastifyReply, message: string) =>
-  reply.status(400).send({ error: { code: 'validation_error', message, retryable: false } });
+type ErrorResponseDetails = {
+  status: number;
+  code: string;
+  message: string;
+  retryable?: boolean;
+  containerId?: string;
+};
 
-const sendError = (reply: FastifyReply, status: number, code: string, message: string, retryable = false) =>
-  reply.status(status).send({ error: { code, message, retryable } });
+const logErrorResponse = (request: FastifyRequest, details: ErrorResponseDetails) => {
+  const route = request.routerPath ?? request.url ?? request.raw.url ?? 'unknown';
+  request.log.error(
+    {
+      requestId: request.id,
+      method: request.method,
+      route,
+      status: details.status,
+      errorCode: details.code,
+      message: details.message,
+      containerId: details.containerId,
+    },
+    'docker-runner request failed',
+  );
+};
+
+const sendError = (request: FastifyRequest, reply: FastifyReply, details: ErrorResponseDetails) => {
+  const retryable = typeof details.retryable === 'boolean' ? details.retryable : details.status >= 500;
+  logErrorResponse(request, { ...details, retryable });
+  reply.status(details.status).send({ error: { code: details.code, message: details.message, retryable } });
+};
+
+const validationError = (request: FastifyRequest, reply: FastifyReply, message: string) =>
+  sendError(request, reply, { status: 400, code: 'validation_error', message, retryable: false });
 
 type DockerodeError = Error & {
   statusCode?: number;
@@ -157,11 +184,12 @@ const extractDockerError = (error: unknown): { statusCode: number; code?: string
 };
 
 const sendDockerError = (
+  request: FastifyRequest,
   reply: FastifyReply,
   error: unknown,
   fallbackStatus: number,
   fallbackCode: string,
-  options?: { retryable?: boolean },
+  options?: { retryable?: boolean; containerId?: string },
 ) => {
   const details = extractDockerError(error);
   const status = details?.statusCode ?? fallbackStatus;
@@ -169,13 +197,13 @@ const sendDockerError = (
   const message =
     details?.message ?? (error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error');
   const retryable = typeof options?.retryable === 'boolean' ? options.retryable : status >= 500;
-  sendError(reply, status, code, message, retryable);
+  sendError(request, reply, { status, code, message, retryable, containerId: options?.containerId });
 };
 
-const parse = <T>(schema: z.ZodSchema<T>, value: unknown, reply: FastifyReply): T | undefined => {
+const parse = <T>(schema: z.ZodSchema<T>, value: unknown, request: FastifyRequest, reply: FastifyReply): T | undefined => {
   const result = schema.safeParse(value);
   if (!result.success) {
-    validationError(reply, result.error.issues[0]?.message ?? 'Invalid payload');
+    validationError(request, reply, result.error.issues[0]?.message ?? 'Invalid payload');
     return undefined;
   }
   return result.data;
@@ -240,7 +268,12 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       nonceCache,
     });
     if (!verification.ok) {
-      sendError(reply, 401, verification.code ?? 'unauthorized', verification.message ?? 'Unauthorized');
+      sendError(request, reply, {
+        status: 401,
+        code: verification.code ?? 'unauthorized',
+        message: verification.message ?? 'Unauthorized',
+        retryable: false,
+      });
     }
   });
 
@@ -248,50 +281,55 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
     reply.send({ status: 'ok' });
   });
 
-  app.get('/v1/ready', async (_, reply) => {
+  app.get('/v1/ready', async (request, reply) => {
     try {
       await containers.getDocker().ping();
       reply.send({ status: 'ready' });
     } catch (error) {
-      sendError(reply, 503, 'docker_unavailable', error instanceof Error ? error.message : String(error), true);
+      sendError(request, reply, {
+        status: 503,
+        code: 'docker_unavailable',
+        message: error instanceof Error ? error.message : String(error),
+        retryable: true,
+      });
     }
   });
 
   app.post('/v1/images/ensure', (async (request, reply) => {
-    const body = parse(ensureImageSchema, request.body, reply);
+    const body = parse(ensureImageSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.ensureImage(body.image, body.platform);
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'image_ensure_failed', { retryable: true });
+      sendDockerError(request, reply, error, 500, 'image_ensure_failed', { retryable: true });
     }
   }) as RequestHandler);
 
   app.post('/v1/containers/start', (async (request, reply) => {
-    const body = parse(containerOptsSchema, request.body ?? {}, reply);
+    const body = parse(containerOptsSchema, request.body ?? {}, request, reply);
     if (!body) return;
     try {
       const handle = await containers.start(body);
       reply.send({ containerId: handle.id, name: body.name, status: 'running' });
     } catch (error) {
-      sendDockerError(reply, error, 500, 'start_failed', { retryable: true });
+      sendDockerError(request, reply, error, 500, 'start_failed', { retryable: true });
     }
   }) as RequestHandler);
 
   app.post('/v1/containers/stop', (async (request, reply) => {
-    const body = parse(stopContainerSchema, request.body, reply);
+    const body = parse(stopContainerSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.stopContainer(body.containerId, body.timeoutSec ?? 10);
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'stop_failed');
+      sendDockerError(request, reply, error, 500, 'stop_failed', { containerId: body?.containerId });
     }
   }) as RequestHandler);
 
   app.post('/v1/containers/remove', (async (request, reply) => {
-    const body = parse(removeContainerSchema, request.body, reply);
+    const body = parse(removeContainerSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.removeContainer(body.containerId, {
@@ -300,123 +338,123 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       });
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'remove_failed');
+      sendDockerError(request, reply, error, 500, 'remove_failed', { containerId: body?.containerId });
     }
   }) as RequestHandler);
 
   app.get('/v1/containers/inspect', async (request, reply) => {
-    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, request, reply);
     if (!query) return;
     try {
       const inspect = await containers.inspectContainer(query.containerId);
       reply.send(inspect);
     } catch (error) {
-      sendDockerError(reply, error, 404, 'inspect_failed');
+      sendDockerError(request, reply, error, 404, 'inspect_failed', { containerId: query?.containerId });
     }
   });
 
   app.get('/v1/containers/labels', async (request, reply) => {
-    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, request, reply);
     if (!query) return;
     try {
       const labels = await containers.getContainerLabels(query.containerId);
       reply.send({ labels });
     } catch (error) {
-      sendDockerError(reply, error, 404, 'labels_failed');
+      sendDockerError(request, reply, error, 404, 'labels_failed', { containerId: query?.containerId });
     }
   });
 
   app.get('/v1/containers/networks', async (request, reply) => {
-    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, reply);
+    const query = parse(z.object({ containerId: z.string().min(1) }), request.query, request, reply);
     if (!query) return;
     try {
       const networks = await containers.getContainerNetworks(query.containerId);
       reply.send({ networks });
     } catch (error) {
-      sendDockerError(reply, error, 404, 'networks_failed');
+      sendDockerError(request, reply, error, 404, 'networks_failed', { containerId: query?.containerId });
     }
   });
 
   app.post('/v1/containers/findByLabels', (async (request, reply) => {
-    const body = parse(findByLabelsSchema, request.body, reply);
+    const body = parse(findByLabelsSchema, request.body, request, reply);
     if (!body) return;
     try {
       const handles = await containers.findContainersByLabels(body.labels, { all: body.all });
       reply.send({ containerIds: handles.map((h) => h.id) });
     } catch (error) {
-      sendDockerError(reply, error, 500, 'find_failed');
+      sendDockerError(request, reply, error, 500, 'find_failed');
     }
   }) as RequestHandler);
 
   app.post('/v1/exec/run', (async (request, reply) => {
-    const body = parse(execRunSchema, request.body, reply);
+    const body = parse(execRunSchema, request.body, request, reply);
     if (!body) return;
     try {
       const result = await containers.execContainer(body.containerId, body.command, body.options as ExecOptions);
       reply.send(result);
     } catch (error) {
-      sendDockerError(reply, error, 500, 'exec_failed');
+      sendDockerError(request, reply, error, 500, 'exec_failed', { containerId: body?.containerId });
     }
   }) as RequestHandler);
 
   app.post('/v1/exec/resize', (async (request, reply) => {
-    const body = parse(resizeExecSchema, request.body, reply);
+    const body = parse(resizeExecSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.resizeExec(body.execId, body.size);
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 404, 'resize_failed');
+      sendDockerError(request, reply, error, 404, 'resize_failed');
     }
   }) as RequestHandler);
 
   app.post('/v1/containers/touch', (async (request, reply) => {
-    const body = parse(touchSchema, request.body, reply);
+    const body = parse(touchSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.touchLastUsed(body.containerId);
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'touch_failed');
+      sendDockerError(request, reply, error, 500, 'touch_failed', { containerId: body?.containerId });
     }
   }) as RequestHandler);
 
   app.get('/v1/containers/listByVolume', async (request, reply) => {
-    const query = parse(listByVolumeSchema, request.query, reply);
+    const query = parse(listByVolumeSchema, request.query, request, reply);
     if (!query) return;
     try {
       const ids = await containers.listContainersByVolume(query.volumeName);
       reply.send({ containerIds: ids });
     } catch (error) {
-      sendDockerError(reply, error, 500, 'list_volume_failed');
+      sendDockerError(request, reply, error, 500, 'list_volume_failed');
     }
   });
 
   app.post('/v1/volumes/remove', (async (request, reply) => {
-    const body = parse(removeVolumeSchema, request.body, reply);
+    const body = parse(removeVolumeSchema, request.body, request, reply);
     if (!body) return;
     try {
       await containers.removeVolume(body.volumeName, { force: body.force });
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'volume_remove_failed');
+      sendDockerError(request, reply, error, 500, 'volume_remove_failed');
     }
   }) as RequestHandler);
 
   app.post('/v1/containers/putArchive', (async (request, reply) => {
-    const body = parse(putArchiveSchema, request.body, reply);
+    const body = parse(putArchiveSchema, request.body, request, reply);
     if (!body) return;
     try {
       const buffer = Buffer.from(body.payloadBase64, 'base64');
       await containers.putArchive(body.containerId, buffer, { path: body.path });
       reply.status(204).send();
     } catch (error) {
-      sendDockerError(reply, error, 500, 'put_archive_failed');
+      sendDockerError(request, reply, error, 500, 'put_archive_failed', { containerId: body?.containerId });
     }
   }) as RequestHandler);
 
   app.get('/v1/containers/logs/sse', async (request, reply) => {
-    const query = parse(logsQuerySchema, request.query, reply);
+    const query = parse(logsQuerySchema, request.query, request, reply);
     if (!query) return;
     try {
       const { stream, close } = await containers.streamContainerLogs(query.containerId, {
@@ -448,12 +486,12 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         end();
       });
     } catch (error) {
-      sendDockerError(reply, error, 500, 'logs_failed');
+      sendDockerError(request, reply, error, 500, 'logs_failed', { containerId: query?.containerId });
     }
   });
 
   app.get('/v1/events/sse', async (request, reply) => {
-    const query = parse(eventsQuerySchema, request.query, reply);
+    const query = parse(eventsQuerySchema, request.query, request, reply);
     if (!query) return;
     try {
       const filters = decodeFilters(query.filters) ?? { type: ['container'] };
@@ -511,7 +549,7 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
         finish();
       });
     } catch (error) {
-      sendDockerError(reply, error, 500, 'events_failed');
+      sendDockerError(request, reply, error, 500, 'events_failed');
     }
   });
 
@@ -632,8 +670,13 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       method: 'GET',
       url: '/v1/exec/interactive/ws',
       schema: hiddenSchema,
-      handler: ((_request, reply) => {
-        sendError(reply, 426, 'upgrade_required', 'WebSocket upgrade required');
+      handler: ((request, reply) => {
+        sendError(request, reply, {
+          status: 426,
+          code: 'upgrade_required',
+          message: 'WebSocket upgrade required',
+          retryable: false,
+        });
       }) as RequestHandler,
       wsHandler: interactiveExecWsHandler as unknown as WebsocketRouteHandler,
     });
