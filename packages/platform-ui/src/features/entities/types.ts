@@ -28,20 +28,11 @@ export interface GraphEntitySummary {
   relations: { incoming: number; outgoing: number };
 }
 
-export interface GraphEntityConnectionInput {
-  id?: string;
-  source: string;
-  sourceHandle: string;
-  target: string;
-  targetHandle: string;
-}
-
 export interface GraphEntityUpsertInput {
   id?: string;
   template: string;
   title: string;
   config: Record<string, unknown>;
-  connections: GraphEntityConnectionInput[];
 }
 
 export interface GraphEntityDeleteInput {

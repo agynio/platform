@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
-import { getTemplateOptions, toConnectionList } from '@/features/entities/api/graphEntities';
+import { getTemplateOptions } from '@/features/entities/api/graphEntities';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
 
 interface ToolbarAction {
@@ -32,7 +32,6 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => getTemplateOptions(templatesQuery.data ?? [], kind), [kind, templatesQuery.data]);
-  const connections = useMemo(() => toConnectionList(graphQuery.data?.edges), [graphQuery.data?.edges]);
 
   const filteredEntities = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -164,11 +163,11 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
         kind={kind}
         entity={dialogMode === 'edit' ? activeEntity : undefined}
         templates={templates}
-        allNodes={entities}
-        connections={connections}
+        entities={entities}
+        graphEdges={graphQuery.data?.edges}
         isSubmitting={isSaving}
-        onOpenChange={(open) => {
-          if (!open) {
+        onOpenChange={(openState) => {
+          if (!openState) {
             closeDialog();
           } else if (!dialogMode) {
             setDialogMode('create');

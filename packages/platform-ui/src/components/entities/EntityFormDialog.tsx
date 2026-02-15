@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
+
 import {
   ScreenDialog,
   ScreenDialogContent,
@@ -9,30 +10,20 @@ import {
   ScreenDialogTitle,
 } from '@/components/Dialog';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
-import { Textarea } from '@/components/Textarea';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/forms/Form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectInput } from '@/components/SelectInput';
-import { ConnectionsEditor } from '@/components/entities/ConnectionsEditor';
-import { ENTITY_SELF_PLACEHOLDER, extractNodeConnections, getTemplatePorts } from '@/features/entities/api/graphEntities';
+import { EmbeddedNodeProperties } from '@/components/nodeProperties/EmbeddedNodeProperties';
+import type { NodeConfig, NodeState } from '@/components/nodeProperties/types';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
+import { useReferenceSuggestions } from '@/features/entities/hooks/useReferenceSuggestions';
+import { useNixServices } from '@/features/entities/hooks/useNixServices';
 import type {
-  EntityPortGroup,
-  GraphEntityConnectionInput,
   GraphEntityKind,
   GraphEntitySummary,
   GraphEntityUpsertInput,
   TemplateOption,
 } from '@/features/entities/types';
-import type { EntityFormValues } from './formTypes';
-
-type ConnectionEntry = {
-  edge: GraphEntityConnectionInput;
-  type: 'outgoing' | 'incoming';
-  index: number;
-};
-
-const DUPLICATE_ERROR_MESSAGE = 'Duplicate connection. Each edge must be unique.';
 
 interface EntityFormDialogProps {
   open: boolean;
@@ -40,28 +31,85 @@ interface EntityFormDialogProps {
   kind: GraphEntityKind;
   entity?: GraphEntitySummary;
   templates: TemplateOption[];
-  allNodes: GraphEntitySummary[];
-  connections: GraphEntityConnectionInput[];
+  entities: GraphEntitySummary[];
+  graphEdges?: GraphPersistedEdge[];
   isSubmitting?: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: GraphEntityUpsertInput) => Promise<void>;
 }
 
-function toConfigText(config: Record<string, unknown> | undefined): string {
-  try {
-    return JSON.stringify(config ?? {}, null, 2);
-  } catch (error) {
-    console.warn('Config serialization failed', error);
-    return '{\n  "title": ""\n}';
+type TemplateFormValues = {
+  template: string;
+};
+
+const DEFAULT_NODE_STATE: NodeState = { status: 'not_ready' };
+
+function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeConfig['kind'] {
+  switch ((rawKind ?? '').toString().toLowerCase()) {
+    case 'trigger':
+      return 'Trigger';
+    case 'agent':
+      return 'Agent';
+    case 'tool':
+      return 'Tool';
+    case 'mcp':
+      return 'MCP';
+    default:
+      return 'Workspace';
   }
 }
 
-function createConnectionFieldId(prefix: string, edgeId?: string) {
-  if (edgeId) return edgeId;
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${prefix}-${crypto.randomUUID()}`;
+function normalizeTitle(value: unknown, fallback: string): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
   }
-  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+  return fallback.trim();
+}
+
+function buildConfigFromEntity(entity: GraphEntitySummary): NodeConfig {
+  const clonedConfig = entity.config ? { ...entity.config } : {};
+  const fallbackTitle = entity.title ?? '';
+  const title = normalizeTitle((clonedConfig as Record<string, unknown>).title, fallbackTitle);
+  return {
+    ...(clonedConfig as Record<string, unknown>),
+    kind: toNodeKind(entity.rawTemplateKind ?? entity.templateKind),
+    title,
+    template: entity.templateName,
+  } satisfies NodeConfig;
+}
+
+function buildConfigFromTemplate(option: TemplateOption): NodeConfig {
+  const fallbackTitle = option.title ?? option.name;
+  return {
+    kind: toNodeKind(option.source.kind),
+    title: fallbackTitle,
+    template: option.name,
+  } satisfies NodeConfig;
+}
+
+function mapEntitiesToGraphNodes(entities: GraphEntitySummary[]): GraphNodeConfig[] {
+  if (!Array.isArray(entities) || entities.length === 0) {
+    return [];
+  }
+  return entities.map((entity) => ({
+    id: entity.id,
+    template: entity.templateName,
+    kind: toNodeKind(entity.rawTemplateKind ?? entity.templateKind),
+    title: entity.title,
+    x: entity.position?.x ?? 0,
+    y: entity.position?.y ?? 0,
+    status: 'not_ready',
+    config: entity.config ? { ...entity.config } : undefined,
+    state: entity.state ? { ...entity.state } : undefined,
+    ports: {
+      inputs: entity.ports.inputs.map((port) => ({ id: port.id, title: port.label })),
+      outputs: entity.ports.outputs.map((port) => ({ id: port.id, title: port.label })),
+    },
+    avatarSeed: entity.id,
+  } satisfies GraphNodeConfig));
 }
 
 export function EntityFormDialog({
@@ -70,211 +118,137 @@ export function EntityFormDialog({
   kind,
   entity,
   templates,
-  allNodes,
-  connections,
+  entities,
+  graphEdges,
   isSubmitting,
   onOpenChange,
   onSubmit,
 }: EntityFormDialogProps) {
   const templateMap = useMemo(() => new Map(templates.map((tpl) => [tpl.name, tpl])), [templates]);
-  const connectionDefaults = useMemo(() => {
-    if (!entity) {
-      return { incoming: [], outgoing: [] };
-    }
-    return extractNodeConnections(entity.id, connections);
-  }, [connections, entity]);
-
-  const defaultValues: EntityFormValues = useMemo(
-    () => ({
-      template: entity?.templateName ?? '',
-      title: entity?.title ?? '',
-      configText: toConfigText(entity?.config),
-      outgoing: connectionDefaults.outgoing.map((conn) => ({
-        id: createConnectionFieldId('out', conn.id),
-        edgeId: conn.id,
-        targetNodeId: conn.target,
-        sourceHandle: conn.sourceHandle,
-        targetHandle: conn.targetHandle,
-      })),
-      incoming: connectionDefaults.incoming.map((conn) => ({
-        id: createConnectionFieldId('in', conn.id),
-        edgeId: conn.id,
-        sourceNodeId: conn.source,
-        sourceHandle: conn.sourceHandle,
-        targetHandle: conn.targetHandle,
-      })),
-    }),
-    [connectionDefaults.incoming, connectionDefaults.outgoing, entity],
+  const graphNodes = useMemo(() => mapEntitiesToGraphNodes(entities), [entities]);
+  const sanitizedGraphEdges = useMemo(
+    () => (graphEdges ?? []).filter((edge): edge is GraphPersistedEdge => Boolean(edge)),
+    [graphEdges],
   );
 
-  const form = useForm<EntityFormValues>({
-    defaultValues,
+  const { secretKeys, variableKeys, ensureSecretKeys, ensureVariableKeys } = useReferenceSuggestions();
+  const nixServices = useNixServices();
+
+  const form = useForm<TemplateFormValues>({
+    defaultValues: { template: entity?.templateName ?? '' },
   });
-  const outgoingArray = useFieldArray({ control: form.control, name: 'outgoing' });
-  const incomingArray = useFieldArray({ control: form.control, name: 'incoming' });
 
-  const clearDuplicateConnectionErrors = (values: EntityFormValues) => {
-    values.outgoing?.forEach((_conn, index) => {
-      form.clearErrors(`outgoing.${index}.targetHandle` as FieldPath<EntityFormValues>);
-    });
-    values.incoming?.forEach((_conn, index) => {
-      form.clearErrors(`incoming.${index}.targetHandle` as FieldPath<EntityFormValues>);
-    });
-  };
-
-  const markDuplicateConnection = (entry: ConnectionEntry) => {
-    const fieldName =
-      entry.type === 'outgoing'
-        ? (`outgoing.${entry.index}.targetHandle` as FieldPath<EntityFormValues>)
-        : (`incoming.${entry.index}.targetHandle` as FieldPath<EntityFormValues>);
-    form.setError(fieldName, {
-      type: 'manual',
-      message: DUPLICATE_ERROR_MESSAGE,
-    });
-  };
+  const [config, setConfig] = useState<NodeConfig | null>(() => (mode === 'edit' && entity ? buildConfigFromEntity(entity) : null));
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      form.reset(defaultValues);
+    if (!open) {
+      return;
     }
-  }, [defaultValues, form, open]);
+    setSubmitError(null);
+    form.reset({ template: entity?.templateName ?? '' });
+    if (mode === 'edit' && entity) {
+      setConfig(buildConfigFromEntity(entity));
+      return;
+    }
+    if (mode === 'create') {
+      const templateName = form.getValues('template');
+      if (templateName) {
+        const template = templateMap.get(templateName);
+        setConfig(template ? buildConfigFromTemplate(template) : null);
+      } else {
+        setConfig(null);
+      }
+    }
+  }, [entity, form, mode, open, templateMap]);
 
   const selectedTemplateName = form.watch('template');
-  const selectedTemplate = selectedTemplateName ? templateMap.get(selectedTemplateName)?.source : undefined;
-  const currentPorts: EntityPortGroup = useMemo(() => {
-    if (selectedTemplate) {
-      return getTemplatePorts(selectedTemplate);
-    }
-    if (entity) {
-      return entity.ports;
-    }
-    return { inputs: [], outputs: [] };
-  }, [entity, selectedTemplate]);
 
-  const templateRef = useRef<string | undefined>(entity?.templateName);
   useEffect(() => {
-    if (mode !== 'create') return;
-    if (templateRef.current === selectedTemplateName) return;
-    templateRef.current = selectedTemplateName;
-    form.setValue('outgoing', []);
-    form.setValue('incoming', []);
-  }, [form, mode, selectedTemplateName]);
-
-  const handleSubmit = async (values: EntityFormValues) => {
-    clearDuplicateConnectionErrors(values);
-    let parsedConfig: unknown;
-    try {
-      parsedConfig = JSON.parse(values.configText || '{}');
-    } catch (_error) {
-      form.setError('configText', { type: 'manual', message: 'Invalid JSON. Please fix and retry.' });
+    if (mode !== 'create') {
       return;
     }
-    if (!parsedConfig || typeof parsedConfig !== 'object' || Array.isArray(parsedConfig)) {
-      form.setError('configText', { type: 'manual', message: 'Configuration must be a JSON object.' });
+    if (!selectedTemplateName) {
+      setConfig(null);
+      return;
+    }
+    const template = templateMap.get(selectedTemplateName);
+    if (!template) {
+      setConfig(null);
+      return;
+    }
+    setConfig((current) => {
+      if (current && current.template === selectedTemplateName) {
+        return current;
+      }
+      return buildConfigFromTemplate(template);
+    });
+  }, [mode, selectedTemplateName, templateMap]);
+
+  const handleConfigChange = useCallback((partial: Partial<NodeConfig>) => {
+    setConfig((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        ...partial,
+        template: current.template,
+        kind: current.kind,
+      } satisfies NodeConfig;
+    });
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    setSubmitError(null);
+    const currentConfig = config;
+    const templateName = entity?.templateName ?? form.getValues('template');
+    if (!templateName) {
+      setSubmitError('Template is required.');
+      return;
+    }
+    if (!currentConfig) {
+      setSubmitError('Select a template to configure this entity.');
+      return;
+    }
+    const trimmedTitle = typeof currentConfig.title === 'string' ? currentConfig.title.trim() : '';
+    if (!trimmedTitle) {
+      setSubmitError('Title is required.');
       return;
     }
 
-    const connectionEntries: ConnectionEntry[] = [];
-
-    values.outgoing?.forEach((conn, index) => {
-      const targetNodeId = conn.targetNodeId?.trim() ?? '';
-      const sourceHandle = conn.sourceHandle?.trim() ?? '';
-      const targetHandle = conn.targetHandle?.trim() ?? '';
-      if (!targetNodeId || !sourceHandle || !targetHandle) {
-        return;
-      }
-      connectionEntries.push({
-        type: 'outgoing',
-        index,
-        edge: {
-          id: conn.edgeId,
-          source: ENTITY_SELF_PLACEHOLDER,
-          sourceHandle,
-          target: targetNodeId,
-          targetHandle,
-        },
-      });
-    });
-
-    values.incoming?.forEach((conn, index) => {
-      const sourceNodeId = conn.sourceNodeId?.trim() ?? '';
-      const sourceHandle = conn.sourceHandle?.trim() ?? '';
-      const targetHandle = conn.targetHandle?.trim() ?? '';
-      if (!sourceNodeId || !sourceHandle || !targetHandle) {
-        return;
-      }
-      connectionEntries.push({
-        type: 'incoming',
-        index,
-        edge: {
-          id: conn.edgeId,
-          source: sourceNodeId,
-          sourceHandle,
-          target: ENTITY_SELF_PLACEHOLDER,
-          targetHandle,
-        },
-      });
-    });
+    const payloadConfig: Record<string, unknown> = {
+      ...currentConfig,
+      title: trimmedTitle,
+      template: templateName,
+      kind: currentConfig.kind,
+    };
 
     const payload: GraphEntityUpsertInput = {
       id: entity?.id,
-      template: entity?.templateName ?? values.template,
-      title: values.title.trim(),
-      config: parsedConfig as Record<string, unknown>,
-      connections: connectionEntries.map((entry) => entry.edge),
-    };
-
-    if (connectionEntries.length > 0) {
-      const buckets = new Map<string, ConnectionEntry[]>();
-      for (const entry of connectionEntries) {
-        const { source, sourceHandle, target, targetHandle } = entry.edge;
-        const key = `${source}|${sourceHandle}|${target}|${targetHandle}`;
-        const existing = buckets.get(key);
-        if (existing) {
-          existing.push(entry);
-        } else {
-          buckets.set(key, [entry]);
-        }
-      }
-      const duplicates = Array.from(buckets.values()).filter((group) => group.length > 1);
-      if (duplicates.length > 0) {
-        duplicates.forEach((group) => {
-          group.forEach((entry) => markDuplicateConnection(entry));
-        });
-        return;
-      }
-    }
-
-    if (!payload.template) {
-      form.setError('template', { type: 'manual', message: 'Template is required.' });
-      return;
-    }
-
-    if (!payload.title) {
-      form.setError('title', { type: 'manual', message: 'Title is required.' });
-      return;
-    }
+      template: templateName,
+      title: trimmedTitle,
+      config: payloadConfig,
+    } satisfies GraphEntityUpsertInput;
 
     try {
       await onSubmit(payload);
       onOpenChange(false);
-    } catch (_error) {
-      // errors are surfaced via notifications upstream; keep dialog open
-      return;
+    } catch {
+      setSubmitError('Unable to save entity. Please try again.');
     }
-  };
+  }, [config, entity?.id, entity?.templateName, form, onOpenChange, onSubmit]);
 
   const disableTemplateSelect = mode === 'edit';
   const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
+  const actionDisabled = isSubmitting || !config;
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
       <ScreenDialogContent className="max-h-[90vh] overflow-y-auto">
         <ScreenDialogHeader>
           <ScreenDialogTitle>{dialogTitle}</ScreenDialogTitle>
-          <ScreenDialogDescription>
-            Configure the template, metadata, and graph connections for this {kind}.
-          </ScreenDialogDescription>
+          <ScreenDialogDescription>Configure the template and metadata for this {kind}.</ScreenDialogDescription>
         </ScreenDialogHeader>
         {templates.length === 0 && (
           <Alert variant="destructive">
@@ -282,10 +256,11 @@ export function EntityFormDialog({
           </Alert>
         )}
         <Form {...form}>
-          <form className="space-y-4" onSubmit={form.handleSubmit(handleSubmit)}>
+          <form className="space-y-4" onSubmit={form.handleSubmit(() => handleSubmit())}>
             <FormField
               control={form.control}
               name="template"
+              rules={{ required: mode === 'create' }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Template</FormLabel>
@@ -304,75 +279,40 @@ export function EntityFormDialog({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input {...field} disabled={isSubmitting} placeholder="Enter a friendly title" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
 
-            <FormField
-              control={form.control}
-              name="configText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Config JSON</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      {...field}
-                      rows={8}
-                      className="font-mono text-sm"
-                      disabled={isSubmitting}
-                      spellCheck={false}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <ConnectionsEditor
-              title="Outgoing connections"
-              description="Connect this entity's outputs to downstream nodes."
-              variant="outgoing"
-              control={form.control}
-              setValue={form.setValue}
-              fields={outgoingArray.fields}
-              append={outgoingArray.append}
-              remove={outgoingArray.remove}
-              currentNodeId={entity?.id}
-              currentPorts={currentPorts}
-              nodes={allNodes}
-              disabled={isSubmitting || (!selectedTemplate && mode === 'create')}
-            />
-
-            <ConnectionsEditor
-              title="Incoming connections"
-              description="Link upstream nodes into this entity's inputs."
-              variant="incoming"
-              control={form.control}
-              setValue={form.setValue}
-              fields={incomingArray.fields}
-              append={incomingArray.append}
-              remove={incomingArray.remove}
-              currentNodeId={entity?.id}
-              currentPorts={currentPorts}
-              nodes={allNodes}
-              disabled={isSubmitting || (!selectedTemplate && mode === 'create')}
-            />
+            {config ? (
+              <EmbeddedNodeProperties
+                className="space-y-8"
+                config={config}
+                state={DEFAULT_NODE_STATE}
+                onConfigChange={handleConfigChange}
+                secretKeys={secretKeys}
+                variableKeys={variableKeys}
+                ensureSecretKeys={ensureSecretKeys}
+                ensureVariableKeys={ensureVariableKeys}
+                nixPackageSearch={nixServices.search}
+                fetchNixPackageVersions={nixServices.listVersions}
+                resolveNixPackageSelection={nixServices.resolve}
+                graphNodes={graphNodes.length > 0 ? graphNodes : undefined}
+                graphEdges={sanitizedGraphEdges.length > 0 ? sanitizedGraphEdges : undefined}
+                titleAutoFocus={open}
+              />
+            ) : (
+              <div className="rounded-md border border-dashed border-[var(--agyn-border-default)] bg-muted/30 p-6 text-sm text-muted-foreground">
+                Select a template to configure this entity.
+              </div>
+            )}
 
             <ScreenDialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || (mode === 'create' && !form.getValues('template'))}>
+              <Button type="submit" disabled={actionDisabled}>
                 {mode === 'create' ? 'Create' : 'Save changes'}
               </Button>
             </ScreenDialogFooter>

@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { server, TestProviders, abs } from '../../../__tests__/integration/testUtils';
+import { TemplatesProvider } from '@/lib/graph/templates.provider';
 
 const pointerProto = Element.prototype as typeof Element.prototype & {
   hasPointerCapture?: (pointerId: number) => boolean;
@@ -92,6 +93,16 @@ function primeGraphHandlers(graphOverride = baseGraph) {
   );
 }
 
+function renderWithGraphProviders(children: React.ReactNode) {
+  render(
+    <TestProviders>
+      <TemplatesProvider>
+        <MemoryRouter>{children}</MemoryRouter>
+      </TemplatesProvider>
+    </TestProviders>,
+  );
+}
+
 describe('Entity list pages', () => {
   beforeAll(() => server.listen());
   afterAll(() => server.close());
@@ -106,13 +117,7 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup();
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Core Agent');
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
@@ -129,13 +134,7 @@ describe('Entity list pages', () => {
   it('shows trigger entities in the triggers list', async () => {
     primeGraphHandlers();
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <TriggersListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<TriggersListPage />);
 
     await screen.findByText('Webhook Trigger');
     expect(screen.queryByText('Core Agent')).not.toBeInTheDocument();
@@ -161,13 +160,7 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Core Agent');
     await user.click(screen.getByRole('button', { name: /new agent/i }));
@@ -175,28 +168,16 @@ describe('Entity list pages', () => {
     const templateSelect = screen.getByRole('combobox', { name: /template/i });
     await user.selectOptions(templateSelect, 'support-agent');
 
-    const titleInput = screen.getByLabelText('Title');
+    const titleInput = await screen.findByLabelText('Title');
     await user.clear(titleInput);
     await user.type(titleInput, 'Responder');
-
-    // Add one outgoing connection to the existing agent
-    await user.click(screen.getAllByRole('button', { name: 'Add' })[0]);
-
-    const targetNodeSelect = screen.getByLabelText('Target node');
-    await user.selectOptions(targetNodeSelect, 'agent-1');
-
-    const sourceHandleSelect = screen.getByLabelText('Source handle');
-    await user.selectOptions(sourceHandleSelect, 'output');
-
-    const targetHandleSelect = screen.getByLabelText('Target handle');
-    await user.selectOptions(targetHandleSelect, 'input');
 
     await user.click(screen.getByRole('button', { name: /create/i }));
 
     await waitFor(() => expect(notifications.success).toHaveBeenCalledWith('Entity created'));
     expect(savedPayload.body).toBeDefined();
     expect(savedPayload.body.nodes.some((node: any) => node.template === 'support-agent' && node.config?.title === 'Responder')).toBe(true);
-    expect(savedPayload.body.edges.some((edge: any) => edge.target === 'agent-1')).toBe(true);
+    expect(savedPayload.body.edges).toEqual(baseGraph.edges);
   });
 
   it('shows conflict banner when graph version is stale and refreshes on demand', async () => {
@@ -213,18 +194,12 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Core Agent');
     await user.click(screen.getAllByRole('button', { name: /edit/i })[0]);
 
-    const titleInput = screen.getByLabelText('Title');
+    const titleInput = await screen.findByLabelText('Title');
     await user.clear(titleInput);
     await user.type(titleInput, 'Updated');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
@@ -238,60 +213,23 @@ describe('Entity list pages', () => {
     await waitFor(() => expect(screen.queryByText('Graph updated elsewhere')).not.toBeInTheDocument());
   });
 
-  it('prevents duplicate connections before submitting the form', async () => {
+  it('requires selecting a template before enabling create actions', async () => {
     primeGraphHandlers();
-
-    const postSpy = vi.fn();
-    server.use(
-      http.post(abs('/api/graph'), async () => {
-        postSpy();
-        return HttpResponse.json(baseGraph);
-      }),
-    );
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Core Agent');
     await user.click(screen.getByRole('button', { name: /new agent/i }));
 
+    const createButton = screen.getByRole('button', { name: /create/i });
+    expect(createButton).toBeDisabled();
+
     const templateSelect = screen.getByRole('combobox', { name: /template/i });
     await user.selectOptions(templateSelect, 'support-agent');
 
-    const titleInput = screen.getByLabelText('Title');
-    await user.clear(titleInput);
-    await user.type(titleInput, 'Responder');
-
-    const addButtons = screen.getAllByRole('button', { name: 'Add' });
-    await user.click(addButtons[0]);
-    await user.click(addButtons[0]);
-
-    const fillOutgoingRow = async (index: number) => {
-      const targetNodeSelects = screen.getAllByLabelText('Target node');
-      await user.selectOptions(targetNodeSelects[index], 'agent-1');
-
-      const sourceHandleSelects = screen.getAllByLabelText('Source handle');
-      await user.selectOptions(sourceHandleSelects[index], 'output');
-
-      const targetHandleSelects = screen.getAllByLabelText('Target handle');
-      await user.selectOptions(targetHandleSelects[index], 'input');
-    };
-
-    await fillOutgoingRow(0);
-    await fillOutgoingRow(1);
-
-    await user.click(screen.getByRole('button', { name: /create/i }));
-
-    const duplicateMessages = await screen.findAllByText(/duplicate connection/i);
-    expect(duplicateMessages).toHaveLength(2);
-    expect(postSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(createButton).not.toBeDisabled());
   });
 
   it('sorts entity rows by title and template columns', async () => {
@@ -315,13 +253,7 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup();
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsListPage />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Zulu Agent');
     await screen.findByText('Alpha Agent');

@@ -3,7 +3,6 @@ import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import type { TemplateSchema } from '@/api/types/graph';
 import {
   type EntityPortDefinition,
-  type GraphEntityConnectionInput,
   type GraphEntityDeleteInput,
   type GraphEntityGraph,
   type GraphEntityKind,
@@ -156,54 +155,6 @@ export function getTemplateOptions(templates: TemplateSchema[] = [], kind?: Grap
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-function cloneEdge(edge: PersistedGraph['edges'][number]): GraphEntityConnectionInput {
-  return {
-    id: edge.id,
-    source: edge.source,
-    sourceHandle: edge.sourceHandle,
-    target: edge.target,
-    targetHandle: edge.targetHandle,
-  } satisfies GraphEntityConnectionInput;
-}
-
-export function toConnectionList(edges: PersistedGraph['edges'] | undefined): GraphEntityConnectionInput[] {
-  if (!Array.isArray(edges)) return [];
-  return edges.filter(Boolean).map((edge) => cloneEdge(edge as PersistedGraph['edges'][number]));
-}
-
-export const ENTITY_SELF_PLACEHOLDER = '__ENTITY_SELF__';
-
-function normalizeConnections(connections: GraphEntityConnectionInput[], nodeId: string): GraphEntityConnectionInput[] {
-  const valid: GraphEntityConnectionInput[] = [];
-  for (const conn of connections) {
-    if (!conn) continue;
-    const sourceRaw = conn.source?.trim();
-    const targetRaw = conn.target?.trim();
-    const sourceHandle = conn.sourceHandle?.trim();
-    const targetHandle = conn.targetHandle?.trim();
-    if (!sourceRaw || !targetRaw || !sourceHandle || !targetHandle) continue;
-    const source = sourceRaw === ENTITY_SELF_PLACEHOLDER ? nodeId : sourceRaw;
-    const target = targetRaw === ENTITY_SELF_PLACEHOLDER ? nodeId : targetRaw;
-    if (source !== nodeId && target !== nodeId) continue;
-    valid.push({
-      id: conn.id,
-      source,
-      sourceHandle,
-      target,
-      targetHandle,
-    });
-  }
-  return valid;
-}
-
-function mergeConnections(
-  edges: GraphEntityConnectionInput[],
-  nodeId: string,
-  allEdges: GraphEntityConnectionInput[],
-): GraphEntityConnectionInput[] {
-  const preserved = allEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
-  return [...preserved, ...edges];
-}
 
 function buildGraphPayloadInternal(graph: PersistedGraph): PersistedGraphUpsertRequestUI {
   const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
@@ -240,28 +191,11 @@ function sanitizeConfig(value: Record<string, unknown>, title: string): Record<s
   return { ...base, title };
 }
 
-export function extractNodeConnections(
-  nodeId: string,
-  edges: GraphEntityConnectionInput[],
-): { incoming: GraphEntityConnectionInput[]; outgoing: GraphEntityConnectionInput[] } {
-  const incoming: GraphEntityConnectionInput[] = [];
-  const outgoing: GraphEntityConnectionInput[] = [];
-  for (const edge of edges) {
-    if (!edge) continue;
-    if (edge.source === nodeId) {
-      outgoing.push({ ...edge });
-    } else if (edge.target === nodeId) {
-      incoming.push({ ...edge });
-    }
-  }
-  return { incoming, outgoing };
-}
-
 export function applyCreateEntity(graph: PersistedGraph, input: GraphEntityUpsertInput): PersistedGraph {
   const base = cloneGraph(graph);
   const nodeId = input.id && input.id.trim().length > 0 ? input.id.trim() : generateNodeId(input.template, base);
   const nodes = Array.isArray(base.nodes) ? [...base.nodes] : [];
-  const edges = toConnectionList(base.edges);
+  const edges = Array.isArray(base.edges) ? [...base.edges] : [];
   const config = sanitizeConfig(input.config, input.title);
   const newNode = {
     id: nodeId,
@@ -271,11 +205,10 @@ export function applyCreateEntity(graph: PersistedGraph, input: GraphEntityUpser
     position: { x: 0, y: 0 },
   } satisfies PersistedGraph['nodes'][number];
   nodes.push(newNode);
-  const normalizedConnections = normalizeConnections(input.connections, nodeId);
   return {
     ...base,
     nodes,
-    edges: [...edges, ...normalizedConnections],
+    edges,
   } satisfies PersistedGraph;
 }
 
@@ -285,7 +218,7 @@ export function applyUpdateEntity(graph: PersistedGraph, input: GraphEntityUpser
   }
   const base = cloneGraph(graph);
   const nodes = Array.isArray(base.nodes) ? [...base.nodes] : [];
-  const edges = toConnectionList(base.edges);
+  const edges = Array.isArray(base.edges) ? [...base.edges] : [];
   const index = nodes.findIndex((node) => node?.id === input.id);
   if (index === -1) {
     throw new Error(`Node ${input.id} not found`);
@@ -296,12 +229,10 @@ export function applyUpdateEntity(graph: PersistedGraph, input: GraphEntityUpser
     ...existing,
     config,
   };
-  const normalizedConnections = normalizeConnections(input.connections, input.id);
-  const mergedEdges = mergeConnections(normalizedConnections, input.id, edges);
   return {
     ...base,
     nodes,
-    edges: mergedEdges,
+    edges,
   } satisfies PersistedGraph;
 }
 
