@@ -142,7 +142,11 @@ const meta: Meta<typeof MemoryManager> = {
   decorators: [withMainLayout],
   parameters: {
     layout: 'fullscreen',
-    selectedMenuItem: 'memory',
+    screen: {
+      routePath: '/agents/memory',
+      initialEntry: '/agents/memory',
+    },
+    selectedMenuItem: 'agentsMemory',
   },
   tags: ['!autodocs'],
 };

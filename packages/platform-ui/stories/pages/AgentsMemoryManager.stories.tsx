@@ -26,7 +26,7 @@ const meta: Meta<typeof AgentsMemoryManager> = {
       routePath: '/agents/memory',
       initialEntry: '/agents/memory',
     },
-    selectedMenuItem: 'memory',
+    selectedMenuItem: 'agentsMemory',
   },
 };
 
