@@ -125,8 +125,19 @@ type ErrorResponseDetails = {
   containerId?: string;
 };
 
+const getRoutePath = (request: FastifyRequest): string => {
+  const typedRequest = request as FastifyRequest & { routerPath?: string };
+  return (
+    request.routeOptions?.url ??
+    typedRequest.routerPath ??
+    request.url ??
+    request.raw.url ??
+    'unknown'
+  );
+};
+
 const logErrorResponse = (request: FastifyRequest, details: ErrorResponseDetails) => {
-  const route = request.routerPath ?? request.url ?? request.raw.url ?? 'unknown';
+  const route = getRoutePath(request);
   request.log.error(
     {
       requestId: request.id,
