@@ -24,7 +24,16 @@ export class ContainerAdminService {
   ) {}
 
   async deleteContainer(containerId: string): Promise<void> {
-    await this.stopContainer(containerId);
+    try {
+      await this.stopContainer(containerId);
+    } catch (error) {
+      this.logger.warn('Stop container failed; attempting forced removal', {
+        containerId: this.shortId(containerId),
+        statusCode: this.extractStatusCode(error),
+        errorCode: this.extractErrorCode(error),
+        error,
+      });
+    }
     await this.removeContainer(containerId);
     await this.registry.markDeleted(containerId, 'manual_delete');
   }
