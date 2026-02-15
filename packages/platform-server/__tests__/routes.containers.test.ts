@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryDto } from '../src/infra/container/containers.controller';
 import type { PrismaClient, ContainerEventType } from '@prisma/client';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 import { NotFoundException, HttpException } from '@nestjs/common';
 import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
@@ -621,5 +621,20 @@ describe('ContainersController routes', () => {
     expect(error).toBeInstanceOf(HttpException);
     expect((error as HttpException).getStatus()).toBe(503);
     expect((error as HttpException).getResponse()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
+  });
+
+  it('maps unexpected delete errors to structured 503 with request id context', async () => {
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(new Error('tcp connection reset'));
+
+    const fakeRequest = { id: 'req-delete-123', headers: { 'x-request-id': 'hdr-req-456' } };
+    const error = (await controller.delete('cid-1', fakeRequest as unknown as FastifyRequest).catch((err) => err)) as HttpException;
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect(error.getStatus()).toBe(503);
+    expect(error.getResponse()).toEqual({
+      code: 'container_delete_failed',
+      message: 'Failed to delete container',
+      requestId: 'req-delete-123',
+    });
   });
 });

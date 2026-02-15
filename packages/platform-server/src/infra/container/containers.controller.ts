@@ -11,7 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   HttpException,
-  InternalServerErrorException,
+  Req,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
@@ -518,37 +518,44 @@ export class ContainersController {
 
   @Delete(':containerId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param('containerId') containerIdParam: string): Promise<void> {
+  async delete(@Param('containerId') containerIdParam: string, @Req() req?: unknown): Promise<void> {
     const containerId = typeof containerIdParam === 'string' ? containerIdParam.trim() : '';
     if (!containerId) {
       throw new BadRequestException('containerId is required');
     }
     const shortId = this.shortId(containerId);
-    this.logger.log('Delete container requested', { containerId: shortId });
-    const existing = await this.prisma.container.findUnique({ where: { containerId } });
-    if (!existing) {
-      this.logger.warn('Delete container requested for missing record', { containerId: shortId, prismaHit: false });
-      throw new NotFoundException({ code: 'container_not_found', message: 'Container not found' });
-    }
-    this.logger.debug('Resolved container delete target', {
-      containerId: shortId,
-      prismaHit: true,
-      status: existing.status,
-      threadId: existing.threadId,
-      nodeId: existing.nodeId,
-    });
+    const requestId = this.extractRequestId(req);
+    this.logger.log('Delete container requested', { containerId: shortId, requestId });
     try {
+      const existing = await this.prisma.container.findUnique({ where: { containerId } });
+      if (!existing) {
+        this.logger.warn('Delete container requested for missing record', {
+          containerId: shortId,
+          prismaHit: false,
+          requestId,
+        });
+        throw new NotFoundException({ code: 'container_not_found', message: 'Container not found' });
+      }
+      this.logger.debug('Resolved container delete target', {
+        containerId: shortId,
+        prismaHit: true,
+        status: existing.status,
+        threadId: existing.threadId,
+        nodeId: existing.nodeId,
+        requestId,
+      });
       await this.containerAdmin.deleteContainer(containerId);
-      this.logger.log('Container delete completed', { containerId: shortId });
+      this.logger.log('Container delete completed', { containerId: shortId, requestId });
     } catch (error) {
-      const logPayload = this.buildDeleteErrorLog(containerId, error);
-      this.logger.error('Container delete failed', logPayload);
-      throw this.mapDeleteError(error);
+      this.handleDeleteError(containerId, error, requestId);
     }
   }
 
-  private buildDeleteErrorLog(containerId: string, error: unknown): Record<string, unknown> {
+  private buildDeleteErrorLog(containerId: string, error: unknown, requestId?: string): Record<string, unknown> {
     const payload: Record<string, unknown> = { containerId: this.shortId(containerId) };
+    if (requestId) {
+      payload.requestId = requestId;
+    }
     if (error instanceof DockerRunnerRequestError) {
       payload.runnerStatusCode = error.statusCode;
       payload.runnerErrorCode = error.errorCode;
@@ -556,31 +563,61 @@ export class ContainersController {
       payload.retryable = error.retryable;
       return payload;
     }
+    if (error instanceof HttpException) {
+      payload.httpStatus = error.getStatus();
+      payload.response = error.getResponse();
+      payload.message = error.message;
+      payload.name = error.name;
+      return payload;
+    }
     if (error instanceof Error) {
       payload.message = error.message;
       payload.name = error.name;
+      if (error.stack) {
+        payload.stack = error.stack;
+      }
       return payload;
     }
     payload.error = error;
     return payload;
   }
 
-  private mapDeleteError(error: unknown): HttpException {
+  private handleDeleteError(containerId: string, error: unknown, requestId?: string): never {
+    if (error instanceof HttpException) {
+      if (error.getStatus() >= 500) {
+        const logPayload = this.buildDeleteErrorLog(containerId, error, requestId);
+        const stack = error instanceof Error ? error.stack : undefined;
+        this.logger.error('Container delete failed', stack, logPayload);
+      }
+      throw error;
+    }
+    const logPayload = this.buildDeleteErrorLog(containerId, error, requestId);
+    const stack = error instanceof Error ? error.stack : undefined;
+    this.logger.error('Container delete failed', stack, logPayload);
+    throw this.mapDeleteError(error, requestId);
+  }
+
+  private mapDeleteError(error: unknown, requestId?: string): HttpException {
     if (error instanceof DockerRunnerRequestError) {
       const status = this.normalizeRunnerStatus(error.statusCode);
       const body = {
         code: error.errorCode ?? 'docker_runner_error',
         message: error.message,
+        ...(requestId ? { requestId } : {}),
       };
       if (status === HttpStatus.NOT_FOUND) {
         return new NotFoundException(body);
       }
       return new HttpException(body, status);
     }
-    if (error instanceof HttpException) {
-      return error;
-    }
-    return new InternalServerErrorException({ code: 'container_delete_failed', message: 'Failed to delete container' });
+    return new HttpException(
+      {
+        code: 'container_delete_failed',
+        message: 'Failed to delete container',
+        ...(requestId ? { requestId } : {}),
+      },
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
   }
 
   private normalizeRunnerStatus(status?: number): number {
@@ -590,7 +627,60 @@ export class ContainersController {
     return HttpStatus.BAD_GATEWAY;
   }
 
+  private extractRequestId(req?: unknown): string | undefined {
+    if (!req || typeof req !== 'object') {
+      return undefined;
+    }
+    const candidate = req as { id?: unknown; headers?: unknown; raw?: { id?: unknown; headers?: unknown } };
+    const idSources = [candidate.id, candidate.raw?.id];
+    for (const source of idSources) {
+      if (typeof source === 'string') {
+        const trimmed = source.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    const headerSources = [candidate.headers, candidate.raw?.headers];
+    for (const headers of headerSources) {
+      const headerValue = this.extractHeaderValue(headers, 'x-request-id') ?? this.extractHeaderValue(headers, 'request-id');
+      if (headerValue) {
+        return headerValue;
+      }
+    }
+    return undefined;
+  }
+
+  private extractHeaderValue(headers: unknown, key: string): string | undefined {
+    if (!headers || typeof headers !== 'object') {
+      return undefined;
+    }
+    const normalizedKey = key.toLowerCase();
+    const source = headers as Record<string, unknown>;
+    const value = source[key] ?? source[normalizedKey];
+    if (Array.isArray(value)) {
+      return this.firstDefinedString(value);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || undefined;
+    }
+    return undefined;
+  }
+
   private shortId(containerId: string): string {
     return containerId.length > 12 ? containerId.slice(0, 12) : containerId;
+  }
+
+  private firstDefinedString(values: unknown[]): string | undefined {
+    for (const entry of values) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    return undefined;
   }
 }

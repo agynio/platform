@@ -229,7 +229,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
       });
 
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
+      expect(response.json()).toMatchObject({ code: 'runner_unreachable', message: 'runner offline' });
 
       // Registry should remain untouched when removal fails
       const row = await prisma.container.findUnique({ where: { containerId } });
