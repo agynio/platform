@@ -54,4 +54,20 @@ describe('ContainerAdminService', () => {
     expect(docker.removeContainer).toHaveBeenCalled();
     expect(registry.markDeleted).toHaveBeenCalledWith('cid-maybe-gone', 'manual_delete');
   });
+
+  it('treats runner fallback codes with missing-container messages as benign', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      removeContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'remove_failed', message: 'No such container: gone' }),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-fallback')).resolves.toBeUndefined();
+
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-fallback', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-fallback', 'manual_delete');
+  });
 });
