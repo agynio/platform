@@ -163,8 +163,6 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
         kind={kind}
         entity={dialogMode === 'edit' ? activeEntity : undefined}
         templates={templates}
-        entities={entities}
-        graphEdges={graphQuery.data?.edges}
         isSubmitting={isSaving}
         onOpenChange={(openState) => {
           if (!openState) {

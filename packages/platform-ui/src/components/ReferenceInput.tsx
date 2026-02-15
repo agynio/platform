@@ -8,8 +8,13 @@ import {
   useRef,
   useState,
 } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from './ui/select';
 import { Type, Lock, Variable } from 'lucide-react';
-import { SegmentedControl } from './SegmentedControl';
 
 type SourceType = 'text' | 'secret' | 'variable';
 
@@ -48,7 +53,6 @@ export function ReferenceInput({
   const [filterValue, setFilterValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { disabled, id, ...restInputProps } = inputProps;
 
   const handleSourceTypeChange = (value: string) => {
     const newType = value as SourceType;
@@ -56,18 +60,6 @@ export function ReferenceInput({
       onSourceTypeChange(newType);
     } else {
       setInternalSourceType(newType);
-    }
-    if (!disabled) {
-      inputRef.current?.focus();
-      if (newType === 'secret' && secretKeys.length > 0) {
-        setShowAutocomplete(true);
-        setSelectedIndex(-1);
-      } else if (newType === 'variable' && variableKeys.length > 0) {
-        setShowAutocomplete(true);
-        setSelectedIndex(-1);
-      } else {
-        setShowAutocomplete(false);
-      }
     }
   };
 
@@ -184,66 +176,40 @@ export function ReferenceInput({
 
   useEffect(() => {
     setFilterValue('');
-    if (
-      sourceType === 'text' ||
-      (sourceType === 'secret' && secretKeys.length === 0) ||
-      (sourceType === 'variable' && variableKeys.length === 0)
-    ) {
-      setShowAutocomplete(false);
-    }
-  }, [sourceType, secretKeys.length, variableKeys.length]);
+    setShowAutocomplete(false);
+  }, [sourceType]);
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
+  const inputLeftPadding = size === 'sm' ? 'pl-[52px]' : 'pl-[64px]';
   const iconRightPadding = size === 'sm' ? 'pr-9' : 'pr-12';
   const iconRightPosition = size === 'sm' ? 'right-3' : 'right-4';
+  const selectorSize = size === 'sm' ? 'w-[38px] h-[38px]' : 'w-[50px] h-[50px]';
   const inputHeight = size === 'sm' ? 'h-10' : 'h-[52px]';
 
-  const segmentedItems = [
-    {
-      value: 'text',
-      label: 'Text',
-      icon: <Type className="w-4 h-4" />,
-      disabled,
-      title: 'Plain text',
-    },
-    {
-      value: 'secret',
-      label: 'Secret',
-      icon: <Lock className="w-4 h-4" />,
-      disabled,
-      title: 'Secret reference',
-    },
-    {
-      value: 'variable',
-      label: 'Variable',
-      icon: <Variable className="w-4 h-4" />,
-      disabled,
-      title: 'Variable reference',
-    },
-  ];
+  const getSourceIcon = () => {
+    switch (sourceType) {
+      case 'text':
+        return <Type className="w-4 h-4" />;
+      case 'secret':
+        return <Lock className="w-4 h-4" />;
+      case 'variable':
+        return <Variable className="w-4 h-4" />;
+    }
+  };
 
   return (
     <div className="w-full">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        {label ? (
-          <label htmlFor={id} className="text-[var(--agyn-dark)]">
-            {label}
-          </label>
-        ) : null}
-        <SegmentedControl
-          items={segmentedItems}
-          value={sourceType}
-          onChange={handleSourceTypeChange}
-          size={size === 'sm' ? 'sm' : 'md'}
-          className="ml-auto"
-        />
-      </div>
+      {label && (
+        <label className="block mb-2 text-[var(--agyn-dark)]">
+          {label}
+        </label>
+      )}
       
       <div className="relative">
         {/* Input Field */}
         <input
           className={`
-            w-full ${paddingClasses} ${inputHeight}
+            w-full ${paddingClasses} ${inputLeftPadding} ${inputHeight}
             bg-white 
             border border-[var(--agyn-border-subtle)] 
             rounded-[10px]
@@ -259,10 +225,103 @@ export function ReferenceInput({
           onFocus={handleInputFocus}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
-          id={id}
-          {...restInputProps}
+          {...inputProps}
         />
+        
+        {/* Source Selector - Square with right border, positioned inside input */}
+        <div className={`absolute left-[1px] top-[1px] z-10 ${selectorSize}`}>
+          <Select value={sourceType} onValueChange={handleSourceTypeChange} disabled={inputProps.disabled}>
+            <SelectTrigger
+              size={undefined}
+              className="
+                !h-full
+                w-full
+                border-0
+                border-r border-r-[var(--agyn-border-subtle)]
+                bg-white
+                hover:bg-[var(--agyn-bg-light)]
+                rounded-l-[10px]
+                rounded-r-none
+                focus:ring-0
+                focus:ring-offset-0
+                [&>svg]:hidden
+                flex items-center justify-center
+                disabled:bg-[var(--agyn-bg-light)] disabled:cursor-not-allowed
+              "
+            >
+              <div className="text-[var(--agyn-gray)]">
+                {getSourceIcon()}
+              </div>
+            </SelectTrigger>
+            
+            <SelectContent
+              className="
+                bg-white 
+                border border-[var(--agyn-border-default)] 
+                rounded-[10px]
+                shadow-lg
+              "
+            >
+              <SelectItem
+                value="text"
+                className="
+                  px-3 py-2
+                  pr-10
+                  !text-[var(--agyn-dark)]
+                  data-[highlighted]:bg-[var(--agyn-bg-light)]
+                  data-[highlighted]:!text-[var(--agyn-dark)]
+                  focus:bg-[var(--agyn-bg-light)]
+                  focus:!text-[var(--agyn-dark)]
+                  cursor-pointer
+                  rounded-[6px]
+                "
+              >
+                <div className="flex items-center gap-2">
+                  <Type className="w-4 h-4" />
+                  <span>Plain Text</span>
+                </div>
+              </SelectItem>
+              <SelectItem
+                value="secret"
+                className="
+                  px-3 py-2
+                  pr-10
+                  !text-[var(--agyn-dark)]
+                  data-[highlighted]:bg-[var(--agyn-bg-light)]
+                  data-[highlighted]:!text-[var(--agyn-dark)]
+                  focus:bg-[var(--agyn-bg-light)]
+                  focus:!text-[var(--agyn-dark)]
+                  cursor-pointer
+                  rounded-[6px]
+                "
+              >
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  <span>Secret</span>
+                </div>
+              </SelectItem>
+              <SelectItem
+                value="variable"
+                className="
+                  px-3 py-2
+                  pr-10
+                  !text-[var(--agyn-dark)]
+                  data-[highlighted]:bg-[var(--agyn-bg-light)]
+                  data-[highlighted]:!text-[var(--agyn-dark)]
+                  focus:bg-[var(--agyn-bg-light)]
+                  focus:!text-[var(--agyn-dark)]
+                  cursor-pointer
+                  rounded-[6px]
+                "
+              >
+                <div className="flex items-center gap-2">
+                  <Variable className="w-4 h-4" />
+                  <span>Variable</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         
         {rightIcon && (
           <div className={`absolute ${iconRightPosition} top-1/2 -translate-y-1/2 text-[var(--agyn-gray)]`}>
