@@ -2,6 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ContainerRegistry } from './container.registry';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 
+type StopContainerOptions = {
+  swallowNonBenignErrors?: boolean;
+};
+
 @Injectable()
 export class ContainerAdminService {
   private readonly logger = new Logger(ContainerAdminService.name);
@@ -24,21 +28,12 @@ export class ContainerAdminService {
   ) {}
 
   async deleteContainer(containerId: string): Promise<void> {
-    try {
-      await this.stopContainer(containerId);
-    } catch (error) {
-      this.logger.warn('Stop container failed; attempting forced removal', {
-        containerId: this.shortId(containerId),
-        statusCode: this.extractStatusCode(error),
-        errorCode: this.extractErrorCode(error),
-        error,
-      });
-    }
+    await this.stopContainer(containerId, { swallowNonBenignErrors: true });
     await this.removeContainer(containerId);
     await this.registry.markDeleted(containerId, 'manual_delete');
   }
 
-  private async stopContainer(containerId: string): Promise<void> {
+  private async stopContainer(containerId: string, options?: StopContainerOptions): Promise<void> {
     try {
       await this.dockerClient.stopContainer(containerId, 10);
     } catch (error) {
@@ -50,10 +45,17 @@ export class ContainerAdminService {
         });
         return;
       }
-      this.logger.error('Failed to stop container during delete', {
+      const context = {
         containerId: this.shortId(containerId),
+        statusCode: this.extractStatusCode(error),
+        errorCode: this.extractErrorCode(error),
         error,
-      });
+      };
+      if (options?.swallowNonBenignErrors) {
+        this.logger.warn('Failed to stop container before delete; continuing with forced removal', context);
+        return;
+      }
+      this.logger.error('Failed to stop container during delete', context);
       throw error;
     }
   }

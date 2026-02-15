@@ -190,6 +190,32 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
     }
   }, 120_000);
 
+  it('still removes containers when stop throws a generic error', async () => {
+    const { containerId } = await startRegisteredContainer('delete-stop-generic');
+    const stopSpy = vi
+      .spyOn(dockerClient, 'stopContainer')
+      .mockImplementation(async () => {
+        throw new Error('network down');
+      });
+
+    try {
+      const response = await app.getHttpAdapter().getInstance().inject({
+        method: 'DELETE',
+        url: `/api/containers/${containerId}`,
+      });
+
+      expect(response.statusCode).toBe(204);
+
+      await expect(dockerClient.inspectContainer(containerId)).rejects.toMatchObject({ statusCode: 404 });
+      const row = await prisma.container.findUnique({ where: { containerId } });
+      expect(row?.deletedAt).toBeInstanceOf(Date);
+
+      orphanContainers.delete(containerId);
+    } finally {
+      stopSpy.mockRestore();
+    }
+  }, 120_000);
+
 });
 
 async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {

@@ -70,4 +70,21 @@ describe('ContainerAdminService', () => {
     expect(docker.removeContainer).toHaveBeenCalledWith('cid-fallback', { force: true, removeVolumes: true });
     expect(registry.markDeleted).toHaveBeenCalledWith('cid-fallback', 'manual_delete');
   });
+
+  it('continues with forced removal when stop returns a non-benign error', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'stop_failed' }),
+      removeContainer: vi.fn().mockResolvedValue(undefined),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-stop-error')).resolves.toBeUndefined();
+
+    expect(docker.stopContainer).toHaveBeenCalledWith('cid-stop-error', 10);
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-stop-error', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-stop-error', 'manual_delete');
+  });
 });
