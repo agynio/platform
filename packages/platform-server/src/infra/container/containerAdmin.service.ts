@@ -13,6 +13,11 @@ export class ContainerAdminService {
     'not_found',
   ];
 
+  private static readonly MISSING_CONTAINER_MESSAGE_PATTERNS: ReadonlyArray<RegExp> = [
+    /no such container/i,
+    /container (is|was)? not found/i,
+  ];
+
   constructor(
     @Inject(DOCKER_CLIENT) private readonly dockerClient: DockerClient,
     private readonly registry: ContainerRegistry,
@@ -70,7 +75,14 @@ export class ContainerAdminService {
       return true;
     }
     const errorCode = this.extractErrorCode(err);
-    return typeof errorCode === 'string' && allowedErrorCodes.includes(errorCode);
+    if (typeof errorCode === 'string' && allowedErrorCodes.includes(errorCode)) {
+      return true;
+    }
+    const message = this.extractErrorMessage(err);
+    if (message && ContainerAdminService.MISSING_CONTAINER_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))) {
+      return true;
+    }
+    return false;
   }
 
   private extractStatusCode(err: unknown): number | undefined {
@@ -90,6 +102,22 @@ export class ContainerAdminService {
     if (typeof err === 'object' && err !== null && 'code' in err) {
       const value = (err as { code?: unknown }).code;
       if (typeof value === 'string') return value;
+    }
+    return undefined;
+  }
+
+  private extractErrorMessage(err: unknown): string | undefined {
+    if (typeof err === 'string') {
+      return err;
+    }
+    if (err instanceof Error && typeof err.message === 'string') {
+      return err.message;
+    }
+    if (typeof err === 'object' && err !== null && 'message' in err) {
+      const value = (err as { message?: unknown }).message;
+      if (typeof value === 'string') {
+        return value;
+      }
     }
     return undefined;
   }
