@@ -1,27 +1,19 @@
-import type { ComponentPropsWithoutRef } from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import type { ChangeEvent, SelectHTMLAttributes } from 'react';
+import { cn } from '@/lib/utils';
+import { SelectInput, type SelectGroup, type SelectOption } from './SelectInput';
 
-type SelectTriggerProps = ComponentPropsWithoutRef<typeof SelectTrigger>;
+type NativeSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size' | 'value' | 'defaultValue' | 'onChange'>;
 
-interface DropdownOption {
-  value: string;
+interface DropdownOption extends SelectOption {
   label: string;
 }
 
-interface DropdownGroup {
+interface DropdownGroup extends Omit<SelectGroup, 'label'> {
   label?: string;
   options: DropdownOption[];
 }
 
-interface DropdownProps extends Omit<SelectTriggerProps, 'children' | 'className' | 'size' | 'disabled'> {
+interface DropdownProps extends NativeSelectProps {
   label?: string;
   placeholder?: string;
   value?: string;
@@ -36,6 +28,8 @@ interface DropdownProps extends Omit<SelectTriggerProps, 'children' | 'className
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  allowEmptyOption?: boolean;
+  onChange?: (event: ChangeEvent<HTMLSelectElement>) => void;
 }
 
 export function Dropdown({
@@ -53,115 +47,42 @@ export function Dropdown({
   disabled = false,
   className = '',
   triggerClassName = '',
-  ...triggerProps
+  allowEmptyOption = false,
+  onBlur,
+  onFocus,
+  onChange,
+  ...selectProps
 }: DropdownProps) {
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    onChange?.(event);
+    onValueChange?.(event.target.value);
+  };
+
   return (
-    <div className={`w-full ${className}`}>
-      {label && (
-        <label className="block mb-2 text-[var(--agyn-dark)]">
-          {label}
-        </label>
+    <SelectInput
+      label={label}
+      placeholder={placeholder}
+      value={value}
+      defaultValue={defaultValue}
+      onChange={handleChange}
+      options={groups.length > 0 ? [] : options}
+      groups={groups}
+      error={error}
+      helperText={helperText}
+      size={size}
+      variant={variant}
+      disabled={disabled}
+      allowEmptyOption={allowEmptyOption}
+      className={cn(
+        triggerClassName,
+        variant === 'flat'
+          ? 'text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] focus-visible:ring-0 focus:ring-0 focus:border-transparent'
+          : undefined,
       )}
-
-      <Select
-        value={value}
-        defaultValue={defaultValue}
-        onValueChange={onValueChange}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          size={size}
-          disabled={disabled}
-          className={`
-            w-full
-            ${variant === 'flat' 
-              ? 'bg-transparent border-none shadow-none px-0 gap-1 h-auto text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)]' 
-              : `
-                bg-white 
-                border border-[var(--agyn-border-subtle)] 
-                rounded-[10px]
-                text-[var(--agyn-dark)]
-                focus:outline-none focus:ring-2 focus:ring-[var(--agyn-blue)] focus:border-transparent
-                disabled:bg-[var(--agyn-bg-light)] disabled:cursor-not-allowed
-                ${error ? 'border-red-500 focus:ring-red-500' : ''}
-                ${size === 'sm' ? 'px-3 !h-10' : 'px-4 py-3'}
-              `
-            }
-          ${triggerClassName}
-          `}
-          {...triggerProps}
-        >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        
-        <SelectContent
-          className="
-            bg-white 
-            border border-[var(--agyn-border-default)] 
-            rounded-[10px]
-            shadow-lg
-          "
-        >
-          {/* Render groups if provided */}
-          {groups.length > 0 ? (
-            groups.map((group, groupIndex) => (
-              <SelectGroup key={groupIndex}>
-                {group.label && (
-                  <SelectLabel className="text-[var(--agyn-gray)] px-3 py-2">
-                    {group.label}
-                  </SelectLabel>
-                )}
-                {group.options.map((option) => (
-                  <SelectItem
-                    key={option.value}
-                    value={option.value}
-                    className="
-                      px-3 py-2
-                      !text-[var(--agyn-dark)]
-                      data-[highlighted]:bg-[var(--agyn-bg-light)]
-                      data-[highlighted]:!text-[var(--agyn-dark)]
-                      focus:bg-[var(--agyn-bg-light)]
-                      focus:!text-[var(--agyn-dark)]
-                      cursor-pointer
-                      rounded-[6px]
-                    "
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))
-          ) : (
-            /* Render flat options */
-            options.map((option) => (
-              <SelectItem
-                key={option.value}
-                value={option.value}
-                className="
-                  px-3 py-2
-                  !text-[var(--agyn-dark)]
-                  data-[highlighted]:bg-[var(--agyn-bg-light)]
-                  data-[highlighted]:!text-[var(--agyn-dark)]
-                  focus:bg-[var(--agyn-bg-light)]
-                  focus:!text-[var(--agyn-dark)]
-                  cursor-pointer
-                  rounded-[6px]
-                "
-              >
-                {option.label}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-
-      {error && (
-        <p className="mt-2 text-sm text-red-500">{error}</p>
-      )}
-
-      {helperText && !error && (
-        <p className="mt-2 text-sm text-[var(--agyn-gray)]">{helperText}</p>
-      )}
-    </div>
+      containerClassName={cn('w-full', className)}
+      onBlur={onBlur}
+      onFocus={onFocus}
+      {...selectProps}
+    />
   );
 }

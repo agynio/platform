@@ -102,12 +102,11 @@ describe('NodePropertiesSidebar Slack trigger references', () => {
       });
     });
 
-    const [appSourceTrigger, botSourceTrigger] = screen.getAllByRole('combobox');
+    const appVariableButton = screen.getAllByRole('button', { name: /variable/i })[0];
+    const botSecretButton = screen.getAllByRole('button', { name: /secret/i })[1];
 
     onConfigChange.mockClear();
-    await user.click(appSourceTrigger);
-    const variableOption = await screen.findByText('Variable');
-    await user.click(variableOption);
+    await user.click(appVariableButton);
 
     await waitFor(() => {
       expect(appTokenInput).toHaveValue('');
@@ -123,9 +122,7 @@ describe('NodePropertiesSidebar Slack trigger references', () => {
     });
 
     onConfigChange.mockClear();
-    await user.click(botSourceTrigger);
-    const secretOption = await screen.findByText('Secret');
-    await user.click(secretOption);
+    await user.click(botSecretButton);
 
     await waitFor(() => {
       expect(botTokenInput).toHaveValue('');

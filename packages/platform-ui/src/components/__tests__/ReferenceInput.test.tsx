@@ -81,12 +81,8 @@ describe('ReferenceInput', () => {
     await user.click(input);
     expect(await screen.findByText('secret/app/token')).toBeInTheDocument();
 
-    const trigger = screen.getByRole('combobox');
-    await user.click(trigger);
-    const variableOption = await screen.findByText('Variable');
-    await user.click(variableOption);
-
-    await user.click(input);
+    const variableButton = screen.getByRole('button', { name: /variable/i });
+    await user.click(variableButton);
 
     expect(await screen.findByText('SLACK_APP_TOKEN')).toBeInTheDocument();
     expect(screen.getByText('SLACK_BOT_TOKEN')).toBeInTheDocument();

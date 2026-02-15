@@ -672,9 +672,7 @@ describe('Settings/LLM page', () => {
     expect(modelInput.getAttribute('placeholder')).toBe('gpt-4o-mini');
 
     const credentialCombobox = within(dialog).getByRole('combobox', { name: 'Credential' });
-    await user.click(credentialCombobox);
-    const credentialOption = await screen.findByRole('option', { name: 'zz-anthropic-legacy' });
-    await user.click(credentialOption);
+    await user.selectOptions(credentialCombobox, 'zz-anthropic-legacy');
 
     await waitFor(() => expect(modelInput.getAttribute('placeholder')).toBe('claude-3-opus'));
     expect(
