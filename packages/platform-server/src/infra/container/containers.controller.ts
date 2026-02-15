@@ -10,6 +10,8 @@ import {
   NotFoundException,
   HttpCode,
   HttpStatus,
+  HttpException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
@@ -17,6 +19,7 @@ import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min 
 import { Transform, Type } from 'class-transformer';
 import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 import { ContainerAdminService } from './containerAdmin.service';
+import { DockerRunnerRequestError } from './httpDockerRunner.client';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -520,10 +523,74 @@ export class ContainersController {
     if (!containerId) {
       throw new BadRequestException('containerId is required');
     }
+    const shortId = this.shortId(containerId);
+    this.logger.log('Delete container requested', { containerId: shortId });
     const existing = await this.prisma.container.findUnique({ where: { containerId } });
     if (!existing) {
-      throw new NotFoundException('container_not_found');
+      this.logger.warn('Delete container requested for missing record', { containerId: shortId, prismaHit: false });
+      throw new NotFoundException({ code: 'container_not_found', message: 'Container not found' });
     }
-    await this.containerAdmin.deleteContainer(containerId);
+    this.logger.debug('Resolved container delete target', {
+      containerId: shortId,
+      prismaHit: true,
+      status: existing.status,
+      threadId: existing.threadId,
+      nodeId: existing.nodeId,
+    });
+    try {
+      await this.containerAdmin.deleteContainer(containerId);
+      this.logger.log('Container delete completed', { containerId: shortId });
+    } catch (error) {
+      const logPayload = this.buildDeleteErrorLog(containerId, error);
+      this.logger.error('Container delete failed', logPayload);
+      throw this.mapDeleteError(error);
+    }
+  }
+
+  private buildDeleteErrorLog(containerId: string, error: unknown): Record<string, unknown> {
+    const payload: Record<string, unknown> = { containerId: this.shortId(containerId) };
+    if (error instanceof DockerRunnerRequestError) {
+      payload.runnerStatusCode = error.statusCode;
+      payload.runnerErrorCode = error.errorCode;
+      payload.message = error.message;
+      payload.retryable = error.retryable;
+      return payload;
+    }
+    if (error instanceof Error) {
+      payload.message = error.message;
+      payload.name = error.name;
+      return payload;
+    }
+    payload.error = error;
+    return payload;
+  }
+
+  private mapDeleteError(error: unknown): HttpException {
+    if (error instanceof DockerRunnerRequestError) {
+      const status = this.normalizeRunnerStatus(error.statusCode);
+      const body = {
+        code: error.errorCode ?? 'docker_runner_error',
+        message: error.message,
+      };
+      if (status === HttpStatus.NOT_FOUND) {
+        return new NotFoundException(body);
+      }
+      return new HttpException(body, status);
+    }
+    if (error instanceof HttpException) {
+      return error;
+    }
+    return new InternalServerErrorException({ code: 'container_delete_failed', message: 'Failed to delete container' });
+  }
+
+  private normalizeRunnerStatus(status?: number): number {
+    if (typeof status === 'number' && status >= 400 && status < 600) {
+      return status;
+    }
+    return HttpStatus.BAD_GATEWAY;
+  }
+
+  private shortId(containerId: string): string {
+    return containerId.length > 12 ? containerId.slice(0, 12) : containerId;
   }
 }

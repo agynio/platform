@@ -28,14 +28,20 @@ export class ContainerAdminService {
   ) {}
 
   async deleteContainer(containerId: string): Promise<void> {
+    const context = { containerId: this.shortId(containerId) };
+    this.logger.log('Deleting container', context);
     await this.stopContainer(containerId, { swallowNonBenignErrors: true });
     await this.removeContainer(containerId);
     await this.registry.markDeleted(containerId, 'manual_delete');
+    this.logger.debug('Container registry marked deleted', context);
   }
 
   private async stopContainer(containerId: string, options?: StopContainerOptions): Promise<void> {
+    const context = { containerId: this.shortId(containerId), timeoutSec: 10 };
+    this.logger.debug('Stopping container before delete', context);
     try {
       await this.dockerClient.stopContainer(containerId, 10);
+      this.logger.debug('Stop container completed', context);
     } catch (error) {
       if (this.isBenignDockerError(error, [304, 404, 409], ContainerAdminService.MISSING_CONTAINER_ERROR_CODES)) {
         this.logger.debug('Stop container returned benign error', {
@@ -61,8 +67,11 @@ export class ContainerAdminService {
   }
 
   private async removeContainer(containerId: string): Promise<void> {
+    const context = { containerId: this.shortId(containerId) };
+    this.logger.debug('Removing container with force', context);
     try {
       await this.dockerClient.removeContainer(containerId, { force: true, removeVolumes: true });
+      this.logger.debug('Force removal completed', context);
     } catch (error) {
       if (this.isBenignDockerError(error, [404, 409], ContainerAdminService.MISSING_CONTAINER_ERROR_CODES)) {
         this.logger.debug('Remove container returned benign error', {

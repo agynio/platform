@@ -4,6 +4,8 @@ import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryD
 import type { PrismaClient, ContainerEventType } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
+import { NotFoundException, HttpException } from '@nestjs/common';
+import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
 type RowMetadata = {
@@ -607,7 +609,17 @@ describe('ContainersController routes', () => {
   });
 
   it('rejects with NotFound when deleting a missing container', async () => {
-    await expect(controller.delete('missing-cid')).rejects.toThrowError('container_not_found');
+    await expect(controller.delete('missing-cid')).rejects.toBeInstanceOf(NotFoundException);
     expect(containerAdmin.deleteContainer).not.toHaveBeenCalled();
+  });
+
+  it('returns structured HttpException when runner delete fails', async () => {
+    const runnerError = new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(runnerError);
+
+    const error = await controller.delete('cid-1').catch((err) => err);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatus()).toBe(503);
+    expect((error as HttpException).getResponse()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
   });
 });

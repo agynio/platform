@@ -216,6 +216,35 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
     }
   }, 120_000);
 
+  it('returns structured runner error when force removal fails', async () => {
+    const { containerId } = await startRegisteredContainer('delete-remove-runner-error');
+    const removeSpy = vi
+      .spyOn(dockerClient, 'removeContainer')
+      .mockRejectedValueOnce(new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline'));
+
+    try {
+      const response = await app.getHttpAdapter().getInstance().inject({
+        method: 'DELETE',
+        url: `/api/containers/${containerId}`,
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
+
+      // Registry should remain untouched when removal fails
+      const row = await prisma.container.findUnique({ where: { containerId } });
+      expect(row?.deletedAt).toBeNull();
+    } finally {
+      removeSpy.mockRestore();
+      orphanContainers.delete(containerId);
+      try {
+        await dockerClient.removeContainer(containerId, { force: true, removeVolumes: true });
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+  }, 120_000);
+
 });
 
 async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
