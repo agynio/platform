@@ -117,7 +117,9 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), prometheus (9090), grafana (3000), cadvisor (8080)
+# litellm (127.0.0.1:4000), docker-runner (7071)
+# Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
+# Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -136,8 +138,12 @@ pnpm --filter @agyn/platform-server run prisma:generate
 pnpm --filter @agyn/platform-server dev
 # UI (Vite dev server)
 pnpm --filter @agyn/platform-ui dev
+# docker-runner (Fastify dev server)
+pnpm --filter @agyn/docker-runner dev
 ```
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
+
+The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
 
 - Production (Docker):
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):
@@ -179,6 +185,9 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Workspace/Docker:
   - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
+  - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
+  - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
+  - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)
@@ -210,7 +219,8 @@ UI variables (packages/platform-ui/.env.example):
   - vault — HashiCorp Vault (8200), auto-init helper vault-auto-init
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
-  - cadvisor (8080), prometheus (9090), grafana (3000)
+  - docker-runner — authenticated Docker API proxy (7071, mounts /var/run/docker.sock)
+  - Optional monitoring overlay (docker-compose.monitoring.yml) adds prometheus (9090) and grafana (3000) without mounting the Docker socket; provide your own scrape targets via configuration.
 
 To start services:
 ```bash

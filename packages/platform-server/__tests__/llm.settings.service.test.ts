@@ -4,6 +4,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { ConfigService, configSchema, type Config } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const BASE_URL = 'http://litellm.test';
 
@@ -12,6 +13,7 @@ const defaultConfig: Partial<Config> = {
   litellmBaseUrl: BASE_URL,
   litellmMasterKey: 'sk-master',
   agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
+  ...runnerConfigDefaults,
 };
 
 const createConfig = (overrides?: Partial<Config>) => {

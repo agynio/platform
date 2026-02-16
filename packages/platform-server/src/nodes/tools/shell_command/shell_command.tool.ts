@@ -107,6 +107,28 @@ const splitAnsiSafePortion = (input: string): { safe: string; remainder: string 
   return { safe: input.slice(0, remainderStart), remainder: input.slice(remainderStart) };
 };
 
+type ExecErrorSnapshot = {
+  stdout: string;
+  stderr: string;
+  timeoutMs?: number;
+};
+
+const snapshotExecError = (error: unknown): ExecErrorSnapshot => {
+  if (typeof error !== 'object' || error === null) {
+    return { stdout: '', stderr: '' };
+  }
+  const stdout = 'stdout' in error && typeof (error as { stdout?: unknown }).stdout === 'string'
+    ? (error as { stdout: string }).stdout
+    : '';
+  const stderr = 'stderr' in error && typeof (error as { stderr?: unknown }).stderr === 'string'
+    ? (error as { stderr: string }).stderr
+    : '';
+  const timeout = 'timeoutMs' in error && typeof (error as { timeoutMs?: unknown }).timeoutMs === 'number'
+    ? (error as { timeoutMs: number }).timeoutMs
+    : undefined;
+  return { stdout, stderr, timeoutMs: timeout };
+};
+
 class AnsiSequenceCleaner {
   private remainder = '';
 
@@ -403,8 +425,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const limit = cfg.outputLimitChars;
 
       if (isExecIdleTimeoutError(err)) {
-        const timeoutErr = err as ExecIdleTimeoutError;
-        const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
+        const timeoutErr = snapshotExecError(err);
+        const combined = getCombinedOutput({ stdout: timeoutErr.stdout, stderr: timeoutErr.stderr });
         const idleMs = timeoutErr.timeoutMs ?? idleTimeoutMs;
         const { message } = await this.buildPlainTextErrorPayload({
           exitCode: 408,
@@ -418,8 +440,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       if (isExecTimeoutError(err)) {
-        const timeoutErr = err as ExecTimeoutError;
-        const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
+        const timeoutErr = snapshotExecError(err);
+        const combined = getCombinedOutput({ stdout: timeoutErr.stdout, stderr: timeoutErr.stderr });
         const usedMs = timeoutErr.timeoutMs ?? timeoutMs;
         const { message } = await this.buildPlainTextErrorPayload({
           exitCode: 408,
@@ -676,8 +698,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           truncatedSource = source;
           allowNextChunkAfterTruncate = true;
         }
-      }
-    };
+  }
+};
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
@@ -841,11 +863,13 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         let headline: string;
         if (execError instanceof ExecIdleTimeoutError) {
           exitCodeForExecError = 408;
-          const idleMs = execError.timeoutMs ?? cfg.idleTimeoutMs;
+          const idleSnapshot = snapshotExecError(execError);
+          const idleMs = idleSnapshot.timeoutMs ?? cfg.idleTimeoutMs;
           headline = `Exec idle timed out after ${idleMs}ms`;
         } else if (execError instanceof ExecTimeoutError) {
           exitCodeForExecError = 408;
-          const usedMs = execError.timeoutMs ?? cfg.executionTimeoutMs;
+          const timeoutSnapshot = snapshotExecError(execError);
+          const usedMs = timeoutSnapshot.timeoutMs ?? cfg.executionTimeoutMs;
           headline = `Exec timed out after ${usedMs}ms`;
         } else if (this.isConnectionInterruption(execError)) {
           headline = await this.buildInterruptionMessage(container.id);

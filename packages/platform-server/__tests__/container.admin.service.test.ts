@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from 'vitest';
+import { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
+import type { DockerClient } from '../src/infra/container/dockerClient.token';
+import type { ContainerRegistry } from '../src/infra/container/container.registry';
+
+describe('ContainerAdminService', () => {
+  it('stops, removes, and marks containers as deleted', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      removeContainer: vi.fn().mockResolvedValue(undefined),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await service.deleteContainer('cid-123');
+
+    expect(docker.stopContainer).toHaveBeenCalledWith('cid-123', 10);
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-123', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-123', 'manual_delete');
+  });
+
+  it('ignores benign not-found errors when stopping/removing', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockRejectedValueOnce({ statusCode: 404 }),
+      removeContainer: vi.fn().mockRejectedValueOnce({ statusCode: 409 }),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await service.deleteContainer('cid-missing');
+
+    expect(docker.stopContainer).toHaveBeenCalledWith('cid-missing', 10);
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-missing', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-missing', 'manual_delete');
+  });
+
+  it('treats runner container_not_found errors as benign even when status is 500', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'container_not_found' }),
+      removeContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'container_not_found' }),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-maybe-gone')).resolves.toBeUndefined();
+
+    expect(docker.stopContainer).toHaveBeenCalled();
+    expect(docker.removeContainer).toHaveBeenCalled();
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-maybe-gone', 'manual_delete');
+  });
+
+  it('treats runner fallback codes with missing-container messages as benign', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      removeContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'remove_failed', message: 'No such container: gone' }),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-fallback')).resolves.toBeUndefined();
+
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-fallback', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-fallback', 'manual_delete');
+  });
+
+  it('continues with forced removal when stop returns a non-benign error', async () => {
+    const docker: Partial<DockerClient> = {
+      stopContainer: vi.fn().mockRejectedValueOnce({ statusCode: 500, errorCode: 'stop_failed' }),
+      removeContainer: vi.fn().mockResolvedValue(undefined),
+    };
+    const registry: Partial<ContainerRegistry> = {
+      markDeleted: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ContainerAdminService(docker as DockerClient, registry as ContainerRegistry);
+    await expect(service.deleteContainer('cid-stop-error')).resolves.toBeUndefined();
+
+    expect(docker.stopContainer).toHaveBeenCalledWith('cid-stop-error', 10);
+    expect(docker.removeContainer).toHaveBeenCalledWith('cid-stop-error', { force: true, removeVolumes: true });
+    expect(registry.markDeleted).toHaveBeenCalledWith('cid-stop-error', 'manual_delete');
+  });
+});

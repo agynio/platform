@@ -20,6 +20,7 @@ import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
+import { runnerConfigDefaults } from './helpers/config';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async init(): Promise<void> {}
@@ -76,6 +77,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
             agentsDatabaseUrl: 'postgres://localhost/agents',
             litellmBaseUrl: 'http://localhost:4000',
             litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
           }),
         ),
       },
@@ -371,6 +373,7 @@ describe('ManageTool unit', () => {
               agentsDatabaseUrl: 'postgres://localhost/agents',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',
+              ...runnerConfigDefaults,
             }),
           ),
         },
@@ -434,6 +437,7 @@ describe('ManageTool graph wiring', () => {
               agentsDatabaseUrl: 'postgres://localhost/agents',
               litellmBaseUrl: 'http://localhost:4000',
               litellmMasterKey: 'sk-test',
+              ...runnerConfigDefaults,
             }),
           ),
         },

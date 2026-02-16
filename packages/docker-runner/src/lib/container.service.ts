@@ -1,43 +1,27 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
+import { Injectable, Logger } from '@nestjs/common';
+import Docker, { ContainerCreateOptions, Exec, type GetEventsOptions } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerHandle } from './container.handle';
-import { PLATFORM_LABEL, type Platform } from '../../core/constants';
-import {
-  isExecTimeoutError,
-  ExecTimeoutError,
-  ExecIdleTimeoutError,
-  isExecIdleTimeoutError,
-} from '../../utils/execTimeout';
-import { ContainerRegistry } from './container.registry';
 import { mapInspectMounts } from './container.mounts';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
+import { ExecIdleTimeoutError, ExecTimeoutError, isExecIdleTimeoutError, isExecTimeoutError } from './execTimeout';
+import type { ContainerRegistryPort } from './containerRegistry.port';
+import type { DockerClientPort } from './dockerClient.port';
+import {
+  ContainerOpts,
+  ExecOptions,
+  ExecResult,
+  InteractiveExecOptions,
+  InteractiveExecSession,
+  LogsStreamOptions,
+  LogsStreamSession,
+  Platform,
+  PLATFORM_LABEL,
+} from './types';
 
 const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
-
-export type ContainerOpts = {
-  image?: string;
-  name?: string;
-  cmd?: string[];
-  entrypoint?: string;
-  env?: Record<string, string> | string[];
-  workingDir?: string;
-  autoRemove?: boolean; // --rm behavior
-  binds?: string[]; // hostPath:containerPath[:ro]
-  networkMode?: string;
-  tty?: boolean;
-  labels?: Record<string, string>;
-  platform?: Platform;
-  privileged?: boolean;
-  /** Container paths to create as anonymous volumes (top-level Volumes mapping) */
-  anonymousVolumes?: string[];
-  /** Advanced: raw dockerode create options merged last (escape hatch) */
-  createExtras?: Partial<ContainerCreateOptions>;
-  /** Optional TTL for last-used based cleanup (seconds). <=0 disables cleanup */
-  ttlSeconds?: number;
-};
 
 /**
  * ContainerService provides a thin wrapper around dockerode for:
@@ -57,12 +41,10 @@ export type ContainerOpts = {
  * await c.remove();
  */
 @Injectable()
-export class ContainerService {
+export class ContainerService implements DockerClientPort {
   private readonly logger = new Logger(ContainerService.name);
   private docker: Docker;
-  constructor(
-    @Inject(ContainerRegistry) private registry: ContainerRegistry,
-  ) {
+  constructor(private readonly registry?: ContainerRegistryPort | null) {
     this.docker = new Docker({
       ...(process.env.DOCKER_SOCKET
         ? {
@@ -247,21 +229,7 @@ export class ContainerService {
   }
 
   /** Execute a command inside a running container by its docker id. */
-  async execContainer(
-    containerId: string,
-    command: string[] | string,
-    options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      tty?: boolean;
-      killOnTimeout?: boolean;
-      signal?: AbortSignal;
-      onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
-      logToPid1?: boolean;
-    },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async execContainer(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
     if (inspectData.State?.Running !== true) {
@@ -337,14 +305,8 @@ export class ContainerService {
   async openInteractiveExec(
     containerId: string,
     command: string[] | string,
-    options?: { workdir?: string; env?: Record<string, string> | string[]; tty?: boolean; demuxStderr?: boolean },
-  ): Promise<{
-    stdin: NodeJS.WritableStream;
-    stdout: NodeJS.ReadableStream;
-    stderr?: NodeJS.ReadableStream;
-    close: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
-    execId: string;
-  }> {
+    options?: InteractiveExecOptions,
+  ): Promise<InteractiveExecSession> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
     if (inspectData.State?.Running !== true) {
@@ -471,17 +433,7 @@ export class ContainerService {
     };
   }
 
-  async streamContainerLogs(
-    containerId: string,
-    options: {
-      follow?: boolean;
-      since?: number;
-      tail?: number;
-      stdout?: boolean;
-      stderr?: boolean;
-      timestamps?: boolean;
-    } = {},
-  ): Promise<{ stream: NodeJS.ReadableStream; close: () => Promise<void> }> {
+  async streamContainerLogs(containerId: string, options: LogsStreamOptions = {}): Promise<LogsStreamSession> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
     if (!inspectData) throw new Error(`Container '${containerId}' not found`);
@@ -866,6 +818,8 @@ export class ContainerService {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 304) {
         this.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
+      } else if (sc === 404) {
+        this.debug(`Container missing during stop cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
         // Conflict typically indicates removal already in progress; treat as benign
         this.warn(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
@@ -906,6 +860,21 @@ export class ContainerService {
     const container = this.docker.getContainer(containerId);
     const details = await container.inspect();
     return details.Config?.Labels ?? undefined;
+  }
+
+  async inspectContainer(containerId: string): Promise<Docker.ContainerInspectInfo> {
+    const container = this.docker.getContainer(containerId);
+    return container.inspect();
+  }
+
+  async getEventsStream(options: { since?: number; filters?: GetEventsOptions['filters'] }): Promise<NodeJS.ReadableStream> {
+    return new Promise((resolve, reject) => {
+      this.docker.getEvents({ since: options.since, filters: options.filters }, (err?: Error, stream?: NodeJS.ReadableStream) => {
+        if (err) return reject(err);
+        if (!stream) return reject(new Error('events_stream_unavailable'));
+        resolve(stream);
+      });
+    });
   }
 
   /** Inspect and return the list of docker networks the container is attached to */
@@ -1005,10 +974,4 @@ export class ContainerService {
     else await container.putArchive(data, options);
     void this.touchLastUsed(inspectData.Id);
   }
-}
-
-export interface ExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
 }

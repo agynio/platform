@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { OpenAILLMProvisioner } from '../src/llm/provisioners/openai.provisioner';
 import { ConfigService, configSchema, type Config } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const baseConfig: Partial<Config> = {
   llmProvider: 'openai',
@@ -9,6 +10,7 @@ const baseConfig: Partial<Config> = {
   litellmBaseUrl: 'http://127.0.0.1:4000',
   litellmMasterKey: 'sk-master',
   agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
+  ...runnerConfigDefaults,
 };
 
 describe('OpenAILLMProvisioner DI enforcement', () => {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
+import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
 export type ContainerHealthStatus = 'healthy' | 'unhealthy' | 'starting';
@@ -150,6 +150,22 @@ export class ContainerRegistry {
       data: {
         status: 'stopped',
         deletedAt: null,
+        terminationReason: reason,
+        metadata: meta as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  async markDeleted(containerId: string, reason: string): Promise<void> {
+    const existing = await this.prisma.container.findUnique({ where: { containerId } });
+    if (!existing) return;
+    const meta = this.normalizeMetadata(existing.metadata);
+    meta.lastEventAt = new Date().toISOString();
+    await this.prisma.container.update({
+      where: { containerId },
+      data: {
+        status: 'stopped',
+        deletedAt: new Date(),
         terminationReason: reason,
         metadata: meta as unknown as Prisma.InputJsonValue,
       },

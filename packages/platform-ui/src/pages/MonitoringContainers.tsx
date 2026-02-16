@@ -4,10 +4,12 @@ import type { ContainerItem } from '@/api/modules/containers';
 import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTerminalDialog';
 import { ContainersPageContent } from '@/components/monitoring/ContainersPageContent';
 import { useMonitoringContainers } from '@/features/monitoring/containers/hooks';
+import { useDeleteContainer } from '@/api/hooks/containers';
 
 export function MonitoringContainers() {
   const navigate = useNavigate();
   const { containers, itemById, status, setStatus, counts, isLoading, error, refetch } = useMonitoringContainers();
+  const { mutateAsync: deleteContainer, isPending: isDeletingContainer } = useDeleteContainer();
   const [terminalContainer, setTerminalContainer] = useState<ContainerItem | null>(null);
 
   const loading = isLoading && containers.length === 0;
@@ -38,9 +40,18 @@ export function MonitoringContainers() {
     [navigate],
   );
 
-  const handleDeleteContainer = useCallback((containerId: string) => {
-    console.warn('Delete container not implemented', containerId);
-  }, []);
+  const handleDeleteContainer = useCallback(
+    async (containerId: string) => {
+      if (!containerId || isDeletingContainer) return;
+      try {
+        await deleteContainer(containerId);
+        await refetch();
+      } catch (err) {
+        console.error('Failed to delete container', err);
+      }
+    },
+    [deleteContainer, isDeletingContainer, refetch],
+  );
 
   useEffect(() => {
     if (!terminalContainer) return;

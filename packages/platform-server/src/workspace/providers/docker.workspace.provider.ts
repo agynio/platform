@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ContainerHandle } from '../../infra/container/container.handle';
-import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
-import { PLATFORM_LABEL } from '../../core/constants';
+import { mapInspectMounts, type ContainerHandle, type ContainerOpts, PLATFORM_LABEL } from '@agyn/docker-runner';
+import { DOCKER_CLIENT, type DockerClient } from '../../infra/container/dockerClient.token';
+import { ContainerRegistry } from '../../infra/container/container.registry';
 import {
   DestroyWorkspaceOptions,
   EnsureWorkspaceResult,
@@ -37,7 +37,10 @@ const DIND_HOST = 'tcp://0.0.0.0:2375';
 export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   private readonly logger = new Logger(DockerWorkspaceRuntimeProvider.name);
 
-  constructor(@Inject(ContainerService) private readonly containers: ContainerService) {
+  constructor(
+    @Inject(DOCKER_CLIENT) private readonly containers: DockerClient,
+    private readonly registry: ContainerRegistry,
+  ) {
     super();
   }
 
@@ -106,6 +109,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     } catch {
       // ignore errors
     }
+    await this.registerWorkspaceContainer(handle.id, key, spec);
 
     const providerType: WorkspaceRuntimeProviderType = 'docker';
     const status = await this.resolveWorkspaceStatus(handle.id);
@@ -232,8 +236,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
   private async resolveWorkspaceStatus(containerId: string): Promise<WorkspaceStatus> {
     try {
-      const docker = this.containers.getDocker();
-      const details = await docker.getContainer(containerId).inspect();
+      const details = await this.containers.inspectContainer(containerId);
       const raw = typeof details?.State?.Status === 'string' ? details.State.Status.toLowerCase() : '';
       switch (raw) {
         case 'created':
@@ -346,6 +349,37 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     return container;
   }
 
+  private async registerWorkspaceContainer(containerId: string, key: WorkspaceKey, spec: WorkspaceSpec): Promise<void> {
+    try {
+      const inspect = await this.containers.inspectContainer(containerId);
+      const inspectId = typeof inspect.Id === 'string' ? inspect.Id : containerId;
+      const labels = inspect.Config?.Labels ?? {};
+      const nodeId = key.nodeId ?? labels[NODE_ID_LABEL] ?? 'unknown';
+      const threadId = key.threadId ?? labels[THREAD_ID_LABEL] ?? '';
+      const mounts = mapInspectMounts(inspect.Mounts);
+      const inspectNameRaw = typeof inspect.Name === 'string' ? inspect.Name : null;
+      const normalizedName = inspectNameRaw?.trim().replace(/^\/+/, '') ?? null;
+      const resolvedName = (normalizedName && normalizedName.length > 0 ? normalizedName : inspectId.substring(0, 63)).slice(0, 63);
+      const image = inspect.Config?.Image ?? spec.image ?? inspect.Image ?? 'unknown';
+      await this.registry.registerStart({
+        containerId: inspectId,
+        nodeId,
+        threadId,
+        image,
+        labels,
+        platform: labels[PLATFORM_LABEL] ?? key.platform,
+        ttlSeconds: spec.ttlSeconds ?? DEFAULT_TTL_SECONDS,
+        mounts: mounts.length ? mounts : undefined,
+        name: resolvedName,
+      });
+    } catch (err) {
+      this.logger.warn('Failed to register workspace container start', {
+        containerId: containerId.substring(0, 12),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   private buildCreateExtras(
     networkName: string,
     aliases: string[] | undefined,
@@ -427,8 +461,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
   private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
     try {
-      const docker = this.containers.getDocker();
-      const inspect = await docker.getContainer(dind.id).inspect();
+      const inspect = await this.containers.inspectContainer(dind.id);
       const state = (inspect as { State?: { Running?: boolean; Status?: string } }).State;
       if (state && state.Running === false) {
         throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
