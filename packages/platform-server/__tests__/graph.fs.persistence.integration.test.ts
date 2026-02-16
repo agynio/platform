@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { FsGraphRepository } from '../src/graph/fsGraph.repository';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 
 const schema = [
@@ -28,6 +29,7 @@ const baseConfigEnv = {
   litellmMasterKey: 'sk-test',
   dockerMirrorUrl: 'http://registry-mirror:5000',
   nixAllowedChannels: 'nixpkgs-unstable',
+  ...runnerConfigDefaults,
 };
 
 describe('FsGraphRepository filesystem persistence', () => {
