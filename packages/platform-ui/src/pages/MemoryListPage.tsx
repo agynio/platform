@@ -6,7 +6,6 @@ import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
 import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
 import { Button } from '@/components/Button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/Badge';
 
 type MemoryRow = {
@@ -69,44 +68,56 @@ export function MemoryListPage() {
         </Alert>
       )}
 
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Node</TableHead>
-              <TableHead>Scope</TableHead>
-              <TableHead>Thread</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {docsQuery.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={3}>Loading memory documents…</TableCell>
-              </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground">
-                  No memory documents found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{row.title}</span>
-                      <span className="text-xs text-muted-foreground">{row.nodeId}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{row.scope === 'global' ? 'Global' : 'Per thread'}</Badge>
-                  </TableCell>
-                  <TableCell>{row.scope === 'perThread' ? row.threadId ?? '—' : '—'}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+      <div className="rounded-lg border bg-white">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full border-collapse table-fixed">
+            <colgroup>
+              <col style={{ width: '45%' }} />
+              <col style={{ width: '25%' }} />
+              <col style={{ width: '30%' }} />
+            </colgroup>
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
+                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Node</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Scope</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Thread</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docsQuery.isLoading ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-sm text-[var(--agyn-text-subtle)]">
+                    Loading memory documents…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-sm text-[var(--agyn-text-subtle)]">
+                    No memory documents found.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className="border-b border-[var(--agyn-border-subtle)] hover:bg-[var(--agyn-bg-light)]/50 transition-colors"
+                  >
+                    <td className="px-6 h-[60px]">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{row.title}</span>
+                        <span className="text-xs text-[var(--agyn-text-subtle)]">{row.nodeId}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 h-[60px]">
+                      <Badge variant="outline">{row.scope === 'global' ? 'Global' : 'Per thread'}</Badge>
+                    </td>
+                    <td className="px-6 h-[60px]">{row.scope === 'perThread' ? row.threadId ?? '—' : '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
