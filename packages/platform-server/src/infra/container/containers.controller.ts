@@ -20,6 +20,7 @@ import { Transform, Type } from 'class-transformer';
 import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 import { ContainerAdminService } from './containerAdmin.service';
 import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { ConfigService } from '../../core/services/config.service';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -80,6 +81,37 @@ const decodeEventCursor = (value: string): { createdAt: Date; id: number } => {
 
 const isHealth = (value: unknown): value is ContainerHealth =>
   value === 'healthy' || value === 'unhealthy' || value === 'starting';
+
+type DeleteFailureKind =
+  | 'precondition_failed'
+  | 'db_not_found'
+  | 'auth'
+  | 'runner_unreachable'
+  | 'runner_4xx'
+  | 'runner_5xx'
+  | 'unknown';
+
+type DeleteFailureContext = {
+  requestId?: string;
+  runnerCalled: boolean;
+  dbRecordFound: boolean;
+};
+
+type DeleteFailureLog = {
+  containerId: string;
+  requestId: string | null;
+  runnerCalled: boolean;
+  runnerBaseUrl: string;
+  failureKind: DeleteFailureKind;
+  runnerStatusCode?: number;
+  runnerErrorCode?: string;
+  runnerMessage?: string;
+  runnerRetryable?: boolean;
+  httpStatus?: number;
+  httpResponse?: unknown;
+  errorName?: string;
+  errorMessage?: string;
+};
 
 export class ListContainersQueryDto {
   @IsOptional()
@@ -155,12 +187,15 @@ export class ListContainerEventsQueryDto {
 export class ContainersController {
   private prisma: PrismaClient;
   private readonly logger = new Logger(ContainersController.name);
+  private readonly runnerBaseUrl: string;
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
     private readonly containerAdmin: ContainerAdminService,
+    private readonly configService?: ConfigService,
   ) {
     this.prisma = prismaSvc.getClient();
+    this.runnerBaseUrl = this.configService?.dockerRunnerBaseUrl ?? 'unknown';
   }
 
   @Get()
@@ -526,6 +561,11 @@ export class ContainersController {
     const shortId = this.shortId(containerId);
     const requestId = this.extractRequestId(req);
     this.logger.log('Delete container requested', { containerId: shortId, requestId });
+    const failureContext: DeleteFailureContext = {
+      requestId,
+      runnerCalled: false,
+      dbRecordFound: false,
+    };
     try {
       const existing = await this.prisma.container.findUnique({ where: { containerId } });
       if (!existing) {
@@ -536,6 +576,7 @@ export class ContainersController {
         });
         throw new NotFoundException({ code: 'container_not_found', message: 'Container not found' });
       }
+      failureContext.dbRecordFound = true;
       this.logger.debug('Resolved container delete target', {
         containerId: shortId,
         prismaHit: true,
@@ -544,58 +585,89 @@ export class ContainersController {
         nodeId: existing.nodeId,
         requestId,
       });
+      failureContext.runnerCalled = true;
       await this.containerAdmin.deleteContainer(containerId);
       this.logger.log('Container delete completed', { containerId: shortId, requestId });
     } catch (error) {
-      this.handleDeleteError(containerId, error, requestId);
+      this.handleDeleteError(containerId, error, failureContext);
     }
   }
 
-  private buildDeleteErrorLog(containerId: string, error: unknown, requestId?: string): Record<string, unknown> {
-    const payload: Record<string, unknown> = { containerId: this.shortId(containerId) };
-    if (requestId) {
-      payload.requestId = requestId;
-    }
+  private buildDeleteFailureLog(containerId: string, error: unknown, context: DeleteFailureContext): DeleteFailureLog {
+    const payload: DeleteFailureLog = {
+      containerId: this.shortId(containerId),
+      requestId: context.requestId ?? null,
+      runnerCalled: context.runnerCalled,
+      runnerBaseUrl: this.runnerBaseUrl,
+      failureKind: this.resolveFailureKind(error, context),
+    };
     if (error instanceof DockerRunnerRequestError) {
       payload.runnerStatusCode = error.statusCode;
       payload.runnerErrorCode = error.errorCode;
-      payload.message = error.message;
-      payload.retryable = error.retryable;
+      payload.runnerMessage = error.message;
+      payload.runnerRetryable = error.retryable;
       return payload;
     }
     if (error instanceof HttpException) {
       payload.httpStatus = error.getStatus();
-      payload.response = error.getResponse();
-      payload.message = error.message;
-      payload.name = error.name;
+      payload.httpResponse = error.getResponse();
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
       return payload;
     }
     if (error instanceof Error) {
-      payload.message = error.message;
-      payload.name = error.name;
-      if (error.stack) {
-        payload.stack = error.stack;
-      }
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
       return payload;
     }
-    payload.error = error;
+    payload.errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
     return payload;
   }
 
-  private handleDeleteError(containerId: string, error: unknown, requestId?: string): never {
+  private handleDeleteError(containerId: string, error: unknown, context: DeleteFailureContext): never {
+    const logPayload = this.buildDeleteFailureLog(containerId, error, context);
+    this.logger.error(`Container delete failed ${JSON.stringify(logPayload)}`);
     if (error instanceof HttpException) {
-      const status = error.getStatus();
-      if (status >= 500 || status === HttpStatus.UNAUTHORIZED) {
-        const logPayload = this.buildDeleteErrorLog(containerId, error, requestId);
-        const stack = error instanceof Error ? error.stack : undefined;
-        this.logger.error('Container delete failed', stack, logPayload);
-      }
       throw error;
     }
-    const logPayload = this.buildDeleteErrorLog(containerId, error, requestId);
-    const stack = error instanceof Error ? error.stack : undefined;
-    this.logger.error('Container delete failed', stack, logPayload);
-    throw this.mapDeleteError(error, requestId);
+    throw this.mapDeleteError(error, context.requestId);
+  }
+
+  private resolveFailureKind(error: unknown, context: DeleteFailureContext): DeleteFailureKind {
+    if (!context.dbRecordFound) {
+      return 'db_not_found';
+    }
+    if (error instanceof DockerRunnerRequestError) {
+      if (error.statusCode >= 500) {
+        return 'runner_5xx';
+      }
+      if (error.statusCode >= 400 && error.statusCode < 500) {
+        return 'runner_4xx';
+      }
+      return 'runner_unreachable';
+    }
+    if (error instanceof HttpException) {
+      const status = error.getStatus();
+      if (!context.runnerCalled && status === HttpStatus.NOT_FOUND) {
+        return 'db_not_found';
+      }
+      if (status === HttpStatus.BAD_REQUEST) {
+        return 'precondition_failed';
+      }
+      if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN) {
+        return 'auth';
+      }
+      if (context.runnerCalled && status >= 500) {
+        return 'runner_5xx';
+      }
+      if (context.runnerCalled && status >= 400 && status < 500) {
+        return 'runner_4xx';
+      }
+    }
+    if (!context.runnerCalled) {
+      return 'precondition_failed';
+    }
+    return 'unknown';
   }
 
   private mapDeleteError(error: unknown, requestId?: string): HttpException {

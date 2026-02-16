@@ -66,7 +66,7 @@ class TestWorkspaceController {
 }
 
 Reflect.defineMetadata('design:paramtypes', [WorkspaceProvider, PrismaService, ConfigService], TestWorkspaceController);
-Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService], ContainersController);
+Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
 describeOrSkip('workspace create → delete full-stack flow', () => {

@@ -9,6 +9,7 @@ import { ContainersController } from '../src/infra/container/containers.controll
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { ConfigService } from '../src/core/services/config.service';
 import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import type { PrismaClient } from '@prisma/client';
@@ -28,7 +29,7 @@ import {
 } from './helpers/docker.e2e';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
-Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService], ContainersController);
+Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
 const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1';
@@ -87,6 +88,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
         { provide: PrismaService, useValue: { getClient: () => prisma } },
         { provide: ContainerRegistry, useValue: registry },
         { provide: DOCKER_CLIENT, useValue: dockerClient },
+        { provide: ConfigService, useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService },
         ContainerAdminService,
       ],
     }).compile();
@@ -292,6 +294,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
         { provide: PrismaService, useValue: { getClient: () => prisma } },
         { provide: ContainerRegistry, useValue: registry },
         { provide: DOCKER_CLIENT, useValue: dockerClient },
+        { provide: ConfigService, useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService },
         ContainerAdminService,
       ],
     }).compile();

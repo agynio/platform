@@ -11,12 +11,13 @@ import { ContainersController } from '../src/infra/container/containers.controll
 import { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { ConfigService } from '../src/core/services/config.service';
 import { HttpDockerRunnerClient } from '../src/infra/container/httpDockerRunner.client';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
-Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService], ContainersController);
+Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 
 const RUNNER_SECRET = 'it-is-only-a-test';
 
@@ -195,6 +196,10 @@ describe('DELETE /api/containers/:id integration', () => {
         {
           provide: DOCKER_CLIENT,
           useValue: new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET }),
+        },
+        {
+          provide: ConfigService,
+          useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService,
         },
         {
           provide: ContainerAdminService,

@@ -4,8 +4,10 @@ import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryD
 import type { PrismaClient, ContainerEventType } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
-import { NotFoundException, HttpException } from '@nestjs/common';
+import { NotFoundException, HttpException, Logger } from '@nestjs/common';
 import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { ConfigService } from '../src/core/services/config.service';
+import { PrismaService } from '../src/core/services/prisma.service';
 
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
 type RowMetadata = {
@@ -278,13 +280,15 @@ describe('ContainersController routes', () => {
   let prismaSvc: PrismaStub;
   let controller: ContainersController;
   let containerAdmin: Pick<ContainerAdminService, 'deleteContainer'>;
+  let configService: Pick<ConfigService, 'dockerRunnerBaseUrl'>;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
     containerAdmin = {
       deleteContainer: vi.fn().mockResolvedValue(undefined),
     } as Pick<ContainerAdminService, 'deleteContainer'>;
-    controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService);
+    configService = { dockerRunnerBaseUrl: 'http://runner.local' } as ConfigService;
+    controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] | 'all' =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed', 'all'].includes(v);
@@ -491,7 +495,11 @@ describe('ContainersController routes', () => {
       },
     ];
     const prismaSvcWithRaw = new PrismaStubWithQueryRaw(rows);
-    const rawController = new ContainersController(prismaSvcWithRaw);
+    const rawController = new ContainersController(
+      prismaSvcWithRaw as unknown as PrismaService,
+      containerAdmin as ContainerAdminService,
+      configService as ConfigService,
+    );
     const result = await rawController.list({} as ListContainersQueryDto);
     expect(result.items).toEqual([]);
     expect(prismaSvcWithRaw.queryRawCalls.length).toBe(0);
@@ -623,6 +631,31 @@ describe('ContainersController routes', () => {
     expect((error as HttpException).getResponse()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
   });
 
+  it('logs structured metadata when the runner is unreachable', async () => {
+    const runnerError = new DockerRunnerRequestError(0, 'runner_connection_refused', true, 'runner offline');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(runnerError);
+    const loggerInstance = (controller as unknown as { logger: Logger }).logger;
+    const errorSpy = vi.spyOn(loggerInstance, 'error');
+
+    await controller.delete('cid-1', { id: 'req-log-1' } as unknown as FastifyRequest).catch(() => undefined);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const loggedMessage = errorSpy.mock.calls[0][0] as string;
+    expect(loggedMessage).toMatch(/^Container delete failed /);
+    const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      containerId: 'cid-1',
+      requestId: 'req-log-1',
+      runnerCalled: true,
+      runnerBaseUrl: 'http://runner.local',
+      failureKind: 'runner_unreachable',
+      runnerStatusCode: 0,
+      runnerErrorCode: 'runner_connection_refused',
+      runnerMessage: 'runner offline',
+    });
+    errorSpy.mockRestore();
+  });
+
   it('maps unexpected delete errors to structured 503 with request id context', async () => {
     (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(new Error('tcp connection reset'));
 
@@ -636,5 +669,26 @@ describe('ContainersController routes', () => {
       message: 'Failed to delete container',
       requestId: 'req-delete-123',
     });
+  });
+
+  it('logs metadata for unexpected delete failures', async () => {
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(new Error('tcp connection reset'));
+    const loggerInstance = (controller as unknown as { logger: Logger }).logger;
+    const errorSpy = vi.spyOn(loggerInstance, 'error');
+
+    await controller.delete('cid-1', { id: 'req-log-2' } as unknown as FastifyRequest).catch(() => undefined);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const loggedMessage = errorSpy.mock.calls[0][0] as string;
+    const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      containerId: 'cid-1',
+      requestId: 'req-log-2',
+      runnerCalled: true,
+      runnerBaseUrl: 'http://runner.local',
+      failureKind: 'unknown',
+      errorMessage: 'tcp connection reset',
+    });
+    errorSpy.mockRestore();
   });
 });
