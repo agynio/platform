@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -13,7 +13,20 @@ import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { HttpDockerRunnerClient } from '../src/infra/container/httpDockerRunner.client';
-import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
+import { InfraModule } from '../src/infra/infra.module';
+import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
+import { VolumeGcService } from '../src/infra/container/volumeGc.job';
+import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
+import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
+import { GithubService } from '../src/infra/github/github.client';
+import { PRService } from '../src/infra/github/pr.usecase';
+import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
+import { ArchiveService } from '../src/infra/archive/archive.service';
+import { TerminalSessionsService } from '../src/infra/container/terminal.sessions.service';
+import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
+import { registerTestConfig, clearTestConfig } from './helpers/config';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
@@ -177,6 +190,59 @@ class PrismaServiceStub {
   }
 }
 
+const createLifecycleStub = () => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  sweep: vi.fn().mockResolvedValue(undefined),
+});
+
+const createDockerClientStub = (): DockerClient => ({
+  touchLastUsed: vi.fn().mockResolvedValue(undefined),
+  ensureImage: vi.fn().mockResolvedValue(undefined),
+  start: vi.fn().mockResolvedValue({ id: 'dummy', stop: vi.fn(), remove: vi.fn() }),
+  execContainer: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+  openInteractiveExec: vi.fn().mockResolvedValue({ stdin: null, stdout: null, stderr: null, close: vi.fn() } as any),
+  streamContainerLogs: vi.fn().mockResolvedValue({ close: vi.fn() } as any),
+  resizeExec: vi.fn().mockResolvedValue(undefined),
+  stopContainer: vi.fn().mockResolvedValue(undefined),
+  removeContainer: vi.fn().mockResolvedValue(undefined),
+  getContainerLabels: vi.fn().mockResolvedValue(undefined),
+  getContainerNetworks: vi.fn().mockResolvedValue([]),
+  findContainersByLabels: vi.fn().mockResolvedValue([]),
+  listContainersByVolume: vi.fn().mockResolvedValue([]),
+  removeVolume: vi.fn().mockResolvedValue(undefined),
+  findContainerByLabels: vi.fn().mockResolvedValue(undefined),
+  putArchive: vi.fn().mockResolvedValue(undefined),
+  inspectContainer: vi.fn().mockResolvedValue({} as any),
+  getEventsStream: vi.fn().mockResolvedValue({ on: vi.fn(), off: vi.fn() } as any),
+} as unknown as DockerClient);
+
+const createContainerRegistryStub = () => ({
+  ensureIndexes: vi.fn().mockResolvedValue(undefined),
+  registerStart: vi.fn(),
+  markDeleted: vi.fn(),
+});
+
+const createWorkspaceProviderStub = () => ({
+  ensureWorkspace: vi.fn(),
+  destroyWorkspace: vi.fn(),
+}) as unknown as WorkspaceProvider;
+
+const createNcpsStub = () => ({
+  init: vi.fn().mockResolvedValue(undefined),
+  getKey: vi.fn(),
+  getKeysForInjection: vi.fn().mockReturnValue([]),
+});
+
+const createGithubStub = () => ({ isEnabled: vi.fn().mockReturnValue(false) });
+
+const createPrServiceStub = () => ({ getPRInfo: vi.fn() });
+
+const createEventProcessorStub = () => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+});
+
 describe('DELETE /api/containers/:id integration', () => {
   let app: NestFastifyApplication;
   let prismaSvc: PrismaServiceStub;
@@ -199,7 +265,10 @@ describe('DELETE /api/containers/:id integration', () => {
         },
         {
           provide: ConfigService,
-          useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService,
+          useValue: {
+            dockerRunnerBaseUrl: runner.baseUrl,
+            getDockerRunnerBaseUrl: () => runner.baseUrl,
+          } as ConfigService,
         },
         {
           provide: ContainerAdminService,
@@ -272,5 +341,86 @@ describe('DELETE /api/containers/:id integration', () => {
     expect(response.statusCode).toBe(204);
     const row = prismaSvc.getContainer('fallback-missing');
     expect(row?.deletedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('ContainersController wiring via InfraModule', () => {
+  let app: NestFastifyApplication;
+  const containerId = 'wired-123';
+  const prismaClientStub = {
+    container: {
+      findUnique: vi.fn().mockResolvedValue({
+        containerId,
+        status: 'running',
+        threadId: 'thread-1',
+        nodeId: 'node-1',
+      }),
+    },
+  } as Partial<PrismaClient>;
+  const prismaServiceStub = { getClient: () => prismaClientStub } as PrismaService;
+  const adminMock = { deleteContainer: vi.fn().mockResolvedValue(undefined) } as unknown as ContainerAdminService;
+
+  beforeAll(async () => {
+    registerTestConfig({
+      dockerRunnerBaseUrl: 'http://runner.test',
+      dockerRunnerSharedSecret: 'runner-secret',
+      agentsDatabaseUrl: 'postgresql://postgres:postgres@localhost:5432/agents_test',
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [InfraModule],
+    })
+      .overrideProvider(PrismaService)
+      .useValue(prismaServiceStub)
+      .overrideProvider(ContainerRegistry)
+      .useValue(createContainerRegistryStub())
+      .overrideProvider(ContainerCleanupService)
+      .useValue(createLifecycleStub())
+      .overrideProvider(VolumeGcService)
+      .useValue(createLifecycleStub())
+      .overrideProvider(DockerWorkspaceEventsWatcher)
+      .useValue(createLifecycleStub())
+      .overrideProvider(NcpsKeyService)
+      .useValue(createNcpsStub())
+      .overrideProvider(GithubService)
+      .useValue(createGithubStub())
+      .overrideProvider(PRService)
+      .useValue(createPrServiceStub())
+      .overrideProvider(WorkspaceProvider)
+      .useValue(createWorkspaceProviderStub())
+      .overrideProvider(ContainerThreadTerminationService)
+      .useValue(createLifecycleStub())
+      .overrideProvider(TerminalSessionsService)
+      .useValue({} as TerminalSessionsService)
+      .overrideProvider(ContainerEventProcessor)
+      .useValue(createEventProcessorStub())
+      .overrideProvider(ArchiveService)
+      .useValue({} as ArchiveService)
+      .overrideProvider(DOCKER_CLIENT)
+      .useValue(createDockerClientStub())
+      .overrideProvider(ContainerAdminService)
+      .useValue(adminMock)
+      .compile();
+
+    app = moduleRef.createNestApplication(new FastifyAdapter());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  });
+
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
+    clearTestConfig();
+  });
+
+  it('delegates DELETE requests to ContainerAdminService without throwing', async () => {
+    const response = await app.getHttpAdapter().getInstance().inject({
+      method: 'DELETE',
+      url: `/api/containers/${containerId}`,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(adminMock.deleteContainer).toHaveBeenCalledWith(containerId);
   });
 });

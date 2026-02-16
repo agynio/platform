@@ -287,7 +287,10 @@ describe('ContainersController routes', () => {
     containerAdmin = {
       deleteContainer: vi.fn().mockResolvedValue(undefined),
     } as Pick<ContainerAdminService, 'deleteContainer'>;
-    configService = { dockerRunnerBaseUrl: 'http://runner.local' } as ConfigService;
+    configService = {
+      dockerRunnerBaseUrl: 'http://runner.local',
+      getDockerRunnerBaseUrl: () => 'http://runner.local',
+    } as ConfigService;
     controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] | 'all' =>

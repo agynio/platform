@@ -191,11 +191,11 @@ export class ContainersController {
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
-    private readonly containerAdmin: ContainerAdminService,
-    private readonly configService?: ConfigService,
+    @Inject(ContainerAdminService) private readonly containerAdmin: ContainerAdminService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.prisma = prismaSvc.getClient();
-    this.runnerBaseUrl = this.configService?.dockerRunnerBaseUrl ?? 'unknown';
+    this.runnerBaseUrl = this.configService.getDockerRunnerBaseUrl();
   }
 
   @Get()

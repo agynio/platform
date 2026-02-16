@@ -88,7 +88,13 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
         { provide: PrismaService, useValue: { getClient: () => prisma } },
         { provide: ContainerRegistry, useValue: registry },
         { provide: DOCKER_CLIENT, useValue: dockerClient },
-        { provide: ConfigService, useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService },
+        {
+          provide: ConfigService,
+          useValue: {
+            dockerRunnerBaseUrl: runner.baseUrl,
+            getDockerRunnerBaseUrl: () => runner.baseUrl,
+          } as ConfigService,
+        },
         ContainerAdminService,
       ],
     }).compile();
@@ -294,7 +300,13 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
         { provide: PrismaService, useValue: { getClient: () => prisma } },
         { provide: ContainerRegistry, useValue: registry },
         { provide: DOCKER_CLIENT, useValue: dockerClient },
-        { provide: ConfigService, useValue: { dockerRunnerBaseUrl: runner.baseUrl } as ConfigService },
+        {
+          provide: ConfigService,
+          useValue: {
+            dockerRunnerBaseUrl: runner.baseUrl,
+            getDockerRunnerBaseUrl: () => runner.baseUrl,
+          } as ConfigService,
+        },
         ContainerAdminService,
       ],
     }).compile();
