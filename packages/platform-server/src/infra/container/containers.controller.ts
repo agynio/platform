@@ -111,6 +111,7 @@ type DeleteFailureLog = {
   httpResponse?: unknown;
   errorName?: string;
   errorMessage?: string;
+  errorStack?: string;
 };
 
 export class ListContainersQueryDto {
@@ -606,6 +607,11 @@ export class ContainersController {
       payload.runnerErrorCode = error.errorCode;
       payload.runnerMessage = error.message;
       payload.runnerRetryable = error.retryable;
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
+      if (error.stack) {
+        payload.errorStack = error.stack;
+      }
       return payload;
     }
     if (error instanceof HttpException) {
@@ -613,11 +619,17 @@ export class ContainersController {
       payload.httpResponse = error.getResponse();
       payload.errorName = error.name;
       payload.errorMessage = error.message;
+      if (error instanceof Error && error.stack) {
+        payload.errorStack = error.stack;
+      }
       return payload;
     }
     if (error instanceof Error) {
       payload.errorName = error.name;
       payload.errorMessage = error.message;
+      if (error.stack) {
+        payload.errorStack = error.stack;
+      }
       return payload;
     }
     payload.errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
@@ -626,7 +638,8 @@ export class ContainersController {
 
   private handleDeleteError(containerId: string, error: unknown, context: DeleteFailureContext): never {
     const logPayload = this.buildDeleteFailureLog(containerId, error, context);
-    this.logger.error(`Container delete failed ${JSON.stringify(logPayload)}`);
+    const stack = error instanceof Error ? error.stack : undefined;
+    this.logger.error(`Container delete failed ${JSON.stringify(logPayload)}`, stack);
     if (error instanceof HttpException) {
       throw error;
     }

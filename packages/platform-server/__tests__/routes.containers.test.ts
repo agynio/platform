@@ -643,7 +643,7 @@ describe('ContainersController routes', () => {
     await controller.delete('cid-1', { id: 'req-log-1' } as unknown as FastifyRequest).catch(() => undefined);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    const loggedMessage = errorSpy.mock.calls[0][0] as string;
+    const [loggedMessage, stackArg] = errorSpy.mock.calls[0] as [string, string?];
     expect(loggedMessage).toMatch(/^Container delete failed /);
     const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
     expect(payload).toMatchObject({
@@ -655,7 +655,9 @@ describe('ContainersController routes', () => {
       runnerStatusCode: 0,
       runnerErrorCode: 'runner_connection_refused',
       runnerMessage: 'runner offline',
+      errorStack: runnerError.stack,
     });
+    expect(stackArg).toBe(runnerError.stack);
     errorSpy.mockRestore();
   });
 
@@ -675,14 +677,15 @@ describe('ContainersController routes', () => {
   });
 
   it('logs metadata for unexpected delete failures', async () => {
-    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(new Error('tcp connection reset'));
+    const deleteError = new Error('tcp connection reset');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(deleteError);
     const loggerInstance = (controller as unknown as { logger: Logger }).logger;
     const errorSpy = vi.spyOn(loggerInstance, 'error');
 
     await controller.delete('cid-1', { id: 'req-log-2' } as unknown as FastifyRequest).catch(() => undefined);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    const loggedMessage = errorSpy.mock.calls[0][0] as string;
+    const [loggedMessage, stackArg] = errorSpy.mock.calls[0] as [string, string?];
     const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
     expect(payload).toMatchObject({
       containerId: 'cid-1',
@@ -691,7 +694,9 @@ describe('ContainersController routes', () => {
       runnerBaseUrl: 'http://runner.local',
       failureKind: 'unknown',
       errorMessage: 'tcp connection reset',
+      errorStack: deleteError.stack,
     });
+    expect(stackArg).toBe(deleteError.stack);
     errorSpy.mockRestore();
   });
 });
