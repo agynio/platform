@@ -24,6 +24,7 @@ import { graphApiService } from '@/features/graph/services/api';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 import { listVariables } from '@/features/variables/api';
 import type { GraphEntityKind, GraphEntitySummary, GraphEntityUpsertInput, TemplateOption } from '@/features/entities/types';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
 type EntityFormValues = {
   template: string;
@@ -93,6 +94,17 @@ function buildSubmitConfig(
   sanitized.template = meta.template;
   sanitized.kind = meta.kind;
   return sanitized;
+}
+
+function randomIdSegment(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().split('-')[0] ?? Math.random().toString(36).slice(2, 10);
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function generatePreviewNodeId(kind: GraphEntityKind): string {
+  return `entity-preview-${kind}-${randomIdSegment()}`;
 }
 
 function useSecretSuggestions() {
@@ -196,6 +208,8 @@ interface EntityFormDialogProps {
   entity?: GraphEntitySummary;
   templates: TemplateOption[];
   isSubmitting?: boolean;
+  graphNodes?: GraphNodeConfig[];
+  graphEdges?: GraphPersistedEdge[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: GraphEntityUpsertInput) => Promise<void>;
 }
@@ -207,6 +221,8 @@ export function EntityFormDialog({
   entity,
   templates,
   isSubmitting,
+  graphNodes,
+  graphEdges,
   onOpenChange,
   onSubmit,
 }: EntityFormDialogProps) {
@@ -222,6 +238,7 @@ export function EntityFormDialog({
   const titleValue = form.watch('title');
   const [configState, setConfigState] = useState<Record<string, unknown>>(() => ensureRecord(entity?.config));
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const previewNodeIdRef = useRef<string>('');
 
   const { secretSuggestions, ensureSecretKeys } = useSecretSuggestions();
   const { variableSuggestions, ensureVariableKeys } = useVariableSuggestions();
@@ -237,6 +254,12 @@ export function EntityFormDialog({
     });
     setConfigState(ensureRecord(entity?.config));
   }, [entity, form, open]);
+
+  useEffect(() => {
+    if (!open) {
+      previewNodeIdRef.current = '';
+    }
+  }, [open]);
 
   const selectedTemplate = templateSelection ? templateMap.get(templateSelection) : undefined;
   const nodeKind = useMemo<NodeViewKind>(() => {
@@ -260,6 +283,22 @@ export function EntityFormDialog({
   );
 
   const viewState = useMemo<NodeState>(() => ({ status: resolveNodeStatus(entity) }), [entity]);
+
+  const nodeIdForView = useMemo(() => {
+    if (mode === 'edit' && entity?.id) {
+      return entity.id;
+    }
+    if (!open) {
+      return '';
+    }
+    if (!previewNodeIdRef.current) {
+      previewNodeIdRef.current = generatePreviewNodeId(kind);
+    }
+    return previewNodeIdRef.current;
+  }, [mode, entity?.id, open, kind]);
+
+  const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
+  const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);
 
   const handleViewConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
@@ -348,6 +387,9 @@ export function EntityFormDialog({
           variableSuggestions,
           ensureSecretKeys,
           ensureVariableKeys,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
         };
         return <TriggerNodeConfigView {...triggerProps} />;
       }
@@ -356,6 +398,9 @@ export function EntityFormDialog({
           config: viewConfig as NodePropertiesViewProps<'Agent'>['config'],
           state: viewState,
           onConfigChange: handleViewConfigChange,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
         };
         return <AgentNodeConfigView {...agentProps} />;
       }
@@ -368,6 +413,9 @@ export function EntityFormDialog({
           variableSuggestions,
           ensureSecretKeys,
           ensureVariableKeys,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
         };
         return <ToolNodeConfigView {...toolProps} />;
       }
@@ -384,6 +432,9 @@ export function EntityFormDialog({
           nixPackageSearch,
           fetchNixPackageVersions,
           resolveNixPackageSelection,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
         };
         return <WorkspaceNodeConfigView {...workspaceProps} />;
       }
@@ -401,6 +452,9 @@ export function EntityFormDialog({
     nixPackageSearch,
     fetchNixPackageVersions,
     resolveNixPackageSelection,
+    nodeIdForView,
+    safeGraphNodes,
+    safeGraphEdges,
   ]);
 
   const disableTemplateSelect = mode === 'edit';

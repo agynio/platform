@@ -8,7 +8,9 @@ import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from 
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
 import { getTemplateOptions } from '@/features/entities/api/graphEntities';
+import { mapPersistedGraphToNodes } from '@/features/graph/mappers';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
+import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
 interface ToolbarAction {
   label: string;
@@ -32,6 +34,16 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => getTemplateOptions(templatesQuery.data ?? [], kind), [kind, templatesQuery.data]);
+
+  const graphNodes = useMemo<GraphNodeConfig[]>(() => {
+    if (!graphQuery.data) return [];
+    return mapPersistedGraphToNodes(graphQuery.data, templatesQuery.data ?? []).nodes;
+  }, [graphQuery.data, templatesQuery.data]);
+
+  const graphEdges = useMemo<GraphPersistedEdge[]>(() => {
+    if (!graphQuery.data?.edges) return [];
+    return graphQuery.data.edges.filter((edge): edge is GraphPersistedEdge => Boolean(edge));
+  }, [graphQuery.data]);
 
   const filteredEntities = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -171,6 +183,8 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
         entity={dialogMode === 'edit' ? activeEntity : undefined}
         templates={templates}
         isSubmitting={isSaving}
+        graphNodes={graphNodes}
+        graphEdges={graphEdges}
         onOpenChange={(openState) => {
           if (!openState) {
             closeDialog();
