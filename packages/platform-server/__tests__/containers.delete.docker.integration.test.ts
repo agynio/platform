@@ -9,7 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import type { FastifyInstance } from 'fastify';
+import { fetch } from 'undici';
 
 import { ContainersController } from '../src/infra/container/containers.controller';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -33,7 +33,6 @@ const hasTcpDocker = !!process.env.DOCKER_HOST;
 const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
 
 type RunnerHandle = {
-  app: FastifyInstance;
   baseUrl: string;
   close: () => Promise<void>;
 };
@@ -229,7 +228,9 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
       });
 
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toMatchObject({ code: 'runner_unreachable', message: 'runner offline' });
+      const errorBody = response.json() as { code?: string; message?: string };
+      expect(errorBody.code).toBe('runner_unreachable');
+      expect(errorBody.message).toBe('runner offline');
 
       // Registry should remain untouched when removal fails
       const row = await prisma.container.findUnique({ where: { containerId } });
@@ -247,6 +248,120 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
 
 });
 
+describeOrSkip('DELETE /api/containers/:id docker runner external process integration', () => {
+  let app: NestFastifyApplication;
+  let prisma: PrismaClient;
+  let registry: ContainerRegistry;
+  let runner: RunnerHandle;
+  let dockerClient: HttpDockerRunnerClient;
+  let dbHandle: PostgresHandle;
+  const orphanContainers = new Set<string>();
+
+  const startRegisteredContainer = async (prefix: string): Promise<{ containerId: string }> => {
+    const containerName = `${prefix}-${randomUUID().slice(0, 8)}`;
+    const startHandle = await dockerClient.start({ image: 'alpine:3.19', cmd: ['sleep', '120'], name: containerName });
+    const containerId = startHandle.id;
+    orphanContainers.add(containerId);
+
+    const threadId = randomUUID();
+    await prisma.thread.create({
+      data: {
+        id: threadId,
+        alias: `docker-e2e-${threadId.slice(0, 8)}`,
+      },
+    });
+
+    await registry.registerStart({
+      containerId,
+      nodeId: 'node-real-delete-process',
+      threadId,
+      image: 'alpine:3.19',
+      name: containerName,
+      labels: { 'test-suite': 'containers-delete-docker-process' },
+    });
+
+    return { containerId };
+  };
+
+  beforeAll(async () => {
+    dbHandle = await startPostgres();
+    await runPrismaMigrations(dbHandle.connectionString);
+    prisma = new Prisma({ datasources: { db: { url: dbHandle.connectionString } } });
+    await prisma.$connect();
+    registry = new ContainerRegistry(prisma);
+    await registry.ensureIndexes();
+
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunnerProcess(socketPath);
+    dockerClient = new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [ContainersController],
+      providers: [
+        { provide: PrismaService, useValue: { getClient: () => prisma } },
+        { provide: ContainerRegistry, useValue: registry },
+        { provide: DOCKER_CLIENT, useValue: dockerClient },
+        ContainerAdminService,
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication(new FastifyAdapter());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  }, 120_000);
+
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
+    if (runner) {
+      await runner.close();
+    }
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+    if (dbHandle) {
+      await dbHandle.stop();
+    }
+  });
+
+  beforeEach(async () => {
+    await prisma.containerEvent.deleteMany();
+    await prisma.container.deleteMany();
+    await prisma.thread.deleteMany();
+  });
+
+  afterEach(async () => {
+    for (const containerId of orphanContainers) {
+      try {
+        await dockerClient.removeContainer(containerId, { force: true, removeVolumes: true });
+      } catch {
+        // ignore cleanup failures
+      }
+      orphanContainers.delete(containerId);
+    }
+  });
+
+  it('removes a container via an out-of-process docker-runner', async () => {
+    const { containerId } = await startRegisteredContainer('delete-process');
+
+    const response = await app.getHttpAdapter().getInstance().inject({
+      method: 'DELETE',
+      url: `/api/containers/${containerId}`,
+    });
+
+    expect(response.statusCode).toBe(204);
+    await expect(dockerClient.inspectContainer(containerId)).rejects.toMatchObject({ statusCode: 404 });
+
+    const row = await prisma.container.findUnique({ where: { containerId } });
+    expect(row).not.toBeNull();
+    expect(row?.deletedAt).toBeInstanceOf(Date);
+    expect(row?.status).toBe('stopped');
+
+    orphanContainers.delete(containerId);
+  }, 120_000);
+});
+
 async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
   const port = await getAvailablePort();
   const app = createRunnerApp({
@@ -259,9 +374,88 @@ async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
   });
   await app.listen({ port, host: '127.0.0.1' });
   return {
-    app,
     baseUrl: `http://127.0.0.1:${port}`,
     close: () => app.close(),
+  };
+}
+
+async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
+  const port = await getAvailablePort();
+  const repoRoot = path.resolve(__dirname, '..', '..', '..');
+  const runnerEntry = path.resolve(repoRoot, 'packages', 'docker-runner', 'src', 'service', 'main.ts');
+  const tsxBin = path.resolve(repoRoot, 'node_modules', '.bin', 'tsx');
+  if (!fs.existsSync(tsxBin)) {
+    throw new Error(`tsx binary not found at ${tsxBin}`);
+  }
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    DOCKER_RUNNER_HOST: '127.0.0.1',
+    DOCKER_RUNNER_PORT: String(port),
+    DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
+    DOCKER_RUNNER_LOG_LEVEL: 'error',
+  };
+  if (socketPath) {
+    env.DOCKER_SOCKET = socketPath;
+  } else {
+    delete env.DOCKER_SOCKET;
+  }
+
+  const child = spawn(tsxBin, [runnerEntry], {
+    cwd: repoRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk) => {
+    process.stdout.write(`[docker-runner] ${chunk.toString()}`);
+  });
+  child.stderr?.on('data', (chunk) => {
+    process.stderr.write(`[docker-runner] ${chunk.toString()}`);
+  });
+
+  let exitHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | null = null;
+  let errorHandler: ((err: Error) => void) | null = null;
+  const exitPromise = new Promise<never>((_, reject) => {
+    exitHandler = (code, signal) => {
+      reject(new Error(`docker-runner exited before readiness (code=${code ?? 0}, signal=${signal ?? 'none'})`));
+    };
+    errorHandler = (err) => {
+      reject(err);
+    };
+    child.once('exit', exitHandler);
+    child.once('error', errorHandler);
+  });
+  try {
+    await Promise.race([
+      waitFor(async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/v1/health`);
+          return response.ok;
+        } catch {
+          return false;
+        }
+      }, { timeoutMs: 30_000, intervalMs: 250 }),
+      exitPromise,
+    ]);
+  } catch (error) {
+    child.kill('SIGTERM');
+    throw error;
+  } finally {
+    if (exitHandler) child.off('exit', exitHandler);
+    if (errorHandler) child.off('error', errorHandler);
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    close: async () => {
+      if (child.exitCode !== null || child.signalCode) {
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        child.once('exit', () => resolve());
+        child.kill('SIGTERM');
+      });
+    },
   };
 }
 

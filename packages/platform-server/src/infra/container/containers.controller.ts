@@ -584,7 +584,8 @@ export class ContainersController {
 
   private handleDeleteError(containerId: string, error: unknown, requestId?: string): never {
     if (error instanceof HttpException) {
-      if (error.getStatus() >= 500) {
+      const status = error.getStatus();
+      if (status >= 500 || status === HttpStatus.UNAUTHORIZED) {
         const logPayload = this.buildDeleteErrorLog(containerId, error, requestId);
         const stack = error instanceof Error ? error.stack : undefined;
         this.logger.error('Container delete failed', stack, logPayload);

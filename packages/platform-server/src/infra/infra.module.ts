@@ -24,6 +24,7 @@ import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
 import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
+import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -48,6 +49,7 @@ import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
         }),
       inject: [ConfigService],
     },
+    DockerRunnerConnectivityProbe,
     {
       provide: ContainerCleanupService,
       useFactory: (registry: ContainerRegistry, containers: DockerClient) => {

@@ -152,10 +152,18 @@ const logErrorResponse = (request: FastifyRequest, details: ErrorResponseDetails
   );
 };
 
-const sendError = (request: FastifyRequest, reply: FastifyReply, details: ErrorResponseDetails) => {
+const sendError = (
+  request: FastifyRequest,
+  reply: FastifyReply,
+  details: ErrorResponseDetails,
+  options?: { skipLog?: boolean },
+) => {
   const retryable = typeof details.retryable === 'boolean' ? details.retryable : details.status >= 500;
-  logErrorResponse(request, { ...details, retryable });
+  if (!options?.skipLog) {
+    logErrorResponse(request, { ...details, retryable });
+  }
   reply.status(details.status).send({ error: { code: details.code, message: details.message, retryable } });
+  return reply;
 };
 
 const validationError = (request: FastifyRequest, reply: FastifyReply, message: string) =>
@@ -279,12 +287,27 @@ export function createRunnerApp(config: RunnerConfig): FastifyInstance {
       nonceCache,
     });
     if (!verification.ok) {
-      sendError(request, reply, {
-        status: 401,
-        code: verification.code ?? 'unauthorized',
-        message: verification.message ?? 'Unauthorized',
-        retryable: false,
-      });
+      request.log.error(
+        {
+          requestId: request.id,
+          method: request.method,
+          route: path,
+          errorCode: verification.code ?? 'unauthorized',
+          message: verification.message ?? 'Unauthorized',
+        },
+        'docker-runner authentication failed',
+      );
+      return sendError(
+        request,
+        reply,
+        {
+          status: 401,
+          code: verification.code ?? 'unauthorized',
+          message: verification.message ?? 'Unauthorized',
+          retryable: false,
+        },
+        { skipLog: true },
+      );
     }
   });
 

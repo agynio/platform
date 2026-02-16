@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { PassThrough, Writable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
-import { fetch, type Response } from 'undici';
+import { fetch as undiciFetch, type Response } from 'undici';
 import {
   ContainerHandle,
   type ContainerOpts,
@@ -39,6 +39,7 @@ type RunnerClientConfig = {
   sharedSecret: string;
   requestTimeoutMs?: number;
   maxRetries?: number;
+  fetchImpl?: typeof undiciFetch;
 };
 
 type RequestOptions = {
@@ -54,6 +55,12 @@ const RETRYABLE_STATUS = new Set([502, 503, 504]);
 type RunnerErrorBody = { error?: { code?: string; message?: string; retryable?: boolean } };
 
 export const EXEC_REQUEST_TIMEOUT_SLACK_MS = 5_000;
+
+type NetworkErrorContext = {
+  method: string;
+  path: string;
+  timeoutMs?: number;
+};
 
 type RunnerExecMessage =
   | { type: 'ready'; execId: string }
@@ -82,12 +89,22 @@ export class HttpDockerRunnerClient implements DockerClient {
   private readonly sharedSecret: string;
   private readonly requestTimeoutMs: number;
   private readonly maxRetries: number;
+  private readonly fetchImpl: typeof undiciFetch;
 
   constructor(config: RunnerClientConfig) {
     this.baseUrl = new URL(config.baseUrl);
     this.sharedSecret = config.sharedSecret;
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.maxRetries = config.maxRetries ?? 2;
+    this.fetchImpl = config.fetchImpl ?? undiciFetch;
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl.toString();
+  }
+
+  async checkConnectivity(): Promise<{ status: string }> {
+    return this.send<{ status: string }>({ method: 'GET', path: '/v1/ready' });
   }
 
   private buildUrl(path: string, query?: RequestOptions['query']): URL {
@@ -123,8 +140,68 @@ export class HttpDockerRunnerClient implements DockerClient {
     return new DockerRunnerRequestError(response.status, code, retryable, message);
   }
 
-  private buildNetworkError(message: string): DockerRunnerRequestError {
-    return new DockerRunnerRequestError(0, 'network_error', true, message);
+  private buildNetworkError(error: unknown, context: NetworkErrorContext): DockerRunnerRequestError {
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        const timeout = context.timeoutMs ?? this.requestTimeoutMs;
+        return new DockerRunnerRequestError(
+          0,
+          'runner_request_timeout',
+          true,
+          `Docker runner request ${context.method} ${context.path} timed out after ${timeout}ms (baseUrl=${this.baseUrl.origin})`,
+        );
+      }
+      const errno = this.extractErrno(error);
+      if (errno?.code) {
+        const code = errno.code.toUpperCase();
+        const location = this.baseUrl.origin;
+        if (code === 'ECONNREFUSED') {
+          return new DockerRunnerRequestError(0, 'runner_connection_refused', true, `Docker runner refused connection at ${location}`);
+        }
+        if (code === 'ECONNRESET') {
+          return new DockerRunnerRequestError(0, 'runner_connection_reset', true, `Docker runner connection reset at ${location}`);
+        }
+        if (code === 'ETIMEDOUT') {
+          return new DockerRunnerRequestError(0, 'runner_connection_timeout', true, `Docker runner connection timeout at ${location}`);
+        }
+        if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'EHOSTUNREACH') {
+          return new DockerRunnerRequestError(
+            0,
+            'runner_host_unreachable',
+            true,
+            `Docker runner host ${this.baseUrl.hostname} unreachable (${code})`,
+          );
+        }
+      }
+      const chained = this.extractErrno(error.cause);
+      if (chained?.code) {
+        return this.buildNetworkError(chained, context);
+      }
+    }
+    const fallbackMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Unknown network error';
+    return new DockerRunnerRequestError(
+      0,
+      'runner_network_error',
+      true,
+      `Docker runner request ${context.method} ${context.path} failed (${this.baseUrl.origin}): ${fallbackMessage}`,
+    );
+  }
+
+  private extractErrno(error: unknown): NodeJS.ErrnoException | undefined {
+    if (!error || typeof error !== 'object') return undefined;
+    const candidate = error as Partial<NodeJS.ErrnoException> & { cause?: unknown };
+    if (candidate.code && typeof candidate.code === 'string') {
+      return candidate as NodeJS.ErrnoException;
+    }
+    if (candidate.cause && candidate.cause !== error) {
+      return this.extractErrno(candidate.cause);
+    }
+    return undefined;
   }
 
   private async ensureOk(response: Response): Promise<Response> {
@@ -154,7 +231,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? this.requestTimeoutMs);
       try {
-        const response = await fetch(this.buildUrl(options.path, options.query), {
+        const response = await this.fetchImpl(this.buildUrl(options.path, options.query), {
           method: options.method,
           body: bodyString || undefined,
           headers: {
@@ -175,8 +252,14 @@ export class HttpDockerRunnerClient implements DockerClient {
         return { success: false, error };
       } catch (error) {
         clearTimeout(timeout);
-        const message = error instanceof Error ? error.message : String(error);
-        return { success: false, error: this.buildNetworkError(message) };
+        return {
+          success: false,
+          error: this.buildNetworkError(error, {
+            method: options.method,
+            path: pathWithQuery,
+            timeoutMs: options.timeoutMs,
+          }),
+        };
       }
     };
 
@@ -361,7 +444,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       secret: this.sharedSecret,
     });
 
-    const response = await fetch(url, {
+    const response = await this.fetchImpl(url, {
       method: 'GET',
       headers,
     });
@@ -525,7 +608,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       body: '',
       secret: this.sharedSecret,
     });
-    const response = await fetch(url, { method: 'GET', headers });
+    const response = await this.fetchImpl(url, { method: 'GET', headers });
     await this.ensureOk(response);
     if (!response.body) throw new Error('Runner events stream missing body');
     const stream = new PassThrough();
