@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { PassThrough, Writable } from 'node:stream';
+import type { IncomingMessage } from 'http';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
 import { fetch as undiciFetch, type Response } from 'undici';
@@ -334,6 +335,7 @@ export class HttpDockerRunnerClient implements DockerClient {
       closeResolver = resolve;
       closeReject = reject;
     });
+    void closePromise.catch(() => undefined);
     let readyResolve: (() => void) | null = null;
     let readyReject: ((reason?: unknown) => void) | null = null;
     const readyPromise = new Promise<void>((resolve, reject) => {
@@ -374,18 +376,41 @@ export class HttpDockerRunnerClient implements DockerClient {
           return;
         }
         if (payload.type === 'error') {
-          const errMsg = payload.error ?? payload.data ?? payload.message ?? 'interactive exec error';
-          const err = new Error(errMsg);
-          closeReject?.(err);
+          const err = this.parseExecErrorPayload(payload);
+          stdout.end();
+          stderr.end();
+          if (readyReject) {
+            readyReject(err);
+            readyReject = null;
+          }
+          if (closeReject) {
+            closeReject(err);
+            closeReject = null;
+          }
+          closeResolver = null;
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
+          return;
         }
       } catch (err) {
-        closeReject?.(err);
+        const normalized = err instanceof Error ? err : new Error(String(err));
+        if (readyReject) {
+          readyReject(normalized);
+          readyReject = null;
+        }
+        if (closeReject) {
+          closeReject(normalized);
+          closeReject = null;
+        }
       }
     });
 
     ws.on('error', (err) => {
       readyReject?.(err);
       closeReject?.(err);
+      readyReject = null;
+      closeReject = null;
     });
 
     ws.on('close', () => {
@@ -395,6 +420,36 @@ export class HttpDockerRunnerClient implements DockerClient {
         closeReject(new Error('Interactive exec connection closed'));
         closeReject = null;
       }
+    });
+
+    ws.on('unexpected-response', (_req, res: IncomingMessage) => {
+      const statusCode = typeof res.statusCode === 'number' ? res.statusCode : 500;
+      const statusMessage = res.statusMessage ?? 'Runner upgrade failed';
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer | string) => {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      });
+      res.on('end', () => {
+        const body = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
+        const parsed = this.parseExecErrorFrame(body);
+        const message = parsed?.message || body || statusMessage || 'Runner upgrade failed';
+        const errorCode = parsed?.errorCode || 'runner_ws_error';
+        const retryable = typeof parsed?.retryable === 'boolean' ? parsed.retryable : statusCode >= 500;
+        const error = new DockerRunnerRequestError(statusCode, errorCode, retryable, message.trim() || statusMessage);
+        if (readyReject) {
+          readyReject(error);
+          readyReject = null;
+        }
+        if (closeReject) {
+          closeReject(error);
+          closeReject = null;
+        }
+        try {
+          ws.terminate();
+        } catch {
+          // ignore terminate errors
+        }
+      });
     });
 
     const stdin = new Writable({
@@ -422,6 +477,67 @@ export class HttpDockerRunnerClient implements DockerClient {
     await readyPromise;
 
     return { stdin, stdout, stderr, close, execId };
+  }
+
+  private parseExecErrorPayload(payload: Extract<RunnerExecMessage, { type: 'error' }>): DockerRunnerRequestError {
+    const segments: string[] = [];
+    if (typeof payload.error === 'string') segments.push(payload.error);
+    if (typeof payload.message === 'string') segments.push(payload.message);
+    if (typeof payload.data === 'string') segments.push(payload.data);
+    const structured = segments
+      .map((segment) => this.parseExecErrorFrame(segment))
+      .find((details) => details !== null);
+    if (structured) {
+      const statusCode = typeof structured.statusCode === 'number' ? structured.statusCode : 500;
+      const errorCode = structured.errorCode ?? this.inferExecErrorCode(statusCode);
+      const retryable = typeof structured.retryable === 'boolean' ? structured.retryable : statusCode >= 500;
+      const message = structured.message ?? segments.find((value) => value.trim().length > 0) ?? 'interactive exec error';
+      return new DockerRunnerRequestError(statusCode, errorCode, retryable, message);
+    }
+    const fallback = segments.find((value) => value.trim().length > 0) ?? 'interactive exec error';
+    const inferred = this.detectExecErrorFromMessage(fallback);
+    return new DockerRunnerRequestError(inferred.statusCode, inferred.code, inferred.retryable, fallback);
+  }
+
+  private parseExecErrorFrame(raw: string): { statusCode?: number; errorCode?: string; message?: string; retryable?: boolean } | null {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith('{') || trimmed.length > 16_384) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        status?: number;
+        statusCode?: number;
+        code?: string;
+        message?: string;
+        retryable?: boolean;
+        error?: { code?: string; message?: string; retryable?: boolean; status?: number; statusCode?: number };
+      };
+      const status = parsed.status ?? parsed.statusCode ?? parsed.error?.status ?? parsed.error?.statusCode;
+      const code = parsed.error?.code ?? parsed.code;
+      const message = parsed.error?.message ?? parsed.message;
+      const retryable = parsed.error?.retryable ?? parsed.retryable;
+      if (typeof status !== 'number' && typeof code !== 'string' && typeof message !== 'string') return null;
+      return { statusCode: status, errorCode: code, message, retryable };
+    } catch {
+      return null;
+    }
+  }
+
+  private detectExecErrorFromMessage(message: string): { statusCode: number; code: string; retryable: boolean } {
+    const normalized = message.toLowerCase();
+    if (normalized.includes('no such container')) {
+      return { statusCode: 404, code: 'container_not_found', retryable: false };
+    }
+    if (normalized.includes('not running') || normalized.includes('already stopped')) {
+      return { statusCode: 409, code: 'container_conflict', retryable: false };
+    }
+    return { statusCode: 500, code: 'runner_exec_error', retryable: true };
+  }
+
+  private inferExecErrorCode(statusCode: number): string {
+    if (statusCode === 404) return 'container_not_found';
+    if (statusCode === 409) return 'container_conflict';
+    return 'runner_exec_error';
   }
 
   async streamContainerLogs(containerId: string, options: LogsStreamOptions = {}): Promise<LogsStreamSession> {

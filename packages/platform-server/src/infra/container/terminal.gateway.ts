@@ -8,6 +8,7 @@ import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.
 import { WorkspaceProvider } from '../../workspace/providers/workspace.provider';
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
 import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
+import { DockerRunnerRequestError } from './httpDockerRunner.client';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -760,6 +761,19 @@ export class ContainerTerminalGateway {
         refreshActivity();
       });
     } catch (err) {
+      if (err instanceof DockerRunnerRequestError && (err.statusCode === 404 || err.statusCode === 409)) {
+        const code = err.statusCode === 404 ? 'terminal_container_not_found' : 'terminal_container_conflict';
+        send({ type: 'error', code, message: err.message });
+        this.logger.warn('terminal container unavailable', {
+          sessionId,
+          workspaceId: workspaceShortId,
+          execId,
+          status: err.statusCode,
+          errorCode: err.errorCode,
+        });
+        await cleanup(code, { skipStatus: true });
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       send({ type: 'error', code: 'exec_start_failed', message });
       logStatus('error', { reason: message, code: 'exec_start_failed' });

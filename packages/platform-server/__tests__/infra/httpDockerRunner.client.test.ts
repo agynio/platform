@@ -84,3 +84,35 @@ describe('HttpDockerRunnerClient network diagnostics', () => {
     expect(sendSpy).toHaveBeenCalledWith({ method: 'GET', path: '/v1/ready' });
   });
 });
+
+describe('HttpDockerRunnerClient exec websocket errors', () => {
+  const baseConfig = {
+    baseUrl: 'http://runner.internal:7071',
+    sharedSecret: 'secret',
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parses structured error frames for missing containers', () => {
+    const client = new HttpDockerRunnerClient(baseConfig);
+    const payload = {
+      type: 'error',
+      data: JSON.stringify({
+        status: 404,
+        error: { code: 'no_such_container', message: 'No such container', retryable: false },
+      }),
+    } as { type: 'error'; data: string };
+
+    const error = (client as unknown as {
+      parseExecErrorPayload: (message: { type: 'error'; data?: string; error?: string; message?: string }) => DockerRunnerRequestError;
+    }).parseExecErrorPayload(payload);
+
+    expect(error).toBeInstanceOf(DockerRunnerRequestError);
+    expect(error.statusCode).toBe(404);
+    expect(error.errorCode).toBe('no_such_container');
+    expect(error.retryable).toBe(false);
+    expect(error.message).toContain('No such container');
+  });
+});
