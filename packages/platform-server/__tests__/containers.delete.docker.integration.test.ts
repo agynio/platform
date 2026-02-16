@@ -1,15 +1,9 @@
 import 'reflect-metadata';
-import fs from 'node:fs';
-import net from 'node:net';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { setTimeout as sleep } from 'node:timers/promises';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { fetch } from 'undici';
 
 import { ContainersController } from '../src/infra/container/containers.controller';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -20,27 +14,24 @@ import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaClient as Prisma } from '@prisma/client';
 
-import { createRunnerApp } from '../../docker-runner/src/service/app';
+import {
+  DEFAULT_SOCKET,
+  RUNNER_SECRET,
+  hasTcpDocker,
+  socketMissing,
+  startDockerRunner,
+  startDockerRunnerProcess,
+  startPostgres,
+  runPrismaMigrations,
+  type RunnerHandle,
+  type PostgresHandle,
+} from './helpers/docker.e2e';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
-const RUNNER_SECRET = 'docker-e2e-secret';
-const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
 const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1';
-const hasTcpDocker = !!process.env.DOCKER_HOST;
-const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
-
-type RunnerHandle = {
-  baseUrl: string;
-  close: () => Promise<void>;
-};
-
-type PostgresHandle = {
-  connectionString: string;
-  stop: () => Promise<void>;
-};
 
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 
@@ -361,199 +352,6 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
     orphanContainers.delete(containerId);
   }, 120_000);
 });
-
-async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
-  const port = await getAvailablePort();
-  const app = createRunnerApp({
-    port,
-    host: '127.0.0.1',
-    sharedSecret: RUNNER_SECRET,
-    dockerSocket: socketPath,
-    signatureTtlMs: 60_000,
-    logLevel: 'error',
-  });
-  await app.listen({ port, host: '127.0.0.1' });
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    close: () => app.close(),
-  };
-}
-
-async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
-  const port = await getAvailablePort();
-  const repoRoot = path.resolve(__dirname, '..', '..', '..');
-  const runnerEntry = path.resolve(repoRoot, 'packages', 'docker-runner', 'src', 'service', 'main.ts');
-  const tsxBin = path.resolve(repoRoot, 'node_modules', '.bin', 'tsx');
-  if (!fs.existsSync(tsxBin)) {
-    throw new Error(`tsx binary not found at ${tsxBin}`);
-  }
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    DOCKER_RUNNER_HOST: '127.0.0.1',
-    DOCKER_RUNNER_PORT: String(port),
-    DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
-    DOCKER_RUNNER_LOG_LEVEL: 'error',
-  };
-  if (socketPath) {
-    env.DOCKER_SOCKET = socketPath;
-  } else {
-    delete env.DOCKER_SOCKET;
-  }
-
-  const child = spawn(tsxBin, [runnerEntry], {
-    cwd: repoRoot,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  child.stdout?.on('data', (chunk) => {
-    process.stdout.write(`[docker-runner] ${chunk.toString()}`);
-  });
-  child.stderr?.on('data', (chunk) => {
-    process.stderr.write(`[docker-runner] ${chunk.toString()}`);
-  });
-
-  let exitHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | null = null;
-  let errorHandler: ((err: Error) => void) | null = null;
-  const exitPromise = new Promise<never>((_, reject) => {
-    exitHandler = (code, signal) => {
-      reject(new Error(`docker-runner exited before readiness (code=${code ?? 0}, signal=${signal ?? 'none'})`));
-    };
-    errorHandler = (err) => {
-      reject(err);
-    };
-    child.once('exit', exitHandler);
-    child.once('error', errorHandler);
-  });
-  try {
-    await Promise.race([
-      waitFor(async () => {
-        try {
-          const response = await fetch(`http://127.0.0.1:${port}/v1/health`);
-          return response.ok;
-        } catch {
-          return false;
-        }
-      }, { timeoutMs: 30_000, intervalMs: 250 }),
-      exitPromise,
-    ]);
-  } catch (error) {
-    child.kill('SIGTERM');
-    throw error;
-  } finally {
-    if (exitHandler) child.off('exit', exitHandler);
-    if (errorHandler) child.off('error', errorHandler);
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    close: async () => {
-      if (child.exitCode !== null || child.signalCode) {
-        return;
-      }
-      await new Promise<void>((resolve) => {
-        child.once('exit', () => resolve());
-        child.kill('SIGTERM');
-      });
-    },
-  };
-}
-
-async function startPostgres(): Promise<PostgresHandle> {
-  const containerName = `containers-pg-${randomUUID()}`;
-  const port = await getAvailablePort();
-  await runCommand('docker', [
-    'run',
-    '-d',
-    '--name',
-    containerName,
-    '-e',
-    'POSTGRES_PASSWORD=postgres',
-    '-e',
-    'POSTGRES_USER=postgres',
-    '-e',
-    'POSTGRES_DB=agents_test',
-    '-p',
-    `${port}:5432`,
-    'postgres:15-alpine',
-  ]);
-
-  await waitFor(async () => {
-    try {
-      await runCommand('docker', ['exec', containerName, 'pg_isready', '-U', 'postgres']);
-      return true;
-    } catch {
-      return false;
-    }
-  }, { timeoutMs: 30_000, intervalMs: 1_000 });
-
-  const connectionString = `postgresql://postgres:postgres@127.0.0.1:${port}/agents_test`;
-  return {
-    connectionString,
-    stop: async () => {
-      try {
-        await runCommand('docker', ['rm', '-f', containerName]);
-      } catch {
-        // ignore cleanup errors
-      }
-    },
-  };
-}
-
-async function runPrismaMigrations(databaseUrl: string): Promise<void> {
-  const serverRoot = path.resolve(__dirname, '..');
-  await runCommand('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
-    cwd: serverRoot,
-    env: { ...process.env, AGENTS_DATABASE_URL: databaseUrl },
-  });
-}
-
-function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('Failed to allocate port'));
-        return;
-      }
-      const { port } = address;
-      server.close(() => resolve(port));
-    });
-  });
-}
-
-function runCommand(command: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options?.cwd,
-      env: options?.env,
-      stdio: 'inherit',
-    });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
-      }
-    });
-  });
-}
-
-async function waitFor(predicate: () => Promise<boolean>, options: { timeoutMs: number; intervalMs: number }): Promise<void> {
-  const deadline = Date.now() + options.timeoutMs;
-  while (Date.now() < deadline) {
-    if (await predicate()) {
-      return;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error('Timed out waiting for condition');
-}
 
 if (shouldSkip) {
   console.warn('Skipping docker deletion integration tests due to SKIP_DOCKER_DELETE_E2E=1');
