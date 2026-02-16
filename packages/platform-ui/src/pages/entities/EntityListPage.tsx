@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, RefreshCw } from 'lucide-react';
-import { Input } from '@/components/Input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
@@ -27,7 +26,6 @@ interface EntityListPageProps {
 
 export function EntityListPage({ kind, title, description, createLabel, emptyLabel, toolbarActions = [] }: EntityListPageProps) {
   const { entities, createEntity, updateEntity, deleteEntity, graphQuery, templatesQuery, conflict, resolveConflict, isSaving } = useGraphEntities();
-  const [search, setSearch] = useState('');
   const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
   const [activeEntity, setActiveEntity] = useState<GraphEntitySummary | undefined>();
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
@@ -45,17 +43,8 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   }, [graphQuery.data]);
 
   const filteredEntities = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return entities.filter((entity) => {
-      if (entity.templateKind !== kind) return false;
-      if (!query) return true;
-      const haystack = [entity.title, entity.id, entity.templateTitle, entity.templateName]
-        .concat(typeof entity.config.description === 'string' ? [entity.config.description] : [])
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [entities, kind, search]);
+    return entities.filter((entity) => entity.templateKind === kind);
+  }, [entities, kind]);
 
   const sortedEntities = useMemo(() => {
     if (filteredEntities.length === 0) return filteredEntities;
@@ -95,7 +84,7 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   const dialogModeForSubmit = dialogMode ?? 'create';
   const dialogSubmit = dialogMode === 'edit' ? updateEntity : createEntity;
 
-  const showEmptyLabel = search ? `No ${title.toLowerCase()} match “${search}”.` : emptyLabel;
+  const showEmptyLabel = emptyLabel;
   const disableCreate = templates.length === 0 || isSaving || templatesQuery.isLoading;
 
   const handleSortChange = (key: EntityTableSortKey) => {
@@ -138,61 +127,44 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
         </div>
       </div>
 
-      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3 bg-white">
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder={`Search ${title.toLowerCase()}`}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="max-w-sm"
-          />
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            disabled={!search}
-            className="px-3 py-1.5 text-xs rounded-md border border-[var(--agyn-border-subtle)] text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {(conflict || graphQuery.isError || templatesQuery.isError) && (
+          <div className="shrink-0 space-y-4 border-b border-[var(--agyn-border-subtle)] px-6 py-4">
+            {conflict && (
+              <Alert className="border-amber-400/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+                <AlertTitle>Graph updated elsewhere</AlertTitle>
+                <AlertDescription className="flex items-center justify-between gap-3">
+                  <span>Latest graph changes are available. Refresh to continue editing.</span>
+                  <button
+                    type="button"
+                    onClick={() => resolveConflict()}
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)] transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh graph
+                  </button>
+                </AlertDescription>
+              </Alert>
+            )}
 
-      <div className="flex-1 overflow-auto">
-        <div className="px-6 py-6 space-y-4">
-          {conflict && (
-            <Alert className="border-amber-400/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-              <AlertTitle>Graph updated elsewhere</AlertTitle>
-              <AlertDescription className="flex items-center justify-between gap-3">
-                <span>Latest graph changes are available. Refresh to continue editing.</span>
-                <button
-                  type="button"
-                  onClick={() => resolveConflict()}
-                  className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)] transition-colors"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh graph
-                </button>
-              </AlertDescription>
-            </Alert>
-          )}
+            {(graphQuery.isError || templatesQuery.isError) && (
+              <Alert variant="destructive">
+                <AlertTitle>Unable to load graph data</AlertTitle>
+                <AlertDescription>Check your connection and try again.</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
 
-          {(graphQuery.isError || templatesQuery.isError) && (
-            <Alert variant="destructive">
-              <AlertTitle>Unable to load graph data</AlertTitle>
-              <AlertDescription>Check your connection and try again.</AlertDescription>
-            </Alert>
-          )}
-
-          <EntityTable
-            rows={sortedEntities}
-            isLoading={isLoading}
-            emptyLabel={showEmptyLabel}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-            sort={sort}
-            onSortChange={handleSortChange}
-          />
-        </div>
+        <EntityTable
+          rows={sortedEntities}
+          isLoading={isLoading}
+          emptyLabel={showEmptyLabel}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          sort={sort}
+          onSortChange={handleSortChange}
+        />
       </div>
 
       <EntityFormDialog

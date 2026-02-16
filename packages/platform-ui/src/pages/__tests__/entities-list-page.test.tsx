@@ -112,23 +112,14 @@ describe('Entity list pages', () => {
     notifications.error.mockReset();
   });
 
-  it('renders agent rows and filters by search text', async () => {
+  it('renders agent rows without mixing entity kinds', async () => {
     primeGraphHandlers();
-
-    const user = userEvent.setup();
 
     renderWithGraphProviders(<AgentsListPage />);
 
     await screen.findByText('Core Agent');
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
-
-    const searchInput = screen.getByPlaceholderText('Search agents');
-    await user.type(searchInput, 'trigger');
-
-    await waitFor(() => expect(screen.getByText('No agents match “trigger”.')).toBeInTheDocument());
-
-    await user.clear(searchInput);
-    await waitFor(() => expect(screen.getByText('Core Agent')).toBeVisible());
+    expect(screen.getByText('Core Agent')).toBeVisible();
   });
 
   it('shows trigger entities in the triggers list', async () => {

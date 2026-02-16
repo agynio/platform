@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 
 import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
 import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
-import { Button } from '@/components/Button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/Badge';
 
@@ -46,31 +45,43 @@ export function MemoryListPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
-      <div className="space-y-2">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Memory</h1>
-          <p className="text-sm text-muted-foreground">Browse nodes with stored memory documents.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={handleRefresh} disabled={docsQuery.isFetching}>
-            Refresh
-          </Button>
-          <Button asChild>
-            <Link to="/agents/memory">Open memory manager</Link>
-          </Button>
+    <div className="flex h-full flex-col overflow-hidden bg-white">
+      <div className="border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--agyn-dark)]">Memory</h1>
+            <p className="mt-1 text-sm text-[var(--agyn-text-subtle)]">Browse nodes with stored memory documents.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={docsQuery.isFetching}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] shadow-sm transition-colors hover:bg-[var(--agyn-bg-light)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Refresh
+            </button>
+            <Link
+              to="/agents/memory"
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] shadow-sm transition-colors hover:bg-[var(--agyn-bg-light)]"
+            >
+              Open memory manager
+            </Link>
+          </div>
         </div>
       </div>
 
-      {errorMessage && (
-        <Alert variant="destructive">
-          <AlertDescription>Failed to load memory documents: {errorMessage}</AlertDescription>
-        </Alert>
-      )}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {errorMessage && (
+          <div className="shrink-0 border-b border-[var(--agyn-border-subtle)] px-6 py-4">
+            <Alert variant="destructive">
+              <AlertDescription>Failed to load memory documents: {errorMessage}</AlertDescription>
+            </Alert>
+          </div>
+        )}
 
-      <div className="rounded-lg border bg-white">
         <div className="flex-1 overflow-auto">
-          <table className="w-full border-collapse table-fixed">
+          <table className="w-full table-fixed border-collapse">
             <colgroup>
               <col style={{ width: '45%' }} />
               <col style={{ width: '25%' }} />
@@ -78,9 +89,9 @@ export function MemoryListPage() {
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
-                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Node</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Scope</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Thread</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--agyn-text-subtle)]">Node</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--agyn-text-subtle)]">Scope</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--agyn-text-subtle)]">Thread</th>
               </tr>
             </thead>
             <tbody>
@@ -100,18 +111,18 @@ export function MemoryListPage() {
                 rows.map((row) => (
                   <tr
                     key={row.key}
-                    className="border-b border-[var(--agyn-border-subtle)] hover:bg-[var(--agyn-bg-light)]/50 transition-colors"
+                    className="border-b border-[var(--agyn-border-subtle)] transition-colors hover:bg-[var(--agyn-bg-light)]/50"
                   >
-                    <td className="px-6 h-[60px]">
+                    <td className="h-[60px] px-6">
                       <div className="flex flex-col">
                         <span className="font-medium">{row.title}</span>
                         <span className="text-xs text-[var(--agyn-text-subtle)]">{row.nodeId}</span>
                       </div>
                     </td>
-                    <td className="px-6 h-[60px]">
+                    <td className="h-[60px] px-6">
                       <Badge variant="outline">{row.scope === 'global' ? 'Global' : 'Per thread'}</Badge>
                     </td>
-                    <td className="px-6 h-[60px]">{row.scope === 'perThread' ? row.threadId ?? '—' : '—'}</td>
+                    <td className="h-[60px] px-6">{row.scope === 'perThread' ? row.threadId ?? '—' : '—'}</td>
                   </tr>
                 ))
               )}

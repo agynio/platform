@@ -1,30 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
 import { useForm } from 'react-hook-form';
 
-import {
-  ScreenDialog,
-  ScreenDialogContent,
-  ScreenDialogDescription,
-  ScreenDialogFooter,
-  ScreenDialogHeader,
-  ScreenDialogTitle,
-} from '@/components/Dialog';
+import { ScreenDialog, ScreenDialogContent, ScreenDialogDescription, ScreenDialogTitle } from '@/components/Dialog';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectInput } from '@/components/SelectInput';
-import TriggerNodeConfigView from '@/components/nodeProperties/views/TriggerNodeConfigView';
-import AgentNodeConfigView from '@/components/nodeProperties/views/AgentNodeConfigView';
-import ToolNodeConfigView from '@/components/nodeProperties/views/ToolNodeConfigView';
-import WorkspaceNodeConfigView from '@/components/nodeProperties/views/WorkspaceNodeConfigView';
 import type { NodeConfig, NodeState } from '@/components/nodeProperties/types';
 import type { NodePropertiesViewProps } from '@/components/nodeProperties/viewTypes';
+import { NODE_TEMPLATE_KIND_MAP, isNodeTemplateName } from '@/components/nodeProperties/viewTypes';
+import { NODE_TEMPLATE_VIEW_REGISTRY, NODE_VIEW_REGISTRY } from '@/components/nodeProperties/viewRegistry';
 import { graphApiService } from '@/features/graph/services/api';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 import { listVariables } from '@/features/variables/api';
 import type { GraphEntityKind, GraphEntitySummary, GraphEntityUpsertInput, TemplateOption } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
+import { X } from 'lucide-react';
 
 type EntityFormValues = {
   template: string;
@@ -373,41 +366,32 @@ export function EntityFormDialog({
     [],
   );
 
+  const displayTitle = (titleValue ?? '').trim() || entity?.title || '';
+
+  const templateNameForView = typeof viewConfig.template === 'string' ? viewConfig.template : undefined;
+
+  const templateViewComponent = useCallback(<K extends NodeConfig['kind']>(kind: K) => {
+    if (!templateNameForView || !isNodeTemplateName(templateNameForView)) {
+      return undefined;
+    }
+    const expectedKind = NODE_TEMPLATE_KIND_MAP[templateNameForView];
+    if (expectedKind !== kind) {
+      return undefined;
+    }
+    return NODE_TEMPLATE_VIEW_REGISTRY[templateNameForView] as ComponentType<NodePropertiesViewProps<K>>;
+  }, [templateNameForView]);
+
   const configView = useMemo(() => {
     if (!templateSelection) {
       return null;
     }
     switch (nodeKind) {
-      case 'Trigger': {
-        const triggerProps: NodePropertiesViewProps<'Trigger'> = {
-          config: viewConfig as NodePropertiesViewProps<'Trigger'>['config'],
-          state: viewState,
-          onConfigChange: handleViewConfigChange,
-          secretSuggestions,
-          variableSuggestions,
-          ensureSecretKeys,
-          ensureVariableKeys,
-          nodeId: nodeIdForView,
-          graphNodes: safeGraphNodes,
-          graphEdges: safeGraphEdges,
-        };
-        return <TriggerNodeConfigView {...triggerProps} />;
-      }
-      case 'Agent': {
-        const agentProps: NodePropertiesViewProps<'Agent'> = {
-          config: viewConfig as NodePropertiesViewProps<'Agent'>['config'],
-          state: viewState,
-          onConfigChange: handleViewConfigChange,
-          nodeId: nodeIdForView,
-          graphNodes: safeGraphNodes,
-          graphEdges: safeGraphEdges,
-        };
-        return <AgentNodeConfigView {...agentProps} />;
-      }
       case 'Tool': {
+        const View = templateViewComponent('Tool') ?? NODE_VIEW_REGISTRY.Tool;
         const toolProps: NodePropertiesViewProps<'Tool'> = {
           config: viewConfig as NodePropertiesViewProps<'Tool'>['config'],
           state: viewState,
+          displayTitle,
           onConfigChange: handleViewConfigChange,
           secretSuggestions,
           variableSuggestions,
@@ -416,14 +400,15 @@ export function EntityFormDialog({
           nodeId: nodeIdForView,
           graphNodes: safeGraphNodes,
           graphEdges: safeGraphEdges,
-        };
-        return <ToolNodeConfigView {...toolProps} />;
+        } satisfies NodePropertiesViewProps<'Tool'>;
+        return <View {...toolProps} />;
       }
-      case 'Workspace':
-      default: {
+      case 'Workspace': {
+        const View = templateViewComponent('Workspace') ?? NODE_VIEW_REGISTRY.Workspace;
         const workspaceProps: NodePropertiesViewProps<'Workspace'> = {
           config: viewConfig as NodePropertiesViewProps<'Workspace'>['config'],
           state: viewState,
+          displayTitle,
           onConfigChange: handleViewConfigChange,
           secretSuggestions,
           variableSuggestions,
@@ -435,8 +420,42 @@ export function EntityFormDialog({
           nodeId: nodeIdForView,
           graphNodes: safeGraphNodes,
           graphEdges: safeGraphEdges,
-        };
-        return <WorkspaceNodeConfigView {...workspaceProps} />;
+        } satisfies NodePropertiesViewProps<'Workspace'>;
+        return <View {...workspaceProps} />;
+      }
+      case 'Agent': {
+        const View = templateViewComponent('Agent') ?? NODE_VIEW_REGISTRY.Agent;
+        const agentProps: NodePropertiesViewProps<'Agent'> = {
+          config: viewConfig as NodePropertiesViewProps<'Agent'>['config'],
+          state: viewState,
+          displayTitle,
+          onConfigChange: handleViewConfigChange,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
+        } satisfies NodePropertiesViewProps<'Agent'>;
+        return <View {...agentProps} />;
+      }
+      case 'Trigger': {
+        const View = templateViewComponent('Trigger') ?? NODE_VIEW_REGISTRY.Trigger;
+        const triggerProps: NodePropertiesViewProps<'Trigger'> = {
+          config: viewConfig as NodePropertiesViewProps<'Trigger'>['config'],
+          state: viewState,
+          displayTitle,
+          onConfigChange: handleViewConfigChange,
+          secretSuggestions,
+          variableSuggestions,
+          ensureSecretKeys,
+          ensureVariableKeys,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
+        } satisfies NodePropertiesViewProps<'Trigger'>;
+        return <View {...triggerProps} />;
+      }
+      default: {
+        const unexpected: never = nodeKind;
+        throw new Error(`Unsupported node kind: ${String(unexpected)}`);
       }
     }
   }, [
@@ -444,6 +463,7 @@ export function EntityFormDialog({
     nodeKind,
     viewConfig,
     viewState,
+    displayTitle,
     handleViewConfigChange,
     secretSuggestions,
     variableSuggestions,
@@ -451,6 +471,7 @@ export function EntityFormDialog({
     ensureVariableKeys,
     nixPackageSearch,
     fetchNixPackageVersions,
+    templateViewComponent,
     resolveNixPackageSelection,
     nodeIdForView,
     safeGraphNodes,
@@ -506,92 +527,108 @@ export function EntityFormDialog({
 
   return (
     <ScreenDialog open={open} onOpenChange={onOpenChange}>
-      <ScreenDialogContent className="max-h-[90vh] overflow-y-auto">
-        <ScreenDialogHeader>
-          <ScreenDialogTitle>{dialogTitle}</ScreenDialogTitle>
-          <ScreenDialogDescription>Configure the template and metadata for this {kind}.</ScreenDialogDescription>
-        </ScreenDialogHeader>
-        {templates.length === 0 && (
-          <Alert variant="destructive">
-            <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
-          </Alert>
-        )}
+      <ScreenDialogContent className="flex h-[90vh] max-h-[90vh] flex-col overflow-hidden p-0" hideCloseButton>
         <Form {...form}>
-          <form className="space-y-6" onSubmit={handleFormSubmit}>
-            <FormField
-              control={form.control}
-              name="template"
-              rules={{ required: mode === 'create' }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Template</FormLabel>
-                  <FormControl>
-                    <SelectInput
-                      value={field.value ?? ''}
-                      onChange={(event) => {
-                        field.onChange(event.target.value);
-                        if (mode === 'create') {
-                          setConfigState({});
-                        }
-                      }}
-                      disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
-                      placeholder="Select a template"
-                      options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
-                      allowEmptyOption
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form className="flex h-full flex-col" onSubmit={handleFormSubmit}>
+            <ScreenDialogTitle className="sr-only">{dialogTitle}</ScreenDialogTitle>
+            <ScreenDialogDescription className="sr-only">
+              Configure the template and metadata for this {kind}.
+            </ScreenDialogDescription>
+            <div className="border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-1 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--agyn-text-subtle)]">{dialogTitle}</p>
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <FormItem className="space-y-2">
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            aria-label="Entity title"
+                            placeholder="Enter a title"
+                            disabled={isSubmitting}
+                            onChange={(event) => {
+                              field.onChange(event);
+                              const nextValue = event.target.value;
+                              setConfigState((current) => ({ ...current, title: nextValue }));
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="inline-flex size-8 items-center justify-center rounded-full text-[var(--agyn-gray)] transition-colors hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-dark)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--agyn-blue)] focus-visible:ring-offset-2"
+                  aria-label="Close dialog"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
 
-            <FormField
-              control={form.control}
-              name="title"
-              rules={{ required: true }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      aria-label="Entity title"
-                      placeholder="Enter a title"
-                      disabled={isSubmitting}
-                      onChange={(event) => {
-                        field.onChange(event);
-                        const nextValue = event.target.value;
-                        setConfigState((current) => ({ ...current, title: nextValue }));
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+              {templates.length === 0 && (
+                <Alert variant="destructive">
+                  <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
+                </Alert>
               )}
-            />
 
-            <div className="rounded-lg border border-[var(--agyn-border-subtle)] bg-white px-6 py-6">
+              <FormField
+                control={form.control}
+                name="template"
+                rules={{ required: mode === 'create' }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Template</FormLabel>
+                    <FormControl>
+                      <SelectInput
+                        value={field.value ?? ''}
+                        onChange={(event) => {
+                          field.onChange(event.target.value);
+                          if (mode === 'create') {
+                            setConfigState({});
+                          }
+                        }}
+                        disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
+                        placeholder="Select a template"
+                        options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
+                        allowEmptyOption
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {templateSelection ? (
                 <div className="space-y-8">{configView}</div>
               ) : (
-                <p className="text-sm text-muted-foreground">Select a template to configure this {kind}.</p>
+                <p className="text-sm text-[var(--agyn-text-subtle)]">Select a template to configure this {kind}.</p>
+              )}
+
+              {submitError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{submitError}</AlertDescription>
+                </Alert>
               )}
             </div>
 
-            {submitError && (
-              <Alert variant="destructive">
-                <AlertDescription>{submitError}</AlertDescription>
-              </Alert>
-            )}
-
-            <ScreenDialogFooter>
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting || (mode === 'create' && !templateSelection)}>
                 {mode === 'create' ? 'Create' : 'Save changes'}
               </Button>
-            </ScreenDialogFooter>
+            </div>
           </form>
         </Form>
       </ScreenDialogContent>
