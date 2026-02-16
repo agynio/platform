@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
@@ -110,36 +109,51 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
-      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-4 bg-white">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-[var(--agyn-dark)]">{title}</h1>
             <p className="text-sm text-[var(--agyn-text-subtle)] mt-1">{description}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2">
             {toolbarActions.map((action) => (
-              <Button key={action.to} asChild variant="outline" size="sm">
-                <Link to={action.to}>{action.label}</Link>
-              </Button>
+              <Link
+                key={action.to}
+                to={action.to}
+                className="inline-flex items-center rounded-md border border-[var(--agyn-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)] transition-colors"
+              >
+                {action.label}
+              </Link>
             ))}
-            <Button onClick={handleCreateClick} disabled={disableCreate} size="sm">
-              <Plus className="mr-2 h-4 w-4" /> {createLabel}
-            </Button>
+            <button
+              type="button"
+              onClick={handleCreateClick}
+              disabled={disableCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--agyn-blue)] text-white rounded-md hover:bg-[var(--agyn-blue)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              {createLabel}
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3 bg-white">
+        <div className="flex items-center gap-2">
           <Input
             placeholder={`Search ${title.toLowerCase()}`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="max-w-sm"
           />
-          <Button variant="outline" size="sm" onClick={() => setSearch('')} disabled={!search}>
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            disabled={!search}
+            className="px-3 py-1.5 text-xs rounded-md border border-[var(--agyn-border-subtle)] text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
             Clear
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -150,9 +164,14 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
               <AlertTitle>Graph updated elsewhere</AlertTitle>
               <AlertDescription className="flex items-center justify-between gap-3">
                 <span>Latest graph changes are available. Refresh to continue editing.</span>
-                <Button size="sm" variant="outline" onClick={() => resolveConflict()}>
-                  <RefreshCw className="mr-2 h-4 w-4" /> Refresh graph
-                </Button>
+                <button
+                  type="button"
+                  onClick={() => resolveConflict()}
+                  className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)] transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh graph
+                </button>
               </AlertDescription>
             </Alert>
           )}
