@@ -97,12 +97,12 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
-      <div className="space-y-2">
+    <div className="flex h-full flex-col overflow-hidden bg-white">
+      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <h1 className="text-xl font-semibold text-[var(--agyn-dark)]">{title}</h1>
+            <p className="text-sm text-[var(--agyn-text-subtle)] mt-1">{description}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {toolbarActions.map((action) => (
@@ -110,12 +110,15 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
                 <Link to={action.to}>{action.label}</Link>
               </Button>
             ))}
-            <Button onClick={handleCreateClick} disabled={disableCreate}>
+            <Button onClick={handleCreateClick} disabled={disableCreate} size="sm">
               <Plus className="mr-2 h-4 w-4" /> {createLabel}
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+      </div>
+
+      <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Input
             placeholder={`Search ${title.toLowerCase()}`}
             value={search}
@@ -128,34 +131,38 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
         </div>
       </div>
 
-      {conflict && (
-        <Alert className="border-amber-400/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-          <AlertTitle>Graph updated elsewhere</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>Latest graph changes are available. Refresh to continue editing.</span>
-            <Button size="sm" variant="outline" onClick={() => resolveConflict()}>
-              <RefreshCw className="mr-2 h-4 w-4" /> Refresh graph
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="flex-1 overflow-auto">
+        <div className="px-6 py-6 space-y-4">
+          {conflict && (
+            <Alert className="border-amber-400/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              <AlertTitle>Graph updated elsewhere</AlertTitle>
+              <AlertDescription className="flex items-center justify-between gap-3">
+                <span>Latest graph changes are available. Refresh to continue editing.</span>
+                <Button size="sm" variant="outline" onClick={() => resolveConflict()}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Refresh graph
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
-      {(graphQuery.isError || templatesQuery.isError) && (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to load graph data</AlertTitle>
-          <AlertDescription>Check your connection and try again.</AlertDescription>
-        </Alert>
-      )}
+          {(graphQuery.isError || templatesQuery.isError) && (
+            <Alert variant="destructive">
+              <AlertTitle>Unable to load graph data</AlertTitle>
+              <AlertDescription>Check your connection and try again.</AlertDescription>
+            </Alert>
+          )}
 
-      <EntityTable
-        rows={sortedEntities}
-        isLoading={isLoading}
-        emptyLabel={showEmptyLabel}
-        onEdit={handleEditClick}
-        onDelete={handleDeleteClick}
-        sort={sort}
-        onSortChange={handleSortChange}
-      />
+          <EntityTable
+            rows={sortedEntities}
+            isLoading={isLoading}
+            emptyLabel={showEmptyLabel}
+            onEdit={handleEditClick}
+            onDelete={handleDeleteClick}
+            sort={sort}
+            onSortChange={handleSortChange}
+          />
+        </div>
+      </div>
 
       <EntityFormDialog
         open={dialogOpen}

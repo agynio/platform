@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+vi.mock('@/lib/graph/templates.provider', () => ({
+  useTemplatesCache: () => ({
+    templates: [],
+    ready: true,
+    error: null,
+    refresh: vi.fn(),
+    getTemplate: () => undefined,
+  }),
+}));
+
 import { EntityFormDialog } from '../EntityFormDialog';
 import type { GraphEntityKind, GraphEntitySummary, TemplateOption } from '@/features/entities/types';
 import type { PersistedGraphNode } from '@agyn/shared';
@@ -56,7 +66,7 @@ function createEntitySummary(overrides: Partial<GraphEntitySummary> = {}): Graph
 }
 
 describe('EntityFormDialog', () => {
-  it('submits sanitized config for create mode', async () => {
+  it('embeds workspace config fields and submits updated values', async () => {
     const templates = [createTemplate('workspace-template', 'workspace')];
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const onOpenChange = vi.fn();
@@ -73,16 +83,17 @@ describe('EntityFormDialog', () => {
       />,
     );
 
-    const templateSelect = screen.getByRole('combobox');
+    const templateSelect = screen.getByLabelText('Template');
     fireEvent.change(templateSelect, { target: { value: 'workspace-template' } });
 
     const titleInput = await screen.findByLabelText('Entity title');
     await userEvent.clear(titleInput);
     await userEvent.type(titleInput, '  My Workspace  ');
 
-    const configField = screen.getByLabelText('Entity configuration (JSON)');
-    await userEvent.clear(configField);
-    fireEvent.change(configField, { target: { value: '{"region":"us-west"}' } });
+    await screen.findByText('Container');
+    const imageInput = screen.getByPlaceholderText('docker.io/library/ubuntu:latest');
+    await userEvent.clear(imageInput);
+    await userEvent.type(imageInput, 'docker.io/library/node:18');
 
     const submitButton = screen.getByRole('button', { name: /create/i });
     await userEvent.click(submitButton);
@@ -100,7 +111,7 @@ describe('EntityFormDialog', () => {
       template: 'workspace-template',
       title: 'My Workspace',
       kind: 'Workspace',
-      region: 'us-west',
+      image: 'docker.io/library/node:18',
     });
 
     await waitFor(() => {
@@ -108,7 +119,7 @@ describe('EntityFormDialog', () => {
     });
   });
 
-  it('disables template selection and preserves data for edit mode', async () => {
+  it('disables template selection and shows agent config fields for edit mode', async () => {
     const templates = [createTemplate('agent-template', 'agent')];
     const entity = createEntitySummary({
       id: 'agent-1',
@@ -133,15 +144,14 @@ describe('EntityFormDialog', () => {
       />,
     );
 
-    const templateSelect = screen.getByRole('combobox');
+    const templateSelect = screen.getByLabelText('Template');
     expect(templateSelect).toBeDisabled();
 
-    const titleInput = await screen.findByLabelText('Entity title');
-    await userEvent.clear(titleInput);
-    await userEvent.type(titleInput, 'Updated Agent');
+    await screen.findByPlaceholderText('e.g., Casey Quinn');
 
-    const configField = screen.getByLabelText('Entity configuration (JSON)');
-    expect(configField).toHaveValue(JSON.stringify(entity.config, null, 2));
+    const modelInput = screen.getByPlaceholderText('gpt-4');
+    await userEvent.clear(modelInput);
+    await userEvent.type(modelInput, 'claude-3');
 
     const saveButton = screen.getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton);
@@ -152,6 +162,6 @@ describe('EntityFormDialog', () => {
 
     const payload = onSubmit.mock.calls[0][0];
     expect(payload.template).toBe('agent-template');
-    expect(payload.config).toMatchObject({ title: 'Updated Agent' });
+    expect(payload.config).toMatchObject({ model: 'claude-3' });
   });
 });
