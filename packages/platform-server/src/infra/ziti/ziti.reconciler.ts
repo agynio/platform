@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { setTimeout as delay } from 'node:timers/promises';
+
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { ConfigService } from '../../core/services/config.service';
 import { ZitiIdentityManager } from './ziti.identity.manager';
@@ -19,13 +21,17 @@ const SERVICE_ATTRIBUTE = 'service.platform-api';
 const ROUTER_ATTRIBUTE = 'router.platform';
 const PLATFORM_ATTRIBUTE = 'component.platform-server';
 const RUNNER_ATTRIBUTE = 'component.docker-runner';
+const ROUTER_DISCOVERY_TIMEOUT_MS = 120_000;
+const ROUTER_DISCOVERY_INTERVAL_MS = 2_000;
 
 @Injectable()
 export class ZitiReconciler {
   private readonly logger = new Logger(ZitiReconciler.name);
 
   constructor(
+    @Inject(ConfigService)
     private readonly config: ConfigService,
+    @Inject(ZitiIdentityManager)
     private readonly identityManager: ZitiIdentityManager,
   ) {}
 
@@ -117,10 +123,7 @@ export class ZitiReconciler {
   }
 
   private async ensureRouter(client: ZitiManagementClient, profile: ZitiRuntimeProfile): Promise<ZitiEdgeRouter> {
-    const router = await client.getEdgeRouterByName(profile.routerName);
-    if (!router) {
-      throw new Error(`Ziti edge router "${profile.routerName}" was not found. Ensure docker-compose is running.`);
-    }
+    const router = await this.waitForRouter(client, profile);
     const missingAttrs = profile.routerRoleAttributes.filter((attr) => !router.roleAttributes?.includes(attr));
     if (missingAttrs.length === 0) {
       return router;
@@ -128,6 +131,34 @@ export class ZitiReconciler {
     const nextAttributes = Array.from(new Set([...(router.roleAttributes ?? []), ...missingAttrs]));
     this.logger.log(`Updating Ziti router role attributes for ${profile.routerName}`);
     return client.updateEdgeRouter(router.id, { roleAttributes: nextAttributes });
+  }
+
+  private async waitForRouter(
+    client: ZitiManagementClient,
+    profile: ZitiRuntimeProfile,
+  ): Promise<ZitiEdgeRouter> {
+    const deadline = Date.now() + ROUTER_DISCOVERY_TIMEOUT_MS;
+    let lastError: Error | undefined;
+
+    while (Date.now() < deadline) {
+      try {
+        const router = await client.getEdgeRouterByName(profile.routerName);
+        if (router) {
+          return router;
+        }
+        lastError = new Error(`router ${profile.routerName} not yet registered`);
+      } catch (error) {
+        lastError = error as Error;
+      }
+
+      this.logger.log(
+        `Waiting for Ziti router ${profile.routerName} to register (retrying in ${ROUTER_DISCOVERY_INTERVAL_MS / 1000}s)`,
+      );
+      await delay(ROUTER_DISCOVERY_INTERVAL_MS);
+    }
+
+    const reason = lastError?.message ?? 'unknown reason';
+    throw new Error(`Ziti edge router "${profile.routerName}" was not found: ${reason}`);
   }
 
   private async ensureService(client: ZitiManagementClient, profile: ZitiRuntimeProfile): Promise<ZitiService> {
@@ -155,14 +186,14 @@ export class ZitiReconciler {
       name: `${profile.serviceName}.dial`,
       type: 'Dial',
       semantic: 'AllOf',
-      identityRoles: profile.identities.runner.selectors,
+      identityRoles: profile.identities.platform.selectors,
       serviceRoles: profile.serviceSelectors,
     });
     await this.ensureServicePolicy(client, {
       name: `${profile.serviceName}.bind`,
       type: 'Bind',
       semantic: 'AllOf',
-      identityRoles: profile.identities.platform.selectors,
+      identityRoles: profile.identities.runner.selectors,
       serviceRoles: profile.serviceSelectors,
     });
   }
