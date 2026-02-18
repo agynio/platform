@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
-import { EXCLUDED_WORKSPACE_TEMPLATES, getTemplateOptions } from '@/features/entities/api/graphEntities';
+import { getTemplateOptions } from '@/features/entities/api/graphEntities';
 import { mapPersistedGraphToNodes } from '@/features/graph/mappers';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
@@ -22,18 +22,32 @@ interface EntityListPageProps {
   createLabel: string;
   emptyLabel: string;
   toolbarActions?: ToolbarAction[];
+  templateIncludeNames?: ReadonlySet<string>;
+  templateExcludeNames?: ReadonlySet<string>;
 }
 
-export function EntityListPage({ kind, title, description, createLabel, emptyLabel, toolbarActions = [] }: EntityListPageProps) {
+export function EntityListPage({
+  kind,
+  title,
+  description,
+  createLabel,
+  emptyLabel,
+  toolbarActions = [],
+  templateIncludeNames,
+  templateExcludeNames,
+}: EntityListPageProps) {
   const { entities, createEntity, updateEntity, deleteEntity, graphQuery, templatesQuery, conflict, resolveConflict, isSaving } = useGraphEntities();
   const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
   const [activeEntity, setActiveEntity] = useState<GraphEntitySummary | undefined>();
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => {
-    const excludedTemplates = kind === 'workspace' ? EXCLUDED_WORKSPACE_TEMPLATES : undefined;
-    return getTemplateOptions(templatesQuery.data ?? [], kind, excludedTemplates);
-  }, [kind, templatesQuery.data]);
+    const options = getTemplateOptions(templatesQuery.data ?? [], kind, templateExcludeNames);
+    if (!templateIncludeNames || templateIncludeNames.size === 0) {
+      return options;
+    }
+    return options.filter((option) => templateIncludeNames.has(option.name));
+  }, [kind, templateExcludeNames, templateIncludeNames, templatesQuery.data]);
 
   const graphNodes = useMemo<GraphNodeConfig[]>(() => {
     if (!graphQuery.data) return [];
@@ -46,8 +60,19 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   }, [graphQuery.data]);
 
   const filteredEntities = useMemo(() => {
-    return entities.filter((entity) => entity.templateKind === kind);
-  }, [entities, kind]);
+    return entities.filter((entity) => {
+      if (entity.templateKind !== kind) {
+        return false;
+      }
+      if (templateIncludeNames && templateIncludeNames.size > 0 && !templateIncludeNames.has(entity.templateName)) {
+        return false;
+      }
+      if (templateExcludeNames && templateExcludeNames.has(entity.templateName)) {
+        return false;
+      }
+      return true;
+    });
+  }, [entities, kind, templateIncludeNames, templateExcludeNames]);
 
   const sortedEntities = useMemo(() => {
     if (filteredEntities.length === 0) return filteredEntities;

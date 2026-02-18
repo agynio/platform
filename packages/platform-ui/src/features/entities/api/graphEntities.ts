@@ -12,6 +12,7 @@ import {
 } from '../types';
 
 export const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
+export const INCLUDED_MEMORY_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
 
 function ensureRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -124,10 +125,6 @@ export function mapGraphEntities(graph: GraphEntityGraph | undefined, templates:
     const config = ensureRecord(node.config);
     const portGroup = getTemplatePorts(template);
     const resolvedKind = resolveEntityKind(template?.kind);
-
-    if (resolvedKind === 'workspace' && node.template && EXCLUDED_WORKSPACE_TEMPLATES.has(node.template)) {
-      continue;
-    }
 
     summaries.push({
       id: node.id,

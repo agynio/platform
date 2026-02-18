@@ -29,6 +29,7 @@ if (!pointerProto.scrollIntoView) {
 import { AgentsListPage } from '../AgentsListPage';
 import { TriggersListPage } from '../TriggersListPage';
 import { WorkspacesListPage } from '../WorkspacesListPage';
+import { MemoryEntitiesListPage } from '../MemoryEntitiesListPage';
 
 const notifications = vi.hoisted(() => ({
   success: vi.fn(),
@@ -180,6 +181,87 @@ describe('Entity list pages', () => {
     expect(within(templateSelect).getByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
     expect(within(templateSelect).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
     expect(within(templateSelect).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
+  });
+
+  it('renders only memory entities on the memory page', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'memory-1', template: 'memory', config: { title: 'Memory Root' } },
+        { id: 'workspace-1', template: 'worker-service', config: { title: 'Worker Pool' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    renderWithGraphProviders(<MemoryEntitiesListPage />);
+
+    await screen.findByText('Memory Root');
+    expect(screen.queryByText('Worker Pool')).not.toBeInTheDocument();
+    expect(screen.queryByText('Core Agent')).not.toBeInTheDocument();
+    expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
+  });
+
+  it('limits the memory create dialog to memory templates only', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [{ id: 'memory-1', template: 'memory', config: { title: 'Memory Root' } }],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<MemoryEntitiesListPage />);
+
+    await screen.findByText('Memory Root');
+    await user.click(screen.getByRole('button', { name: /new memory workspace/i }));
+
+    const templateSelect = await screen.findByRole('combobox', { name: /template/i });
+    expect(within(templateSelect).getByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
+    expect(within(templateSelect).getByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
+    expect(within(templateSelect).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
+  });
+
+  it('saves memory entity edits when no edges are present', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'memory-1', template: 'memory', config: { title: 'Memory Root' } },
+        { id: 'memory-2', template: 'memoryConnector', config: { title: 'Memory Connector' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    const savedPayload: { body?: any } = {};
+    server.use(
+      http.post(abs('/api/graph'), async ({ request }) => {
+        savedPayload.body = await request.json();
+        return HttpResponse.json({
+          ...graphOverride,
+          version: graphOverride.version + 1,
+          nodes: graphOverride.nodes.map((node) =>
+            node.id === 'memory-1' ? { ...node, config: { ...node.config, title: 'Memory Updated' } } : node,
+          ),
+        });
+      }),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<MemoryEntitiesListPage />);
+
+    await screen.findByText('Memory Root');
+    await user.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+
+    const titleInput = await screen.findByLabelText('Title');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Memory Updated');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(notifications.success).toHaveBeenCalledWith('Entity updated'));
+    expect(savedPayload.body?.edges).toEqual([]);
   });
 
   it('shows trigger entities in the triggers list', async () => {

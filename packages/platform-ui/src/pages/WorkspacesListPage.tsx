@@ -1,4 +1,5 @@
 import { EntityListPage } from './entities/EntityListPage';
+import { EXCLUDED_WORKSPACE_TEMPLATES } from '@/features/entities/api/graphEntities';
 
 export function WorkspacesListPage() {
   return (
@@ -8,6 +9,7 @@ export function WorkspacesListPage() {
       description="Manage underlying services and workspaces powering agents."
       createLabel="New workspace"
       emptyLabel="No workspaces configured yet."
+      templateExcludeNames={EXCLUDED_WORKSPACE_TEMPLATES}
     />
   );
 }

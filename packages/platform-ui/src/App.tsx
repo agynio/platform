@@ -24,7 +24,7 @@ import { AgentsListPage } from './pages/AgentsListPage';
 import { TriggersListPage } from './pages/TriggersListPage';
 import { ToolsListPage } from './pages/ToolsListPage';
 import { WorkspacesListPage } from './pages/WorkspacesListPage';
-import { MemoryListPage } from './pages/MemoryListPage';
+import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
 
 const queryClient = new QueryClient();
 
@@ -53,7 +53,7 @@ function App() {
                 <Route path="/triggers" element={<TriggersListPage />} />
                 <Route path="/tools" element={<ToolsListPage />} />
                 <Route path="/workspaces" element={<WorkspacesListPage />} />
-                <Route path="/memory" element={<MemoryListPage />} />
+                <Route path="/memory" element={<MemoryEntitiesListPage />} />
 
                 {/* Tracing */}
                 <Route path="/tracing/traces" element={<TracingTraces />} />
