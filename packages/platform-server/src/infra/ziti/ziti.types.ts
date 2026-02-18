@@ -66,6 +66,14 @@ export type ZitiEdgeRouterPolicy = {
   serviceRoles: string[];
 };
 
+export type ZitiIdentityRouterPolicy = {
+  id: string;
+  name: string;
+  semantic: 'AllOf' | 'AnyOf';
+  identityRoles: string[];
+  edgeRouterRoles: string[];
+};
+
 export type ZitiEnrollment = {
   id: string;
   identityId: string;

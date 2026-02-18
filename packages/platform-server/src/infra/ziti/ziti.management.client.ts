@@ -6,6 +6,7 @@ import type {
   ZitiEdgeRouterPolicy,
   ZitiEnrollment,
   ZitiIdentity,
+  ZitiIdentityRouterPolicy,
   ZitiService,
   ZitiServicePolicy,
 } from './ziti.types';
@@ -121,6 +122,29 @@ export class ZitiManagementClient {
     payload: Partial<ZitiEdgeRouterPolicy>,
   ): Promise<ZitiEdgeRouterPolicy> {
     const response = await this.request<Envelope<ZitiEdgeRouterPolicy>>('PATCH', `/service-edge-router-policies/${id}`, {
+      body: payload,
+    });
+    return response.data;
+  }
+
+  async getEdgeRouterPolicyByName(name: string): Promise<ZitiIdentityRouterPolicy | undefined> {
+    return this.findByName<ZitiIdentityRouterPolicy>('/edge-router-policies', name);
+  }
+
+  async createEdgeRouterPolicy(
+    payload: Omit<ZitiIdentityRouterPolicy, 'id'>,
+  ): Promise<ZitiIdentityRouterPolicy> {
+    const response = await this.request<Envelope<ZitiIdentityRouterPolicy>>('POST', '/edge-router-policies', {
+      body: payload,
+    });
+    return response.data;
+  }
+
+  async updateEdgeRouterPolicy(
+    id: string,
+    payload: Partial<ZitiIdentityRouterPolicy>,
+  ): Promise<ZitiIdentityRouterPolicy> {
+    const response = await this.request<Envelope<ZitiIdentityRouterPolicy>>('PATCH', `/edge-router-policies/${id}`, {
       body: payload,
     });
     return response.data;
