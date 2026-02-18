@@ -13,6 +13,12 @@ const booleanFlag = (defaultValue: boolean) =>
       return defaultValue;
     });
 
+const defaultZitiConfig = {
+  enabled: false,
+  identityFile: '.ziti/identities/dev.agyn-platform.docker-runner.json',
+  serviceName: 'dev.agyn-platform.platform-api',
+} as const;
+
 const runnerConfigSchema = z.object({
   port: z
     .union([z.string(), z.number()])
@@ -34,11 +40,11 @@ const runnerConfigSchema = z.object({
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   ziti: z
     .object({
-      enabled: booleanFlag(false),
-      identityFile: z.string().default('.ziti/identities/dev.agyn-platform.docker-runner.json'),
-      serviceName: z.string().default('dev.agyn-platform.platform-api'),
+      enabled: booleanFlag(defaultZitiConfig.enabled),
+      identityFile: z.string().default(defaultZitiConfig.identityFile),
+      serviceName: z.string().default(defaultZitiConfig.serviceName),
     })
-    .default({}),
+    .default(() => ({ ...defaultZitiConfig })),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
