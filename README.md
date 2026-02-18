@@ -173,7 +173,7 @@ overlay instead of the Docker bridge network:
 1. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
 2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
    `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
-3. Start the controller stack: `docker compose up -d ziti-controller controller-init ziti-edge-router`.
+3. Start the controller stack: `docker compose up -d ziti-controller ziti-controller-init ziti-edge-router`.
 4. Launch docker-runner and platform-server normally. The server will reconcile the controller, enroll identities, and
    expose a local proxy on `127.0.0.1:17071` for all docker-runner calls.
 

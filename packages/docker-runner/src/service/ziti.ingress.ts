@@ -19,7 +19,8 @@ export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngres
   await ziti.init(config.ziti.identityFile);
 
   const app = ziti.express(express, config.ziti.serviceName);
-  const target = `http://${config.host}:${config.port}`;
+  const targetHost = resolveTargetHost(config.host);
+  const target = `http://${targetHost}:${config.port}`;
   const proxy = httpProxy.createProxyServer({
     target,
     changeOrigin: true,
@@ -63,3 +64,11 @@ const closeServer = (server: HttpServer): Promise<void> =>
   new Promise((resolve) => {
     server.close(() => resolve());
   });
+
+const resolveTargetHost = (host: string): string => {
+  const normalized = host.trim();
+  if (!normalized || normalized === '0.0.0.0' || normalized === '::' || normalized === '[::]') {
+    return '127.0.0.1';
+  }
+  return normalized;
+};

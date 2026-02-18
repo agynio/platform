@@ -23,7 +23,7 @@ pnpm approve-builds
 2. Ensure the dev stack is running:
 
 ```bash
-docker compose up -d ziti-controller controller-init ziti-edge-router
+docker compose up -d ziti-controller ziti-controller-init ziti-edge-router
 ```
 
 3. Copy `.env` files and enable OpenZiti flags:

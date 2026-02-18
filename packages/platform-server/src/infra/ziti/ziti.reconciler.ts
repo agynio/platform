@@ -8,6 +8,7 @@ import type {
   ZitiEdgeRouterPolicy,
   ZitiIdentity,
   ZitiIdentityProfile,
+  ZitiIdentityRouterPolicy,
   ZitiRuntimeProfile,
   ZitiService,
   ZitiServicePolicy,
@@ -48,6 +49,7 @@ export class ZitiReconciler {
       await this.ensureService(client, profile);
       await this.ensureServicePolicies(client, profile);
       await this.ensureEdgeRouterPolicy(client, profile);
+      await this.ensureIdentityRouterPolicy(client, profile);
 
       const platformIdentity = await this.ensureIdentity(client, profile.identities.platform);
       const runnerIdentity = await this.ensureIdentity(client, profile.identities.runner);
@@ -213,6 +215,35 @@ export class ZitiReconciler {
     }
     this.logger.log(`Updating Ziti edge-router policy ${payload.name}`);
     return client.updateServiceEdgeRouterPolicy(existing.id, payload);
+  }
+
+  private async ensureIdentityRouterPolicy(
+    client: ZitiManagementClient,
+    profile: ZitiRuntimeProfile,
+  ): Promise<ZitiIdentityRouterPolicy> {
+    const identityRoles = Array.from(
+      new Set([...profile.identities.platform.selectors, ...profile.identities.runner.selectors]),
+    );
+    const payload: Omit<ZitiIdentityRouterPolicy, 'id'> = {
+      name: `${profile.serviceName}.identities.use-router`,
+      semantic: 'AnyOf',
+      identityRoles,
+      edgeRouterRoles: profile.routerSelectors,
+    };
+    const existing = await client.getEdgeRouterPolicyByName(payload.name);
+    if (!existing) {
+      this.logger.log(`Creating Ziti identity-router policy ${payload.name}`);
+      return client.createEdgeRouterPolicy(payload);
+    }
+    const needsUpdate =
+      existing.semantic !== payload.semantic ||
+      !this.matches(existing.identityRoles, payload.identityRoles) ||
+      !this.matches(existing.edgeRouterRoles, payload.edgeRouterRoles);
+    if (!needsUpdate) {
+      return existing;
+    }
+    this.logger.log(`Updating Ziti identity-router policy ${payload.name}`);
+    return client.updateEdgeRouterPolicy(existing.id, payload);
   }
 
   private async ensureIdentity(
