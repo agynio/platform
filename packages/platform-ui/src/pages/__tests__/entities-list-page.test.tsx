@@ -69,6 +69,20 @@ const templateSet = [
     sourcePorts: ['dispatch'],
     targetPorts: ['ingest'],
   },
+  {
+    name: 'memory',
+    title: 'Memory Workspace',
+    kind: 'service',
+    sourcePorts: [],
+    targetPorts: [],
+  },
+  {
+    name: 'memoryConnector',
+    title: 'Memory Connector',
+    kind: 'service',
+    sourcePorts: [],
+    targetPorts: [],
+  },
 ];
 
 const baseGraph = {
@@ -132,6 +146,24 @@ describe('Entity list pages', () => {
     expect(screen.queryByText('Core Agent')).not.toBeInTheDocument();
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /open memory manager/i })).not.toBeInTheDocument();
+  });
+
+  it('excludes memory workspace templates from the workspaces list', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'workspace-1', template: 'worker-service', config: { title: 'Worker Pool' } },
+        { id: 'workspace-2', template: 'memory', config: { title: 'Memory Root' } },
+        { id: 'workspace-3', template: 'memoryConnector', config: { title: 'Memory Connector' } },
+      ],
+    };
+    primeGraphHandlers(graphOverride);
+
+    renderWithGraphProviders(<WorkspacesListPage />);
+
+    await screen.findByText('Worker Pool');
+    expect(screen.queryByText('Memory Root')).not.toBeInTheDocument();
+    expect(screen.queryByText('Memory Connector')).not.toBeInTheDocument();
   });
 
   it('shows trigger entities in the triggers list', async () => {

@@ -11,6 +11,8 @@ import {
   type TemplateOption,
 } from '../types';
 
+const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
+
 function ensureRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -121,13 +123,19 @@ export function mapGraphEntities(graph: GraphEntityGraph | undefined, templates:
     const template = templateByName.get(node.template);
     const config = ensureRecord(node.config);
     const portGroup = getTemplatePorts(template);
+    const resolvedKind = resolveEntityKind(template?.kind);
+
+    if (resolvedKind === 'workspace' && node.template && EXCLUDED_WORKSPACE_TEMPLATES.has(node.template)) {
+      continue;
+    }
+
     summaries.push({
       id: node.id,
       node,
       title: deriveNodeTitle(node, template),
       templateName: node.template,
       templateTitle: template?.title ?? node.template,
-      templateKind: resolveEntityKind(template?.kind),
+      templateKind: resolvedKind,
       rawTemplateKind: template?.kind,
       config,
       state: node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
