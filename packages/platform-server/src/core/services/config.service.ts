@@ -28,6 +28,25 @@ const numberFlag = (defaultValue: number) =>
 
 const trimUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
+const defaultZitiConfig = {
+  enabled: false,
+  managementUrl: 'https://127.0.0.1:1280/edge/management/v1',
+  username: 'admin',
+  password: 'admin',
+  insecureTls: true,
+  serviceName: 'dev.agyn-platform.platform-api',
+  routerName: 'dev-edge-router',
+  runnerProxyHost: '127.0.0.1',
+  runnerProxyPort: 17071,
+  platformIdentityName: 'dev.agyn-platform.platform-server',
+  platformIdentityFile: '.ziti/identities/dev.agyn-platform.platform-server.json',
+  runnerIdentityName: 'dev.agyn-platform.docker-runner',
+  runnerIdentityFile: '.ziti/identities/dev.agyn-platform.docker-runner.json',
+  identitiesDir: '.ziti/identities',
+  tmpDir: '.ziti/tmp',
+  enrollmentTtlSeconds: 900,
+} as const;
+
 export const configSchema = z.object({
   // GitHub settings are optional to allow dev boot without GitHub
   githubAppId: z.string().min(1).optional(),
@@ -215,31 +234,27 @@ export const configSchema = z.object({
     ),
   ziti: z
     .object({
-      enabled: booleanFlag(false),
+      enabled: booleanFlag(defaultZitiConfig.enabled),
       managementUrl: z
         .string()
-        .default('https://127.0.0.1:1280/edge/management/v1')
+        .default(defaultZitiConfig.managementUrl)
         .transform((value) => trimUrl(value)),
-      username: z.string().default('admin'),
-      password: z.string().default('admin'),
-      insecureTls: booleanFlag(true),
-      serviceName: z.string().default('dev.agyn-platform.platform-api'),
-      routerName: z.string().default('dev-edge-router'),
-      runnerProxyHost: z.string().default('127.0.0.1'),
-      runnerProxyPort: numberFlag(17071),
-      platformIdentityName: z.string().default('dev.agyn-platform.platform-server'),
-      platformIdentityFile: z
-        .string()
-        .default('.ziti/identities/dev.agyn-platform.platform-server.json'),
-      runnerIdentityName: z.string().default('dev.agyn-platform.docker-runner'),
-      runnerIdentityFile: z
-        .string()
-        .default('.ziti/identities/dev.agyn-platform.docker-runner.json'),
-      identitiesDir: z.string().default('.ziti/identities'),
-      tmpDir: z.string().default('.ziti/tmp'),
-      enrollmentTtlSeconds: numberFlag(900),
+      username: z.string().default(defaultZitiConfig.username),
+      password: z.string().default(defaultZitiConfig.password),
+      insecureTls: booleanFlag(defaultZitiConfig.insecureTls),
+      serviceName: z.string().default(defaultZitiConfig.serviceName),
+      routerName: z.string().default(defaultZitiConfig.routerName),
+      runnerProxyHost: z.string().default(defaultZitiConfig.runnerProxyHost),
+      runnerProxyPort: numberFlag(defaultZitiConfig.runnerProxyPort),
+      platformIdentityName: z.string().default(defaultZitiConfig.platformIdentityName),
+      platformIdentityFile: z.string().default(defaultZitiConfig.platformIdentityFile),
+      runnerIdentityName: z.string().default(defaultZitiConfig.runnerIdentityName),
+      runnerIdentityFile: z.string().default(defaultZitiConfig.runnerIdentityFile),
+      identitiesDir: z.string().default(defaultZitiConfig.identitiesDir),
+      tmpDir: z.string().default(defaultZitiConfig.tmpDir),
+      enrollmentTtlSeconds: numberFlag(defaultZitiConfig.enrollmentTtlSeconds),
     })
-    .default({}),
+    .default(() => ({ ...defaultZitiConfig })),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -474,8 +489,12 @@ export class ConfigService implements Config {
     return this.params.nixRepoAllowlist ?? [];
   }
 
-  get zitiConfig(): Config['ziti'] {
+  get ziti(): Config['ziti'] {
     return this.params.ziti;
+  }
+
+  get zitiConfig(): Config['ziti'] {
+    return this.ziti;
   }
 
   isZitiEnabled(): boolean {
