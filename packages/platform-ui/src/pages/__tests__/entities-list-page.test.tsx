@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
@@ -164,6 +164,22 @@ describe('Entity list pages', () => {
     await screen.findByText('Worker Pool');
     expect(screen.queryByText('Memory Root')).not.toBeInTheDocument();
     expect(screen.queryByText('Memory Connector')).not.toBeInTheDocument();
+  });
+
+  it('excludes memory workspace templates from the create dialog', async () => {
+    primeGraphHandlers();
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<WorkspacesListPage />);
+
+    await screen.findByText('Worker Pool');
+    await user.click(screen.getByRole('button', { name: /new workspace/i }));
+
+    const templateSelect = await screen.findByRole('combobox', { name: /template/i });
+    expect(within(templateSelect).getByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
+    expect(within(templateSelect).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
+    expect(within(templateSelect).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
   });
 
   it('shows trigger entities in the triggers list', async () => {

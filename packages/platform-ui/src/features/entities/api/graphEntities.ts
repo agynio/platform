@@ -11,7 +11,7 @@ import {
   type TemplateOption,
 } from '../types';
 
-const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
+export const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
 
 function ensureRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -151,7 +151,11 @@ export function mapGraphEntities(graph: GraphEntityGraph | undefined, templates:
   return summaries;
 }
 
-export function getTemplateOptions(templates: TemplateSchema[] = [], kind?: GraphEntityKind): TemplateOption[] {
+export function getTemplateOptions(
+  templates: TemplateSchema[] = [],
+  kind?: GraphEntityKind,
+  excludeTemplateNames?: Set<string>,
+): TemplateOption[] {
   return templates
     .map((template) => ({
       name: template.name,
@@ -159,7 +163,15 @@ export function getTemplateOptions(templates: TemplateSchema[] = [], kind?: Grap
       kind: resolveEntityKind(template.kind),
       source: template,
     }))
-    .filter((option) => (kind ? option.kind === kind : true))
+    .filter((option) => {
+      if (kind && option.kind !== kind) {
+        return false;
+      }
+      if (excludeTemplateNames && excludeTemplateNames.has(option.name)) {
+        return false;
+      }
+      return true;
+    })
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 

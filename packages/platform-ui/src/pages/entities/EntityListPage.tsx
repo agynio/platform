@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
 import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
-import { getTemplateOptions } from '@/features/entities/api/graphEntities';
+import { EXCLUDED_WORKSPACE_TEMPLATES, getTemplateOptions } from '@/features/entities/api/graphEntities';
 import { mapPersistedGraphToNodes } from '@/features/graph/mappers';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
@@ -30,7 +30,10 @@ export function EntityListPage({ kind, title, description, createLabel, emptyLab
   const [activeEntity, setActiveEntity] = useState<GraphEntitySummary | undefined>();
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
-  const templates = useMemo(() => getTemplateOptions(templatesQuery.data ?? [], kind), [kind, templatesQuery.data]);
+  const templates = useMemo(() => {
+    const excludedTemplates = kind === 'workspace' ? EXCLUDED_WORKSPACE_TEMPLATES : undefined;
+    return getTemplateOptions(templatesQuery.data ?? [], kind, excludedTemplates);
+  }, [kind, templatesQuery.data]);
 
   const graphNodes = useMemo<GraphNodeConfig[]>(() => {
     if (!graphQuery.data) return [];
