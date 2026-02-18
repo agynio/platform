@@ -58,4 +58,9 @@ describe('RootLayout navigation', () => {
     const props = renderAt('/memory');
     expect(props.selectedMenuItem).toBe('entitiesMemory');
   });
+
+  it('highlights entities workspaces when visiting the workspaces list', () => {
+    const props = renderAt('/workspaces');
+    expect(props.selectedMenuItem).toBe('entitiesWorkspaces');
+  });
 });

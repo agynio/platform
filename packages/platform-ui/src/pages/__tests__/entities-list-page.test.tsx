@@ -28,6 +28,7 @@ if (!pointerProto.scrollIntoView) {
 }
 import { AgentsListPage } from '../AgentsListPage';
 import { TriggersListPage } from '../TriggersListPage';
+import { WorkspacesListPage } from '../WorkspacesListPage';
 
 const notifications = vi.hoisted(() => ({
   success: vi.fn(),
@@ -120,6 +121,17 @@ describe('Entity list pages', () => {
     await screen.findByText('Core Agent');
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
     expect(screen.getByText('Core Agent')).toBeVisible();
+  });
+
+  it('renders only workspaces on the workspaces page without memory controls', async () => {
+    primeGraphHandlers();
+
+    renderWithGraphProviders(<WorkspacesListPage />);
+
+    await screen.findByText('Worker Pool');
+    expect(screen.queryByText('Core Agent')).not.toBeInTheDocument();
+    expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /open memory manager/i })).not.toBeInTheDocument();
   });
 
   it('shows trigger entities in the triggers list', async () => {

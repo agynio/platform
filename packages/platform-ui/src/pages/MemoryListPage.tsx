@@ -3,14 +3,12 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
-import { useNodeTitleMap } from '@/features/graph/hooks/useNodeTitleMap';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/Badge';
 
 type MemoryRow = {
   key: string;
   nodeId: string;
-  title: string;
   scope: MemoryDocItem['scope'];
   threadId?: string;
 };
@@ -21,18 +19,15 @@ export function MemoryListPage() {
     queryFn: () => memoryApi.listDocs(),
     staleTime: 30_000,
   });
-  const { titleMap } = useNodeTitleMap();
-
   const rows = useMemo<MemoryRow[]>(() => {
     const items = docsQuery.data?.items ?? [];
     return items.map((item, index) => ({
       key: `${item.nodeId}-${item.scope}-${item.threadId ?? 'global'}-${index}`,
       nodeId: item.nodeId,
-      title: titleMap.get(item.nodeId) ?? item.nodeId,
       scope: item.scope,
       threadId: item.threadId,
     }));
-  }, [docsQuery.data, titleMap]);
+  }, [docsQuery.data]);
 
   const errorMessage = docsQuery.error
     ? docsQuery.error instanceof Error
@@ -115,8 +110,7 @@ export function MemoryListPage() {
                   >
                     <td className="h-[60px] px-6">
                       <div className="flex flex-col">
-                        <span className="font-medium">{row.title}</span>
-                        <span className="text-xs text-[var(--agyn-text-subtle)]">{row.nodeId}</span>
+                        <span className="font-medium">{row.nodeId}</span>
                       </div>
                     </td>
                     <td className="h-[60px] px-6">
