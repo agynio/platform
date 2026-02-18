@@ -1,10 +1,10 @@
-import './env.js';
+import './env';
 
 import type { FastifyInstance } from 'fastify';
 
-import { loadRunnerConfig } from './config.js';
-import { createRunnerApp } from './app.js';
-import { startZitiIngress } from './ziti.ingress.js';
+import { loadRunnerConfig } from './config';
+import { createRunnerApp } from './app';
+import { startZitiIngress } from './ziti.ingress';
 
 async function bootstrap(): Promise<void> {
   let app: FastifyInstance | undefined;
@@ -14,9 +14,8 @@ async function bootstrap(): Promise<void> {
     const config = loadRunnerConfig();
     app = createRunnerApp(config);
     await app.listen({ port: config.port, host: config.host });
-    console.info(`docker-runner listening on http://${config.host}:${config.port}`);
     const ingress = await startZitiIngress(config);
-    closeZiti = ingress.close;
+    closeZiti = ingress?.close;
 
     const shutdown = async () => {
       await closeZiti?.();

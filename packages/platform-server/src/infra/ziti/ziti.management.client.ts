@@ -1,12 +1,11 @@
 import { Logger } from '@nestjs/common';
-import { Agent, fetch, type Response as UndiciResponse } from 'undici';
+import { Agent, fetch } from 'undici';
 
 import type {
   ZitiEdgeRouter,
   ZitiEdgeRouterPolicy,
   ZitiEnrollment,
   ZitiIdentity,
-  ZitiIdentityRouterPolicy,
   ZitiService,
   ZitiServicePolicy,
 } from './ziti.types';
@@ -127,29 +126,6 @@ export class ZitiManagementClient {
     return response.data;
   }
 
-  async getEdgeRouterPolicyByName(name: string): Promise<ZitiIdentityRouterPolicy | undefined> {
-    return this.findByName<ZitiIdentityRouterPolicy>('/edge-router-policies', name);
-  }
-
-  async createEdgeRouterPolicy(
-    payload: Omit<ZitiIdentityRouterPolicy, 'id'>,
-  ): Promise<ZitiIdentityRouterPolicy> {
-    const response = await this.request<Envelope<ZitiIdentityRouterPolicy>>('POST', '/edge-router-policies', {
-      body: payload,
-    });
-    return response.data;
-  }
-
-  async updateEdgeRouterPolicy(
-    id: string,
-    payload: Partial<ZitiIdentityRouterPolicy>,
-  ): Promise<ZitiIdentityRouterPolicy> {
-    const response = await this.request<Envelope<ZitiIdentityRouterPolicy>>('PATCH', `/edge-router-policies/${id}`, {
-      body: payload,
-    });
-    return response.data;
-  }
-
   async getEdgeRouterByName(name: string): Promise<ZitiEdgeRouter | undefined> {
     return this.findByName<ZitiEdgeRouter>('/edge-routers', name);
   }
@@ -196,13 +172,6 @@ export class ZitiManagementClient {
     const response = await this.request<ListEnvelope<T>>('GET', path, {
       searchParams: { filter },
     });
-    if (process.env.ZITI_DEBUG === '1') {
-      this.logger.debug(
-        `findByName path=${path} filter=${filter} count=${response.data?.length ?? 0} raw=${JSON.stringify(
-          response,
-        )}`,
-      );
-    }
     return response.data?.[0];
   }
 
@@ -212,9 +181,7 @@ export class ZitiManagementClient {
   }
 
   private async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
-    const sanitizedPath = path.replace(/^\/+/, '');
-    const baseUrl = this.options.baseUrl.endsWith('/') ? this.options.baseUrl : `${this.options.baseUrl}/`;
-    const url = new URL(sanitizedPath, baseUrl);
+    const url = new URL(path, this.options.baseUrl);
     if (options.searchParams) {
       for (const [key, value] of Object.entries(options.searchParams)) {
         if (typeof value === 'string' && value.length > 0) {
@@ -255,7 +222,7 @@ export class ZitiManagementClient {
     return (await response.json()) as T;
   }
 
-  private async safeReadError(response: UndiciResponse): Promise<string> {
+  private async safeReadError(response: Response): Promise<string> {
     try {
       const body = await response.text();
       return body || 'no body';

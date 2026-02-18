@@ -1,6 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { ConfigService } from '../../core/services/config.service';
 import { ZitiIdentityManager } from './ziti.identity.manager';
@@ -10,7 +8,6 @@ import type {
   ZitiEdgeRouterPolicy,
   ZitiIdentity,
   ZitiIdentityProfile,
-  ZitiIdentityRouterPolicy,
   ZitiRuntimeProfile,
   ZitiService,
   ZitiServicePolicy,
@@ -21,22 +18,22 @@ const SERVICE_ATTRIBUTE = 'service.platform-api';
 const ROUTER_ATTRIBUTE = 'router.platform';
 const PLATFORM_ATTRIBUTE = 'component.platform-server';
 const RUNNER_ATTRIBUTE = 'component.docker-runner';
-const ROUTER_DISCOVERY_TIMEOUT_MS = 120_000;
-const ROUTER_DISCOVERY_INTERVAL_MS = 2_000;
 
 @Injectable()
 export class ZitiReconciler {
   private readonly logger = new Logger(ZitiReconciler.name);
 
   constructor(
-    @Inject(ConfigService)
     private readonly config: ConfigService,
-    @Inject(ZitiIdentityManager)
     private readonly identityManager: ZitiIdentityManager,
   ) {}
 
   async reconcile(): Promise<void> {
-    this.logger.log('Reconciling Ziti control-plane');
+    if (!this.config.isZitiEnabled()) {
+      this.logger.log('Ziti disabled; skipping controller reconciliation');
+      return;
+    }
+
     const profile = this.buildProfile();
     const client = new ZitiManagementClient({
       baseUrl: profile.managementUrl,
@@ -51,7 +48,6 @@ export class ZitiReconciler {
       await this.ensureService(client, profile);
       await this.ensureServicePolicies(client, profile);
       await this.ensureEdgeRouterPolicy(client, profile);
-      await this.ensureIdentityRouterPolicy(client, profile);
 
       const platformIdentity = await this.ensureIdentity(client, profile.identities.platform);
       const runnerIdentity = await this.ensureIdentity(client, profile.identities.runner);
@@ -71,7 +67,6 @@ export class ZitiReconciler {
         directories: profile.directories,
         client,
       });
-      this.logger.log('Ziti identities reconciled');
     } finally {
       await client.close();
     }
@@ -120,7 +115,10 @@ export class ZitiReconciler {
   }
 
   private async ensureRouter(client: ZitiManagementClient, profile: ZitiRuntimeProfile): Promise<ZitiEdgeRouter> {
-    const router = await this.waitForRouter(client, profile);
+    const router = await client.getEdgeRouterByName(profile.routerName);
+    if (!router) {
+      throw new Error(`Ziti edge router "${profile.routerName}" was not found. Ensure docker-compose is running.`);
+    }
     const missingAttrs = profile.routerRoleAttributes.filter((attr) => !router.roleAttributes?.includes(attr));
     if (missingAttrs.length === 0) {
       return router;
@@ -128,37 +126,6 @@ export class ZitiReconciler {
     const nextAttributes = Array.from(new Set([...(router.roleAttributes ?? []), ...missingAttrs]));
     this.logger.log(`Updating Ziti router role attributes for ${profile.routerName}`);
     return client.updateEdgeRouter(router.id, { roleAttributes: nextAttributes });
-  }
-
-  private async waitForRouter(
-    client: ZitiManagementClient,
-    profile: ZitiRuntimeProfile,
-  ): Promise<ZitiEdgeRouter> {
-    const deadline = Date.now() + ROUTER_DISCOVERY_TIMEOUT_MS;
-    let lastError: Error | undefined;
-
-    while (Date.now() < deadline) {
-      try {
-        const router = await client.getEdgeRouterByName(profile.routerName);
-        if (router) {
-          this.logger.debug(`Ziti router ${profile.routerName} found`);
-          return router;
-        }
-        lastError = new Error(`router ${profile.routerName} not yet registered`);
-      } catch (error) {
-        lastError = error as Error;
-      }
-      this.logger.debug(
-        `Waiting for router ${profile.routerName}, lastError=${lastError?.message ?? 'none'} (next poll in ${ROUTER_DISCOVERY_INTERVAL_MS / 1000}s)`,
-      );
-      this.logger.log(
-        `Waiting for Ziti router ${profile.routerName} to register (retrying in ${ROUTER_DISCOVERY_INTERVAL_MS / 1000}s)`,
-      );
-      await delay(ROUTER_DISCOVERY_INTERVAL_MS);
-    }
-
-    const reason = lastError?.message ?? 'unknown reason';
-    throw new Error(`Ziti edge router "${profile.routerName}" was not found: ${reason}`);
   }
 
   private async ensureService(client: ZitiManagementClient, profile: ZitiRuntimeProfile): Promise<ZitiService> {
@@ -186,14 +153,14 @@ export class ZitiReconciler {
       name: `${profile.serviceName}.dial`,
       type: 'Dial',
       semantic: 'AllOf',
-      identityRoles: profile.identities.platform.selectors,
+      identityRoles: profile.identities.runner.selectors,
       serviceRoles: profile.serviceSelectors,
     });
     await this.ensureServicePolicy(client, {
       name: `${profile.serviceName}.bind`,
       type: 'Bind',
       semantic: 'AllOf',
-      identityRoles: profile.identities.runner.selectors,
+      identityRoles: profile.identities.platform.selectors,
       serviceRoles: profile.serviceSelectors,
     });
   }
@@ -246,35 +213,6 @@ export class ZitiReconciler {
     }
     this.logger.log(`Updating Ziti edge-router policy ${payload.name}`);
     return client.updateServiceEdgeRouterPolicy(existing.id, payload);
-  }
-
-  private async ensureIdentityRouterPolicy(
-    client: ZitiManagementClient,
-    profile: ZitiRuntimeProfile,
-  ): Promise<ZitiIdentityRouterPolicy> {
-    const identityRoles = Array.from(
-      new Set([...profile.identities.platform.selectors, ...profile.identities.runner.selectors]),
-    );
-    const payload: Omit<ZitiIdentityRouterPolicy, 'id'> = {
-      name: `${profile.serviceName}.identities.use-router`,
-      semantic: 'AnyOf',
-      identityRoles,
-      edgeRouterRoles: profile.routerSelectors,
-    };
-    const existing = await client.getEdgeRouterPolicyByName(payload.name);
-    if (!existing) {
-      this.logger.log(`Creating Ziti identity-router policy ${payload.name}`);
-      return client.createEdgeRouterPolicy(payload);
-    }
-    const needsUpdate =
-      existing.semantic !== payload.semantic ||
-      !this.matches(existing.identityRoles, payload.identityRoles) ||
-      !this.matches(existing.edgeRouterRoles, payload.edgeRouterRoles);
-    if (!needsUpdate) {
-      return existing;
-    }
-    this.logger.log(`Updating Ziti identity-router policy ${payload.name}`);
-    return client.updateEdgeRouterPolicy(existing.id, payload);
   }
 
   private async ensureIdentity(
