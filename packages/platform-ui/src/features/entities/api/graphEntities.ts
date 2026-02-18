@@ -151,7 +151,7 @@ export function mapGraphEntities(graph: GraphEntityGraph | undefined, templates:
 export function getTemplateOptions(
   templates: TemplateSchema[] = [],
   kind?: GraphEntityKind,
-  excludeTemplateNames?: Set<string>,
+  excludeTemplateNames?: ReadonlySet<string> | Set<string>,
 ): TemplateOption[] {
   return templates
     .map((template) => ({
