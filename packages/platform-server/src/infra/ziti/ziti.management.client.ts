@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Agent, fetch } from 'undici';
+import { Agent, fetch, type Response as UndiciResponse } from 'undici';
 
 import type {
   ZitiEdgeRouter,
@@ -246,7 +246,7 @@ export class ZitiManagementClient {
     return (await response.json()) as T;
   }
 
-  private async safeReadError(response: Response): Promise<string> {
+  private async safeReadError(response: UndiciResponse): Promise<string> {
     try {
       const body = await response.text();
       return body || 'no body';
