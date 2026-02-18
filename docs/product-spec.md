@@ -117,6 +117,7 @@ Configuration matrix (server env vars)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000).
+  - ZITI_* (see docs/containers/ziti.md) to route docker-runner traffic through the OpenZiti overlay.
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)
@@ -133,6 +134,7 @@ Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
   - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Optional secure runner: enable ZITI_* env vars on both platform-server and docker-runner; ensure compose Ziti services are up.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev

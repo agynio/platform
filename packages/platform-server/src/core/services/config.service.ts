@@ -3,6 +3,31 @@ import * as dotenv from 'dotenv';
 import { z } from 'zod';
 dotenv.config();
 
+const booleanFlag = (defaultValue: boolean) =>
+  z
+    .union([z.boolean(), z.string()])
+    .default(defaultValue ? 'true' : 'false')
+    .transform((value) => {
+      if (typeof value === 'boolean') return value;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return defaultValue;
+      if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+      if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+      return defaultValue;
+    });
+
+const numberFlag = (defaultValue: number) =>
+  z
+    .union([z.string(), z.number()])
+    .default(String(defaultValue))
+    .transform((value) => {
+      if (typeof value === 'number') return Number.isFinite(value) ? value : defaultValue;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : defaultValue;
+    });
+
+const trimUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+
 export const configSchema = z.object({
   // GitHub settings are optional to allow dev boot without GitHub
   githubAppId: z.string().min(1).optional(),
@@ -188,6 +213,33 @@ export const configSchema = z.object({
         .map((x) => x.trim())
         .filter((x) => !!x),
     ),
+  ziti: z
+    .object({
+      enabled: booleanFlag(false),
+      managementUrl: z
+        .string()
+        .default('https://127.0.0.1:1280/edge/management/v1')
+        .transform((value) => trimUrl(value)),
+      username: z.string().default('admin'),
+      password: z.string().default('admin'),
+      insecureTls: booleanFlag(true),
+      serviceName: z.string().default('dev.agyn-platform.platform-api'),
+      routerName: z.string().default('dev-edge-router'),
+      runnerProxyHost: z.string().default('127.0.0.1'),
+      runnerProxyPort: numberFlag(17071),
+      platformIdentityName: z.string().default('dev.agyn-platform.platform-server'),
+      platformIdentityFile: z
+        .string()
+        .default('.ziti/identities/dev.agyn-platform.platform-server.json'),
+      runnerIdentityName: z.string().default('dev.agyn-platform.docker-runner'),
+      runnerIdentityFile: z
+        .string()
+        .default('.ziti/identities/dev.agyn-platform.docker-runner.json'),
+      identitiesDir: z.string().default('.ziti/identities'),
+      tmpDir: z.string().default('.ziti/tmp'),
+      enrollmentTtlSeconds: numberFlag(900),
+    })
+    .default({}),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -326,6 +378,11 @@ export class ConfigService implements Config {
   }
 
   getDockerRunnerBaseUrl(): string {
+    if (this.isZitiEnabled()) {
+      const host = this.getZitiRunnerProxyHost();
+      const port = this.getZitiRunnerProxyPort();
+      return `http://${host}:${port}`;
+    }
     return this.dockerRunnerBaseUrl;
   }
 
@@ -417,6 +474,68 @@ export class ConfigService implements Config {
     return this.params.nixRepoAllowlist ?? [];
   }
 
+  get zitiConfig(): Config['ziti'] {
+    return this.params.ziti;
+  }
+
+  isZitiEnabled(): boolean {
+    return !!this.params.ziti?.enabled;
+  }
+
+  getZitiManagementUrl(): string {
+    return this.params.ziti.managementUrl;
+  }
+
+  getZitiCredentials(): { username: string; password: string } {
+    return { username: this.params.ziti.username, password: this.params.ziti.password };
+  }
+
+  getZitiInsecureTls(): boolean {
+    return this.params.ziti.insecureTls;
+  }
+
+  getZitiServiceName(): string {
+    return this.params.ziti.serviceName;
+  }
+
+  getZitiRouterName(): string {
+    return this.params.ziti.routerName;
+  }
+
+  getZitiRunnerProxyHost(): string {
+    return this.params.ziti.runnerProxyHost;
+  }
+
+  getZitiRunnerProxyPort(): number {
+    return this.params.ziti.runnerProxyPort;
+  }
+
+  getZitiPlatformIdentity(): { name: string; file: string } {
+    return {
+      name: this.params.ziti.platformIdentityName,
+      file: this.params.ziti.platformIdentityFile,
+    };
+  }
+
+  getZitiRunnerIdentity(): { name: string; file: string } {
+    return {
+      name: this.params.ziti.runnerIdentityName,
+      file: this.params.ziti.runnerIdentityFile,
+    };
+  }
+
+  getZitiIdentityDirectory(): string {
+    return this.params.ziti.identitiesDir;
+  }
+
+  getZitiTmpDirectory(): string {
+    return this.params.ziti.tmpDir;
+  }
+
+  getZitiEnrollmentTtlSeconds(): number {
+    return this.params.ziti.enrollmentTtlSeconds;
+  }
+
   // No global messaging adapter config in Slack-only v1
 
   static fromEnv(): ConfigService {
@@ -471,6 +590,24 @@ export class ConfigService implements Config {
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
+      ziti: {
+        enabled: process.env.ZITI_ENABLED,
+        managementUrl: process.env.ZITI_MANAGEMENT_URL,
+        username: process.env.ZITI_USERNAME,
+        password: process.env.ZITI_PASSWORD,
+        insecureTls: process.env.ZITI_INSECURE_TLS,
+        serviceName: process.env.ZITI_SERVICE_NAME,
+        routerName: process.env.ZITI_ROUTER_NAME,
+        runnerProxyHost: process.env.ZITI_RUNNER_PROXY_HOST,
+        runnerProxyPort: process.env.ZITI_RUNNER_PROXY_PORT,
+        platformIdentityName: process.env.ZITI_PLATFORM_IDENTITY_NAME,
+        platformIdentityFile: process.env.ZITI_PLATFORM_IDENTITY_FILE,
+        runnerIdentityName: process.env.ZITI_RUNNER_IDENTITY_NAME,
+        runnerIdentityFile: process.env.ZITI_RUNNER_IDENTITY_FILE,
+        identitiesDir: process.env.ZITI_IDENTITIES_DIR,
+        tmpDir: process.env.ZITI_TMP_DIR,
+        enrollmentTtlSeconds: process.env.ZITI_ENROLLMENT_TTL_SECONDS,
+      },
     });
     const config = new ConfigService().init(parsed);
     ConfigService.register(config);
