@@ -25,11 +25,19 @@ import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.wo
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
 import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
 import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
+import { ZitiIdentityManager } from './ziti/ziti.identity.manager';
+import { ZitiReconciler } from './ziti/ziti.reconciler';
+import { ZitiRunnerProxyService } from './ziti/ziti.runnerProxy.service';
+import { ZitiBootstrapService } from './ziti/ziti.bootstrap.service';
 
 @Module({
   imports: [CoreModule, VaultModule],
   providers: [
     ArchiveService,
+    ZitiIdentityManager,
+    ZitiReconciler,
+    ZitiRunnerProxyService,
+    ZitiBootstrapService,
     {
       provide: ContainerRegistry,
       useFactory: async (prismaSvc: PrismaService) => {
@@ -41,13 +49,15 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     },
     {
       provide: DOCKER_CLIENT,
-      useFactory: (config: ConfigService) =>
-        new HttpDockerRunnerClient({
+      useFactory: async (config: ConfigService, zitiBootstrap: ZitiBootstrapService) => {
+        await zitiBootstrap.ensureReady();
+        return new HttpDockerRunnerClient({
           baseUrl: config.getDockerRunnerBaseUrl(),
           sharedSecret: config.getDockerRunnerSharedSecret(),
           requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
-        }),
-      inject: [ConfigService],
+        });
+      },
+      inject: [ConfigService, ZitiBootstrapService],
     },
     DockerRunnerConnectivityProbe,
     {

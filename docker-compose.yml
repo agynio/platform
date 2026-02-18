@@ -247,18 +247,115 @@ services:
     networks:
       - agents_net
 
+  ziti-controller:
+    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    container_name: ziti-controller
+    restart: unless-stopped
+    oom_score_adj: -900
+    entrypoint:
+      - "/var/openziti/scripts/run-controller.sh"
+    environment:
+      ZITI_CTRL_NAME: ${ZITI_CTRL_NAME:-dev-controller}
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
+      ZITI_CTRL_EDGE_IP_OVERRIDE: ${ZITI_CTRL_EDGE_IP_OVERRIDE:-127.0.0.1}
+      ZITI_CTRL_ADVERTISED_PORT: ${ZITI_CTRL_ADVERTISED_PORT:-6262}
+      ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION: ${ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION:-168h}
+      ZITI_ROUTER_ENROLLMENT_DURATION: ${ZITI_ROUTER_ENROLLMENT_DURATION:-168h}
+      ZITI_USER: ${ZITI_USER:-admin}
+      ZITI_PWD: ${ZITI_PWD:-admin}
+    ports:
+      - "127.0.0.1:${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}:${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}"
+      - "127.0.0.1:${ZITI_CTRL_ADVERTISED_PORT:-6262}:${ZITI_CTRL_ADVERTISED_PORT:-6262}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -m 1 -s -k -f https://${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}:${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}/edge/client/v1/version",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - type: bind
+        source: ./.ziti/controller
+        target: /persistent
+    networks:
+      - agents_net
+
+  ziti-controller-init:
+    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    container_name: ziti-controller-init
+    restart: "no"
+    depends_on:
+      ziti-controller:
+        condition: service_healthy
+    entrypoint:
+      - "/var/openziti/scripts/run-with-ziti-cli.sh"
+    command:
+      - "/var/openziti/scripts/access-control.sh"
+    environment:
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
+    volumes:
+      - type: bind
+        source: ./.ziti/controller
+        target: /persistent
+    networks:
+      - agents_net
+
+  ziti-edge-router:
+    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    container_name: ziti-edge-router
+    restart: unless-stopped
+    depends_on:
+      ziti-controller-init:
+        condition: service_completed_successfully
+    entrypoint: /bin/bash
+    command: "/var/openziti/scripts/run-router.sh edge"
+    environment:
+      ZITI_CTRL_ADVERTISED_ADDRESS: ${ZITI_CTRL_ADVERTISED_ADDRESS:-ziti-controller}
+      ZITI_CTRL_ADVERTISED_PORT: ${ZITI_CTRL_ADVERTISED_PORT:-6262}
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
+      ZITI_ROUTER_NAME: ${ZITI_ROUTER_NAME:-dev-edge-router}
+      ZITI_ROUTER_ADVERTISED_ADDRESS: ${ZITI_ROUTER_ADVERTISED_ADDRESS:-ziti-edge-router}
+      ZITI_ROUTER_PORT: ${ZITI_ROUTER_PORT:-3022}
+      ZITI_ROUTER_LISTENER_BIND_PORT: ${ZITI_ROUTER_LISTENER_BIND_PORT:-10080}
+      ZITI_ROUTER_ROLES: ${ZITI_ROUTER_ROLES:-public}
+      ZITI_USER: ${ZITI_USER:-admin}
+      ZITI_PWD: ${ZITI_PWD:-admin}
+    ports:
+      - "127.0.0.1:${ZITI_ROUTER_PORT:-3022}:${ZITI_ROUTER_PORT:-3022}"
+    volumes:
+      - type: bind
+        source: ./.ziti/controller
+        target: /persistent
+    networks:
+      - agents_net
+
   docker-runner:
     build:
       context: .
       dockerfile: packages/docker-runner/Dockerfile
     restart: unless-stopped
+    depends_on:
+      ziti-edge-router:
+        condition: service_started
     environment:
       DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
       DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
+      ZITI_ENABLED: ${ZITI_ENABLED:-false}
+      ZITI_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
+      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
     volumes:
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
+      - type: bind
+        source: ./.ziti/identities
+        target: /opt/app/.ziti/identities
+        read_only: true
     ports:
       - "${DOCKER_RUNNER_PORT:-7071}:7071"
     networks:

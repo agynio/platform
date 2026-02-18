@@ -117,7 +117,7 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), docker-runner (7071), and the OpenZiti controller stack
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
@@ -165,6 +165,20 @@ docker run --rm -p 8080:80 \
   ghcr.io/agynio/platform-ui:latest
 ```
 
+### Secure docker-runner connectivity (OpenZiti)
+
+The dev stack now ships an OpenZiti controller, initializer, and edge router. To route docker-runner traffic through the
+overlay instead of the Docker bridge network:
+
+1. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
+2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
+   `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
+3. Start the controller stack: `docker compose up -d ziti-controller controller-init ziti-edge-router`.
+4. Launch docker-runner and platform-server normally. The server will reconcile the controller, enroll identities, and
+   expose a local proxy on `127.0.0.1:17071` for all docker-runner calls.
+
+See [docs/containers/ziti.md](docs/containers/ziti.md) for the full walkthrough and smoke test commands.
+
 ## Configuration
 
 Key environment variables (server) from packages/platform-server/.env.example and src/core/services/config.service.ts:
@@ -188,6 +202,12 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
+- OpenZiti (optional secure docker-runner tunnel):
+  - ZITI_ENABLED (default false) — enable controller reconciliation + proxy
+  - ZITI_MANAGEMENT_URL / ZITI_USERNAME / ZITI_PASSWORD — controller credentials
+  - ZITI_SERVICE_NAME / ZITI_ROUTER_NAME — service plus edge router handles
+  - ZITI_PLATFORM_IDENTITY_FILE / ZITI_RUNNER_IDENTITY_FILE — identity output paths under `./.ziti/`
+  - ZITI_RUNNER_PROXY_PORT (default 17071) — local HTTP proxy for docker-runner calls
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)
