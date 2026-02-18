@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@/lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({
@@ -72,15 +73,17 @@ describe('EntityFormDialog', () => {
     const onOpenChange = vi.fn();
 
     render(
-      <EntityFormDialog
-        open
-        mode="create"
-        kind="workspace"
-        templates={templates}
-        onOpenChange={onOpenChange}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityFormDialog
+          open
+          mode="create"
+          kind="workspace"
+          templates={templates}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+          isSubmitting={false}
+        />
+      </QueryClientProvider>,
     );
 
     const templateSelect = screen.getByLabelText('Template');
@@ -132,16 +135,18 @@ describe('EntityFormDialog', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(
-      <EntityFormDialog
-        open
-        mode="edit"
-        kind="agent"
-        templates={templates}
-        entity={entity}
-        onOpenChange={vi.fn()}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityFormDialog
+          open
+          mode="edit"
+          kind="agent"
+          templates={templates}
+          entity={entity}
+          onOpenChange={vi.fn()}
+          onSubmit={onSubmit}
+          isSubmitting={false}
+        />
+      </QueryClientProvider>,
     );
 
     const templateSelect = screen.getByLabelText('Template');

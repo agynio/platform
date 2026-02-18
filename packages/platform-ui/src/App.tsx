@@ -25,6 +25,7 @@ import { TriggersListPage } from './pages/TriggersListPage';
 import { ToolsListPage } from './pages/ToolsListPage';
 import { WorkspacesListPage } from './pages/WorkspacesListPage';
 import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
+import { McpServersListPage } from './pages/McpServersListPage';
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ function App() {
                 {/* Entities */}
                 <Route path="/triggers" element={<TriggersListPage />} />
                 <Route path="/tools" element={<ToolsListPage />} />
+                <Route path="/mcp" element={<McpServersListPage />} />
                 <Route path="/workspaces" element={<WorkspacesListPage />} />
                 <Route path="/memory" element={<MemoryEntitiesListPage />} />
 

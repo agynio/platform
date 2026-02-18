@@ -1,7 +1,7 @@
 import type { PersistedGraph, PersistedGraphEdge, PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
 
-export type GraphEntityKind = 'trigger' | 'agent' | 'tool' | 'workspace';
+export type GraphEntityKind = 'trigger' | 'agent' | 'tool' | 'mcp' | 'workspace';
 
 export interface EntityPortDefinition {
   id: string;

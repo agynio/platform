@@ -48,6 +48,7 @@ describe('RootLayout navigation', () => {
       'entitiesTriggers',
       'entitiesAgents',
       'entitiesTools',
+      'entitiesMcp',
       'entitiesWorkspaces',
       'entitiesMemory',
     ]);

@@ -28,8 +28,10 @@ if (!pointerProto.scrollIntoView) {
 }
 import { AgentsListPage } from '../AgentsListPage';
 import { TriggersListPage } from '../TriggersListPage';
+import { ToolsListPage } from '../ToolsListPage';
 import { WorkspacesListPage } from '../WorkspacesListPage';
 import { MemoryEntitiesListPage } from '../MemoryEntitiesListPage';
+import { McpServersListPage } from '../McpServersListPage';
 
 const notifications = vi.hoisted(() => ({
   success: vi.fn(),
@@ -62,6 +64,13 @@ const templateSet = [
     kind: 'tool',
     sourcePorts: ['send'],
     targetPorts: ['receive'],
+  },
+  {
+    name: 'filesystem-mcp',
+    title: 'Filesystem MCP',
+    kind: 'mcp',
+    sourcePorts: ['out'],
+    targetPorts: ['in'],
   },
   {
     name: 'worker-service',
@@ -183,6 +192,31 @@ describe('Entity list pages', () => {
     expect(within(templateSelect).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
   });
 
+  it('keeps MCP servers separate from tools, including template picker', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'tool-1', template: 'slack-tool', config: { title: 'Slack Tool' } },
+        { id: 'mcp-1', template: 'filesystem-mcp', config: { title: 'Filesystem MCP' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<ToolsListPage />);
+
+    await screen.findByText('Slack Tool', { selector: '[data-testid="entity-title"]' });
+    expect(screen.queryByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /new tool/i }));
+
+    const templateSelect = await screen.findByRole('combobox', { name: /template/i });
+    expect(within(templateSelect).getByRole('option', { name: 'Slack Tool' })).toBeInTheDocument();
+    expect(within(templateSelect).queryByRole('option', { name: 'Filesystem MCP' })).not.toBeInTheDocument();
+  });
+
   it('renders only memory entities on the memory page', async () => {
     const graphOverride = {
       ...baseGraph,
@@ -221,6 +255,60 @@ describe('Entity list pages', () => {
     expect(within(templateSelect).getByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
     expect(within(templateSelect).getByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
     expect(within(templateSelect).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
+  });
+
+  it('renders only MCP servers on the MCP page and limits templates accordingly', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'mcp-1', template: 'filesystem-mcp', config: { title: 'Filesystem MCP' } },
+        { id: 'tool-1', template: 'slack-tool', config: { title: 'Slack Tool' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<McpServersListPage />);
+
+    await screen.findByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' });
+    expect(screen.queryByText('Slack Tool', { selector: '[data-testid="entity-title"]' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /new mcp server/i }));
+
+    const templateSelect = await screen.findByRole('combobox', { name: /template/i });
+    expect(within(templateSelect).getByRole('option', { name: 'Filesystem MCP' })).toBeInTheDocument();
+    expect(within(templateSelect).queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
+  });
+
+  it('renders the MCP config view in the edit dialog', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [{ id: 'mcp-1', template: 'filesystem-mcp', config: { title: 'Filesystem MCP' } }],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+
+    server.use(
+      http.get(abs('/api/graph/nodes/mcp-1/state'), () =>
+        HttpResponse.json({ state: { mcp: { tools: [{ name: 'search', title: 'Search' }], enabledTools: ['search'] } } }),
+      ),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderWithGraphProviders(<McpServersListPage />);
+
+    const titleCell = await screen.findByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' });
+    const row = titleCell.closest('tr');
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLTableRowElement).getByRole('button', { name: /edit/i }));
+
+    await screen.findByRole('dialog');
+    await screen.findByText('Namespace');
+    expect(screen.getByPlaceholderText('npx -y @modelcontextprotocol/server-everything')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
   });
 
   it('saves memory entity edits when no edges are present', async () => {

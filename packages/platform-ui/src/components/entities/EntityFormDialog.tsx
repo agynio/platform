@@ -18,13 +18,14 @@ import { listVariables } from '@/features/variables/api';
 import type { GraphEntityKind, GraphEntitySummary, GraphEntityUpsertInput, TemplateOption } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 import { X } from 'lucide-react';
+import { useMcpNodeState } from '@/lib/graph/hooks';
 
 type EntityFormValues = {
   template: string;
   title: string;
 };
 
-type NodeViewKind = Extract<NodeConfig['kind'], 'Trigger' | 'Agent' | 'Tool' | 'Workspace'>;
+type NodeViewKind = NodeConfig['kind'];
 
 const SECRET_SUGGESTION_TTL_MS = 5 * 60 * 1000;
 const VARIABLE_SUGGESTION_TTL_MS = 5 * 60 * 1000;
@@ -52,8 +53,9 @@ function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeViewKind {
     case 'agent':
       return 'Agent';
     case 'tool':
-    case 'mcp':
       return 'Tool';
+    case 'mcp':
+      return 'MCP';
     case 'workspace':
     case 'service':
     default:
@@ -292,6 +294,27 @@ export function EntityFormDialog({
 
   const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
   const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);
+  const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
+  const {
+    tools: mcpTools,
+    enabledTools: mcpEnabledTools,
+    setEnabledTools: setMcpEnabledTools,
+    isLoading: mcpToolsLoading,
+  } = useMcpNodeState(mcpStateNodeId);
+
+  const handleToggleMcpTool = useCallback(
+    (toolName: string, enabled: boolean) => {
+      if (!mcpStateNodeId) return;
+      const current = new Set(mcpEnabledTools ?? []);
+      if (enabled) {
+        current.add(toolName);
+      } else {
+        current.delete(toolName);
+      }
+      setMcpEnabledTools(Array.from(current));
+    },
+    [mcpEnabledTools, mcpStateNodeId, setMcpEnabledTools],
+  );
 
   const handleViewConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
@@ -403,6 +426,27 @@ export function EntityFormDialog({
         } satisfies NodePropertiesViewProps<'Tool'>;
         return <View {...toolProps} />;
       }
+      case 'MCP': {
+        const View = templateViewComponent('MCP') ?? NODE_VIEW_REGISTRY.MCP;
+        const mcpProps: NodePropertiesViewProps<'MCP'> = {
+          config: viewConfig as NodePropertiesViewProps<'MCP'>['config'],
+          state: viewState,
+          displayTitle,
+          onConfigChange: handleViewConfigChange,
+          secretSuggestions,
+          variableSuggestions,
+          ensureSecretKeys,
+          ensureVariableKeys,
+          tools: mcpTools,
+          enabledTools: mcpEnabledTools,
+          onToggleTool: handleToggleMcpTool,
+          toolsLoading: mcpToolsLoading,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
+        } satisfies NodePropertiesViewProps<'MCP'>;
+        return <View {...mcpProps} />;
+      }
       case 'Workspace': {
         const View = templateViewComponent('Workspace') ?? NODE_VIEW_REGISTRY.Workspace;
         const workspaceProps: NodePropertiesViewProps<'Workspace'> = {
@@ -476,6 +520,10 @@ export function EntityFormDialog({
     nodeIdForView,
     safeGraphNodes,
     safeGraphEdges,
+    mcpTools,
+    mcpEnabledTools,
+    handleToggleMcpTool,
+    mcpToolsLoading,
   ]);
 
   const disableTemplateSelect = mode === 'edit';

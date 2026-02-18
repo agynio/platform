@@ -17,6 +17,7 @@ import {
   Layers,
   Zap,
   Hammer,
+  Server,
   Building2,
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
@@ -30,6 +31,7 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   entitiesTriggers: '/triggers',
   entitiesAgents: '/agents',
   entitiesTools: '/tools',
+  entitiesMcp: '/mcp',
   entitiesWorkspaces: '/workspaces',
   entitiesMemory: '/memory',
   containers: '/monitoring/containers',
@@ -59,6 +61,7 @@ const MENU_ITEMS: MenuItem[] = [
       { id: 'entitiesTriggers', label: 'Triggers', icon: <Zap className="w-4 h-4" /> },
       { id: 'entitiesAgents', label: 'Agents', icon: <Users className="w-4 h-4" /> },
       { id: 'entitiesTools', label: 'Tools', icon: <Hammer className="w-4 h-4" /> },
+      { id: 'entitiesMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" /> },
       { id: 'entitiesWorkspaces', label: 'Workspaces', icon: <Building2 className="w-4 h-4" /> },
       { id: 'entitiesMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
     ],

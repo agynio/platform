@@ -42,8 +42,9 @@ export function resolveEntityKind(rawKind?: string | null): GraphEntityKind {
     case 'agent':
       return 'agent';
     case 'tool':
-    case 'mcp':
       return 'tool';
+    case 'mcp':
+      return 'mcp';
     case 'service':
     default:
       return 'workspace';

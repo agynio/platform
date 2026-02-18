@@ -14,7 +14,7 @@ type BuilderPanelNodeData = {
 
 function detectKind(templateKind: string | undefined, templateName: string): 'agent' | 'tool' | 'other' {
   if (templateKind === 'agent') return 'agent';
-  if (templateKind === 'tool') return 'tool';
+  if (templateKind === 'tool' || templateKind === 'mcp') return 'tool';
   if (/agent/i.test(templateName)) return 'agent';
   if (/tool/i.test(templateName)) return 'tool';
   return 'other';

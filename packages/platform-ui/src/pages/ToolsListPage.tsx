@@ -5,7 +5,7 @@ export function ToolsListPage() {
     <EntityListPage
       kind="tool"
       title="Tools"
-      description="Browse available tools, including MCP connections."
+      description="Browse available tools provided by agents and services."
       createLabel="New tool"
       emptyLabel="No tools available."
     />

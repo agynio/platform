@@ -24,6 +24,7 @@ const kindLabel: Record<GraphEntitySummary['templateKind'], string> = {
   agent: 'Agent',
   trigger: 'Trigger',
   tool: 'Tool',
+  mcp: 'MCP Server',
   workspace: 'Workspace',
 };
 
