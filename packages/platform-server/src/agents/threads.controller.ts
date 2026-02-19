@@ -51,6 +51,42 @@ const isRunEventStatus = (value: string): value is RunEventStatus => (RunEventSt
 
 const THREAD_MESSAGE_MAX_LENGTH = 100000;
 
+const collectFilterTokens = (input?: string | string[]): string[] => {
+  if (!input) return [];
+  const values = Array.isArray(input) ? input : [input];
+  const tokens: string[] = [];
+  for (const value of values) {
+    for (const token of value.split(',')) {
+      const trimmed = token.trim();
+      if (trimmed.length > 0) tokens.push(trimmed);
+    }
+  }
+  return tokens;
+};
+
+const resolveRunEventFilters = (params: {
+  queryTypes?: string;
+  queryStatuses?: string;
+  typeFilter?: string | string[];
+  statusFilter?: string | string[];
+}): { types: RunEventType[]; statuses: RunEventStatus[] } => {
+  const types = Array.from(
+    new Set([
+      ...collectFilterTokens(params.queryTypes),
+      ...collectFilterTokens(params.typeFilter),
+    ]),
+  ).filter((value): value is RunEventType => isRunEventType(value));
+
+  const statuses = Array.from(
+    new Set([
+      ...collectFilterTokens(params.queryStatuses),
+      ...collectFilterTokens(params.statusFilter),
+    ]),
+  ).filter((value): value is RunEventStatus => isRunEventStatus(value));
+
+  return { types, statuses };
+};
+
 export class ListRunMessagesQueryDto {
   @IsIn(RunMessageTypeValues)
   type!: RunMessageType;
@@ -518,6 +554,36 @@ export class AgentsThreadsController {
     return summary;
   }
 
+  @Get('runs/:runId/events/totals')
+  async getRunTimelineEventTotals(
+    @Param('runId') runId: string,
+    @Query() query: RunTimelineEventsQueryDto,
+    @Query('type') typeFilter?: string | string[],
+    @Query('status') statusFilter?: string | string[],
+  ) {
+    const { types, statuses } = resolveRunEventFilters({
+      queryTypes: query.types,
+      queryStatuses: query.statuses,
+      typeFilter,
+      statusFilter,
+    });
+
+    const totals = await this.runEvents.getRunEventTotals({
+      runId,
+      types: types.length > 0 ? types : undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
+    });
+
+    return {
+      runId,
+      filters: {
+        types,
+        statuses,
+      },
+      totals,
+    };
+  }
+
   @Get('runs/:runId/events')
   async listRunTimelineEvents(
     @Param('runId') runId: string,
@@ -525,32 +591,12 @@ export class AgentsThreadsController {
     @Query('type') typeFilter?: string | string[],
     @Query('status') statusFilter?: string | string[],
   ) {
-    const collect = (input?: string | string[]) => {
-      if (!input) return [] as string[];
-      const values = Array.isArray(input) ? input : [input];
-      const tokens: string[] = [];
-      for (const value of values) {
-        for (const token of value.split(',')) {
-          const trimmed = token.trim();
-          if (trimmed.length > 0) tokens.push(trimmed);
-        }
-      }
-      return tokens;
-    };
-
-    const typeValues = Array.from(
-      new Set([
-        ...collect(query.types),
-        ...collect(typeFilter),
-      ]),
-    ).filter((v): v is RunEventType => isRunEventType(v));
-
-    const statusValues = Array.from(
-      new Set([
-        ...collect(query.statuses),
-        ...collect(statusFilter),
-      ]),
-    ).filter((v): v is RunEventStatus => isRunEventStatus(v));
+    const { types: typeValues, statuses: statusValues } = resolveRunEventFilters({
+      queryTypes: query.types,
+      queryStatuses: query.statuses,
+      typeFilter,
+      statusFilter,
+    });
 
     let cursor: { ts: Date; id?: string } | undefined;
     if (query.cursorTs) {

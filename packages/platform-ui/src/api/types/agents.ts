@@ -165,6 +165,24 @@ export type RunTimelineEventsResponse = {
   nextCursor: RunTimelineEventsCursor | null;
 };
 
+export type RunTimelineTotalsResponse = {
+  runId: string;
+  filters: {
+    types: RunEventType[];
+    statuses: RunEventStatus[];
+  };
+  totals: {
+    eventCount: number;
+    tokenUsage: {
+      input: number;
+      cached: number;
+      output: number;
+      reasoning: number;
+      total: number;
+    };
+  };
+};
+
 export type ToolOutputSource = 'stdout' | 'stderr';
 
 export type ToolOutputChunk = {

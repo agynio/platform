@@ -230,6 +230,17 @@ export type RunTimelineEventsResult = {
   nextCursor: RunTimelineEventsCursor | null;
 };
 
+export type RunTimelineEventTotals = {
+  eventCount: number;
+  tokenUsage: {
+    input: number;
+    cached: number;
+    output: number;
+    reasoning: number;
+    total: number;
+  };
+};
+
 export type RunEventMetadata = Prisma.InputJsonValue | typeof Prisma.JsonNull | null | undefined;
 
 export type ToolOutputChunkPayload = {
@@ -868,6 +879,48 @@ export class RunEventsService {
       countsByType,
       countsByStatus,
       totalEvents,
+    };
+  }
+
+  async getRunEventTotals(params: {
+    runId: string;
+    types?: RunEventType[];
+    statuses?: RunEventStatus[];
+  }): Promise<RunTimelineEventTotals> {
+    const eventWhere: Prisma.RunEventWhereInput = { runId: params.runId };
+    if (params.types && params.types.length > 0) eventWhere.type = { in: params.types };
+    if (params.statuses && params.statuses.length > 0) eventWhere.status = { in: params.statuses };
+
+    const [eventCount, usageAggregate] = await Promise.all([
+      this.prisma.runEvent.count({ where: eventWhere }),
+      this.prisma.lLMCall.aggregate({
+        where: {
+          event: {
+            runId: params.runId,
+            ...(params.types && params.types.length > 0 ? { type: { in: params.types } } : {}),
+            ...(params.statuses && params.statuses.length > 0 ? { status: { in: params.statuses } } : {}),
+          },
+        },
+        _sum: {
+          inputTokens: true,
+          cachedInputTokens: true,
+          outputTokens: true,
+          reasoningTokens: true,
+          totalTokens: true,
+        },
+      }),
+    ]);
+
+    const sums = usageAggregate._sum ?? {};
+    return {
+      eventCount,
+      tokenUsage: {
+        input: sums.inputTokens ?? 0,
+        cached: sums.cachedInputTokens ?? 0,
+        output: sums.outputTokens ?? 0,
+        reasoning: sums.reasoningTokens ?? 0,
+        total: sums.totalTokens ?? 0,
+      },
     };
   }
 

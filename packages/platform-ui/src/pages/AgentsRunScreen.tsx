@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import RunScreen, { type EventFilter, type StatusFilter } from '@/components/screens/RunScreen';
 import type { RunEvent as UiRunEvent } from '@/components/RunEventsList';
 import type { Status } from '@/components/StatusIndicator';
-import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
+import { useRunTimelineEventTotals, useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
 import { contextItems } from '@/api/modules/contextItems';
 import { runs } from '@/api/modules/runs';
 import type {
@@ -182,25 +182,6 @@ type TokenTotals = {
 };
 
 const EMPTY_TOKENS: TokenTotals = { input: 0, cached: 0, output: 0, reasoning: 0, total: 0 };
-
-function aggregateTokens(events: RunTimelineEvent[]): TokenTotals {
-  return events.reduce<TokenTotals>((acc, event) => {
-    if (event.type !== 'llm_call' || !event.llmCall?.usage) return acc;
-    const usage = event.llmCall.usage;
-    const next = { ...acc };
-    next.input += usage.inputTokens ?? 0;
-    next.cached += usage.cachedInputTokens ?? 0;
-    next.output += usage.outputTokens ?? 0;
-    next.reasoning += usage.reasoningTokens ?? 0;
-    const total = usage.totalTokens;
-    if (typeof total === 'number' && Number.isFinite(total)) {
-      next.total += total;
-    } else {
-      next.total += (usage.inputTokens ?? 0) + (usage.cachedInputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.reasoningTokens ?? 0);
-    }
-    return next;
-  }, { ...EMPTY_TOKENS });
-}
 
 function inferToolSubtype(toolName: string | undefined, input: unknown): 'shell' | 'manage' | 'generic' {
   const normalized = (toolName ?? '').toLowerCase();
@@ -1134,6 +1115,9 @@ export function AgentsRunScreen() {
     limit: 100,
     order: 'desc',
   });
+  const totalsQuery = useRunTimelineEventTotals(runId, { types: apiTypes, statuses: apiStatuses });
+
+  const { refetch: refetchTotals } = totalsQuery;
 
   const cursorRef = useRef<RunTimelineEventsCursor | null>(null);
   const catchUpRef = useRef<Promise<unknown> | null>(null);
@@ -1147,6 +1131,10 @@ export function AgentsRunScreen() {
   const reachedHistoryEndRef = useRef(false);
   const apiTypesRef = useRef(apiTypes);
   const apiStatusesRef = useRef(apiStatuses);
+  const totalsRefetchStateRef = useRef<{ timeout: ReturnType<typeof setTimeout> | null; lastInvoked: number }>({
+    timeout: null,
+    lastInvoked: 0,
+  });
 
   useEffect(() => {
     apiTypesRef.current = apiTypes;
@@ -1155,6 +1143,16 @@ export function AgentsRunScreen() {
   useEffect(() => {
     apiStatusesRef.current = apiStatuses;
   }, [apiStatuses]);
+
+  useEffect(() => {
+    const state = totalsRefetchStateRef.current;
+    return () => {
+      if (state.timeout) {
+        clearTimeout(state.timeout);
+        state.timeout = null;
+      }
+    };
+  }, []);
 
   const updateCursor = useCallback(
     (cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) => {
@@ -1403,6 +1401,32 @@ export function AgentsRunScreen() {
     return catchUpRef.current;
   }, [runId, eventsQuery, updateEventsState, updateCursor]);
 
+  const scheduleTotalsRefetch = useCallback(() => {
+    if (!runId) return;
+    const state = totalsRefetchStateRef.current;
+    const minIntervalMs = 2000;
+    const now = Date.now();
+
+    const invoke = () => {
+      state.timeout = null;
+      state.lastInvoked = Date.now();
+      void refetchTotals();
+    };
+
+    if (state.timeout) return;
+    if (now - state.lastInvoked >= minIntervalMs) {
+      invoke();
+      return;
+    }
+
+    state.timeout = setTimeout(invoke, Math.max(0, minIntervalMs - (now - state.lastInvoked)));
+  }, [refetchTotals, runId]);
+
+  useEffect(() => {
+    if (!runId) return;
+    void refetchTotals();
+  }, [runId, apiTypes, apiStatuses, refetchTotals]);
+
   const loadOlderEvents = useCallback(async () => {
     if (!runId) return;
     const cursor = olderCursorRef.current;
@@ -1472,13 +1496,18 @@ export function AgentsRunScreen() {
       updateEventsState([event]);
       updateCursor(toCursor(event));
       summaryQuery.refetch();
+      scheduleTotalsRefetch();
     });
     const offStatus = graphSocket.onRunStatusChanged(({ run }) => {
-      if (run.id === runId) summaryQuery.refetch();
+      if (run.id === runId) {
+        summaryQuery.refetch();
+        scheduleTotalsRefetch();
+      }
     });
     const offReconnect = graphSocket.onReconnected(() => {
       void fetchSinceCursor();
       summaryQuery.refetch();
+      scheduleTotalsRefetch();
     });
     return () => {
       offEvent();
@@ -1486,7 +1515,7 @@ export function AgentsRunScreen() {
       offReconnect();
       graphSocket.unsubscribe([room]);
     };
-  }, [runId, summaryQuery, updateEventsState, updateCursor, fetchSinceCursor]);
+  }, [runId, summaryQuery, updateEventsState, updateCursor, fetchSinceCursor, scheduleTotalsRefetch]);
 
   const selectedEventId = searchParams.get('eventId');
 
@@ -1670,12 +1699,15 @@ export function AgentsRunScreen() {
   const runSummary = summaryQuery.data;
   const runStatus = mapRunStatus(runSummary?.status);
   const runDuration = useRunDuration(runSummary?.createdAt, runSummary?.status, runSummary?.lastEventAt ?? runSummary?.updatedAt);
+  const filteredEventCount = totalsQuery.data?.totals.eventCount;
+  const tokenUsageTotals = totalsQuery.data?.totals.tokenUsage ?? null;
 
   const statistics = useMemo(() => {
     const summary = runSummary;
+    const resolvedTotal = typeof filteredEventCount === 'number' ? filteredEventCount : summary?.totalEvents ?? 0;
     if (!summary) {
       return {
-        totalEvents: 0,
+        totalEvents: resolvedTotal,
         messages: 0,
         llm: 0,
         tools: 0,
@@ -1684,15 +1716,13 @@ export function AgentsRunScreen() {
     }
     const counts = summary.countsByType ?? {};
     return {
-      totalEvents: summary.totalEvents ?? 0,
+      totalEvents: resolvedTotal,
       messages: (counts.invocation_message ?? 0) + (counts.injection ?? 0),
       llm: counts.llm_call ?? 0,
       tools: counts.tool_execution ?? 0,
       summaries: counts.summarization ?? 0,
     };
-  }, [runSummary]);
-
-  const tokenTotals = useMemo(() => aggregateTokens(allEvents), [allEvents]);
+  }, [filteredEventCount, runSummary]);
 
   const uiEvents = useMemo<UiRunEvent[]>(() => {
     const lookup = contextItemsRef.current;
@@ -1719,16 +1749,13 @@ export function AgentsRunScreen() {
   const hasMoreEvents = Boolean(nextCursor);
   const isEmpty = allEvents.length === 0 && !isLoading;
 
-  const primaryError = (eventsQuery.error as Error | undefined) ?? (summaryQuery.error as Error | undefined);
+  const primaryError =
+    (eventsQuery.error as Error | undefined) ??
+    (summaryQuery.error as Error | undefined) ??
+    (totalsQuery.error as Error | undefined);
   const errorMessage = primaryError?.message ?? loadOlderError ?? undefined;
 
-  const tokens = {
-    input: tokenTotals.input,
-    cached: tokenTotals.cached,
-    output: tokenTotals.output,
-    reasoning: tokenTotals.reasoning,
-    total: tokenTotals.total,
-  };
+  const tokens = tokenUsageTotals ?? { ...EMPTY_TOKENS };
 
   return (
     <>
