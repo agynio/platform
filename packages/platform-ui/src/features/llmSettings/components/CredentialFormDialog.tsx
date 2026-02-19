@@ -96,12 +96,15 @@ function isBaseUrlFieldKey(key: string): boolean {
   return BASE_URL_FIELD_KEYS.has(key);
 }
 
-function validateUrl(value: string): true | string {
+function validateUrl(value: string, options?: { requireHttps?: boolean; httpsErrorMessage?: string }): true | string {
   if (!value) return true;
   try {
     const url = new URL(value);
     if (!/^https?:$/.test(url.protocol)) {
       return 'Enter a valid http(s) URL';
+    }
+    if (options?.requireHttps && url.protocol !== 'https:') {
+      return options.httpsErrorMessage ?? 'URL must use HTTPS';
     }
     return true;
   } catch {
@@ -279,7 +282,11 @@ export function CredentialFormDialog({
                         const rules: Record<string, unknown> = {};
                         if (isRequired) rules.required = 'Required field';
                         if (requiresUrlValidation) {
-                          rules.validate = (value: string) => validateUrl(value);
+                          rules.validate = (value: string) =>
+                            validateUrl(value, {
+                              requireHttps: selectedProviderIsOpenAI,
+                              httpsErrorMessage: 'OpenAI base URL must use HTTPS',
+                            });
                         }
                         return (
                           <FormField

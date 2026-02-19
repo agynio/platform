@@ -36,6 +36,7 @@ import { CredentialFormDialog, type CredentialFormPayload } from './components/C
 import { ModelFormDialog, type ModelFormPayload, type ModelFormSnapshot } from './components/ModelFormDialog';
 import { TestModelDialog } from './components/TestModelDialog';
 import type { TestModelErrorState } from './components/TestModelResultView';
+import { getLiteLLMFailureMessage, isSuccessfulLiteLLMResponse } from './utils';
 import { LlmSettingsScreen, type LlmSettingsTab } from '@/components/screens/LlmSettingsScreen';
 
 function toErrorMessage(error: unknown): string {
@@ -426,12 +427,21 @@ export function SettingsLlmContainer(): ReactElement {
       setTestModelResultView(null);
     },
     onSuccess: (response) => {
-      notifySuccess('Model test succeeded');
       if (!testModelState) return;
-      setTestModelResultView({
-        status: 'success',
-        result: response,
-      });
+      if (isSuccessfulLiteLLMResponse(response)) {
+        notifySuccess('Model test succeeded');
+        setTestModelResultView({
+          status: 'success',
+          result: response,
+        });
+      } else {
+        const message = getLiteLLMFailureMessage(response);
+        notifyError(message);
+        setTestModelResultView({
+          status: 'error',
+          error: { message, payload: response },
+        });
+      }
     },
     onError: (error) => {
       const payload = axios.isAxiosError(error) ? error.response?.data : undefined;
@@ -460,10 +470,16 @@ export function SettingsLlmContainer(): ReactElement {
       setModelFormResultView(null);
     },
     onSuccess: (response, { snapshot }) => {
-      notifySuccess('Model test succeeded');
       const fingerprint = snapshotFingerprint(snapshot);
-      setModelFormTestState({ status: 'success', fingerprint: fingerprint ?? undefined, result: response });
       const subject = snapshot.name.trim() || snapshot.model || 'New Model';
+      if (isSuccessfulLiteLLMResponse(response)) {
+        notifySuccess('Model test succeeded');
+        setModelFormTestState({ status: 'success', fingerprint: fingerprint ?? undefined, result: response });
+      } else {
+        const message = getLiteLLMFailureMessage(response);
+        notifyError(message);
+        setModelFormTestState({ status: 'error', fingerprint: fingerprint ?? undefined, error: { message, payload: response } });
+      }
       setModelFormResultView({ subjectLabel: `Test Result — ${subject}` });
     },
     onError: (error, { snapshot }) => {

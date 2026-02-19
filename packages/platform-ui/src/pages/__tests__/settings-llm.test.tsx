@@ -428,6 +428,91 @@ describe('Settings/LLM page', () => {
     await screen.findByText('openai-new');
   });
 
+  it('rejects insecure OpenAI base URLs', async () => {
+    const providers = [
+      {
+        provider: 'OpenAI',
+        provider_display_name: 'OpenAI',
+        litellm_provider: 'openai',
+        credential_fields: [
+          { key: 'base_url', label: 'Base URL', field_type: 'text', required: true, placeholder: null, tooltip: null, options: null, default_value: null },
+          { key: 'api_key', label: 'OpenAI API Key', field_type: 'password', required: true, placeholder: null, tooltip: null, options: null, default_value: null },
+        ],
+        default_model_placeholder: 'gpt-4o-mini',
+      },
+    ];
+
+    const credentialRecords: unknown[] = [];
+
+    server.use(
+      http.get(abs('/api/settings/llm/admin-status'), () =>
+        HttpResponse.json({
+          configured: true,
+          baseUrl: 'http://127.0.0.1:4000',
+          hasMasterKey: true,
+          provider: 'litellm',
+          adminReachable: true,
+        }),
+      ),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
+      http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
+      http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
+      http.post(abs('/api/settings/llm/credentials'), async ({ request }) => {
+        const body = (await request.json()) as {
+          name: string;
+          provider: string;
+          values?: Record<string, string>;
+        };
+        credentialRecords.push({
+          credential_name: body.name,
+          credential_info: { litellm_provider: body.provider },
+          credential_values: body.values ?? {},
+        });
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <TestProviders>
+        <SettingsLlm />
+      </TestProviders>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Add Credential' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Create Credential/i });
+    const nameInput = within(dialog).getByLabelText('Credential Name');
+    const baseUrlInput = within(dialog).getByLabelText('Base URL');
+    const apiKeyInput = within(dialog).getByLabelText('OpenAI API Key');
+
+    expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.openai.com/v1');
+
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, 'http://api.openai.com/v1');
+    await user.type(nameInput, 'openai-insecure');
+    await user.type(apiKeyInput, 'sk-123');
+
+    const submitButton = within(dialog).getByRole('button', { name: 'Create Credential' });
+    await user.click(submitButton);
+
+    expect(await within(dialog).findByText('OpenAI base URL must use HTTPS')).toBeInTheDocument();
+    expect(credentialRecords).toHaveLength(0);
+
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, 'https://api.openai.com/v1');
+    await user.click(submitButton);
+
+    await waitFor(() => expect(notifyMocks.success).toHaveBeenCalledWith('Credential created'));
+    expect(credentialRecords).toHaveLength(1);
+    expect(credentialRecords[0]).toMatchObject({
+      credential_name: 'openai-insecure',
+      credential_values: { base_url: 'https://api.openai.com/v1', api_key: 'sk-123' },
+    });
+  });
+
   it('updates an existing credential without resubmitting masked values', async () => {
     const providers = [
       {
@@ -612,7 +697,7 @@ describe('Settings/LLM page', () => {
       http.post(abs('/api/settings/llm/credentials/zz-anthropic-legacy/test'), async ({ request }) => {
         const body = (await request.json()) as { model?: string; input?: string | null };
         expect(body).toMatchObject({ model: 'claude-3-opus', input: '' });
-        return HttpResponse.json({ success: true, status: 'ok', detail: 'connected' });
+        return HttpResponse.json({ success: true, status: 'success', detail: 'connected' });
       }),
       http.post(abs('/api/settings/llm/models'), async ({ request }) => {
         const body = (await request.json()) as {
@@ -695,7 +780,7 @@ describe('Settings/LLM page', () => {
     const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — anthropic-support' });
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
     expect(within(resultDialog).getByText('Test succeeded')).toBeInTheDocument();
-    expect(within(resultDialog).getByText(/"status": "ok"/)).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"status": "success"/)).toBeInTheDocument();
     const backToFormButton = within(resultDialog).getByRole('button', { name: 'Back to form' });
     await user.click(backToFormButton);
 
@@ -711,6 +796,77 @@ describe('Settings/LLM page', () => {
     const createdRow = screen.getByTestId('llm-model-row-anthropic-support');
     expect(within(createdRow).getByText('Anthropic')).toBeInTheDocument();
     expect(within(createdRow).getByText('zz-anthropic-legacy')).toBeInTheDocument();
+  });
+
+  it('treats draft model test status errors as failures', async () => {
+    const providers = [
+      {
+        provider: 'OpenAI',
+        provider_display_name: 'OpenAI',
+        litellm_provider: 'openai',
+        credential_fields: [
+          { key: 'api_key', label: 'OpenAI API Key', field_type: 'password', required: true, placeholder: null, tooltip: null, options: null, default_value: null },
+        ],
+        default_model_placeholder: 'gpt-4o-mini',
+      },
+    ];
+
+    const credentialRecords = [
+      {
+        credential_name: 'openai-prod',
+        credential_info: { litellm_provider: 'openai' },
+        credential_values: { api_key: 'sk****prod' },
+      },
+    ];
+
+    server.use(
+      http.get(abs('/api/settings/llm/admin-status'), () =>
+        HttpResponse.json({
+          configured: true,
+          baseUrl: 'http://127.0.0.1:4000',
+          hasMasterKey: true,
+          provider: 'litellm',
+          adminReachable: true,
+        }),
+      ),
+      http.get(abs('/api/settings/llm/providers'), () => HttpResponse.json(providers)),
+      http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
+      http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
+      http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
+      http.post(abs('/api/settings/llm/credentials/openai-prod/test'), () =>
+        HttpResponse.json({ status: 'error', message: 'invalid model slug', error: 'invalid_model' }),
+      ),
+    );
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <TestProviders>
+        <SettingsLlm />
+      </TestProviders>,
+    );
+
+    const modelsTab = screen.getByRole('tab', { name: 'Models' });
+    await user.click(modelsTab);
+    await user.click(await screen.findByRole('button', { name: 'Add Model' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Create Model/i });
+    const nameInput = within(dialog).getByLabelText('Model Name');
+    const modelInput = within(dialog).getByLabelText('Provider Model Identifier');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'openai-bad');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-error');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Test Model' }));
+
+    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — openai-bad' });
+    expect(within(resultDialog).getByText('Test failed')).toBeInTheDocument();
+    expect(within(resultDialog).getByText('invalid model slug')).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"status": "error"/)).toBeInTheDocument();
+    await user.click(within(resultDialog).getByRole('button', { name: 'Back to form' }));
+    expect(notifyMocks.error).toHaveBeenCalledWith('invalid model slug');
   });
 
   it('allows creating a model without running a test', async () => {
@@ -1211,7 +1367,7 @@ describe('Settings/LLM page', () => {
       ),
       http.post(abs('/api/settings/llm/models/litellm-model-123/test'), async ({ request }) => {
         testSpy(await request.json());
-        return HttpResponse.json({ success: true, status: 'ok', detail: 'connected' });
+        return HttpResponse.json({ success: true, status: 'success', detail: 'connected' });
       }),
     );
 
@@ -1235,7 +1391,7 @@ describe('Settings/LLM page', () => {
     const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — assistant-prod' });
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
     expect(within(resultDialog).getByText('Test succeeded')).toBeInTheDocument();
-    expect(within(resultDialog).getByText(/"status": "ok"/)).toBeInTheDocument();
+    expect(within(resultDialog).getByText(/"status": "success"/)).toBeInTheDocument();
     const backButton = within(resultDialog).getByRole('button', { name: 'Back to test' });
     await user.click(backButton);
     await screen.findByRole('heading', { name: 'Test Model — assistant-prod' });
@@ -1296,7 +1452,7 @@ describe('Settings/LLM page', () => {
         HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES }),
       ),
       http.post(abs('/api/settings/llm/models/litellm-model-123/test'), () =>
-        HttpResponse.json({ error: 'litellm_failure', message: 'bad request' }, { status: 400 }),
+        HttpResponse.json({ status: 'error', error: 'litellm_failure', message: 'bad request' }),
       ),
     );
 

@@ -1,6 +1,7 @@
 import { type ReactElement } from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { LiteLLMHealthResponse } from '@/api/modules/llmSettings';
+import { getLiteLLMFailureMessage, isSuccessfulLiteLLMResponse } from '../utils';
 
 export type TestModelErrorState = {
   message: string;
@@ -23,11 +24,11 @@ interface TestModelResultViewProps {
 }
 
 export function TestModelResultView({ result, error }: TestModelResultViewProps): ReactElement {
-  const success = Boolean(result);
-  const payload = success ? result : error?.payload;
+  const success = isSuccessfulLiteLLMResponse(result);
+  const payload = success ? result : error?.payload ?? result;
   const payloadText = formatTestModelPayload(payload);
   const statusText = success ? 'Test succeeded' : 'Test failed';
-  const detailMessage = success ? undefined : error?.message;
+  const detailMessage = success ? undefined : error?.message ?? getLiteLLMFailureMessage(result);
   const statusColorClass = success ? 'text-[var(--agyn-status-finished)]' : 'text-[var(--agyn-status-failed)]';
 
   return (
