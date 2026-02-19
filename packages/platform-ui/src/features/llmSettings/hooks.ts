@@ -4,7 +4,6 @@ import {
   listProviders,
   listCredentials,
   listModels,
-  listHealthCheckModes,
   getAdminStatus,
   type LiteLLMProviderInfo,
   type LiteLLMCredential,
@@ -12,7 +11,6 @@ import {
   type LiteLLMAdminStatus,
 } from '@/api/modules/llmSettings';
 import { mapProviders, mapCredentials, mapModels, createProviderOptionMap, type ProviderOption } from './types';
-import { HEALTH_CHECK_MODES_FALLBACK } from './constants';
 
 export function useProviderOptions(): {
   providers: ProviderOption[];
@@ -50,12 +48,6 @@ export function useModelRecords(providerMap: Map<string, ProviderOption>) {
     models,
     query,
   };
-}
-
-export function useHealthCheckModes() {
-  const query = useQuery({ queryKey: ['llm', 'health-check-modes'], queryFn: () => listHealthCheckModes() });
-  const modes = query.data ?? Array.from(HEALTH_CHECK_MODES_FALLBACK);
-  return { modes, isLoading: query.isLoading };
 }
 
 export function useAdminStatus() {

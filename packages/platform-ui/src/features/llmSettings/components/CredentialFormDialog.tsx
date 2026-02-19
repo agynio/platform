@@ -15,13 +15,16 @@ import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
-import { createProviderOptionMap, type CredentialRecord, type ProviderField, type ProviderOption } from '../types';
+import { createProviderOptionMap, isOpenAIProvider, type CredentialRecord, type ProviderField, type ProviderOption } from '../types';
 
 type CredentialFormValues = FieldValues & {
   name: string;
   providerKey: string;
   values: Record<string, string>;
 };
+
+const OPENAI_BASE_URL_DEFAULT = 'https://api.openai.com/v1';
+const BASE_URL_FIELD_KEYS = new Set(['api_base', 'api_base_url', 'base_url']);
 
 export interface CredentialFormPayload {
   name: string;
@@ -45,8 +48,19 @@ function buildDefaultValues(
   providers: ProviderOption[],
   credential?: CredentialRecord,
 ): CredentialFormValues {
+  const resolveSelectionId = (storedKey?: string): string => {
+    if (!providers.length) return '';
+    if (storedKey) {
+      const match = providers.find((option) => option.id === storedKey || option.litellmProvider === storedKey);
+      if (match) {
+        return match.id;
+      }
+    }
+    return providers[0]?.id ?? '';
+  };
+
   if (mode === 'edit' && credential) {
-    const providerKey = credential.providerKey;
+    const providerKey = resolveSelectionId(credential.providerKey);
     const values: Record<string, string> = { ...credential.values };
     return {
       name: credential.name,
@@ -56,7 +70,7 @@ function buildDefaultValues(
   }
 
   const firstProvider = providers[0];
-  const providerKey = firstProvider?.litellmProvider ?? '';
+  const providerKey = resolveSelectionId();
   const values: Record<string, string> = {};
   if (firstProvider) {
     for (const field of firstProvider.fields) {
@@ -89,6 +103,26 @@ function getFieldDescription(field: ProviderField, isMasked: boolean): string | 
   return undefined;
 }
 
+function isBaseUrlFieldKey(key: string): boolean {
+  return BASE_URL_FIELD_KEYS.has(key);
+}
+
+function validateUrl(value: string, options?: { requireHttps?: boolean; httpsErrorMessage?: string }): true | string {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) {
+      return 'Enter a valid http(s) URL';
+    }
+    if (options?.requireHttps && url.protocol !== 'https:') {
+      return options.httpsErrorMessage ?? 'URL must use HTTPS';
+    }
+    return true;
+  } catch {
+    return 'Enter a valid URL';
+  }
+}
+
 export function CredentialFormDialog({
   open,
   mode,
@@ -111,6 +145,7 @@ export function CredentialFormDialog({
   const providerKey = useWatch({ control: form.control, name: 'providerKey' });
 
   const selectedProvider = providerKey ? providerMap.get(providerKey) : undefined;
+  const selectedProviderIsOpenAI = selectedProvider ? isOpenAIProvider(selectedProvider.litellmProvider) : false;
 
   useEffect(() => {
     if (!selectedProvider) return;
@@ -137,10 +172,21 @@ export function CredentialFormDialog({
       }
     }
 
+    if (selectedProviderIsOpenAI) {
+      const baseField = selectedProvider.fields.find((field) => isBaseUrlFieldKey(field.key));
+      if (baseField) {
+        const current = nextValues[baseField.key];
+        if (!current || !current.trim()) {
+          nextValues[baseField.key] = OPENAI_BASE_URL_DEFAULT;
+          changed = true;
+        }
+      }
+    }
+
     if (changed) {
       form.setValue('values', nextValues, { shouldDirty: false, shouldTouch: false });
     }
-  }, [selectedProvider, form]);
+  }, [selectedProvider, selectedProviderIsOpenAI, form]);
 
   const maskedFields = credential?.maskedFields ?? new Set<string>();
 
@@ -150,9 +196,14 @@ export function CredentialFormDialog({
       return;
     }
 
+    if (!selectedProvider) {
+      form.setError('providerKey', { message: 'Select a provider' });
+      return;
+    }
+
     await onSubmit({
       name: data.name.trim(),
-      providerKey: data.providerKey,
+      providerKey: selectedProvider.litellmProvider,
       values: sanitizeValues(data.values ?? {}),
       metadata: credential?.metadata ?? {},
     });
@@ -223,7 +274,7 @@ export function CredentialFormDialog({
                           disabled={providers.length === 0}
                           placeholder="Select provider"
                           options={providers.map((provider) => ({
-                            value: provider.litellmProvider,
+                            value: provider.id,
                             label: provider.label,
                           }))}
                           size="sm"
@@ -243,12 +294,22 @@ export function CredentialFormDialog({
                         const isMasked = maskedFields.has(fieldDef.key);
                         const isRequired = fieldDef.required && (mode === 'create' || !isMasked);
                         const description = getFieldDescription(fieldDef, isMasked);
+                        const requiresUrlValidation = isBaseUrlFieldKey(fieldDef.key);
+                        const rules: Record<string, unknown> = {};
+                        if (isRequired) rules.required = 'Required field';
+                        if (requiresUrlValidation) {
+                          rules.validate = (value: string) =>
+                            validateUrl(value, {
+                              requireHttps: selectedProviderIsOpenAI,
+                              httpsErrorMessage: 'OpenAI base URL must use HTTPS',
+                            });
+                        }
                         return (
                           <FormField
                             key={fieldDef.key}
                             control={form.control}
                             name={fieldName}
-                            rules={isRequired ? { required: 'Required field' } : undefined}
+                            rules={Object.keys(rules).length ? rules : undefined}
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>{fieldDef.label}</FormLabel>

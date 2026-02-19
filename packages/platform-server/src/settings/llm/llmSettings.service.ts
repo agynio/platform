@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, ConflictException, HttpExcepti
 import {
   normalizeLiteLLMProvider,
   resolveLiteLLMProviderOrThrow,
+  sanitizeLiteLLMProviderKey,
   withCanonicalProviderInfo,
 } from './providerNormalization';
 import { ConfigService } from '../../core/services/config.service';
@@ -34,7 +35,6 @@ type UpdateCredentialInput = {
 type TestCredentialInput = {
   name: string;
   model?: string;
-  mode?: string;
   input?: string;
 };
 
@@ -43,7 +43,6 @@ type CreateModelInput = {
   provider: string;
   model: string;
   credentialName: string;
-  mode?: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
@@ -65,7 +64,6 @@ type UpdateModelInput = Partial<Omit<CreateModelInput, 'provider' | 'model' | 'c
 
 type TestModelInput = {
   id: string;
-  mode?: string;
   overrideModel?: string;
   input?: string;
   credentialName?: string;
@@ -135,6 +133,7 @@ function sanitizeRecord(input?: Record<string, unknown>): Record<string, unknown
 }
 
 const RESERVED_MODEL_INFO_KEYS = new Set(['id', 'mode', 'rpm', 'tpm']);
+const DEFAULT_LLM_MODE = 'responses';
 
 function ensureNoSecretKeys(params?: Record<string, unknown>): void {
   if (!params) return;
@@ -165,15 +164,36 @@ function extractCredentialProvider(info?: Record<string, unknown>): string | und
   if (!info) return undefined;
   const litellm = info['litellm_provider'];
   if (typeof litellm === 'string') {
+    const sanitized = sanitizeLiteLLMProviderKey(litellm);
+    if (sanitized) return sanitized;
     const normalized = normalizeLiteLLMProvider(litellm);
     if (normalized) return normalized;
   }
   const legacy = info['custom_llm_provider'];
   if (typeof legacy === 'string') {
+    const sanitized = sanitizeLiteLLMProviderKey(legacy);
+    if (sanitized) return sanitized;
     const normalized = normalizeLiteLLMProvider(legacy);
     if (normalized) return normalized;
   }
   return undefined;
+}
+
+function normalizeCatalogIdPart(value?: string | null): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase();
+}
+
+function buildProviderCatalogId(
+  litellmProvider: string | undefined,
+  displayName: string | undefined,
+  index: number,
+): string {
+  const providerPart = normalizeCatalogIdPart(litellmProvider) ?? `provider-${index + 1}`;
+  const displayPart = normalizeCatalogIdPart(displayName) ?? `entry-${index + 1}`;
+  return `${providerPart}::${displayPart}`;
 }
 
 @Injectable()
@@ -187,7 +207,18 @@ export class LLMSettingsService {
 
   async listProviders(): Promise<LiteLLMProviderInfo[]> {
     const providers = await this.fetchProviders();
-    return providers.map((provider) => withCanonicalProviderInfo(provider));
+    return providers.map((provider, index) => {
+      const providerName = sanitizeLiteLLMProviderKey(provider.provider) ?? provider.provider;
+      const litellm = sanitizeLiteLLMProviderKey(provider.litellm_provider) ?? provider.litellm_provider;
+      const catalogId =
+        normalizeCatalogIdPart(provider.catalog_id) ?? buildProviderCatalogId(litellm, provider.provider_display_name, index);
+      return withCanonicalProviderInfo({
+        ...provider,
+        provider: providerName,
+        litellm_provider: litellm,
+        catalog_id: catalogId,
+      });
+    });
   }
 
   async listCredentials(): Promise<LiteLLMCredentialSummary[]> {
@@ -253,20 +284,27 @@ export class LLMSettingsService {
     if (!provider) {
       throw new BadRequestException('credential is missing provider metadata');
     }
+    const normalizedProvider = normalizeLiteLLMProvider(provider);
+    if (!normalizedProvider) {
+      throw new BadRequestException('credential provider is not supported');
+    }
     const litellmParams: Record<string, unknown> = {
       model: input.model,
-      custom_llm_provider: provider,
-      litellm_provider: provider,
+      custom_llm_provider: normalizedProvider,
+      litellm_provider: normalizedProvider,
       litellm_credential_name: input.name,
     };
     const modelInfo: Record<string, unknown> = {};
     if (input.input) modelInfo.test_prompt = input.input;
     const payload = {
-      mode: input.mode ?? 'chat',
+      mode: DEFAULT_LLM_MODE,
       litellm_params: litellmParams,
       model_info: modelInfo,
     };
-    return this.request<LiteLLMHealthResponse>('POST', '/health/test_connection', payload, { classifyWrite: true });
+    const response = await this.request<LiteLLMHealthResponse>('POST', '/health/test_connection', payload, {
+      classifyWrite: true,
+    });
+    return this.ensureSuccessfulHealthResponse(response, 'credential');
   }
 
   async listModels(): Promise<LiteLLMModelRecord[]> {
@@ -339,14 +377,33 @@ export class LLMSettingsService {
     const params = { ...current.litellm_params } as Record<string, unknown>;
     if (input.overrideModel) params.model = input.overrideModel;
     if (input.credentialName) params.litellm_credential_name = input.credentialName;
+    this.normalizeModelProviderKeys(params);
     const modelInfo: Record<string, unknown> = { ...(current.model_info ?? {}) };
     if (input.input) modelInfo.test_prompt = input.input;
     const payload = {
-      mode: input.mode ?? (typeof current.model_info?.mode === 'string' ? current.model_info.mode : 'chat'),
+      mode: DEFAULT_LLM_MODE,
       litellm_params: params,
       model_info: modelInfo,
     };
-    return this.request<LiteLLMHealthResponse>('POST', '/health/test_connection', payload, { classifyWrite: true });
+    const response = await this.request<LiteLLMHealthResponse>('POST', '/health/test_connection', payload, {
+      classifyWrite: true,
+    });
+    return this.ensureSuccessfulHealthResponse(response, 'model');
+  }
+
+  private ensureSuccessfulHealthResponse(
+    response: LiteLLMHealthResponse,
+    scope: 'credential' | 'model',
+  ): LiteLLMHealthResponse {
+    const status = typeof response.status === 'string' ? response.status.trim().toLowerCase() : undefined;
+    if (status === 'success') {
+      return response;
+    }
+    throw new BadRequestException({
+      error: scope === 'credential' ? 'credential_test_failed' : 'model_test_failed',
+      status: response.status ?? 'error',
+      response,
+    });
   }
 
   async getAdminStatus(): Promise<LiteLLMAdminStatus> {
@@ -455,14 +512,14 @@ export class LLMSettingsService {
   }
 
   private buildModelInfo(input: CreateModelInput): Record<string, unknown> | undefined {
-    const info: Record<string, unknown> = {};
+    const info: Record<string, unknown> = { mode: DEFAULT_LLM_MODE };
     const metadata = this.sanitizeModelMetadata(input.metadata);
     if (Object.keys(metadata).length > 0) {
       Object.assign(info, metadata);
     }
     if (input.rpm !== undefined) info.rpm = input.rpm;
     if (input.tpm !== undefined) info.tpm = input.tpm;
-    return Object.keys(info).length > 0 ? info : undefined;
+    return info;
   }
 
   private async maybeLogModelSync(created: LiteLLMModelRecord): Promise<void> {
@@ -517,15 +574,6 @@ export class LLMSettingsService {
 
   private mergeModelParams(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    const currentProvider = normalizeLiteLLMProvider(
-      (next.custom_llm_provider as string | undefined) ?? (next.litellm_provider as string | undefined),
-    );
-    if (currentProvider) {
-      next.custom_llm_provider = currentProvider;
-      next.litellm_provider = currentProvider;
-    } else {
-      delete next.litellm_provider;
-    }
     if (input.provider) {
       const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
       next.custom_llm_provider = providerKey;
@@ -551,6 +599,22 @@ export class LLMSettingsService {
     return next;
   }
 
+  private normalizeModelProviderKeys(target: Record<string, unknown>): void {
+    const candidate =
+      sanitizeLiteLLMProviderKey(
+        (target.custom_llm_provider as string | undefined) ?? (target.litellm_provider as string | undefined),
+      ) ?? undefined;
+    if (!candidate) {
+      throw new BadRequestException('model is missing provider metadata');
+    }
+    const normalized = normalizeLiteLLMProvider(candidate);
+    if (!normalized) {
+      throw new BadRequestException(`LiteLLM provider ${candidate} is not supported`);
+    }
+    target.custom_llm_provider = normalized;
+    target.litellm_provider = normalized;
+  }
+
   private mergeModelInfo(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
     if (input.metadata) {
@@ -559,9 +623,9 @@ export class LLMSettingsService {
         Object.assign(next, metadata);
       }
     }
-    if (input.mode) next.mode = input.mode;
     if (input.rpm !== undefined) next.rpm = input.rpm;
     if (input.tpm !== undefined) next.tpm = input.tpm;
+    next.mode = DEFAULT_LLM_MODE;
     return next;
   }
 

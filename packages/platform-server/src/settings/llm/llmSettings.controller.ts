@@ -64,7 +64,6 @@ export class LLMSettingsController {
     return this.llmSettings.testCredential({
       name,
       model: dto.model,
-      mode: dto.mode,
       input: dto.input,
     });
   }
@@ -82,7 +81,6 @@ export class LLMSettingsController {
       provider: dto.provider,
       model: dto.model,
       credentialName: dto.credentialName,
-      mode: dto.mode,
       temperature: dto.temperature,
       maxTokens: dto.maxTokens,
       topP: dto.topP,
@@ -104,7 +102,6 @@ export class LLMSettingsController {
       provider: dto.provider,
       model: dto.model,
       credentialName: dto.credentialName,
-      mode: dto.mode,
       temperature: dto.temperature,
       maxTokens: dto.maxTokens,
       topP: dto.topP,
@@ -127,7 +124,6 @@ export class LLMSettingsController {
   async testModel(@Param('id') id: string, @Body() dto: TestModelDto) {
     return this.llmSettings.testModel({
       id,
-      mode: dto.mode,
       overrideModel: dto.overrideModel,
       input: dto.input,
       credentialName: dto.credentialName,

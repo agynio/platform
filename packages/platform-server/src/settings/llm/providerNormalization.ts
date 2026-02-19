@@ -34,21 +34,33 @@ export function normalizeLiteLLMProvider(provider?: string | null): string | und
 }
 
 export function resolveLiteLLMProviderOrThrow(provider?: string | null): string {
-  const normalized = normalizeLiteLLMProvider(provider);
-  if (!normalized) {
+  const sanitized = sanitizeLiteLLMProviderKey(provider);
+  if (!sanitized) {
     throw new Error('LiteLLM provider cannot be empty');
   }
-  return normalized;
+  const normalized = normalizeLiteLLMProvider(sanitized);
+  if (!normalized) {
+    throw new Error('LiteLLM provider is not supported');
+  }
+  return sanitized;
+}
+
+export function sanitizeLiteLLMProviderKey(provider?: string | null): string | undefined {
+  if (typeof provider !== 'string') return undefined;
+  const trimmed = provider.trim();
+  return trimmed.length ? trimmed : undefined;
 }
 
 export function withCanonicalProviderInfo<T extends { provider: string; litellm_provider: string }>(
   info: T,
-): T {
-  const provider = normalizeLiteLLMProvider(info.provider) ?? info.provider.trim().toLowerCase();
-  const litellmProvider = normalizeLiteLLMProvider(info.litellm_provider) ?? info.litellm_provider.trim().toLowerCase();
+): T & { canonical_provider?: string } {
+  const canonical =
+    normalizeLiteLLMProvider(info.litellm_provider) ?? normalizeLiteLLMProvider(info.provider);
+  if (!canonical) {
+    return { ...info };
+  }
   return {
     ...info,
-    provider,
-    litellm_provider: litellmProvider,
+    canonical_provider: canonical,
   };
 }

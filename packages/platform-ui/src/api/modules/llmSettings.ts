@@ -18,6 +18,8 @@ export type LiteLLMProviderInfo = {
   litellm_provider: string;
   credential_fields: LiteLLMProviderField[];
   default_model_placeholder?: string | null;
+  canonical_provider?: string | null;
+  catalog_id?: string | null;
 };
 
 export type LiteLLMCredential = {
@@ -68,11 +70,6 @@ export function isLiteLLMMissingConfigError(error: unknown): error is AxiosError
   return payload?.error === 'litellm_missing_config';
 }
 
-export async function listHealthCheckModes(): Promise<string[]> {
-  const res = await http.get<{ modes?: string[] }>('/api/settings/llm/health-check-modes');
-  return Array.isArray(res?.modes) ? res.modes : [];
-}
-
 export async function listProviders(): Promise<LiteLLMProviderInfo[]> {
   const res = await http.get<LiteLLMProviderInfo[]>('/api/settings/llm/providers');
   return Array.isArray(res) ? res : [];
@@ -108,7 +105,7 @@ export async function deleteCredential(name: string): Promise<LiteLLMGenericResp
   return http.delete(`/api/settings/llm/credentials/${encodeURIComponent(name)}`);
 }
 
-export async function testCredential(name: string, body: { model: string; mode?: string; input?: string }): Promise<LiteLLMHealthResponse> {
+export async function testCredential(name: string, body: { model: string; input?: string }): Promise<LiteLLMHealthResponse> {
   return http.post(`/api/settings/llm/credentials/${encodeURIComponent(name)}/test`, body);
 }
 
@@ -122,7 +119,6 @@ export async function createModel(body: {
   provider: string;
   model: string;
   credentialName: string;
-  mode?: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
@@ -142,7 +138,6 @@ export async function updateModel(id: string, body: {
   provider?: string;
   model?: string;
   credentialName?: string;
-  mode?: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
@@ -161,6 +156,6 @@ export async function deleteModel(id: string): Promise<LiteLLMGenericResponse> {
   return http.delete(`/api/settings/llm/models/${encodeURIComponent(id)}`);
 }
 
-export async function testModel(id: string, body?: { mode?: string; overrideModel?: string; input?: string; credentialName?: string }): Promise<LiteLLMHealthResponse> {
+export async function testModel(id: string, body?: { overrideModel?: string; input?: string; credentialName?: string }): Promise<LiteLLMHealthResponse> {
   return http.post(`/api/settings/llm/models/${encodeURIComponent(id)}/test`, body ?? {});
 }

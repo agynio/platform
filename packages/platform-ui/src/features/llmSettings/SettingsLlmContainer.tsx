@@ -29,7 +29,6 @@ import {
   useProviderOptions,
   useCredentialRecords,
   useModelRecords,
-  useHealthCheckModes,
   useAdminStatus,
 } from './hooks';
 import type { CredentialRecord, ModelRecord } from './types';
@@ -37,6 +36,7 @@ import { CredentialFormDialog, type CredentialFormPayload } from './components/C
 import { ModelFormDialog, type ModelFormPayload, type ModelFormSnapshot } from './components/ModelFormDialog';
 import { TestModelDialog } from './components/TestModelDialog';
 import type { TestModelErrorState } from './components/TestModelResultView';
+import { getLiteLLMFailureMessage, isSuccessfulLiteLLMResponse } from './utils';
 import { LlmSettingsScreen, type LlmSettingsTab } from '@/components/screens/LlmSettingsScreen';
 
 function toErrorMessage(error: unknown): string {
@@ -148,7 +148,6 @@ export function SettingsLlmContainer(): ReactElement {
   }, [adminStatusReason, missingEnvKeys, adminStatus?.baseUrl, fallbackErrorMessage]);
 
   const showAdminBanner = adminDisabled;
-  const { modes: healthCheckModes, isLoading: healthCheckModesLoading } = useHealthCheckModes();
   const adminBannerDescription = useMemo(() => {
     if (adminStatusReason === 'missing_env') {
       return (
@@ -362,7 +361,6 @@ export function SettingsLlmContainer(): ReactElement {
         provider: payload.providerKey,
         model: payload.model,
         credentialName: payload.credentialName,
-        mode: payload.mode,
         temperature: payload.temperature,
         maxTokens: payload.maxTokens,
         topP: payload.topP,
@@ -390,7 +388,6 @@ export function SettingsLlmContainer(): ReactElement {
         provider: payload.providerKey,
         model: payload.model,
         credentialName: payload.credentialName,
-        mode: payload.mode,
         temperature: payload.temperature,
         maxTokens: payload.maxTokens,
         topP: payload.topP,
@@ -422,21 +419,29 @@ export function SettingsLlmContainer(): ReactElement {
   });
 
   const testModelMutation = useMutation({
-    mutationFn: async ({ id, mode, input }: { id: string; mode?: string; input?: string }) =>
+    mutationFn: async ({ id, input }: { id: string; input?: string }) =>
       testModel(id, {
-        mode,
         input,
       }),
     onMutate: () => {
       setTestModelResultView(null);
     },
     onSuccess: (response) => {
-      notifySuccess('Model test succeeded');
       if (!testModelState) return;
-      setTestModelResultView({
-        status: 'success',
-        result: response,
-      });
+      if (isSuccessfulLiteLLMResponse(response)) {
+        notifySuccess('Model test succeeded');
+        setTestModelResultView({
+          status: 'success',
+          result: response,
+        });
+      } else {
+        const message = getLiteLLMFailureMessage(response);
+        notifyError(message);
+        setTestModelResultView({
+          status: 'error',
+          error: { message, payload: response },
+        });
+      }
     },
     onError: (error) => {
       const payload = axios.isAxiosError(error) ? error.response?.data : undefined;
@@ -457,7 +462,6 @@ export function SettingsLlmContainer(): ReactElement {
     mutationFn: async ({ payload }: { snapshot: ModelFormSnapshot; payload: ModelFormPayload }) =>
       testCredential(payload.credentialName, {
         model: payload.model,
-        mode: payload.mode,
         input: '',
       }),
     onMutate: ({ snapshot }) => {
@@ -466,10 +470,16 @@ export function SettingsLlmContainer(): ReactElement {
       setModelFormResultView(null);
     },
     onSuccess: (response, { snapshot }) => {
-      notifySuccess('Model test succeeded');
       const fingerprint = snapshotFingerprint(snapshot);
-      setModelFormTestState({ status: 'success', fingerprint: fingerprint ?? undefined, result: response });
       const subject = snapshot.name.trim() || snapshot.model || 'New Model';
+      if (isSuccessfulLiteLLMResponse(response)) {
+        notifySuccess('Model test succeeded');
+        setModelFormTestState({ status: 'success', fingerprint: fingerprint ?? undefined, result: response });
+      } else {
+        const message = getLiteLLMFailureMessage(response);
+        notifyError(message);
+        setModelFormTestState({ status: 'error', fingerprint: fingerprint ?? undefined, error: { message, payload: response } });
+      }
       setModelFormResultView({ subjectLabel: `Test Result — ${subject}` });
     },
     onError: (error, { snapshot }) => {
@@ -635,12 +645,6 @@ export function SettingsLlmContainer(): ReactElement {
             : undefined
         }
         testPending={modelDraftTestMutation.isPending}
-        testRequired={modelDialog?.mode === 'create'}
-        canSubmit={
-          modelDialog?.mode === 'create'
-            ? modelFormTestState.status === 'success' && modelFormTestState.fingerprint === modelFormFingerprint
-            : true
-        }
         testStatus={modelDialog?.mode === 'create' ? modelFormTestState.status : 'idle'}
         testResultView={modelFormResultViewProps}
       />
@@ -649,8 +653,6 @@ export function SettingsLlmContainer(): ReactElement {
         <TestModelDialog
           open={testModelState !== null}
           model={testModelState.model}
-          healthCheckModes={healthCheckModes}
-          healthCheckModesLoading={healthCheckModesLoading}
           submitting={testModelMutation.isPending}
           onOpenChange={(open) => {
             if (!open) {
@@ -663,7 +665,6 @@ export function SettingsLlmContainer(): ReactElement {
             try {
               await testModelMutation.mutateAsync({
                 id: resolveModelIdentifier(testModelState.model),
-                mode: values.mode,
                 input: values.input,
               });
             } catch {

@@ -19,8 +19,10 @@ export type ProviderField = {
 
 export type ProviderOption = {
   id: string;
+  catalogId: string;
   label: string;
   litellmProvider: string;
+  canonicalProvider?: string | null;
   fields: ProviderField[];
   defaultModelPlaceholder?: string | null;
 };
@@ -43,7 +45,6 @@ export type ModelRecord = {
   providerLabel: string;
   model: string;
   credentialName: string;
-  mode: string;
   temperature?: number;
   topP?: number;
   frequencyPenalty?: number;
@@ -84,7 +85,38 @@ const PROVIDER_ALIAS_MAP: Record<string, string> = {
   openai_text_completion: 'text-completion-openai',
   text_completion_openai: 'text-completion-openai',
   'text-completion-openai': 'text-completion-openai',
+  openai_compatible: 'openai-compatible',
+  'openai-compatible': 'openai-compatible',
+  openai_compatible_endpoints: 'openai-compatible',
+  'openai-compatible-endpoints': 'openai-compatible',
 };
+
+const CANONICAL_LOOKUP_PREFIX = '__canonical__:';
+
+function normalizeCatalogIdPart(value?: string | null): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase();
+}
+
+function buildProviderCatalogId(
+  item: LiteLLMProviderInfo,
+  litellmProvider: string,
+  label: string,
+  index: number,
+): string {
+  const provided = normalizeCatalogIdPart(item.catalog_id);
+  if (provided) return provided;
+  const providerPart = normalizeCatalogIdPart(litellmProvider) ?? `provider-${index + 1}`;
+  const labelPart = normalizeCatalogIdPart(label) ?? `entry-${index + 1}`;
+  return `${providerPart}::${labelPart}`;
+}
+
+function sanitizeProviderKey(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
 
 function canonicalizeProviderKey(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -94,64 +126,32 @@ function canonicalizeProviderKey(value: unknown): string {
   return PROVIDER_ALIAS_MAP[lower] ?? lower;
 }
 
-function fallbackProviderKey(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed.toLowerCase() : '';
-}
-
-const PROVIDER_LOOKUP_BY_CANONICAL = (() => {
-  const entries = Object.entries(PROVIDER_ALIAS_MAP);
-  const map = new Map<string, Set<string>>();
-  for (const [alias, canonical] of entries) {
-    const normalizedCanonical = canonicalizeProviderKey(canonical);
-    const current = map.get(normalizedCanonical) ?? new Set<string>();
-    current.add(normalizedCanonical);
-    current.add(alias);
-    map.set(normalizedCanonical, current);
-  }
-  return new Map(Array.from(map.entries(), ([canonical, set]) => [canonical, Array.from(set)]));
-})();
-
-export function getProviderLookupKeys(provider: string): string[] {
-  const canonical = canonicalizeProviderKey(provider);
-  if (!canonical) return [];
-  return PROVIDER_LOOKUP_BY_CANONICAL.get(canonical) ?? [canonical];
-}
-
 function resolveCredentialProvider(info?: Record<string, unknown>): string {
   if (!info) return '';
-  const litellm = canonicalizeProviderKey(info['litellm_provider']);
-  if (litellm) return litellm;
-  const legacy = canonicalizeProviderKey(info['custom_llm_provider']);
-  if (legacy) return legacy;
+  const litellmRaw = sanitizeProviderKey(info['litellm_provider']);
+  if (litellmRaw) return litellmRaw;
+  const litellmCanonical = canonicalizeProviderKey(info['litellm_provider']);
+  if (litellmCanonical) return litellmCanonical;
+  const legacyRaw = sanitizeProviderKey(info['custom_llm_provider']);
+  if (legacyRaw) return legacyRaw;
+  const legacyCanonical = canonicalizeProviderKey(info['custom_llm_provider']);
+  if (legacyCanonical) return legacyCanonical;
   return '';
 }
 
 export function mapProviders(items: LiteLLMProviderInfo[] | undefined): ProviderOption[] {
   if (!Array.isArray(items)) return [];
-  return items.map((item) => {
-    const rawProvider = typeof item.provider === 'string' ? item.provider : '';
-    const rawProviderTrimmed = rawProvider.trim();
-    const normalizedProvider = canonicalizeProviderKey(rawProviderTrimmed);
-    const rawLitellmProvider = typeof item.litellm_provider === 'string' ? item.litellm_provider : '';
-    const rawLitellmTrimmed = rawLitellmProvider.trim();
-    const normalizedLitellmProvider = canonicalizeProviderKey(rawLitellmTrimmed);
-    const fallbackProvider = fallbackProviderKey(rawProviderTrimmed);
-    const fallbackLitellmProvider = fallbackProviderKey(rawLitellmTrimmed);
-
-    const canonicalProviderId =
-      normalizedProvider ||
-      normalizedLitellmProvider ||
-      fallbackProvider ||
-      fallbackLitellmProvider ||
-      rawProviderTrimmed ||
-      'unknown';
-    const litellmProvider = normalizedLitellmProvider || canonicalProviderId;
-    const labelBase =
-      typeof item.provider_display_name === 'string' && item.provider_display_name.trim().length > 0
-        ? item.provider_display_name.trim()
-        : rawProviderTrimmed || canonicalProviderId;
+  return items.map((item, index) => {
+    const rawProvider = sanitizeProviderKey(item.provider);
+    const rawLitellmProvider = sanitizeProviderKey(item.litellm_provider);
+    const labelSource = sanitizeProviderKey(item.provider_display_name) || rawProvider;
+    const litellmProvider = rawLitellmProvider || rawProvider || `provider-${index + 1}`;
+    const canonicalProvider =
+      canonicalizeProviderKey(item.canonical_provider) ||
+      canonicalizeProviderKey(rawLitellmProvider) ||
+      canonicalizeProviderKey(rawProvider);
+    const labelBase = labelSource || litellmProvider;
+    const catalogId = buildProviderCatalogId(item, litellmProvider, labelBase, index);
     const fields: ProviderField[] = Array.isArray(item.credential_fields)
       ? item.credential_fields.map((field) => ({
           key: field.key,
@@ -165,13 +165,24 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
         }))
       : [];
     return {
-      id: canonicalProviderId,
+      id: catalogId,
+      catalogId,
       label: labelBase,
       litellmProvider,
+      canonicalProvider,
       fields,
       defaultModelPlaceholder: item.default_model_placeholder ?? null,
     } satisfies ProviderOption;
   });
+}
+
+function resolveProviderOption(providerMap: Map<string, ProviderOption>, providerKey: string): ProviderOption | undefined {
+  if (!providerKey) return undefined;
+  const direct = providerMap.get(providerKey) ?? providerMap.get(providerKey.toLowerCase());
+  if (direct) return direct;
+  const canonical = canonicalizeProviderKey(providerKey);
+  if (!canonical) return undefined;
+  return providerMap.get(`${CANONICAL_LOOKUP_PREFIX}${canonical}`);
 }
 
 export function mapCredentials(
@@ -181,8 +192,9 @@ export function mapCredentials(
   if (!Array.isArray(items)) return [];
   return items.map((item) => {
     const info = (item.credential_info ?? {}) as Record<string, unknown>;
-    const providerKey = resolveCredentialProvider(info);
-    const provider = providers.get(providerKey);
+    const storedProviderKey = resolveCredentialProvider(info);
+    const provider = resolveProviderOption(providers, storedProviderKey);
+    const providerKey = provider?.litellmProvider ?? storedProviderKey;
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 
     const maskedFields = new Set<string>();
@@ -240,16 +252,14 @@ export function mapModels(
     const modelInfoId = rawModelInfoId.trim();
 
     const providerKeySource =
-      typeof paramsRaw.custom_llm_provider === 'string'
-        ? (paramsRaw.custom_llm_provider as string)
-        : typeof paramsRaw.litellm_provider === 'string'
-          ? (paramsRaw.litellm_provider as string)
+      typeof paramsRaw.litellm_provider === 'string'
+        ? (paramsRaw.litellm_provider as string)
+        : typeof paramsRaw.custom_llm_provider === 'string'
+          ? (paramsRaw.custom_llm_provider as string)
           : '';
-    const providerKey =
-      canonicalizeProviderKey(providerKeySource) ||
-      fallbackProviderKey(providerKeySource) ||
-      (typeof providerKeySource === 'string' ? providerKeySource.trim() : '');
-    const provider = providers.get(providerKey);
+    const sanitizedProviderKey = sanitizeProviderKey(providerKeySource);
+    const provider = resolveProviderOption(providers, sanitizedProviderKey);
+    const providerKey = provider?.litellmProvider ?? sanitizedProviderKey;
     const providerLabel = provider?.label ?? (providerKey || 'Unknown');
 
     const model = typeof paramsRaw.model === 'string' ? (paramsRaw.model as string) : '';
@@ -282,7 +292,6 @@ export function mapModels(
       providerLabel,
       model,
       credentialName,
-      mode: typeof modelInfo.mode === 'string' ? (modelInfo.mode as string) : 'chat',
       temperature: toNumber(paramsRaw.temperature),
       topP: toNumber(paramsRaw.top_p),
       frequencyPenalty: toNumber(paramsRaw.frequency_penalty),
@@ -299,20 +308,36 @@ export function mapModels(
 
 export function createProviderOptionMap(providers: ProviderOption[]): Map<string, ProviderOption> {
   const map = new Map<string, ProviderOption>();
+  const register = (key: string | undefined | null, provider: ProviderOption) => {
+    if (!key) return;
+    const trimmed = key.trim();
+    if (!trimmed) return;
+    map.set(trimmed, provider);
+    const lower = trimmed.toLowerCase();
+    if (lower !== trimmed) {
+      map.set(lower, provider);
+    }
+  };
+
   for (const provider of providers) {
-    const keys = new Set<string>();
-    keys.add(provider.id);
-    keys.add(provider.litellmProvider);
-    for (const key of getProviderLookupKeys(provider.id)) {
-      keys.add(key);
-    }
-    for (const key of getProviderLookupKeys(provider.litellmProvider)) {
-      keys.add(key);
-    }
-    for (const key of keys) {
-      if (!key) continue;
-      map.set(key, provider);
+    register(provider.id, provider);
+    register(provider.catalogId, provider);
+    register(provider.litellmProvider, provider);
+    if (provider.canonicalProvider) {
+      map.set(`${CANONICAL_LOOKUP_PREFIX}${provider.canonicalProvider}`, provider);
     }
   }
+
   return map;
+}
+
+export function isOpenAIProvider(provider?: string | null): boolean {
+  return canonicalizeProviderKey(provider) === 'openai';
+}
+
+export function isOpenAICompatibleProvider(provider?: string | null): boolean {
+  const canonical = canonicalizeProviderKey(provider);
+  if (!canonical) return false;
+  if (canonical === 'openai') return false;
+  return canonical.includes('openai') && canonical.includes('compatible');
 }

@@ -12,22 +12,18 @@ import {
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { Textarea } from '@/components/Textarea';
-import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/forms/Form';
 import type { LiteLLMHealthResponse } from '@/api/modules/llmSettings';
 import type { ModelRecord } from '../types';
 import { TestModelResultView, type TestModelErrorState } from './TestModelResultView';
 
 interface TestModelFormValues {
-  mode: string;
   input: string;
 }
 
 export interface TestModelDialogProps {
   open: boolean;
   model: ModelRecord;
-  healthCheckModes: string[];
-  healthCheckModesLoading: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TestModelFormValues) => Promise<void> | void;
   submitting: boolean;
@@ -44,8 +40,6 @@ export interface TestModelDialogProps {
 export function TestModelDialog({
   open,
   model,
-  healthCheckModes,
-  healthCheckModesLoading,
   submitting,
   onOpenChange,
   onSubmit,
@@ -53,7 +47,6 @@ export function TestModelDialog({
 }: TestModelDialogProps): ReactElement {
   const form = useForm<TestModelFormValues>({
     defaultValues: {
-      mode: model.mode ?? 'chat',
       input: '',
     },
   });
@@ -61,7 +54,6 @@ export function TestModelDialog({
   useEffect(() => {
     if (open) {
       form.reset({
-        mode: model.mode ?? 'chat',
         input: '',
       });
     }
@@ -69,7 +61,6 @@ export function TestModelDialog({
 
   const handleSubmit = form.handleSubmit(async (values) => {
     await onSubmit({
-      mode: values.mode,
       input: values.input,
     });
   });
@@ -127,25 +118,6 @@ export function TestModelDialog({
         ) : (
           <Form {...form}>
             <form id="llm-model-test-form" onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <FormField
-                control={form.control}
-                name="mode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Mode</FormLabel>
-                    <FormControl>
-                      <Dropdown
-                        value={field.value || undefined}
-                        onValueChange={(value) => field.onChange(value)}
-                        disabled={healthCheckModesLoading}
-                        placeholder="Select mode"
-                        options={healthCheckModes.map((modeOption) => ({ value: modeOption, label: modeOption }))}
-                      />
-                    </FormControl>
-                    <FormDescription>Select LiteLLM request mode for test execution.</FormDescription>
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="input"

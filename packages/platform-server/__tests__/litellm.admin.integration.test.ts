@@ -193,7 +193,7 @@ function createLiteLLMStubServer(masterKey: string, port = 4000) {
       reply.code(400).send({ error: 'credential_not_found' });
       return;
     }
-    reply.send({ success: true, status: 'ok' });
+    reply.send({ success: true, status: 'success' });
   });
 
   fastify.post<{
