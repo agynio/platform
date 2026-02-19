@@ -187,12 +187,12 @@ describe('EntityFormDialog', () => {
       template: 'workspace-template',
       title: 'My Workspace',
     });
-    expect(payload.config).toMatchObject({
-      template: 'workspace-template',
-      title: 'My Workspace',
-      kind: 'Workspace',
+    expect(payload.config).toEqual(expect.objectContaining({
       image: 'docker.io/library/node:18',
-    });
+    }));
+    expect(payload.config).not.toHaveProperty('title');
+    expect(payload.config).not.toHaveProperty('template');
+    expect(payload.config).not.toHaveProperty('kind');
 
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -245,6 +245,68 @@ describe('EntityFormDialog', () => {
     const payload = onSubmit.mock.calls[0][0];
     expect(payload.template).toBe('agent-template');
     expect(payload.config).toMatchObject({ model: 'claude-3' });
+  });
+
+  it('falls back to config title and strips env sources before submit', async () => {
+    const templates = [createTemplate('worker-service', 'workspace')];
+    const entity = createEntitySummary({
+      id: 'workspace-1',
+      templateName: 'worker-service',
+      templateKind: 'workspace',
+      rawTemplateKind: 'service',
+      title: '',
+      config: {
+        title: 'Worker Service',
+        template: 'worker-service',
+        kind: 'Workspace',
+        env: [
+          {
+            id: 'env-1',
+            name: 'API_TOKEN',
+            value: { kind: 'vault', mount: 'kv', path: 'prod/app', key: 'TOKEN' },
+            source: 'vault',
+          },
+          {
+            id: 'env-2',
+            name: 'PLAIN',
+            value: { kind: 'static', value: 'abc' },
+            source: 'valut',
+          },
+        ],
+      },
+    });
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityFormDialog
+          open
+          mode="edit"
+          kind="workspace"
+          templates={templates}
+          entity={entity}
+          onOpenChange={vi.fn()}
+          onSubmit={onSubmit}
+          isSubmitting={false}
+        />
+      </QueryClientProvider>,
+    );
+
+    const titleInput = await screen.findByLabelText('Entity title');
+    await userEvent.clear(titleInput);
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload.title).toBe('Worker Service');
+    expect(payload.config).not.toHaveProperty('title');
+    expect(payload.config).not.toHaveProperty('template');
+    expect(payload.config).not.toHaveProperty('kind');
+    const envEntries = payload.config.env as Array<Record<string, unknown>>;
+    expect(envEntries).toHaveLength(2);
+    envEntries.forEach((entry) => {
+      expect(entry).not.toHaveProperty('source');
+    });
   });
 });
 
@@ -314,8 +376,9 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    expect(screen.getByRole('checkbox', { name: 'Tool One' })).toBeChecked();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Tool Two' }));
+    const toolsSelect = await screen.findByLabelText('Tools');
+    expect(Array.from(toolsSelect.selectedOptions).map((option) => option.value)).toEqual(['tool-1']);
+    await userEvent.selectOptions(toolsSelect, ['tool-2']);
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -352,8 +415,9 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    expect(screen.getByRole('checkbox', { name: 'MCP One' })).toBeChecked();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'MCP Two' }));
+    const mcpSelect = await screen.findByLabelText('MCP servers');
+    expect(Array.from(mcpSelect.selectedOptions).map((option) => option.value)).toEqual(['mcp-1']);
+    await userEvent.selectOptions(mcpSelect, ['mcp-2']);
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -463,9 +527,9 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    expect(screen.getByRole('checkbox', { name: 'Agent One' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Agent Two' })).toBeChecked();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Agent Three' }));
+    const agentsSelect = await screen.findByLabelText('Managed agents');
+    expect(Array.from(agentsSelect.selectedOptions).map((option) => option.value)).toEqual(['agent-1', 'agent-2']);
+    await userEvent.selectOptions(agentsSelect, ['agent-3']);
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

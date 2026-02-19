@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { ScreenDialog, ScreenDialogContent, ScreenDialogDescription, ScreenDialogTitle } from '@/components/Dialog';
@@ -27,7 +26,7 @@ import type {
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 import { X } from 'lucide-react';
 import { useMcpNodeState } from '@/lib/graph/hooks';
-import { listTargetsByEdge } from '@/features/entities/api/graphEntities';
+import { listTargetsByEdge, sanitizeConfigForPersistence } from '@/features/entities/api/graphEntities';
 
 type EntityFormValues = {
   template: string;
@@ -297,10 +296,7 @@ function resolveNodeStatus(entity?: GraphEntitySummary): NodeState['status'] {
   return 'not_ready';
 }
 
-function buildSubmitConfig(
-  base: Record<string, unknown>,
-  meta: { title: string; template: string; kind: NodeViewKind },
-): Record<string, unknown> {
+function buildSubmitConfig(base: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) {
@@ -308,9 +304,6 @@ function buildSubmitConfig(
     }
     sanitized[key] = value;
   }
-  sanitized.title = meta.title;
-  sanitized.template = meta.template;
-  sanitized.kind = meta.kind;
   return sanitized;
 }
 
@@ -457,6 +450,7 @@ export function EntityFormDialog({
   const [configState, setConfigState] = useState<Record<string, unknown>>(() => ensureRecord(entity?.config));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const previewNodeIdRef = useRef<string>('');
+  const configTitleRef = useRef('');
 
   const { secretSuggestions, ensureSecretKeys } = useSecretSuggestions();
   const { variableSuggestions, ensureVariableKeys } = useVariableSuggestions();
@@ -471,6 +465,8 @@ export function EntityFormDialog({
       title: entity?.title ?? '',
     });
     setConfigState(ensureRecord(entity?.config));
+    const initialConfigTitle = typeof entity?.config?.title === 'string' ? entity.config.title.trim() : '';
+    configTitleRef.current = initialConfigTitle;
   }, [entity, form, open]);
 
   useEffect(() => {
@@ -579,18 +575,18 @@ export function EntityFormDialog({
       [relationId]: nextValue ? [nextValue] : [],
     }));
   }, []);
-  const handleToggleRelationOption = useCallback((relationId: string, optionId: string) => {
-    setRelationSelections((current) => {
-      const existing = current[relationId] ?? [];
-      const next = existing.includes(optionId)
-        ? existing.filter((value) => value !== optionId)
-        : [...existing, optionId];
-      return {
+
+  const handleMultiRelationChange = useCallback(
+    (relationId: string, event: ChangeEvent<HTMLSelectElement>) => {
+      const selectedOptions = Array.from(event.target?.selectedOptions ?? []);
+      const nextValues = selectedOptions.map((option) => option.value).filter((value) => value.length > 0);
+      setRelationSelections((current) => ({
         ...current,
-        [relationId]: next,
-      };
-    });
-  }, []);
+        [relationId]: uniqueStrings(nextValues),
+      }));
+    },
+    [],
+  );
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
@@ -625,6 +621,10 @@ export function EntityFormDialog({
           if (key === 'title') {
             const stringValue = typeof value === 'string' ? value : '';
             form.setValue('title', stringValue, { shouldDirty: true, shouldValidate: false });
+            const trimmed = stringValue.trim();
+            if (trimmed.length > 0) {
+              configTitleRef.current = trimmed;
+            }
             if (stringValue.length > 0) {
               next.title = stringValue;
             } else {
@@ -837,23 +837,15 @@ export function EntityFormDialog({
     }
 
     const trimmedTitle = values.title.trim();
-    if (!trimmedTitle) {
+    const baseConfig = buildSubmitConfig(configState);
+    const configTitle = typeof baseConfig.title === 'string' ? baseConfig.title.trim() : '';
+    const payloadTitle = trimmedTitle || configTitle || configTitleRef.current;
+    if (!payloadTitle) {
       form.setError('title', { type: 'required', message: 'Title is required.' });
       return;
     }
 
-    const template = templateMap.get(templateName);
-    const resolvedKind = template
-      ? toNodeKind(template.source?.kind ?? template.kind)
-      : entity
-      ? toNodeKind(entity.rawTemplateKind ?? entity.templateKind)
-      : toNodeKind(kind);
-
-    const payloadConfig = buildSubmitConfig(configState, {
-      title: trimmedTitle,
-      template: templateName,
-      kind: resolvedKind,
-    });
+    const payloadConfig = sanitizeConfigForPersistence(templateName, baseConfig);
 
     const relationPayload: GraphEntityRelationInput[] =
       relationDefinitions.length === 0
@@ -876,7 +868,7 @@ export function EntityFormDialog({
     const payload: GraphEntityUpsertInput = {
       id: entity?.id,
       template: templateName,
-      title: trimmedTitle,
+      title: payloadTitle,
       config: payloadConfig,
       relations: relationPayload.length > 0 ? relationPayload : undefined,
     } satisfies GraphEntityUpsertInput;
@@ -905,7 +897,6 @@ export function EntityFormDialog({
                   <FormField
                     control={form.control}
                     name="title"
-                    rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem className="space-y-2">
                         <FormLabel>Title</FormLabel>
@@ -917,8 +908,6 @@ export function EntityFormDialog({
                             disabled={isSubmitting}
                             onChange={(event) => {
                               field.onChange(event);
-                              const nextValue = event.target.value;
-                              setConfigState((current) => ({ ...current, title: nextValue }));
                             }}
                           />
                         </FormControl>
@@ -1018,35 +1007,32 @@ export function EntityFormDialog({
                           }
                           return (
                             <div key={definition.id} className="space-y-2">
-                              <div>
-                                <p className="text-sm font-medium text-[var(--agyn-dark)]">{definition.label}</p>
-                                <p className="text-xs text-[var(--agyn-text-subtle)]">
-                                  {helperText ?? 'Select one or more targets.'}
-                                </p>
-                              </div>
+                              <label
+                                htmlFor={`relation-${definition.id}`}
+                                className="text-sm font-medium text-[var(--agyn-dark)]"
+                              >
+                                {definition.label}
+                              </label>
                               {options.length === 0 ? (
                                 <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
                               ) : (
-                                <div className="space-y-2">
-                                  {options.map((option) => {
-                                    const checked = selections.includes(option.id);
-                                    return (
-                                      <label
-                                        key={option.id}
-                                        className="flex items-center justify-between rounded-lg border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm"
-                                      >
-                                        <span>{option.label}</span>
-                                        <input
-                                          type="checkbox"
-                                          className="h-4 w-4"
-                                          checked={checked}
-                                          onChange={() => handleToggleRelationOption(definition.id, option.id)}
-                                          disabled={isSubmitting}
-                                        />
-                                      </label>
-                                    );
-                                  })}
-                                </div>
+                                <SelectInput
+                                  id={`relation-${definition.id}`}
+                                  multiple
+                                  htmlSize={Math.min(6, Math.max(3, options.length))}
+                                  value={selections}
+                                  disabled={isSubmitting}
+                                  onChange={(event) => handleMultiRelationChange(definition.id, event)}
+                                  helperText={
+                                    helperText
+                                      ? `${helperText} Hold Cmd/Ctrl to select multiple.`
+                                      : 'Select one or more targets. Hold Cmd/Ctrl to select multiple.'
+                                  }
+                                  options={options.map((option) => ({
+                                    value: option.id,
+                                    label: option.label,
+                                  }))}
+                                />
                               )}
                             </div>
                           );

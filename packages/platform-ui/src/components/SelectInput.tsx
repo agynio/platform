@@ -20,6 +20,7 @@ export interface SelectInputProps extends Omit<SelectHTMLAttributes<HTMLSelectEl
   options?: SelectOption[];
   groups?: SelectGroup[];
   size?: 'sm' | 'default';
+  htmlSize?: number;
   allowEmptyOption?: boolean;
   variant?: 'default' | 'flat';
   containerClassName?: string;
@@ -42,6 +43,7 @@ export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(funct
     disabled,
     onChange,
     defaultValue,
+    htmlSize,
     ...props
   },
   ref,
@@ -90,6 +92,7 @@ export const SelectInput = forwardRef<HTMLSelectElement, SelectInputProps>(funct
         )}
         disabled={disabled}
         onChange={handleChange}
+        size={htmlSize}
         {...selectProps}
         {...props}
       >

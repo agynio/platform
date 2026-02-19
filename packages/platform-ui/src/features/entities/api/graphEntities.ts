@@ -81,6 +81,62 @@ function ensureRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isEnvEntryRecord(value: Record<string, unknown>): boolean {
+  return typeof value.name === 'string' && Object.prototype.hasOwnProperty.call(value, 'value');
+}
+
+function sanitizeEnvEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(entry)) {
+    if (key === 'source') {
+      continue;
+    }
+    next[key] = sanitizeConfigValue(nested);
+  }
+  return next;
+}
+
+function sanitizeConfigValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (isPlainRecord(item) && isEnvEntryRecord(item)) {
+        return sanitizeEnvEntry(item);
+      }
+      return sanitizeConfigValue(item);
+    });
+  }
+  if (isPlainRecord(value)) {
+    if (isEnvEntryRecord(value)) {
+      return sanitizeEnvEntry(value);
+    }
+    const next: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value)) {
+      next[key] = sanitizeConfigValue(nested);
+    }
+    return next;
+  }
+  return value;
+}
+
+export function sanitizeConfigForPersistence(_templateName: string, config: Record<string, unknown> | undefined): Record<string, unknown> {
+  const base = ensureRecord(config ?? {});
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (key === 'title' || key === 'template' || key === 'kind') {
+      continue;
+    }
+    if (value === undefined) {
+      continue;
+    }
+    sanitized[key] = sanitizeConfigValue(value);
+  }
+  return sanitized;
+}
+
 function cloneGraph(graph: PersistedGraph): PersistedGraph {
   if (typeof structuredClone === 'function') {
     return structuredClone(graph);
