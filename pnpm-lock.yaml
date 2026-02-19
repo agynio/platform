@@ -199,9 +199,6 @@ importers:
       '@slack/web-api':
         specifier: ^7.10.0
         version: 7.10.0
-      iconv-lite:
-        specifier: ^0.6.3
-        version: 0.6.3
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -220,6 +217,9 @@ importers:
       fastify:
         specifier: ^5.6.1
         version: 5.6.1
+      iconv-lite:
+        specifier: ^0.6.3
+        version: 0.6.3
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21

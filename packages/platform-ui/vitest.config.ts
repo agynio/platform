@@ -64,7 +64,6 @@ export default defineConfig({
       '@radix-ui/react-progress': path.resolve(__dirname, './node_modules/@radix-ui/react-progress'),
       '@radix-ui/react-radio-group': path.resolve(__dirname, './node_modules/@radix-ui/react-radio-group'),
       '@radix-ui/react-scroll-area': path.resolve(__dirname, './node_modules/@radix-ui/react-scroll-area'),
-      '@radix-ui/react-select': path.resolve(__dirname, './node_modules/@radix-ui/react-select'),
       '@radix-ui/react-separator': path.resolve(__dirname, './node_modules/@radix-ui/react-separator'),
       '@radix-ui/react-slider': path.resolve(__dirname, './node_modules/@radix-ui/react-slider'),
       '@radix-ui/react-slot': path.resolve(__dirname, './node_modules/@radix-ui/react-slot'),

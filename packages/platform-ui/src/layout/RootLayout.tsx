@@ -13,15 +13,27 @@ import {
   Key,
   Variable,
   Bot,
+  Users,
+  Layers,
+  Zap,
+  Hammer,
+  Server,
+  Building2,
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
-  graph: '/agents/graph',
-  threads: '/agents/threads',
-  reminders: '/agents/reminders',
-  memory: '/agents/memory',
+  agentsTeam: '/agents/graph',
+  agentsThreads: '/agents/threads',
+  agentsReminders: '/agents/reminders',
+  agentsMemory: '/agents/memory',
+  entitiesTriggers: '/triggers',
+  entitiesAgents: '/agents',
+  entitiesTools: '/tools',
+  entitiesMcp: '/mcp',
+  entitiesWorkspaces: '/workspaces',
+  entitiesMemory: '/memory',
   containers: '/monitoring/containers',
   resources: '/monitoring/resources',
   llm: '/settings/llm',
@@ -35,10 +47,23 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Agents',
     icon: <Network className="w-5 h-5" />,
     items: [
-      { id: 'graph', label: 'Team', icon: <GitBranch className="w-4 h-4" /> },
-      { id: 'threads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
-      { id: 'reminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
-      { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
+      { id: 'agentsTeam', label: 'Team', icon: <GitBranch className="w-4 h-4" /> },
+      { id: 'agentsThreads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
+      { id: 'agentsReminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
+      { id: 'agentsMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
+    ],
+  },
+  {
+    id: 'entities',
+    label: 'Entities',
+    icon: <Layers className="w-5 h-5" />,
+    items: [
+      { id: 'entitiesTriggers', label: 'Triggers', icon: <Zap className="w-4 h-4" /> },
+      { id: 'entitiesAgents', label: 'Agents', icon: <Users className="w-4 h-4" /> },
+      { id: 'entitiesTools', label: 'Tools', icon: <Hammer className="w-4 h-4" /> },
+      { id: 'entitiesMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" /> },
+      { id: 'entitiesWorkspaces', label: 'Workspaces', icon: <Building2 className="w-4 h-4" /> },
+      { id: 'entitiesMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
     ],
   },
   {
@@ -62,12 +87,26 @@ const MENU_ITEMS: MenuItem[] = [
   },
 ];
 
-const DEFAULT_MENU_ITEM = 'graph';
+const DEFAULT_MENU_ITEM = 'entitiesAgents';
 const MENU_ITEM_ENTRIES = Object.entries(MENU_ITEM_ROUTES);
 
+function matchesRoute(pathname: string, route: string) {
+  if (route === '/') {
+    return pathname === '/';
+  }
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
 function getMenuItemFromPath(pathname: string) {
-  const match = MENU_ITEM_ENTRIES.find(([, route]) => pathname.startsWith(route));
-  return match?.[0] ?? DEFAULT_MENU_ITEM;
+  let matched = DEFAULT_MENU_ITEM;
+  let bestLength = 0;
+  for (const [itemId, route] of MENU_ITEM_ENTRIES) {
+    if (matchesRoute(pathname, route) && route.length > bestLength) {
+      matched = itemId;
+      bestLength = route.length;
+    }
+  }
+  return matched;
 }
 
 export function RootLayout() {
