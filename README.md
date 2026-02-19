@@ -185,8 +185,11 @@ overlay instead of the Docker bridge network:
 3. Start the controller stack: `docker compose up -d ziti-controller ziti-controller-init ziti-edge-router`.
 4. Launch docker-runner and platform-server normally (either via `pnpm dev` or
    `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
-   The server will reconcile the controller, enroll identities, and expose a local proxy on `0.0.0.0:17071`
-   (typically accessed via `127.0.0.1`) for all docker-runner calls.
+   - Host `pnpm` dev keeps the ConfigService defaults, so the proxy binds to `127.0.0.1:17071` unless you override
+     `ZITI_RUNNER_PROXY_HOST`.
+   - The docker overlay sets `ZITI_RUNNER_PROXY_HOST=0.0.0.0` inside the container so port `17071` can be published to
+     the host.
+   In both cases traffic is accessible from the host via `127.0.0.1:17071` once the proxy reports ready.
 
 See [docs/containers/ziti.md](docs/containers/ziti.md) for the full walkthrough and smoke test commands.
 

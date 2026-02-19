@@ -2,9 +2,10 @@
 
 The local development stack now provisions an OpenZiti controller, initializer, and edge router. The platform-server
 reconciles controller state at startup (service, policies, and identities) and stores identity material under
-`./.ziti/identities` (mirrored to `/opt/app/.ziti/identities` inside containers). A lightweight local HTTP proxy binds to
-`0.0.0.0:17071` (reachable via `127.0.0.1` from the same host) and tunnels docker-runner traffic through the OpenZiti
-overlay instead of the Docker bridge network when enabled.
+`./.ziti/identities` (mirrored to `/opt/app/.ziti/identities` inside containers). When OpenZiti is enabled the
+platform-server launches a lightweight HTTP proxy: `pnpm` dev binds to `127.0.0.1:17071` by default, while the
+docker-compose overlay overrides it to `0.0.0.0:17071` inside the container so the port can be published to the host.
+All docker-runner traffic is tunneled through this proxy instead of the Docker bridge network.
 
 ## Prerequisites
 
@@ -31,9 +32,40 @@ docker compose up -d ziti-controller ziti-controller-init ziti-edge-router
 > start them with `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
 > so they share the same controller and network.
 
-3. Copy `.env` files and enable OpenZiti flags:
+3. Copy `.env` files and enable OpenZiti flags. Use the template that matches how you run the services:
+
+### Host (`pnpm dev`)
 
 - `packages/platform-server/.env`
+
+```
+ZITI_ENABLED=true
+ZITI_MANAGEMENT_URL=https://ziti-controller:1280/edge/management/v1
+ZITI_USERNAME=admin
+ZITI_PASSWORD=admin
+ZITI_INSECURE_TLS=true
+ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
+ZITI_ROUTER_NAME=dev-edge-router
+ZITI_RUNNER_PROXY_HOST=127.0.0.1
+ZITI_RUNNER_PROXY_PORT=17071
+ZITI_PLATFORM_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.platform-server.json
+ZITI_RUNNER_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_IDENTITIES_DIR=$(pwd)/.ziti/identities
+ZITI_TMP_DIR=$(pwd)/.ziti/tmp
+```
+
+- `packages/docker-runner/.env`
+
+```
+ZITI_ENABLED=true
+ZITI_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
+```
+
+### Docker compose overlay (`docker-compose.dev.yml`)
+
+Compose already mounts `./.ziti` into `/opt/app/.ziti` inside each container. Override the same variables with
+container paths (via `.env` or `docker-compose.dev.yml`):
 
 ```
 ZITI_ENABLED=true
@@ -48,20 +80,11 @@ ZITI_RUNNER_PROXY_PORT=17071
 ZITI_PLATFORM_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.platform-server.json
 ZITI_RUNNER_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
 ZITI_IDENTITIES_DIR=/opt/app/.ziti/identities
-ZITI_TMP_DIR=/tmp/ziti
-```
+ZITI_TMP_DIR=/opt/app/.ziti/tmp
 
-- `packages/docker-runner/.env` (or container env)
-
+# docker-runner container
+ZITI_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
 ```
-ZITI_ENABLED=true
-ZITI_IDENTITY_FILE=./.ziti/identities/dev.agyn-platform.docker-runner.json
-ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
-```
-
-The docker-compose.dev.yml overlay mounts `./.ziti` into both platform-server and docker-runner containers (presented as
-`/opt/app/.ziti/*` in each container). Local development outside Docker can re-use the same paths or override the env
-vars with machine-local locations.
 
 ## Runtime flow
 
@@ -70,8 +93,9 @@ vars with machine-local locations.
    - Ensures bind/dial service policies and a service-edge-router policy targeting `dev-edge-router`.
    - Creates device identities for the server (`component.platform-server`) and docker-runner (`component.docker-runner`).
    - Generates OTT enrollments and writes identities to `.ziti/identities/`.
-2. Ziti runner proxy starts on `0.0.0.0:17071` (reachable via `127.0.0.1`) and dials the service using the platform-server identity. All requests to
-   docker-runner are routed through this proxy when `ZITI_ENABLED=true`.
+2. Ziti runner proxy starts on `127.0.0.1:17071` by default when running via `pnpm dev`. The docker-compose overlay
+   overrides it to `0.0.0.0:17071` inside the container so the port can be published. All requests to docker-runner are
+   routed through this proxy when `ZITI_ENABLED=true`.
 3. Docker-runner continues to listen on the configured TCP port (default `7071`) and now exposes the same API via an
    OpenZiti Express listener that proxies traffic to the local Fastify server.
 
