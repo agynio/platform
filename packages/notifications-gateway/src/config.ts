@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { NOTIFICATIONS_CHANNEL } from '@agyn/shared';
+
+const DEFAULT_NOTIFICATIONS_CHANNEL = 'notifications.v1' as const;
 
 const configSchema = z.object({
   port: z
@@ -23,7 +24,7 @@ const configSchema = z.object({
     .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
       message: 'REDIS_URL must start with redis:// or rediss://',
     }),
-  redisChannel: z.string().min(1).default(NOTIFICATIONS_CHANNEL),
+  redisChannel: z.string().min(1).default(DEFAULT_NOTIFICATIONS_CHANNEL),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 
@@ -35,7 +36,7 @@ export function loadConfig(): GatewayConfig {
     host: process.env.HOST,
     socketPath: process.env.SOCKET_IO_PATH,
     redisUrl: process.env.REDIS_URL,
-    redisChannel: process.env.NOTIFICATIONS_CHANNEL,
+    redisChannel: process.env.NOTIFICATIONS_CHANNEL ?? DEFAULT_NOTIFICATIONS_CHANNEL,
     logLevel: process.env.LOG_LEVEL,
   });
 }
