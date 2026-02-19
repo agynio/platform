@@ -3,6 +3,7 @@ import Redis from 'ioredis';
 import type { Logger } from '../logger';
 import type { NotificationEnvelope } from '@agyn/shared';
 import { NotificationEnvelopeSchema } from './schema';
+import { serializeError } from '../errors';
 
 export class NotificationsSubscriber extends EventEmitter {
   private redis: Redis | null = null;
@@ -32,10 +33,18 @@ export class NotificationsSubscriber extends EventEmitter {
       this.emit('ready');
     });
     await this.redis.connect();
-    await this.redis.subscribe(this.options.channel, (err) => {
-      if (err) throw err;
+    try {
+      await this.redis.subscribe(this.options.channel);
       this.logger.info({ channel: this.options.channel }, 'subscribed to notifications channel');
-    });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        { channel: this.options.channel, error: serializeError(err) },
+        'failed to subscribe to notifications channel',
+      );
+      this.emit('error', err);
+      throw err;
+    }
     this.redis.on('message', (channel, message) => {
       if (channel !== this.options.channel) return;
       this.handleMessage(message);
@@ -60,15 +69,3 @@ export class NotificationsSubscriber extends EventEmitter {
     }
   }
 }
-
-const serializeError = (error: unknown): { name?: string; message: string } => {
-  if (error instanceof Error) return { name: error.name, message: error.message };
-  if (typeof error === 'object') {
-    try {
-      return { message: JSON.stringify(error) };
-    } catch {
-      return { message: '[object]' };
-    }
-  }
-  return { message: String(error) };
-};
