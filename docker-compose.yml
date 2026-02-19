@@ -334,32 +334,6 @@ services:
     networks:
       - agents_net
 
-  docker-runner:
-    build:
-      context: .
-      dockerfile: packages/docker-runner/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      ziti-edge-router:
-        condition: service_started
-    environment:
-      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
-      DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
-      ZITI_ENABLED: ${ZITI_ENABLED:-false}
-      ZITI_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
-      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
-    volumes:
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-      - type: bind
-        source: ./.ziti/identities
-        target: /opt/app/.ziti/identities
-        read_only: true
-    ports:
-      - "${DOCKER_RUNNER_PORT:-7071}:7071"
-    networks:
-      - agents_net
 
 volumes:
   vault-file:

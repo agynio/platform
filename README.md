@@ -22,7 +22,8 @@ Intended use cases:
 - Operating a local development environment with supporting infra.
 
 ## Repository Structure
-- docker-compose.yml — Development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, cAdvisor, Prometheus, Grafana.
+- docker-compose.yml — Third-party development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, OpenZiti, Prometheus, Grafana, etc.
+- docker-compose.dev.yml — Optional overlay that builds/runs the platform-server and docker-runner containers against the infra stack.
 - .github/workflows/
   - ci.yml — Linting, tests (server/UI), Storybook build + smoke, type-check build steps.
   - docker-ghcr.yml — Build and publish platform-server and platform-ui images to GHCR.
@@ -117,9 +118,14 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071), and the OpenZiti controller stack
+# litellm (127.0.0.1:4000), registry-mirror, and the OpenZiti controller stack
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# Optional: run platform-server and docker-runner inside Docker as well.
+mkdir -p .ziti/identities .ziti/tmp data/graph
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner
+# The overlay builds local images and reuses the infra services defined in docker-compose.yml.
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -141,6 +147,9 @@ pnpm --filter @agyn/platform-ui dev
 # docker-runner (Fastify dev server)
 pnpm --filter @agyn/docker-runner dev
 ```
+> Prefer containers? Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
+> after the infra stack is running. The overlay file builds the local images against the
+> same Postgres/LiteLLM/Vault/Ziti services.
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
 
 The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
@@ -174,8 +183,10 @@ overlay instead of the Docker bridge network:
 2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
    `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
 3. Start the controller stack: `docker compose up -d ziti-controller ziti-controller-init ziti-edge-router`.
-4. Launch docker-runner and platform-server normally. The server will reconcile the controller, enroll identities, and
-   expose a local proxy on `127.0.0.1:17071` for all docker-runner calls.
+4. Launch docker-runner and platform-server normally (either via `pnpm dev` or
+   `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
+   The server will reconcile the controller, enroll identities, and expose a local proxy on `0.0.0.0:17071`
+   (typically accessed via `127.0.0.1`) for all docker-runner calls.
 
 See [docs/containers/ziti.md](docs/containers/ziti.md) for the full walkthrough and smoke test commands.
 
@@ -239,8 +250,8 @@ UI variables (packages/platform-ui/.env.example):
   - vault — HashiCorp Vault (8200), auto-init helper vault-auto-init
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
-  - docker-runner — authenticated Docker API proxy (7071, mounts /var/run/docker.sock)
   - Optional monitoring overlay (docker-compose.monitoring.yml) adds prometheus (9090) and grafana (3000) without mounting the Docker socket; provide your own scrape targets via configuration.
+- In-repo services (platform-server, docker-runner) live in docker-compose.dev.yml and must be combined with the base file.
 
 To start services:
 ```bash

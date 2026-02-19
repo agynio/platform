@@ -2,8 +2,9 @@
 
 The local development stack now provisions an OpenZiti controller, initializer, and edge router. The platform-server
 reconciles controller state at startup (service, policies, and identities) and stores identity material under
-`./.ziti/identities`. A lightweight local HTTP proxy (`127.0.0.1:17071`) tunnels docker-runner traffic through the
-OpenZiti overlay instead of the Docker bridge network when enabled.
+`./.ziti/identities` (mirrored to `/opt/app/.ziti/identities` inside containers). A lightweight local HTTP proxy binds to
+`0.0.0.0:17071` (reachable via `127.0.0.1` from the same host) and tunnels docker-runner traffic through the OpenZiti
+overlay instead of the Docker bridge network when enabled.
 
 ## Prerequisites
 
@@ -20,11 +21,15 @@ pnpm approve-builds
 > pnpm --dir node_modules/.pnpm/@openziti+ziti-sdk-nodejs@0.27.0/node_modules/@openziti/ziti-sdk-nodejs run install
 > ```
 
-2. Ensure the dev stack is running:
+2. Ensure the OpenZiti controller stack is running:
 
 ```bash
 docker compose up -d ziti-controller ziti-controller-init ziti-edge-router
 ```
+
+> Running platform-server and docker-runner inside Docker? After the infra stack is up,
+> start them with `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
+> so they share the same controller and network.
 
 3. Copy `.env` files and enable OpenZiti flags:
 
@@ -38,8 +43,12 @@ ZITI_PASSWORD=admin
 ZITI_INSECURE_TLS=true
 ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ZITI_ROUTER_NAME=dev-edge-router
-ZITI_PLATFORM_IDENTITY_FILE=./.ziti/identities/dev.agyn-platform.platform-server.json
-ZITI_RUNNER_IDENTITY_FILE=./.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_RUNNER_PROXY_HOST=0.0.0.0
+ZITI_RUNNER_PROXY_PORT=17071
+ZITI_PLATFORM_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.platform-server.json
+ZITI_RUNNER_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_IDENTITIES_DIR=/opt/app/.ziti/identities
+ZITI_TMP_DIR=/tmp/ziti
 ```
 
 - `packages/docker-runner/.env` (or container env)
@@ -50,8 +59,9 @@ ZITI_IDENTITY_FILE=./.ziti/identities/dev.agyn-platform.docker-runner.json
 ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ```
 
-The docker-compose service already mounts `./.ziti` into both platform-server and docker-runner containers. Local
-development outside Docker can re-use the same paths.
+The docker-compose.dev.yml overlay mounts `./.ziti` into both platform-server and docker-runner containers (presented as
+`/opt/app/.ziti/*` in each container). Local development outside Docker can re-use the same paths or override the env
+vars with machine-local locations.
 
 ## Runtime flow
 
@@ -60,7 +70,7 @@ development outside Docker can re-use the same paths.
    - Ensures bind/dial service policies and a service-edge-router policy targeting `dev-edge-router`.
    - Creates device identities for the server (`component.platform-server`) and docker-runner (`component.docker-runner`).
    - Generates OTT enrollments and writes identities to `.ziti/identities/`.
-2. Ziti runner proxy starts on `127.0.0.1:17071` and dials the service using the platform-server identity. All requests to
+2. Ziti runner proxy starts on `0.0.0.0:17071` (reachable via `127.0.0.1`) and dials the service using the platform-server identity. All requests to
    docker-runner are routed through this proxy when `ZITI_ENABLED=true`.
 3. Docker-runner continues to listen on the configured TCP port (default `7071`) and now exposes the same API via an
    OpenZiti Express listener that proxies traffic to the local Fastify server.
@@ -89,5 +99,5 @@ docker logs docker-runner | grep "Ziti ingress ready"
 
 Seeing the readiness log after step 1 indicates the end-to-end tunnel is operational.
 
-> To reset the environment delete `./.ziti/identities` and `./.ziti/tmp`, then restart the stack so the platform-server
+> To reset the environment delete `./.ziti/identities` and `./.ziti/tmp` (or the `/opt/app/.ziti/*` mounts inside Docker), then restart the stack so the platform-server
 > can re-enroll identities.
