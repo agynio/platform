@@ -367,9 +367,15 @@ describe('EntityUpsertForm relations', () => {
       entity,
     });
 
-    await screen.findByLabelText('Tools');
+    const toolsDropdown = await screen.findByRole('combobox', { name: 'Tools' });
     expect(screen.getByLabelText('Remove Tool One')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('option', { name: 'Tool Two' }));
+    await userEvent.click(toolsDropdown);
+    const toolsListbox = await screen.findByRole('listbox');
+    expect(toolsListbox).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Tool Two' }));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    expect(screen.getByText('Tool Two')).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -406,9 +412,11 @@ describe('EntityUpsertForm relations', () => {
       entity,
     });
 
-    await screen.findByLabelText('MCP servers');
+    const mcpDropdown = await screen.findByRole('combobox', { name: 'MCP servers' });
     expect(screen.getByLabelText('Remove MCP One')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('option', { name: 'MCP Two' }));
+    await userEvent.click(mcpDropdown);
+    await userEvent.click(screen.getByRole('button', { name: 'MCP Two' }));
+    expect(screen.getByLabelText('Remove MCP Two')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -518,10 +526,13 @@ describe('EntityUpsertForm relations', () => {
       entity,
     });
 
-    await screen.findByLabelText('Managed agents');
+    const agentsDropdown = await screen.findByRole('combobox', { name: 'Managed agents' });
     expect(screen.getByLabelText('Remove Agent One')).toBeInTheDocument();
     expect(screen.getByLabelText('Remove Agent Two')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('option', { name: 'Agent Three' }));
+    await userEvent.click(agentsDropdown);
+    await userEvent.click(screen.getByRole('button', { name: 'Agent Three' }));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

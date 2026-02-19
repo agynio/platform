@@ -25,7 +25,7 @@ import type {
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 import { useMcpNodeState } from '@/lib/graph/hooks';
 import { listTargetsByEdge, sanitizeConfigForPersistence } from '@/features/entities/api/graphEntities';
-import { ChipsMultiSelect } from '@/components/ChipsMultiSelect';
+import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 
 type EntityFormValues = {
   template: string;
@@ -1005,23 +1005,24 @@ export function EntityUpsertForm({
                             </div>
                           );
                         }
+                        const labelId = `relation-${definition.id}-label`;
                         return (
                           <div key={definition.id} className="space-y-2">
-                            <label htmlFor={`relation-${definition.id}`} className="text-sm font-medium text-[var(--agyn-dark)]">
+                            <label id={labelId} className="text-sm font-medium text-[var(--agyn-dark)]">
                               {definition.label}
                             </label>
                             {options.length === 0 ? (
                               <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
                             ) : (
-                              <ChipsMultiSelect
+                              <MultiSelectDropdown
                                 id={`relation-${definition.id}`}
+                                aria-labelledby={labelId}
+                                aria-label={definition.label}
                                 value={selections}
                                 options={options.map((option) => ({ value: option.id, label: option.label }))}
                                 disabled={isSubmitting}
-                                helperText={
-                                  helperText ?? 'Select one or more targets. Use Backspace to remove the last chip.'
-                                }
-                                placeholder={definition.placeholder ?? 'Search nodes'}
+                                helperText={helperText}
+                                placeholder={definition.placeholder ?? 'Select options'}
                                 onChange={(next) => handleMultiRelationChange(definition.id, next)}
                               />
                             )}
