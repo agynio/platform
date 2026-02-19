@@ -4,7 +4,14 @@ import { render, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentsRunScreen } from '../AgentsRunScreen';
-import type { ContextItem, RunTimelineEvent, RunTimelineSummary, RunEventType, RunEventStatus } from '@/api/types/agents';
+import type {
+  ContextItem,
+  RunEventStatus,
+  RunEventType,
+  RunTimelineEvent,
+  RunTimelineSummary,
+  RunTimelineTotalsResponse,
+} from '@/api/types/agents';
 
 const runScreenMocks = vi.hoisted(() => ({
   props: vi.fn(),
@@ -19,8 +26,9 @@ vi.mock('@/components/screens/RunScreen', () => ({
 }));
 
 const runsHookMocks = vi.hoisted(() => ({
-  summary: vi.fn<RunTimelineSummary, [string | undefined]>(),
-  events: vi.fn<{ items: RunTimelineEvent[]; nextCursor: null }, [string | undefined]>(),
+  summary: vi.fn<RunTimelineSummary | undefined, [string | undefined]>(),
+  events: vi.fn<{ items: RunTimelineEvent[]; nextCursor: null } | undefined, [string | undefined]>(),
+  totals: vi.fn<RunTimelineTotalsResponse | undefined, [string | undefined]>(),
 }));
 
 vi.mock('@/api/hooks/runs', () => ({
@@ -33,6 +41,14 @@ vi.mock('@/api/hooks/runs', () => ({
   }),
   useRunTimelineEvents: (runId: string | undefined) => ({
     data: runsHookMocks.events(runId),
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useRunTimelineEventTotals: (runId: string | undefined) => ({
+    data: runsHookMocks.totals(runId),
     isLoading: false,
     isFetching: false,
     isError: false,
@@ -112,6 +128,8 @@ beforeEach(() => {
   runScreenMocks.props.mockClear();
   runsHookMocks.summary.mockReset();
   runsHookMocks.events.mockReset();
+  runsHookMocks.totals.mockReset();
+  runsHookMocks.totals.mockReturnValue(buildTotalsResponse());
   contextItemsMocks.getMany.mockReset();
   contextItemsMocks.getMany.mockResolvedValue([]);
 });
@@ -181,6 +199,24 @@ function buildSummary(): RunTimelineSummary {
     countsByType,
     countsByStatus,
     totalEvents: 1,
+  };
+}
+
+function buildTotalsResponse(overrides?: Partial<RunTimelineTotalsResponse>): RunTimelineTotalsResponse {
+  const tokenUsage = overrides?.totals?.tokenUsage ?? {};
+  return {
+    runId: overrides?.runId ?? 'run-1',
+    filters: overrides?.filters ?? { types: [], statuses: [] },
+    totals: {
+      eventCount: overrides?.totals?.eventCount ?? 0,
+      tokenUsage: {
+        input: tokenUsage.input ?? 0,
+        cached: tokenUsage.cached ?? 0,
+        output: tokenUsage.output ?? 0,
+        reasoning: tokenUsage.reasoning ?? 0,
+        total: tokenUsage.total ?? 0,
+      },
+    },
   };
 }
 
@@ -443,6 +479,52 @@ describe('AgentsRunScreen', () => {
       expect(latest).toBeDefined();
       expect(latest?.events).toHaveLength(1);
       expect(latest?.events[0].data.toolSubtype).toBe('shell');
+    });
+  });
+
+  it('derives total event count and token summaries from the totals query', async () => {
+    const event = buildEvent();
+
+    runsHookMocks.summary.mockReturnValue(buildSummary());
+    runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
+    runsHookMocks.totals.mockReturnValue(
+      buildTotalsResponse({
+        totals: {
+          eventCount: 42,
+          tokenUsage: {
+            input: 10,
+            cached: 2,
+            output: 20,
+            reasoning: 5,
+            total: 37,
+          },
+        },
+      }),
+    );
+
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+          <Routes>
+            <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const latest = latestRunScreenProps<{ statistics: { totalEvents: number }; tokens: Record<string, number> }>();
+      expect(latest).toBeDefined();
+      expect(latest?.statistics.totalEvents).toBe(42);
+      expect(latest?.tokens).toEqual({
+        input: 10,
+        cached: 2,
+        output: 20,
+        reasoning: 5,
+        total: 37,
+      });
     });
   });
 
