@@ -91,6 +91,7 @@ Required versions:
 Optional local services (provided in docker-compose.yml for dev):
 - Postgres databases (postgres at 5442, agents-db at 5443)
 - LiteLLM + Postgres (loopback port 4000)
+- Redis (6379) for notifications Pub/Sub
 - Vault (8200) with dev auto-init
 - NCPS (Nix cache proxy) on 8501
 - Prometheus (9090), Grafana (3000), cAdvisor (8080)
@@ -117,9 +118,12 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), docker-runner (7071), redis (6379)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# To launch only Redis for notifications fan-out:
+docker compose up -d redis
 ```
 
 4) Apply server migrations and generate Prisma client:

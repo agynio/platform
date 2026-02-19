@@ -74,6 +74,15 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - agents_net
+
   vault:
     image: hashicorp/vault:1.17
     oom_score_adj: -900

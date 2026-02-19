@@ -23,6 +23,18 @@ server with Envoy and exposes the Socket.IO endpoint via the standalone
 - Compose v2 (`docker compose version`)
 - Ports `8080`, `9901`, `4000`, `5443`, and `6379` available on the host
 
+## Redis for local development
+
+If you run the platform server or notifications gateway outside the full
+Envoy/E2E stack, start the shared Redis dependency first:
+
+```
+docker compose up -d redis
+```
+
+The E2E compose file reuses the same service definition, so Redis does not need
+separate configuration.
+
 ## Start the stack
 
 ```

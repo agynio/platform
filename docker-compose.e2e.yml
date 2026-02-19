@@ -23,12 +23,9 @@ services:
       - agents_net
 
   redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - agents_net
+    extends:
+      file: ./docker-compose.yml
+      service: redis
 
   litellm-db:
     image: postgres:16-alpine
@@ -128,7 +125,7 @@ services:
     environment:
       PORT: 3011
       HOST: 0.0.0.0
-      REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
       NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
       SOCKET_IO_PATH: /socket.io
     networks:
