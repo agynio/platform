@@ -399,7 +399,10 @@ describe.sequential('LLMSettingsService', () => {
           model_name: 'anthropic/support',
         });
         const info = (payload.model_info ?? {}) as Record<string, unknown>;
-        expect(info).toEqual({ department: 'support' });
+        expect(info).toMatchObject({ department: 'support', mode: 'responses' });
+        expect(info).not.toHaveProperty('id');
+        expect(info).not.toHaveProperty('rpm');
+        expect(info).not.toHaveProperty('tpm');
         expect(info.department).toBe('support');
         return {
           model_name: payload.model_name,
@@ -419,7 +422,10 @@ describe.sequential('LLMSettingsService', () => {
       metadata: { id: 'should-ignore', mode: 'ignored', department: 'support' },
     });
 
-    expect(res.model_info).toEqual({ department: 'support' });
+    expect(res.model_info).toMatchObject({ department: 'support', mode: 'responses' });
+    expect(res.model_info).not.toHaveProperty('id');
+    expect(res.model_info).not.toHaveProperty('rpm');
+    expect(res.model_info).not.toHaveProperty('tpm');
     expect(res.model_id).toBe('generated-id-123');
     listScope.done();
     createScope.done();
