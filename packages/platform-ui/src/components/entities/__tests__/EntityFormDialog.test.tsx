@@ -19,10 +19,6 @@ import type { GraphEntityKind, GraphEntitySummary, TemplateOption } from '@/feat
 import type { PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
-import type * as GraphEntitiesModule from '@/features/entities/api/graphEntities';
-
-// Toggle once Slack relation template + handles are finalized.
-const RELATION_PLACEHOLDER_TESTS_ENABLED = false as const;
 
 function createTemplate(name: string, kind: GraphEntityKind = 'workspace'): TemplateOption {
   const schema: TemplateSchema = {
@@ -69,6 +65,82 @@ function createEntitySummary(overrides: Partial<GraphEntitySummary> = {}): Graph
     relations: { incoming: 0, outgoing: 0 },
     ...overrides,
   } satisfies GraphEntitySummary;
+}
+
+function createGraphNode(overrides: Partial<GraphNodeConfig> = {}): GraphNodeConfig {
+  return {
+    id: overrides.id ?? 'node-graph-1',
+    template: overrides.template ?? 'template-1',
+    title: overrides.title ?? overrides.id ?? 'Node graph 1',
+    kind: overrides.kind ?? 'Workspace',
+    x: overrides.x ?? 0,
+    y: overrides.y ?? 0,
+    status: overrides.status ?? 'ready',
+    ports: overrides.ports ?? { inputs: [], outputs: [] },
+  } satisfies GraphNodeConfig;
+}
+
+function createGraphEdge(overrides: Partial<GraphPersistedEdge> & { source: string; target: string }): GraphPersistedEdge {
+  const sourceHandle = overrides.sourceHandle ?? '$self';
+  const targetHandle = overrides.targetHandle ?? '$self';
+  return {
+    id: overrides.id ?? `${overrides.source}-${sourceHandle}__${overrides.target}-${targetHandle}`,
+    source: overrides.source,
+    sourceHandle,
+    target: overrides.target,
+    targetHandle,
+  } satisfies GraphPersistedEdge;
+}
+
+type RelationDialogRenderOptions = {
+  kind: GraphEntityKind;
+  templateName: string;
+  graphNodes: GraphNodeConfig[];
+  graphEdges: GraphPersistedEdge[];
+  entity?: GraphEntitySummary;
+  mode?: 'create' | 'edit';
+  templates?: TemplateOption[];
+};
+
+function renderRelationDialog(options: RelationDialogRenderOptions) {
+  const {
+    kind,
+    templateName,
+    graphNodes,
+    graphEdges,
+    entity,
+    mode = 'edit',
+    templates = [createTemplate(templateName, kind)],
+  } = options;
+  const resolvedEntity =
+    entity ??
+    createEntitySummary({
+      id: `${templateName}-entity`,
+      templateName,
+      templateKind: kind,
+      rawTemplateKind: kind,
+      title: `${templateName} entity`,
+    });
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <EntityFormDialog
+        open
+        mode={mode}
+        kind={kind}
+        templates={templates}
+        entity={mode === 'edit' ? resolvedEntity : undefined}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+        graphNodes={graphNodes}
+        graphEdges={graphEdges}
+      />
+    </QueryClientProvider>,
+  );
+
+  return { onSubmit };
 }
 
 describe('EntityFormDialog', () => {
@@ -176,46 +248,16 @@ describe('EntityFormDialog', () => {
   });
 });
 
-const describeRelations = RELATION_PLACEHOLDER_TESTS_ENABLED ? describe : describe.skip;
-
-describeRelations('EntityFormDialog relations scaffolding', () => {
-  beforeAll(() => {
-    vi.resetModules();
-    vi.doMock('@/lib/graph/templates.provider', () => ({
-      useTemplatesCache: () => ({
-        templates: [],
-        ready: true,
-        error: null,
-        refresh: vi.fn(),
-        getTemplate: () => undefined,
-      }),
-    }));
-    vi.doMock('@/features/entities/api/graphEntities', async () => {
-      const actual = (await vi.importActual('@/features/entities/api/graphEntities')) as GraphEntitiesModule;
-      const placeholderDefinition = {
-        id: 'slackTriggerAgent',
-        label: 'Agent destination',
-        description: 'Routes Slack trigger events to an agent.',
-        templateNames: ['slackTrigger'],
-        sourceHandle: 'agent',
-        targetHandle: 'input',
-        targetKind: 'agent',
-      } as const;
-      return {
-        ...actual,
-        getEntityRelationDefinitions: (templateName?: string) =>
-          templateName === 'slackTrigger' ? [placeholderDefinition] : [],
-      } satisfies GraphEntitiesModule;
-    });
-  });
-
-  afterAll(() => {
-    vi.resetModules();
-  });
-
-  it('renders Slack relation select and persists changes', async () => {
-    const { EntityFormDialog: RelationDialog } = await import('../EntityFormDialog');
-    const templates = [createTemplate('slackTrigger', 'trigger'), createTemplate('support-agent', 'agent')];
+describe('EntityFormDialog relations', () => {
+  it('prefills Slack trigger agent relation and persists edits', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'trigger-1', template: 'slackTrigger', kind: 'Trigger', title: 'Slack Trigger' }),
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'trigger-1', sourceHandle: 'subscribe', target: 'agent-1', targetHandle: '$self' }),
+    ];
     const entity = createEntitySummary({
       id: 'trigger-1',
       templateName: 'slackTrigger',
@@ -223,71 +265,352 @@ describeRelations('EntityFormDialog relations scaffolding', () => {
       rawTemplateKind: 'trigger',
       title: 'Slack Trigger',
     });
-    const graphNodes: GraphNodeConfig[] = [
-      {
-        id: 'trigger-1',
-        template: 'slackTrigger',
-        kind: 'Trigger',
-        title: 'Slack Trigger',
-        x: 0,
-        y: 0,
-        status: 'ready',
-        ports: { inputs: [], outputs: [] },
-      },
-      {
-        id: 'agent-1',
-        template: 'support-agent',
-        kind: 'Agent',
-        title: 'Agent One',
-        x: 100,
-        y: 0,
-        status: 'ready',
-        ports: { inputs: [], outputs: [] },
-      },
-      {
-        id: 'agent-2',
-        template: 'support-agent',
-        kind: 'Agent',
-        title: 'Agent Two',
-        x: 200,
-        y: 0,
-        status: 'ready',
-        ports: { inputs: [], outputs: [] },
-      },
-    ];
-    const graphEdges: GraphPersistedEdge[] = [
-      { id: 'edge-rel', source: 'trigger-1', sourceHandle: 'agent', target: 'agent-1', targetHandle: 'input' },
-    ];
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <RelationDialog
-          open
-          mode="edit"
-          kind="trigger"
-          templates={templates}
-          entity={entity}
-          onOpenChange={vi.fn()}
-          onSubmit={onSubmit}
-          isSubmitting={false}
-          graphNodes={graphNodes}
-          graphEdges={graphEdges}
-        />
-      </QueryClientProvider>,
-    );
+    const { onSubmit } = renderRelationDialog({
+      kind: 'trigger',
+      templateName: 'slackTrigger',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
 
     const relationSelect = await screen.findByLabelText('Agent destination');
     expect(relationSelect).toHaveValue('agent-1');
 
     await userEvent.selectOptions(relationSelect, 'agent-2');
-
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
-    expect(payload.relations).toEqual([
-      expect.objectContaining({ sourceHandle: 'agent', targetId: 'agent-2', targetHandle: 'input' }),
-    ]);
+    const relation = payload.relations?.find((item) => item.id === 'slackTriggerAgent');
+    expect(relation).toMatchObject({
+      ownerRole: 'source',
+      ownerHandle: 'subscribe',
+      peerHandle: '$self',
+      selections: ['agent-2'],
+    });
+  });
+
+  it('updates agent tool relations via multi-select', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'tool-1', template: 'shellTool', kind: 'Tool', title: 'Tool One' }),
+      createGraphNode({ id: 'tool-2', template: 'githubCloneRepoTool', kind: 'Tool', title: 'Tool Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'tools', target: 'tool-1', targetHandle: '$self' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'agent-1',
+      templateName: 'support-agent',
+      templateKind: 'agent',
+      rawTemplateKind: 'agent',
+      title: 'Agent One',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'agent',
+      templateName: 'support-agent',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'Tool One' })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Tool Two' }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const toolsRelation = payload.relations?.find((item) => item.id === 'agentTools');
+    expect(toolsRelation).toMatchObject({
+      ownerRole: 'source',
+      ownerHandle: 'tools',
+      selections: expect.arrayContaining(['tool-1', 'tool-2']),
+    });
+  });
+
+  it('updates agent MCP server relations via multi-select', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'mcp-1', template: 'mcpServer', kind: 'MCP', title: 'MCP One' }),
+      createGraphNode({ id: 'mcp-2', template: 'mcpServer', kind: 'MCP', title: 'MCP Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'mcp', target: 'mcp-1', targetHandle: '$self' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'agent-1',
+      templateName: 'support-agent',
+      templateKind: 'agent',
+      rawTemplateKind: 'agent',
+      title: 'Agent One',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'agent',
+      templateName: 'support-agent',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'MCP One' })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'MCP Two' }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'agentMcpServers');
+    expect(relation).toMatchObject({ selections: expect.arrayContaining(['mcp-1', 'mcp-2']) });
+  });
+
+  it('updates agent memory connector relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'mc-1', template: 'memoryConnector', kind: 'Workspace', title: 'Connector One' }),
+      createGraphNode({ id: 'mc-2', template: 'memoryConnector', kind: 'Workspace', title: 'Connector Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'mc-1', sourceHandle: '$self', target: 'agent-1', targetHandle: 'memory' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'agent-1',
+      templateName: 'support-agent',
+      templateKind: 'agent',
+      rawTemplateKind: 'agent',
+      title: 'Agent One',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'agent',
+      templateName: 'support-agent',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText('Memory connector');
+    expect(select).toHaveValue('mc-1');
+    await userEvent.selectOptions(select, 'mc-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'agentMemoryConnector');
+    expect(relation).toMatchObject({
+      ownerRole: 'target',
+      ownerHandle: 'memory',
+      peerHandle: '$self',
+      selections: ['mc-2'],
+    });
+  });
+
+  it('updates shell tool workspace relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'shell-1', template: 'shellTool', kind: 'Tool', title: 'Shell Tool' }),
+      createGraphNode({ id: 'workspace-1', template: 'workspace-default', kind: 'Workspace', title: 'Workspace One' }),
+      createGraphNode({ id: 'workspace-2', template: 'workspace-other', kind: 'Workspace', title: 'Workspace Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'workspace-1', sourceHandle: '$self', target: 'shell-1', targetHandle: 'workspace' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'shell-1',
+      templateName: 'shellTool',
+      templateKind: 'tool',
+      rawTemplateKind: 'tool',
+      title: 'Shell Tool',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'tool',
+      templateName: 'shellTool',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText('Workspace');
+    expect(select).toHaveValue('workspace-1');
+    await userEvent.selectOptions(select, 'workspace-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'shellToolWorkspace');
+    expect(relation).toMatchObject({ selections: ['workspace-2'] });
+  });
+
+  it('updates manage tool agent selections', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'manage-1', template: 'manageTool', kind: 'Tool', title: 'Manage Tool' }),
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
+      createGraphNode({ id: 'agent-3', template: 'support-agent', kind: 'Agent', title: 'Agent Three' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'manage-1', sourceHandle: 'agent', target: 'agent-1', targetHandle: '$self' }),
+      createGraphEdge({ source: 'manage-1', sourceHandle: 'agent', target: 'agent-2', targetHandle: '$self' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'manage-1',
+      templateName: 'manageTool',
+      templateKind: 'tool',
+      rawTemplateKind: 'tool',
+      title: 'Manage Tool',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'tool',
+      templateName: 'manageTool',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'Agent One' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Agent Two' })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Agent Three' }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'manageToolAgents');
+    expect(relation).toMatchObject({ selections: expect.arrayContaining(['agent-1', 'agent-2', 'agent-3']) });
+  });
+
+  it('updates call agent tool relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'call-tool-1', template: 'callAgentTool', kind: 'Tool', title: 'Call Agent Tool' }),
+      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
+      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'call-tool-1', sourceHandle: 'agent', target: 'agent-1', targetHandle: '$self' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'call-tool-1',
+      templateName: 'callAgentTool',
+      templateKind: 'tool',
+      rawTemplateKind: 'tool',
+      title: 'Call Agent Tool',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'tool',
+      templateName: 'callAgentTool',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText(/^Agent$/);
+    expect(select).toHaveValue('agent-1');
+    await userEvent.selectOptions(select, 'agent-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'callAgentToolAgent');
+    expect(relation).toMatchObject({ selections: ['agent-2'] });
+  });
+
+  it('updates MCP server workspace relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'mcp-1', template: 'mcpServer', kind: 'MCP', title: 'MCP Server' }),
+      createGraphNode({ id: 'workspace-1', template: 'workspace-default', kind: 'Workspace', title: 'Workspace One' }),
+      createGraphNode({ id: 'workspace-2', template: 'workspace-other', kind: 'Workspace', title: 'Workspace Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'workspace-1', sourceHandle: '$self', target: 'mcp-1', targetHandle: 'workspace' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'mcp-1',
+      templateName: 'mcpServer',
+      templateKind: 'mcp',
+      rawTemplateKind: 'mcp',
+      title: 'MCP Server',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'mcp',
+      templateName: 'mcpServer',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText('Workspace');
+    expect(select).toHaveValue('workspace-1');
+    await userEvent.selectOptions(select, 'workspace-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'mcpServerWorkspace');
+    expect(relation).toMatchObject({ selections: ['workspace-2'] });
+  });
+
+  it('updates memory tool memory relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'memory-tool-1', template: 'memoryTool', kind: 'Tool', title: 'Memory Tool' }),
+      createGraphNode({ id: 'memory-1', template: 'memory', kind: 'Workspace', title: 'Memory One' }),
+      createGraphNode({ id: 'memory-2', template: 'memory', kind: 'Workspace', title: 'Memory Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'memory-1', sourceHandle: '$self', target: 'memory-tool-1', targetHandle: '$memory' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'memory-tool-1',
+      templateName: 'memoryTool',
+      templateKind: 'tool',
+      rawTemplateKind: 'tool',
+      title: 'Memory Tool',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'tool',
+      templateName: 'memoryTool',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText('Memory workspace');
+    expect(select).toHaveValue('memory-1');
+    await userEvent.selectOptions(select, 'memory-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'memoryToolMemory');
+    expect(relation).toMatchObject({ selections: ['memory-2'] });
+  });
+
+  it('updates memory connector memory relation', async () => {
+    const graphNodes = [
+      createGraphNode({ id: 'memory-connector-1', template: 'memoryConnector', kind: 'Workspace', title: 'Memory Connector' }),
+      createGraphNode({ id: 'memory-1', template: 'memory', kind: 'Workspace', title: 'Memory One' }),
+      createGraphNode({ id: 'memory-2', template: 'memory', kind: 'Workspace', title: 'Memory Two' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'memory-1', sourceHandle: '$self', target: 'memory-connector-1', targetHandle: '$memory' }),
+    ];
+    const entity = createEntitySummary({
+      id: 'memory-connector-1',
+      templateName: 'memoryConnector',
+      templateKind: 'workspace',
+      rawTemplateKind: 'workspace',
+      title: 'Memory Connector',
+    });
+    const { onSubmit } = renderRelationDialog({
+      kind: 'workspace',
+      templateName: 'memoryConnector',
+      graphNodes,
+      graphEdges,
+      entity,
+    });
+
+    const select = await screen.findByLabelText('Memory workspace');
+    expect(select).toHaveValue('memory-1');
+    await userEvent.selectOptions(select, 'memory-2');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const payload = onSubmit.mock.calls[0][0];
+    const relation = payload.relations?.find((item) => item.id === 'memoryConnectorMemory');
+    expect(relation).toMatchObject({ selections: ['memory-2'] });
   });
 });

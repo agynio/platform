@@ -20,12 +20,14 @@ import type {
   GraphEntityRelationInput,
   GraphEntitySummary,
   GraphEntityUpsertInput,
+  GraphRelationMode,
+  GraphRelationOwnerRole,
   TemplateOption,
 } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 import { X } from 'lucide-react';
 import { useMcpNodeState } from '@/lib/graph/hooks';
-import { buildEntityRelationPrefill, getEntityRelationDefinitions } from '@/features/entities/api/graphEntities';
+import { listTargetsByEdge } from '@/features/entities/api/graphEntities';
 
 type EntityFormValues = {
   template: string;
@@ -45,6 +47,220 @@ const NODE_STATUS_VALUES: ReadonlyArray<NodeState['status']> = [
   'provisioning_error',
   'deprovisioning_error',
 ];
+
+type RelationSelectionMode = GraphRelationMode;
+type RelationOwnerRole = GraphRelationOwnerRole;
+
+interface RelationCandidateFilter {
+  kinds?: GraphEntityKind[];
+  templateNames?: string[];
+}
+
+interface RelationAppliesTo {
+  templateNames?: string[];
+  templateKinds?: GraphEntityKind[];
+}
+
+interface RelationFieldDefinition {
+  id: string;
+  label: string;
+  description?: string;
+  appliesTo: RelationAppliesTo;
+  ownerRole: RelationOwnerRole;
+  ownerHandle: string;
+  peerHandle: string;
+  mode: RelationSelectionMode;
+  candidateFilter: RelationCandidateFilter;
+  placeholder?: string;
+}
+
+interface RelationOption {
+  id: string;
+  label: string;
+}
+
+const RELATION_FIELD_DEFINITIONS: RelationFieldDefinition[] = [
+  {
+    id: 'slackTriggerAgent',
+    label: 'Agent destination',
+    description: 'Routes Slack trigger events to the selected agent.',
+    appliesTo: { templateNames: ['slackTrigger'] },
+    ownerRole: 'source',
+    ownerHandle: 'subscribe',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['agent'] },
+    placeholder: 'Select an agent',
+  },
+  {
+    id: 'agentTools',
+    label: 'Tools',
+    description: 'Attach tools the agent can call during a run.',
+    appliesTo: { templateKinds: ['agent'] },
+    ownerRole: 'source',
+    ownerHandle: 'tools',
+    peerHandle: '$self',
+    mode: 'multi',
+    candidateFilter: { kinds: ['tool'] },
+  },
+  {
+    id: 'agentMcpServers',
+    label: 'MCP servers',
+    description: 'Enable MCP servers for this agent.',
+    appliesTo: { templateKinds: ['agent'] },
+    ownerRole: 'source',
+    ownerHandle: 'mcp',
+    peerHandle: '$self',
+    mode: 'multi',
+    candidateFilter: { kinds: ['mcp'] },
+  },
+  {
+    id: 'agentMemoryConnector',
+    label: 'Memory connector',
+    description: 'Bind the agent to a memory connector.',
+    appliesTo: { templateKinds: ['agent'] },
+    ownerRole: 'target',
+    ownerHandle: 'memory',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { templateNames: ['memoryConnector'] },
+    placeholder: 'Select a memory connector',
+  },
+  {
+    id: 'shellToolWorkspace',
+    label: 'Workspace',
+    description: 'Provide the workspace for this Shell tool.',
+    appliesTo: { templateNames: ['shellTool'] },
+    ownerRole: 'target',
+    ownerHandle: 'workspace',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['workspace'] },
+    placeholder: 'Select a workspace',
+  },
+  {
+    id: 'githubCloneWorkspace',
+    label: 'Workspace',
+    description: 'Provide the workspace for this GitHub clone tool.',
+    appliesTo: { templateNames: ['githubCloneRepoTool'] },
+    ownerRole: 'target',
+    ownerHandle: 'workspace',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['workspace'] },
+    placeholder: 'Select a workspace',
+  },
+  {
+    id: 'memoryToolMemory',
+    label: 'Memory workspace',
+    description: 'Select the memory backing this tool.',
+    appliesTo: { templateNames: ['memoryTool'] },
+    ownerRole: 'target',
+    ownerHandle: '$memory',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { templateNames: ['memory'] },
+    placeholder: 'Select a memory',
+  },
+  {
+    id: 'manageToolAgents',
+    label: 'Managed agents',
+    description: 'Pick agents that can be orchestrated by this tool.',
+    appliesTo: { templateNames: ['manageTool'] },
+    ownerRole: 'source',
+    ownerHandle: 'agent',
+    peerHandle: '$self',
+    mode: 'multi',
+    candidateFilter: { kinds: ['agent'] },
+  },
+  {
+    id: 'callAgentToolAgent',
+    label: 'Agent',
+    description: 'Select the agent to call.',
+    appliesTo: { templateNames: ['callAgentTool'] },
+    ownerRole: 'source',
+    ownerHandle: 'agent',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['agent'] },
+    placeholder: 'Select an agent',
+  },
+  {
+    id: 'mcpServerWorkspace',
+    label: 'Workspace',
+    description: 'Select the workspace hosting this MCP server.',
+    appliesTo: { templateNames: ['mcpServer'] },
+    ownerRole: 'target',
+    ownerHandle: 'workspace',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['workspace'] },
+    placeholder: 'Select a workspace',
+  },
+  {
+    id: 'memoryConnectorMemory',
+    label: 'Memory workspace',
+    description: 'Select the memory backing this connector.',
+    appliesTo: { templateNames: ['memoryConnector'] },
+    ownerRole: 'target',
+    ownerHandle: '$memory',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { templateNames: ['memory'] },
+    placeholder: 'Select a memory',
+  },
+];
+
+const NODE_KIND_TO_ENTITY_KIND: Record<NodeViewKind, GraphEntityKind> = {
+  Agent: 'agent',
+  Trigger: 'trigger',
+  Tool: 'tool',
+  MCP: 'mcp',
+  Workspace: 'workspace',
+};
+
+function matchesCandidateFilter(node: GraphNodeConfig, filter: RelationCandidateFilter): boolean {
+  if (!filter.kinds && !filter.templateNames) {
+    return true;
+  }
+  if (filter.kinds && filter.kinds.length > 0) {
+    const nodeKind = NODE_KIND_TO_ENTITY_KIND[node.kind] ?? 'workspace';
+    if (!filter.kinds.includes(nodeKind)) {
+      return false;
+    }
+  }
+  if (filter.templateNames && filter.templateNames.length > 0) {
+    if (!filter.templateNames.includes(node.template)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function relationApplies(
+  definition: RelationFieldDefinition,
+  templateName: string,
+  templateKind: GraphEntityKind,
+): boolean {
+  if (!templateName) {
+    return false;
+  }
+  if (definition.appliesTo.templateNames && definition.appliesTo.templateNames.length > 0) {
+    if (!definition.appliesTo.templateNames.includes(templateName)) {
+      return false;
+    }
+  }
+  if (definition.appliesTo.templateKinds && definition.appliesTo.templateKinds.length > 0) {
+    if (!definition.appliesTo.templateKinds.includes(templateKind)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => typeof value === 'string' && value.length > 0)));
+}
 
 function ensureRecord(value?: Record<string, unknown> | null): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -301,19 +517,80 @@ export function EntityFormDialog({
 
   const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
   const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);
-  const relationDefinitions = useMemo(
-    () => getEntityRelationDefinitions(templateSelection || entity?.templateName),
-    [templateSelection, entity?.templateName],
-  );
-  const relationPrefill = useMemo(
-    () => buildEntityRelationPrefill(entity?.id, safeGraphEdges, relationDefinitions),
-    [entity?.id, relationDefinitions, safeGraphEdges],
-  );
-  const [relationInputs, setRelationInputs] = useState<GraphEntityRelationInput[]>(relationPrefill);
+  const relationTemplateName = templateSelection || entity?.templateName || '';
+  const relationTemplateKind = selectedTemplate?.kind ?? entity?.templateKind ?? kind;
+  const relationDefinitions = useMemo(() => {
+    if (!relationTemplateName) {
+      return [];
+    }
+    return RELATION_FIELD_DEFINITIONS.filter((definition) =>
+      relationApplies(definition, relationTemplateName, relationTemplateKind),
+    );
+  }, [relationTemplateKind, relationTemplateName]);
+  const relationPrefillMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    const entityId = entity?.id;
+    relationDefinitions.forEach((definition) => {
+      if (!entityId) {
+        map[definition.id] = [];
+        return;
+      }
+      const filter =
+        definition.ownerRole === 'source'
+          ? { sourceId: entityId, sourceHandle: definition.ownerHandle }
+          : { targetId: entityId, targetHandle: definition.ownerHandle };
+      const matches = listTargetsByEdge(safeGraphEdges, filter);
+      const selectedIds = definition.ownerRole === 'source'
+        ? matches.map((edge) => edge.target)
+        : matches.map((edge) => edge.source);
+      map[definition.id] = uniqueStrings(selectedIds);
+    });
+    return map;
+  }, [entity?.id, relationDefinitions, safeGraphEdges]);
+  const relationOptionsMap = useMemo(() => {
+    const map: Record<string, RelationOption[]> = {};
+    relationDefinitions.forEach((definition) => {
+      const options = safeGraphNodes
+        .filter((node) => matchesCandidateFilter(node, definition.candidateFilter))
+        .map((node) => ({ id: node.id, label: node.title || node.id }))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }));
+      map[definition.id] = options;
+    });
+    return map;
+  }, [relationDefinitions, safeGraphNodes]);
+  const [relationSelections, setRelationSelections] = useState<Record<string, string[]>>({});
   useEffect(() => {
     if (!open) return;
-    setRelationInputs(relationPrefill);
-  }, [open, relationPrefill]);
+    if (relationDefinitions.length === 0) {
+      setRelationSelections({});
+      return;
+    }
+    setRelationSelections(() => {
+      const next: Record<string, string[]> = {};
+      relationDefinitions.forEach((definition) => {
+        next[definition.id] = relationPrefillMap[definition.id] ?? [];
+      });
+      return next;
+    });
+  }, [open, relationDefinitions, relationPrefillMap]);
+  const handleSingleRelationChange = useCallback((relationId: string, nextValue: string) => {
+    setRelationSelections((current) => ({
+      ...current,
+      [relationId]: nextValue ? [nextValue] : [],
+    }));
+  }, []);
+  const handleToggleRelationOption = useCallback((relationId: string, optionId: string) => {
+    setRelationSelections((current) => {
+      const existing = current[relationId] ?? [];
+      const next = existing.includes(optionId)
+        ? existing.filter((value) => value !== optionId)
+        : [...existing, optionId];
+      return {
+        ...current,
+        [relationId]: next,
+      };
+    });
+  }, []);
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
@@ -578,12 +855,30 @@ export function EntityFormDialog({
       kind: resolvedKind,
     });
 
+    const relationPayload: GraphEntityRelationInput[] =
+      relationDefinitions.length === 0
+        ? []
+        : relationDefinitions.map((definition) => {
+            const selections = relationSelections[definition.id] ?? relationPrefillMap[definition.id] ?? [];
+            const normalizedSelections =
+              definition.mode === 'single' ? uniqueStrings(selections).slice(0, 1) : uniqueStrings(selections);
+            return {
+              id: definition.id,
+              ownerHandle: definition.ownerHandle,
+              ownerRole: definition.ownerRole,
+              peerHandle: definition.peerHandle,
+              mode: definition.mode,
+              selections: normalizedSelections,
+              ownerId: entity?.id,
+            } satisfies GraphEntityRelationInput;
+          });
+
     const payload: GraphEntityUpsertInput = {
       id: entity?.id,
       template: templateName,
       title: trimmedTitle,
       config: payloadConfig,
-      relations: relationDefinitions.length > 0 ? relationInputs : undefined,
+      relations: relationPayload.length > 0 ? relationPayload : undefined,
     } satisfies GraphEntityUpsertInput;
 
     try {
@@ -690,40 +985,70 @@ export function EntityFormDialog({
                       </div>
                       <div className="space-y-4">
                         {relationDefinitions.map((definition) => {
-                          const currentRelation = relationInputs.find((relation) => relation.id === definition.id);
-                          const selectedValue = currentRelation?.targetId ?? '';
-                          const targetNodeKind = toNodeKind(definition.targetKind);
-                          const candidateNodes = safeGraphNodes
-                            .filter((node) => node.kind === targetNodeKind)
-                            .sort((a, b) => (a.title ?? a.id).localeCompare(b.title ?? b.id));
-                          const helperText =
-                            candidateNodes.length === 0
-                              ? `No ${definition.targetKind}s are available in this graph.`
-                              : definition.description;
+                          const options = relationOptionsMap[definition.id] ?? [];
+                          const selections = relationSelections[definition.id] ?? [];
+                          const helperText = options.length === 0
+                            ? 'No eligible nodes available in this workspace.'
+                            : definition.description ?? 'Select an option.';
+                          if (definition.mode === 'single') {
+                            const controlId = `relation-${definition.id}`;
+                            return (
+                              <div key={definition.id} className="space-y-2">
+                                <label
+                                  htmlFor={controlId}
+                                  className="text-sm font-medium text-[var(--agyn-dark)]"
+                                >
+                                  {definition.label}
+                                </label>
+                                <SelectInput
+                                  id={controlId}
+                                  placeholder={definition.placeholder ?? 'Select an option'}
+                                  value={selections[0] ?? ''}
+                                  allowEmptyOption
+                                  disabled={isSubmitting || options.length === 0}
+                                  onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
+                                  helperText={helperText}
+                                  options={options.map((option) => ({
+                                    value: option.id,
+                                    label: option.label,
+                                  }))}
+                                />
+                              </div>
+                            );
+                          }
                           return (
-                            <SelectInput
-                              key={definition.id}
-                              label={definition.label}
-                              placeholder={`Select a ${definition.targetKind}`}
-                              value={selectedValue}
-                              allowEmptyOption
-                              disabled={isSubmitting || candidateNodes.length === 0}
-                              onChange={(event) => {
-                                const nextValue = event.target.value;
-                                setRelationInputs((current) =>
-                                  current.map((relation) =>
-                                    relation.id === definition.id
-                                      ? { ...relation, targetId: nextValue.length > 0 ? nextValue : null }
-                                      : relation,
-                                  ),
-                                );
-                              }}
-                              helperText={helperText}
-                              options={candidateNodes.map((node) => ({
-                                value: node.id,
-                                label: node.title || node.id,
-                              }))}
-                            />
+                            <div key={definition.id} className="space-y-2">
+                              <div>
+                                <p className="text-sm font-medium text-[var(--agyn-dark)]">{definition.label}</p>
+                                <p className="text-xs text-[var(--agyn-text-subtle)]">
+                                  {helperText ?? 'Select one or more targets.'}
+                                </p>
+                              </div>
+                              {options.length === 0 ? (
+                                <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {options.map((option) => {
+                                    const checked = selections.includes(option.id);
+                                    return (
+                                      <label
+                                        key={option.id}
+                                        className="flex items-center justify-between rounded-lg border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm"
+                                      >
+                                        <span>{option.label}</span>
+                                        <input
+                                          type="checkbox"
+                                          className="h-4 w-4"
+                                          checked={checked}
+                                          onChange={() => handleToggleRelationOption(definition.id, option.id)}
+                                          disabled={isSubmitting}
+                                        />
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>

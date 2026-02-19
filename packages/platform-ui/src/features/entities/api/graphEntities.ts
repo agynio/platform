@@ -3,11 +3,12 @@ import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import type { TemplateSchema } from '@/api/types/graph';
 import {
   type EntityPortDefinition,
+  type GraphEdgeFilter,
   type GraphEntityDeleteInput,
   type GraphEntityEdge,
   type GraphEntityGraph,
   type GraphEntityKind,
-  type GraphEntityRelationDefinition,
+  type GraphEntityRelationEdge,
   type GraphEntityRelationInput,
   type GraphEntitySummary,
   type GraphEntityUpsertInput,
@@ -17,61 +18,60 @@ import {
 export const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
 export const INCLUDED_MEMORY_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
 
-// Placeholder Slack relation constants. Replace with confirmed template names and handles once specs are finalized.
-export const SLACK_TRIGGER_TEMPLATE_NAMES: ReadonlyArray<string> = Object.freeze([]);
-export const SLACK_TRIGGER_AGENT_SOURCE_HANDLE = '' as const;
-const SLACK_TRIGGER_AGENT_TARGET_HANDLE = 'input';
-
-const RELATION_DEFINITIONS: GraphEntityRelationDefinition[] = [
-  {
-    id: 'slackTriggerAgent',
-    label: 'Agent destination',
-    description: 'Routes Slack trigger events to the selected agent.',
-    templateNames: SLACK_TRIGGER_TEMPLATE_NAMES,
-    sourceHandle: SLACK_TRIGGER_AGENT_SOURCE_HANDLE,
-    targetHandle: SLACK_TRIGGER_AGENT_TARGET_HANDLE,
-    targetKind: 'agent',
-  },
-];
-
-function isRelationDefinitionActive(definition: GraphEntityRelationDefinition): boolean {
-  return definition.templateNames.length > 0 && definition.sourceHandle.trim().length > 0;
+function buildEdgeId(source: string, sourceHandle: string, target: string, targetHandle: string): string {
+  const normalizedSourceHandle = sourceHandle?.length ? sourceHandle : '$self';
+  const normalizedTargetHandle = targetHandle?.length ? targetHandle : '$self';
+  return `${source}-${normalizedSourceHandle}__${target}-${normalizedTargetHandle}`;
 }
 
-export function getEntityRelationDefinitions(templateName?: string): GraphEntityRelationDefinition[] {
-  if (!templateName) {
-    return [];
-  }
-  return RELATION_DEFINITIONS.filter(
-    (definition) => isRelationDefinitionActive(definition) && definition.templateNames.includes(templateName),
-  );
+function matchesEdgeFilter(edge: GraphEntityEdge, filter: GraphEdgeFilter): boolean {
+  if (filter.sourceId && edge.source !== filter.sourceId) return false;
+  if (filter.sourceHandle && edge.sourceHandle !== filter.sourceHandle) return false;
+  if (filter.targetId && edge.target !== filter.targetId) return false;
+  if (filter.targetHandle && edge.targetHandle !== filter.targetHandle) return false;
+  return true;
 }
 
-export function buildEntityRelationPrefill(
-  nodeId: string | undefined,
-  edges: GraphEntityEdge[] | undefined,
-  definitions: GraphEntityRelationDefinition[],
-): GraphEntityRelationInput[] {
-  if (!definitions.length) {
+export function listTargetsByEdge(edges: GraphEntityEdge[] | undefined, filter: GraphEdgeFilter): GraphEntityEdge[] {
+  if (!Array.isArray(edges) || edges.length === 0) {
     return [];
   }
-  const safeEdges = Array.isArray(edges) ? edges : [];
-  return definitions.map((definition) => {
-    const matchedEdge = safeEdges.find(
-      (edge) => edge?.source === nodeId && edge?.sourceHandle === definition.sourceHandle,
-    );
-    const targetId = typeof matchedEdge?.target === 'string' && matchedEdge.target.length > 0 ? matchedEdge.target : null;
-    const targetHandle =
-      typeof matchedEdge?.targetHandle === 'string' && matchedEdge.targetHandle.length > 0
-        ? matchedEdge.targetHandle
-        : definition.targetHandle;
-    return {
-      id: definition.id,
-      sourceHandle: definition.sourceHandle,
-      targetHandle,
-      targetId,
-    } satisfies GraphEntityRelationInput;
-  });
+  return edges.filter((edge): edge is GraphEntityEdge => Boolean(edge) && matchesEdgeFilter(edge, filter));
+}
+
+type ReplaceEdgesOptions = GraphEdgeFilter & {
+  edges: PersistedGraph['edges'] | undefined;
+  nextPairs: GraphEntityRelationEdge[];
+};
+
+export function replaceEdgesForHandle(options: ReplaceEdgesOptions): PersistedGraph['edges'] {
+  const { edges, nextPairs, ...filter } = options;
+  const baseEdges = Array.isArray(edges)
+    ? edges.filter((edge): edge is PersistedGraph['edges'][number] => Boolean(edge))
+    : [];
+  const remaining = baseEdges.filter((edge) => !matchesEdgeFilter(edge, filter));
+
+  const merged = new Map<string, PersistedGraph['edges'][number]>();
+  for (const edge of remaining) {
+    const key = edge.id ?? buildEdgeId(edge.source, edge.sourceHandle, edge.target, edge.targetHandle);
+    merged.set(key, edge);
+  }
+
+  for (const pair of nextPairs) {
+    if (!pair.sourceId || !pair.targetId) continue;
+    const normalizedSourceHandle = pair.sourceHandle?.length ? pair.sourceHandle : '$self';
+    const normalizedTargetHandle = pair.targetHandle?.length ? pair.targetHandle : '$self';
+    const id = buildEdgeId(pair.sourceId, normalizedSourceHandle, pair.targetId, normalizedTargetHandle);
+    merged.set(id, {
+      id,
+      source: pair.sourceId,
+      sourceHandle: normalizedSourceHandle,
+      target: pair.targetId,
+      targetHandle: normalizedTargetHandle,
+    });
+  }
+
+  return Array.from(merged.values());
 }
 
 function ensureRecord(value: unknown): Record<string, unknown> {
@@ -274,36 +274,48 @@ function applyRelationEdges(
   nodeId: string,
   relations: GraphEntityRelationInput[] | undefined,
 ): PersistedGraph['edges'] {
-  const baseEdges = Array.isArray(existingEdges)
+  if (!relations || relations.length === 0) {
+    return Array.isArray(existingEdges)
+      ? existingEdges.filter((edge): edge is PersistedGraph['edges'][number] => Boolean(edge))
+      : [];
+  }
+
+  let nextEdges = Array.isArray(existingEdges)
     ? existingEdges.filter((edge): edge is PersistedGraph['edges'][number] => Boolean(edge))
     : [];
-  if (!relations || relations.length === 0) {
-    return baseEdges;
+
+  for (const relation of relations) {
+    const ownerId = relation.ownerId && relation.ownerId.length > 0 ? relation.ownerId : nodeId;
+    if (!ownerId) continue;
+    const normalizedSelections = relation.mode === 'single'
+      ? relation.selections.slice(0, 1)
+      : relation.selections;
+    const peerIds = Array.from(new Set(normalizedSelections.filter((value) => typeof value === 'string' && value.length > 0)));
+
+    const filter: GraphEdgeFilter =
+      relation.ownerRole === 'source'
+        ? { sourceId: ownerId, sourceHandle: relation.ownerHandle }
+        : { targetId: ownerId, targetHandle: relation.ownerHandle };
+
+    const nextPairs: GraphEntityRelationEdge[] = peerIds.map((peerId) =>
+      relation.ownerRole === 'source'
+        ? {
+            sourceId: ownerId,
+            sourceHandle: relation.ownerHandle,
+            targetId: peerId,
+            targetHandle: relation.peerHandle,
+          }
+        : {
+            sourceId: peerId,
+            sourceHandle: relation.peerHandle,
+            targetId: ownerId,
+            targetHandle: relation.ownerHandle,
+          },
+    );
+
+    nextEdges = replaceEdgesForHandle({ edges: nextEdges, ...filter, nextPairs });
   }
-  const validRelations = relations.filter(
-    (relation) => typeof relation?.sourceHandle === 'string' && relation.sourceHandle.trim().length > 0,
-  );
-  if (validRelations.length === 0) {
-    return baseEdges;
-  }
-  const managedHandles = new Set(validRelations.map((relation) => relation.sourceHandle));
-  const trimmedEdges = baseEdges.filter((edge) => edge.source !== nodeId || !managedHandles.has(edge.sourceHandle));
-  const nextEdges = [...trimmedEdges];
-  for (const relation of validRelations) {
-    const targetId = typeof relation.targetId === 'string' ? relation.targetId.trim() : '';
-    if (!targetId) continue;
-    const normalizedTargetHandle =
-      typeof relation.targetHandle === 'string' && relation.targetHandle.trim().length > 0
-        ? relation.targetHandle.trim()
-        : '$self';
-    nextEdges.push({
-      id: `${nodeId}-${relation.sourceHandle}__${targetId}-${normalizedTargetHandle}`,
-      source: nodeId,
-      sourceHandle: relation.sourceHandle,
-      target: targetId,
-      targetHandle: normalizedTargetHandle,
-    });
-  }
+
   return nextEdges;
 }
 

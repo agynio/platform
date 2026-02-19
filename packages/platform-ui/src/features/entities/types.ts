@@ -28,21 +28,31 @@ export interface GraphEntitySummary {
   relations: { incoming: number; outgoing: number };
 }
 
-export interface GraphEntityRelationDefinition {
-  id: string;
-  label: string;
-  description?: string;
-  templateNames: ReadonlyArray<string>;
-  sourceHandle: string;
-  targetHandle: string;
-  targetKind: GraphEntityKind;
+export interface GraphEdgeFilter {
+  sourceId?: string;
+  sourceHandle?: string;
+  targetId?: string;
+  targetHandle?: string;
 }
+
+export interface GraphEntityRelationEdge {
+  sourceId: string;
+  sourceHandle: string;
+  targetId: string;
+  targetHandle: string;
+}
+
+export type GraphRelationOwnerRole = 'source' | 'target';
+export type GraphRelationMode = 'single' | 'multi';
 
 export interface GraphEntityRelationInput {
   id: string;
-  sourceHandle: string;
-  targetHandle: string;
-  targetId: string | null;
+  ownerId?: string;
+  ownerRole: GraphRelationOwnerRole;
+  ownerHandle: string;
+  peerHandle: string;
+  mode: GraphRelationMode;
+  selections: string[];
 }
 
 export interface GraphEntityUpsertInput {
