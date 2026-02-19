@@ -1,4 +1,7 @@
+import * as dotenv from 'dotenv';
 import { z } from 'zod';
+
+dotenv.config();
 
 const DEFAULT_NOTIFICATIONS_CHANNEL = 'notifications.v1' as const;
 
@@ -18,11 +21,11 @@ const configSchema = z.object({
     .string()
     .default('/socket.io')
     .transform((value) => (value.startsWith('/') ? value : `/${value}`)),
-  redisUrl: z
+  notificationsRedisUrl: z
     .string()
-    .min(1, 'REDIS_URL is required')
+    .min(1, 'NOTIFICATIONS_REDIS_URL is required')
     .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
-      message: 'REDIS_URL must start with redis:// or rediss://',
+      message: 'NOTIFICATIONS_REDIS_URL must start with redis:// or rediss://',
     }),
   redisChannel: z.string().min(1).default(DEFAULT_NOTIFICATIONS_CHANNEL),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -35,7 +38,7 @@ export function loadConfig(): GatewayConfig {
     port: process.env.PORT,
     host: process.env.HOST,
     socketPath: process.env.SOCKET_IO_PATH,
-    redisUrl: process.env.REDIS_URL,
+    notificationsRedisUrl: process.env.NOTIFICATIONS_REDIS_URL,
     redisChannel: process.env.NOTIFICATIONS_CHANNEL ?? DEFAULT_NOTIFICATIONS_CHANNEL,
     logLevel: process.env.LOG_LEVEL,
   });

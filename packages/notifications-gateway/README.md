@@ -12,9 +12,12 @@ Socket.IO server.
 | `PORT` | TCP port for the HTTP/WebSocket server | `3011` |
 | `HOST` | Bind address | `0.0.0.0` |
 | `SOCKET_IO_PATH` | Socket.IO path (must remain `/socket.io` for the UI) | `/socket.io` |
-| `REDIS_URL` | Redis connection string (e.g. `redis://redis:6379/0`) | _required_ |
+| `NOTIFICATIONS_REDIS_URL` | Redis connection string (e.g. `redis://redis:6379/0`) | _required_ |
 | `NOTIFICATIONS_CHANNEL` | Pub/Sub channel name | `notifications.v1` |
 | `LOG_LEVEL` | Pino log level (`fatal`..`trace`) | `info` |
+
+The gateway automatically loads environment variables from a local `.env` file via `dotenv`,
+matching the behavior of other platform services.
 
 ## Development
 

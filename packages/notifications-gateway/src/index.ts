@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   const httpServer = createServer();
   const io = createSocketServer({ server: httpServer, path: config.socketPath, logger });
   const subscriber = new NotificationsSubscriber(
-    { url: config.redisUrl, channel: config.redisChannel },
+    { url: config.notificationsRedisUrl, channel: config.redisChannel },
     logger,
   );
 
