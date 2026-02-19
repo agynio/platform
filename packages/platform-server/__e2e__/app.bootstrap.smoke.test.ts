@@ -17,7 +17,8 @@ import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { VaultService } from '../src/vault/vault.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
+import { NotificationsBroker } from '../src/notifications/notifications.broker';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
@@ -161,17 +162,27 @@ describe('App bootstrap smoke test', () => {
     }
     const llmProvisionerStub = new StubProvisioner();
 
-    const subscriptionSpy = vi.spyOn(EventsBusService.prototype, 'subscribeToRunEvents');
-
     const configService = new ConfigService().init(
       configSchema.parse({
         llmProvider: process.env.LLM_PROVIDER || 'litellm',
         litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
         litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',
+        notificationsRedisUrl: 'redis://localhost:6379/0',
+        notificationsChannel: 'notifications.v1',
         ...runnerConfigDefaults,
       }),
     );
+
+    const notificationsPublisherStub = {
+      onModuleInit: vi.fn(),
+      onModuleDestroy: vi.fn(),
+    } satisfies Partial<NotificationsPublisher>;
+    const notificationsBrokerStub = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publish: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    } satisfies Partial<NotificationsBroker>;
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
@@ -212,7 +223,11 @@ describe('App bootstrap smoke test', () => {
       .overrideProvider(LLMProvisioner)
       .useValue(llmProvisionerStub)
       .overrideProvider(LLMSettingsService)
-      .useValue({});
+      .useValue({})
+      .overrideProvider(NotificationsBroker)
+      .useValue(notificationsBrokerStub)
+      .overrideProvider(NotificationsPublisher)
+      .useValue(notificationsPublisherStub as NotificationsPublisher);
 
     const moduleRef = await moduleBuilder.compile();
     expect(moduleRef.get(ConfigService)).toBe(configService);
@@ -241,17 +256,9 @@ describe('App bootstrap smoke test', () => {
       expect(agentProbe.agent).toBeInstanceOf(AgentNode);
       expect(Reflect.get(agentProbe.agent as object, 'llmProvisioner')).toBe(llmProvisioner);
 
-      const gateway = app.get(GraphSocketGateway);
-      expect(gateway).toBeInstanceOf(GraphSocketGateway);
-      expect(subscriptionSpy).toHaveBeenCalledTimes(1);
-      const [listener] = subscriptionSpy.mock.calls[0] ?? [];
-      expect(typeof listener).toBe('function');
-
-      const cleanupRegistry = Reflect.get(gateway as object, 'cleanup') as unknown;
-      expect(Array.isArray(cleanupRegistry)).toBe(true);
-      expect((cleanupRegistry as unknown[]).length).toBeGreaterThan(0);
+      const notifications = app.get(NotificationsPublisher);
+      expect(notifications).toBe(notificationsPublisherStub);
     } finally {
-      subscriptionSpy.mockRestore();
       await app.close();
       await moduleRef.close();
     }

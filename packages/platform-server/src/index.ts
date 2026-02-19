@@ -17,7 +17,6 @@ import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './bootstrap/app.module';
 import { ConfigService } from './core/services/config.service';
-import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
 
@@ -72,10 +71,6 @@ async function bootstrap() {
 
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
-
-  // Attach Socket.IO gateway via DI before starting server
-  const gateway = app.get(GraphSocketGateway);
-  gateway.init({ server: fastifyInstance.server });
 
   // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;

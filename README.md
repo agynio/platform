@@ -275,6 +275,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 
 ## Deployment
 - Local compose: docker-compose.yml includes all supporting services required for dev workflows.
+- E2E ingress: docker-compose.e2e.yml builds the platform server, notifications gateway, Redis, and Envoy. See docs/runbooks/notifications-gateway.md for usage.
 - Server container:
   - Image: ghcr.io/agynio/platform-server
   - Required env: AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY, optional Vault and CORS
