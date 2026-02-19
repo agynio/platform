@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { EdgeDef } from '../shared/types/graph.types';
+import type { EdgeDef } from '@agyn/shared';
 import {
   TemplatePortsRegistry,
   ResolvedEdgePorts,

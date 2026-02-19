@@ -6,7 +6,7 @@ import {
   LiveNode,
   edgeKey,
 } from '../graph/liveGraph.types';
-import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
+import type { EdgeDef, GraphDefinition, NodeDef } from '@agyn/shared';
 import { GraphError } from '../graph/types';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';

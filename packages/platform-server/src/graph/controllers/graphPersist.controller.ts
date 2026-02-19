@@ -8,7 +8,7 @@ import type {
   GraphDefinition,
   PersistedGraphUpsertRequest,
   PersistedGraphUpsertResponse,
-} from '../../shared/types/graph.types';
+} from '@agyn/shared';
 import { z } from 'zod';
 import { GraphErrorCode } from '../errors';
 import { GraphGuard } from '../graph.guard';

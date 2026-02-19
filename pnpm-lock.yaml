@@ -734,7 +734,11 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      '@langchain/core':
+        specifier: 1.0.1
+        version: 1.0.1(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.1.0(@opentelemetry/api@1.9.0))(openai@6.6.0(ws@8.18.3)(zod@4.1.12))
 
 packages:
 

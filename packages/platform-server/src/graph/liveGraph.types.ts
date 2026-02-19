@@ -1,4 +1,4 @@
-import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
+import type { EdgeDef, GraphDefinition, NodeDef } from '@agyn/shared';
 import { GraphError } from './types';
 import { Node } from '../nodes/base/Node';
 

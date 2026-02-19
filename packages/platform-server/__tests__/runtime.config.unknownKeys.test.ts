@@ -4,7 +4,7 @@ import { GraphRepository } from '../src/graph/graph.repository.js';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
-import type { GraphDefinition } from '../src/shared/types/graph.types';
+import type { GraphDefinition } from '@agyn/shared';
 import { GraphError } from '../src/graph/types';
 import { ModuleRef } from '@nestjs/core';
 import Node from '../src/nodes/base/Node';
