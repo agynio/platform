@@ -4,7 +4,9 @@ import {
   createServer,
   request as httpRequest,
   type Agent as HttpAgent,
+  type IncomingHttpHeaders,
   type IncomingMessage,
+  type OutgoingHttpHeaders,
   type Server as HttpServer,
   type ServerResponse,
 } from 'node:http';
@@ -19,12 +21,28 @@ import { ConfigService } from '../../core/services/config.service';
 type ZitiSdk = typeof import('@openziti/ziti-sdk-nodejs');
 type HttpProxyServer = ReturnType<typeof httpProxy.createProxyServer>;
 
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'proxy-connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
 @Injectable()
 export class ZitiRunnerProxyService {
   private readonly logger = new Logger(ZitiRunnerProxyService.name);
   private server?: HttpServer;
   private proxy?: HttpProxyServer;
+  private agent?: (HttpAgent & EventEmitter) | null;
+  private serviceHost?: string;
   private started = false;
+  private requestSequence = 0;
+  private readonly traceEnabled = (process.env.ZITI_PROXY_TRACE ?? '').trim() === '1';
 
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
 
@@ -47,10 +65,16 @@ export class ZitiRunnerProxyService {
     agent.on('error', (error: Error) => {
       this.logger.error({ error: error.message }, 'Ziti HTTP agent error');
     });
+    this.agent = agent;
+    this.serviceHost = this.config.getZitiServiceName();
     await this.waitForService(agent);
 
+    if (this.traceEnabled) {
+      this.logger.log('Ziti runner proxy request tracing enabled');
+    }
+
     const proxy = httpProxy.createProxyServer({
-      target: `http://${this.config.getZitiServiceName()}`,
+      target: `http://${this.serviceHost}`,
       agent,
       changeOrigin: true,
       ws: true,
@@ -65,15 +89,7 @@ export class ZitiRunnerProxyService {
     const host = this.config.getZitiRunnerProxyHost();
     const port = this.config.getZitiRunnerProxyPort();
 
-    this.server = createServer((req, res) => {
-      if (!this.proxy) {
-        res.statusCode = 502;
-        res.end('Ziti proxy unavailable');
-        return;
-      }
-      const activeProxy = this.proxy!;
-      activeProxy.web(req, res, undefined, (error: Error | null) => this.handleProxyFailure(error, res));
-    });
+    this.server = createServer((req, res) => this.handleHttpRequest(req, res));
 
     this.server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       if (!this.proxy) {
@@ -112,6 +128,8 @@ export class ZitiRunnerProxyService {
       this.closeServer(),
       this.closeProxy(),
     ]);
+    this.agent = null;
+    this.serviceHost = undefined;
     this.started = false;
   }
 
@@ -153,6 +171,104 @@ export class ZitiRunnerProxyService {
   private async ensureWritableDirectory(dir: string): Promise<void> {
     await fs.mkdir(dir, { recursive: true });
     await fs.access(dir, fsConstants.W_OK);
+  }
+
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    if (!this.agent || !this.serviceHost) {
+      this.handleProxyFailure(new Error('Ziti HTTP agent unavailable'), res);
+      return;
+    }
+    const requestId = this.nextRequestId();
+    const method = req.method ?? 'GET';
+    const url = req.url ?? '/';
+    req.setTimeout(0);
+    res.setTimeout(0);
+    this.logTrace('proxy request', { id: requestId, method, url });
+
+    const headers = this.buildUpstreamRequestHeaders(req.headers);
+    this.logTrace('proxy forward', {
+      id: requestId,
+      method,
+      url,
+      'content-length': req.headers['content-length'] ?? 'n/a',
+      'upstream-content-length': headers['content-length'] ?? 'n/a',
+    });
+    const upstreamReq = httpRequest(
+      {
+        host: this.serviceHost,
+        agent: this.agent,
+        method,
+        path: url,
+        headers,
+      },
+      (upstreamRes) => {
+        this.logTrace('proxy response', {
+          id: requestId,
+          method,
+          url,
+          status: upstreamRes.statusCode ?? 0,
+        });
+        const responseHeaders = this.buildDownstreamHeaders(upstreamRes.headers);
+        res.writeHead(upstreamRes.statusCode ?? 502, responseHeaders);
+        upstreamRes.pipe(res);
+        upstreamRes.once('close', () => {
+          this.logTrace('proxy upstream closed', { id: requestId, method, url });
+        });
+      },
+    );
+
+    upstreamReq.on('error', (error) => {
+      this.logTrace('proxy error', { id: requestId, method, url, error: error.message });
+      this.handleProxyFailure(error, res);
+    });
+
+    req.pipe(upstreamReq);
+    res.once('close', () => {
+      upstreamReq.destroy(new Error('downstream_closed'));
+    });
+    req.once('aborted', () => {
+      upstreamReq.destroy(new Error('downstream_aborted'));
+    });
+  }
+
+  private buildUpstreamRequestHeaders(headers: IncomingHttpHeaders): OutgoingHttpHeaders {
+    const normalized: OutgoingHttpHeaders = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (!key) continue;
+      if (HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+        continue;
+      }
+      normalized[key] = value as string | string[];
+    }
+    normalized.connection = 'close';
+    if (this.serviceHost) {
+      normalized.host = this.serviceHost;
+    }
+    return normalized;
+  }
+
+  private buildDownstreamHeaders(headers: IncomingHttpHeaders): OutgoingHttpHeaders {
+    const normalized: OutgoingHttpHeaders = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (!key) continue;
+      if (HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+        continue;
+      }
+      normalized[key] = value as string | string[];
+    }
+    return normalized;
+  }
+
+  private nextRequestId(): number {
+    this.requestSequence += 1;
+    return this.requestSequence;
+  }
+
+  private logTrace(message: string, metadata: Record<string, unknown>): void {
+    if (!this.traceEnabled) {
+      return;
+    }
+    this.logger.log(metadata, message);
   }
 
   private async waitForService(agent: HttpAgent): Promise<void> {
