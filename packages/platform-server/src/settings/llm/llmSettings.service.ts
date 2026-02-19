@@ -284,10 +284,14 @@ export class LLMSettingsService {
     if (!provider) {
       throw new BadRequestException('credential is missing provider metadata');
     }
+    const normalizedProvider = normalizeLiteLLMProvider(provider);
+    if (!normalizedProvider) {
+      throw new BadRequestException('credential provider is not supported');
+    }
     const litellmParams: Record<string, unknown> = {
       model: input.model,
-      custom_llm_provider: provider,
-      litellm_provider: provider,
+      custom_llm_provider: normalizedProvider,
+      litellm_provider: normalizedProvider,
       litellm_credential_name: input.name,
     };
     const modelInfo: Record<string, unknown> = {};
@@ -493,7 +497,6 @@ export class LLMSettingsService {
     if (input.frequencyPenalty !== undefined) params.frequency_penalty = input.frequencyPenalty;
     if (input.presencePenalty !== undefined) params.presence_penalty = input.presencePenalty;
     if (input.stream !== undefined) params.stream = input.stream;
-    this.normalizeModelProviderKeys(params);
     return params;
   }
 
@@ -571,7 +574,6 @@ export class LLMSettingsService {
 
   private mergeModelParams(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    this.normalizeModelProviderKeys(next);
     if (input.provider) {
       const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
       next.custom_llm_provider = providerKey;
@@ -598,16 +600,19 @@ export class LLMSettingsService {
   }
 
   private normalizeModelProviderKeys(target: Record<string, unknown>): void {
-    const rawProvider =
-      (target.custom_llm_provider as string | undefined) ?? (target.litellm_provider as string | undefined);
-    const normalized = normalizeLiteLLMProvider(rawProvider);
-    if (normalized) {
-      target.custom_llm_provider = normalized;
-      target.litellm_provider = normalized;
-      return;
+    const candidate =
+      sanitizeLiteLLMProviderKey(
+        (target.custom_llm_provider as string | undefined) ?? (target.litellm_provider as string | undefined),
+      ) ?? undefined;
+    if (!candidate) {
+      throw new BadRequestException('model is missing provider metadata');
     }
-    delete target.custom_llm_provider;
-    delete target.litellm_provider;
+    const normalized = normalizeLiteLLMProvider(candidate);
+    if (!normalized) {
+      throw new BadRequestException(`LiteLLM provider ${candidate} is not supported`);
+    }
+    target.custom_llm_provider = normalized;
+    target.litellm_provider = normalized;
   }
 
   private mergeModelInfo(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {

@@ -34,11 +34,15 @@ export function normalizeLiteLLMProvider(provider?: string | null): string | und
 }
 
 export function resolveLiteLLMProviderOrThrow(provider?: string | null): string {
-  const normalized = normalizeLiteLLMProvider(provider);
-  if (!normalized) {
+  const sanitized = sanitizeLiteLLMProviderKey(provider);
+  if (!sanitized) {
     throw new Error('LiteLLM provider cannot be empty');
   }
-  return normalized;
+  const normalized = normalizeLiteLLMProvider(sanitized);
+  if (!normalized) {
+    throw new Error('LiteLLM provider is not supported');
+  }
+  return sanitized;
 }
 
 export function sanitizeLiteLLMProviderKey(provider?: string | null): string | undefined {

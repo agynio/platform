@@ -225,6 +225,28 @@ describe.sequential('LLMSettingsService', () => {
     scope.done();
   });
 
+  it('persists provided provider key without normalization when creating credentials', async () => {
+    const scope = nock(BASE_URL)
+      .post('/credentials', (body) => {
+        expect(body).toMatchObject({
+          credential_name: 'openai-chat',
+          credential_info: {
+            litellm_provider: 'openai_chat',
+          },
+        });
+        return true;
+      })
+      .reply(200, { success: true });
+
+    const service = new LLMSettingsService(createConfig());
+    await service.createCredential({
+      name: 'openai-chat',
+      provider: ' openai_chat ',
+      values: { api_key: 'sk-test' },
+    });
+    scope.done();
+  });
+
   it('does not clear secrets when updating non-secret fields', async () => {
     const scope = nock(BASE_URL)
       .patch('/credentials/openai-dev', (body) => {
@@ -301,6 +323,34 @@ describe.sequential('LLMSettingsService', () => {
 
     const service = new LLMSettingsService(createConfig());
     const res = await service.testCredential({ name: 'legacy-openai', model: 'gpt-4o-mini' });
+    expect(res).toMatchObject({ status: 'success' });
+    detailScope.done();
+    testScope.done();
+  });
+
+  it('normalizes credential provider keys when testing credentials', async () => {
+    const detailScope = nock(BASE_URL)
+      .get('/credentials/by_name/openai-chat')
+      .reply(200, {
+        credential_name: 'openai-chat',
+        credential_info: { litellm_provider: 'openai_chat' },
+        credential_values: { api_key: 'sk***' },
+      });
+
+    const testScope = nock(BASE_URL)
+      .post('/health/test_connection', (body) => {
+        expect(body).toMatchObject({
+          litellm_params: {
+            custom_llm_provider: 'openai',
+            litellm_provider: 'openai',
+          },
+        });
+        return true;
+      })
+      .reply(200, { success: true, status: 'success' });
+
+    const service = new LLMSettingsService(createConfig());
+    const res = await service.testCredential({ name: 'openai-chat', model: 'gpt-4o' });
     expect(res).toMatchObject({ status: 'success' });
     detailScope.done();
     testScope.done();
@@ -429,6 +479,35 @@ describe.sequential('LLMSettingsService', () => {
     expect(res.model_info).not.toHaveProperty('rpm');
     expect(res.model_info).not.toHaveProperty('tpm');
     expect(res.model_id).toBe('generated-id-123');
+    listScope.done();
+    createScope.done();
+  });
+
+  it('persists provided provider key without normalization when creating models', async () => {
+    const listScope = nock(BASE_URL)
+      .get('/model/info')
+      .reply(200, { data: [] });
+
+    const createScope = nock(BASE_URL)
+      .post('/model/new', (body) => {
+        const payload = typeof body === 'string' ? JSON.parse(body) : (body as Record<string, unknown>);
+        expect(payload).toMatchObject({
+          litellm_params: expect.objectContaining({
+            custom_llm_provider: 'openai_chat',
+            litellm_provider: 'openai_chat',
+          }),
+        });
+        return true;
+      })
+      .reply(200, { model_name: 'openai/support' });
+
+    const service = new LLMSettingsService(createConfig());
+    await service.createModel({
+      name: 'openai/support',
+      provider: ' openai_chat ',
+      model: 'gpt-4o-mini',
+      credentialName: 'openai-dev',
+    });
     listScope.done();
     createScope.done();
   });
@@ -650,6 +729,43 @@ describe.sequential('LLMSettingsService', () => {
 
     const service = new LLMSettingsService(createConfig());
     const response = await service.testModel({ id: 'model-uuid-1' });
+    expect(response).toMatchObject({ status: 'success' });
+    listScope.done();
+    testScope.done();
+  });
+
+  it('normalizes provider keys when testing models', async () => {
+    const listScope = nock(BASE_URL)
+      .get('/model/info')
+      .reply(200, {
+        data: [
+          {
+            model_name: 'openai/support',
+            litellm_params: {
+              model: 'gpt-4o-mini',
+              custom_llm_provider: 'openai_chat',
+              litellm_provider: 'openai_chat',
+              litellm_credential_name: 'openai-dev',
+            },
+            model_info: {},
+          },
+        ],
+      });
+
+    const testScope = nock(BASE_URL)
+      .post('/health/test_connection', (body) => {
+        expect(body).toMatchObject({
+          litellm_params: expect.objectContaining({
+            custom_llm_provider: 'openai',
+            litellm_provider: 'openai',
+          }),
+        });
+        return true;
+      })
+      .reply(200, { status: 'success' });
+
+    const service = new LLMSettingsService(createConfig());
+    const response = await service.testModel({ id: 'openai/support' });
     expect(response).toMatchObject({ status: 'success' });
     listScope.done();
     testScope.done();
