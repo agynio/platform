@@ -15,10 +15,17 @@ import { NODE_TEMPLATE_VIEW_REGISTRY, NODE_VIEW_REGISTRY } from '@/components/no
 import { graphApiService } from '@/features/graph/services/api';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 import { listVariables } from '@/features/variables/api';
-import type { GraphEntityKind, GraphEntitySummary, GraphEntityUpsertInput, TemplateOption } from '@/features/entities/types';
+import type {
+  GraphEntityKind,
+  GraphEntityRelationInput,
+  GraphEntitySummary,
+  GraphEntityUpsertInput,
+  TemplateOption,
+} from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 import { X } from 'lucide-react';
 import { useMcpNodeState } from '@/lib/graph/hooks';
+import { buildEntityRelationPrefill, getEntityRelationDefinitions } from '@/features/entities/api/graphEntities';
 
 type EntityFormValues = {
   template: string;
@@ -294,6 +301,19 @@ export function EntityFormDialog({
 
   const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
   const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);
+  const relationDefinitions = useMemo(
+    () => getEntityRelationDefinitions(templateSelection || entity?.templateName),
+    [templateSelection, entity?.templateName],
+  );
+  const relationPrefill = useMemo(
+    () => buildEntityRelationPrefill(entity?.id, safeGraphEdges, relationDefinitions),
+    [entity?.id, relationDefinitions, safeGraphEdges],
+  );
+  const [relationInputs, setRelationInputs] = useState<GraphEntityRelationInput[]>(relationPrefill);
+  useEffect(() => {
+    if (!open) return;
+    setRelationInputs(relationPrefill);
+  }, [open, relationPrefill]);
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
@@ -563,6 +583,7 @@ export function EntityFormDialog({
       template: templateName,
       title: trimmedTitle,
       config: payloadConfig,
+      relations: relationDefinitions.length > 0 ? relationInputs : undefined,
     } satisfies GraphEntityUpsertInput;
 
     try {
@@ -657,7 +678,58 @@ export function EntityFormDialog({
               />
 
               {templateSelection ? (
-                <div className="space-y-8">{configView}</div>
+                <div className="space-y-8">
+                  {configView}
+                  {relationDefinitions.length > 0 ? (
+                    <div className="space-y-4 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-[var(--agyn-dark)]">Relations</p>
+                        <p className="text-xs text-[var(--agyn-text-subtle)]">
+                          Connect this entity to downstream nodes.
+                        </p>
+                      </div>
+                      <div className="space-y-4">
+                        {relationDefinitions.map((definition) => {
+                          const currentRelation = relationInputs.find((relation) => relation.id === definition.id);
+                          const selectedValue = currentRelation?.targetId ?? '';
+                          const targetNodeKind = toNodeKind(definition.targetKind);
+                          const candidateNodes = safeGraphNodes
+                            .filter((node) => node.kind === targetNodeKind)
+                            .sort((a, b) => (a.title ?? a.id).localeCompare(b.title ?? b.id));
+                          const helperText =
+                            candidateNodes.length === 0
+                              ? `No ${definition.targetKind}s are available in this graph.`
+                              : definition.description;
+                          return (
+                            <SelectInput
+                              key={definition.id}
+                              label={definition.label}
+                              placeholder={`Select a ${definition.targetKind}`}
+                              value={selectedValue}
+                              allowEmptyOption
+                              disabled={isSubmitting || candidateNodes.length === 0}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                setRelationInputs((current) =>
+                                  current.map((relation) =>
+                                    relation.id === definition.id
+                                      ? { ...relation, targetId: nextValue.length > 0 ? nextValue : null }
+                                      : relation,
+                                  ),
+                                );
+                              }}
+                              helperText={helperText}
+                              options={candidateNodes.map((node) => ({
+                                value: node.id,
+                                label: node.title || node.id,
+                              }))}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <p className="text-sm text-[var(--agyn-text-subtle)]">Select a template to configure this {kind}.</p>
               )}

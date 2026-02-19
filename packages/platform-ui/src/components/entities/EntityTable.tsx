@@ -41,12 +41,10 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sor
     <div className="flex-1 overflow-auto">
       <table className="w-full border-collapse table-fixed">
         <colgroup>
+          <col style={{ width: '36%' }} />
           <col style={{ width: '26%' }} />
-          <col style={{ width: '20%' }} />
-          <col style={{ width: '18%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '12%' }} />
+          <col style={{ width: '28%' }} />
+          <col style={{ width: '10%' }} />
         </colgroup>
         <thead className="sticky top-0 z-10">
           <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
@@ -57,15 +55,13 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sor
               <SortableColumnHeader label="Template" column="template" sort={sort} onSortChange={onSortChange} />
             </th>
             <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Node ID</th>
-            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Ports</th>
-            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Relations</th>
             <th className="text-right px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Actions</th>
           </tr>
         </thead>
         <tbody>
           {isLoading && rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-6 py-12 text-center text-sm text-[var(--agyn-text-subtle)]">
+              <td colSpan={4} className="px-6 py-12 text-center text-sm text-[var(--agyn-text-subtle)]">
                 Loading entities…
               </td>
             </tr>
@@ -99,18 +95,6 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sor
                   <code className="rounded bg-[var(--agyn-bg-light)] px-2 py-1 text-xs text-[var(--agyn-dark)]">
                     {entity.id}
                   </code>
-                </td>
-                <td className="px-6 h-[60px]">
-                  <div className="flex flex-col text-xs text-[var(--agyn-text-subtle)]">
-                    <span>Inputs: {entity.ports.inputs.length}</span>
-                    <span>Outputs: {entity.ports.outputs.length}</span>
-                  </div>
-                </td>
-                <td className="px-6 h-[60px]">
-                  <div className="flex flex-col text-xs text-[var(--agyn-text-subtle)]">
-                    <span>Incoming: {entity.relations.incoming}</span>
-                    <span>Outgoing: {entity.relations.outgoing}</span>
-                  </div>
                 </td>
                 <td className="px-6 h-[60px]">
                   <div className="flex items-center justify-end gap-2">

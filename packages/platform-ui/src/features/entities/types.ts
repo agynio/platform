@@ -28,11 +28,29 @@ export interface GraphEntitySummary {
   relations: { incoming: number; outgoing: number };
 }
 
+export interface GraphEntityRelationDefinition {
+  id: string;
+  label: string;
+  description?: string;
+  templateNames: ReadonlyArray<string>;
+  sourceHandle: string;
+  targetHandle: string;
+  targetKind: GraphEntityKind;
+}
+
+export interface GraphEntityRelationInput {
+  id: string;
+  sourceHandle: string;
+  targetHandle: string;
+  targetId: string | null;
+}
+
 export interface GraphEntityUpsertInput {
   id?: string;
   template: string;
   title: string;
   config: Record<string, unknown>;
+  relations?: GraphEntityRelationInput[];
 }
 
 export interface GraphEntityDeleteInput {

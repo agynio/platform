@@ -4,8 +4,11 @@ import type { TemplateSchema } from '@/api/types/graph';
 import {
   type EntityPortDefinition,
   type GraphEntityDeleteInput,
+  type GraphEntityEdge,
   type GraphEntityGraph,
   type GraphEntityKind,
+  type GraphEntityRelationDefinition,
+  type GraphEntityRelationInput,
   type GraphEntitySummary,
   type GraphEntityUpsertInput,
   type TemplateOption,
@@ -13,6 +16,63 @@ import {
 
 export const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
 export const INCLUDED_MEMORY_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector']);
+
+// Placeholder Slack relation constants. Replace with confirmed template names and handles once specs are finalized.
+export const SLACK_TRIGGER_TEMPLATE_NAMES: ReadonlyArray<string> = Object.freeze([]);
+export const SLACK_TRIGGER_AGENT_SOURCE_HANDLE = '' as const;
+const SLACK_TRIGGER_AGENT_TARGET_HANDLE = 'input';
+
+const RELATION_DEFINITIONS: GraphEntityRelationDefinition[] = [
+  {
+    id: 'slackTriggerAgent',
+    label: 'Agent destination',
+    description: 'Routes Slack trigger events to the selected agent.',
+    templateNames: SLACK_TRIGGER_TEMPLATE_NAMES,
+    sourceHandle: SLACK_TRIGGER_AGENT_SOURCE_HANDLE,
+    targetHandle: SLACK_TRIGGER_AGENT_TARGET_HANDLE,
+    targetKind: 'agent',
+  },
+];
+
+function isRelationDefinitionActive(definition: GraphEntityRelationDefinition): boolean {
+  return definition.templateNames.length > 0 && definition.sourceHandle.trim().length > 0;
+}
+
+export function getEntityRelationDefinitions(templateName?: string): GraphEntityRelationDefinition[] {
+  if (!templateName) {
+    return [];
+  }
+  return RELATION_DEFINITIONS.filter(
+    (definition) => isRelationDefinitionActive(definition) && definition.templateNames.includes(templateName),
+  );
+}
+
+export function buildEntityRelationPrefill(
+  nodeId: string | undefined,
+  edges: GraphEntityEdge[] | undefined,
+  definitions: GraphEntityRelationDefinition[],
+): GraphEntityRelationInput[] {
+  if (!definitions.length) {
+    return [];
+  }
+  const safeEdges = Array.isArray(edges) ? edges : [];
+  return definitions.map((definition) => {
+    const matchedEdge = safeEdges.find(
+      (edge) => edge?.source === nodeId && edge?.sourceHandle === definition.sourceHandle,
+    );
+    const targetId = typeof matchedEdge?.target === 'string' && matchedEdge.target.length > 0 ? matchedEdge.target : null;
+    const targetHandle =
+      typeof matchedEdge?.targetHandle === 'string' && matchedEdge.targetHandle.length > 0
+        ? matchedEdge.targetHandle
+        : definition.targetHandle;
+    return {
+      id: definition.id,
+      sourceHandle: definition.sourceHandle,
+      targetHandle,
+      targetId,
+    } satisfies GraphEntityRelationInput;
+  });
+}
 
 function ensureRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -209,11 +269,48 @@ function sanitizeConfig(value: Record<string, unknown>, title: string): Record<s
   return { ...base, title };
 }
 
+function applyRelationEdges(
+  existingEdges: PersistedGraph['edges'] | undefined,
+  nodeId: string,
+  relations: GraphEntityRelationInput[] | undefined,
+): PersistedGraph['edges'] {
+  const baseEdges = Array.isArray(existingEdges)
+    ? existingEdges.filter((edge): edge is PersistedGraph['edges'][number] => Boolean(edge))
+    : [];
+  if (!relations || relations.length === 0) {
+    return baseEdges;
+  }
+  const validRelations = relations.filter(
+    (relation) => typeof relation?.sourceHandle === 'string' && relation.sourceHandle.trim().length > 0,
+  );
+  if (validRelations.length === 0) {
+    return baseEdges;
+  }
+  const managedHandles = new Set(validRelations.map((relation) => relation.sourceHandle));
+  const trimmedEdges = baseEdges.filter((edge) => edge.source !== nodeId || !managedHandles.has(edge.sourceHandle));
+  const nextEdges = [...trimmedEdges];
+  for (const relation of validRelations) {
+    const targetId = typeof relation.targetId === 'string' ? relation.targetId.trim() : '';
+    if (!targetId) continue;
+    const normalizedTargetHandle =
+      typeof relation.targetHandle === 'string' && relation.targetHandle.trim().length > 0
+        ? relation.targetHandle.trim()
+        : '$self';
+    nextEdges.push({
+      id: `${nodeId}-${relation.sourceHandle}__${targetId}-${normalizedTargetHandle}`,
+      source: nodeId,
+      sourceHandle: relation.sourceHandle,
+      target: targetId,
+      targetHandle: normalizedTargetHandle,
+    });
+  }
+  return nextEdges;
+}
+
 export function applyCreateEntity(graph: PersistedGraph, input: GraphEntityUpsertInput): PersistedGraph {
   const base = cloneGraph(graph);
   const nodeId = input.id && input.id.trim().length > 0 ? input.id.trim() : generateNodeId(input.template, base);
   const nodes = Array.isArray(base.nodes) ? [...base.nodes] : [];
-  const edges = Array.isArray(base.edges) ? [...base.edges] : [];
   const config = sanitizeConfig(input.config, input.title);
   const newNode = {
     id: nodeId,
@@ -226,7 +323,7 @@ export function applyCreateEntity(graph: PersistedGraph, input: GraphEntityUpser
   return {
     ...base,
     nodes,
-    edges,
+    edges: applyRelationEdges(base.edges, nodeId, input.relations),
   } satisfies PersistedGraph;
 }
 
@@ -236,7 +333,6 @@ export function applyUpdateEntity(graph: PersistedGraph, input: GraphEntityUpser
   }
   const base = cloneGraph(graph);
   const nodes = Array.isArray(base.nodes) ? [...base.nodes] : [];
-  const edges = Array.isArray(base.edges) ? [...base.edges] : [];
   const index = nodes.findIndex((node) => node?.id === input.id);
   if (index === -1) {
     throw new Error(`Node ${input.id} not found`);
@@ -250,7 +346,7 @@ export function applyUpdateEntity(graph: PersistedGraph, input: GraphEntityUpser
   return {
     ...base,
     nodes,
-    edges,
+    edges: applyRelationEdges(base.edges, input.id, input.relations),
   } satisfies PersistedGraph;
 }
 
