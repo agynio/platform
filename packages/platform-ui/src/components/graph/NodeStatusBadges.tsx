@@ -1,47 +1,13 @@
 import { Badge } from '@/components/Badge';
-import type { ProvisionState } from '../../lib/graph/types';
-
-// Map status color to Badge variant locally; do not centralize
-function badgeVariantFor(color: 'gray' | 'blue' | 'green' | 'red' | 'yellow') {
-  switch (color) {
-    case 'green':
-      return 'secondary' as const; // success-like
-    case 'red':
-      return 'destructive' as const;
-    case 'blue':
-      return 'accent' as const;
-    case 'yellow':
-      return 'outline' as const;
-    case 'gray':
-    default:
-      return 'neutral' as const;
-  }
-}
-
-function statusColor(state: ProvisionState | undefined): 'gray' | 'blue' | 'green' | 'red' | 'yellow' {
-  switch (state) {
-    case 'provisioning':
-      return 'blue';
-    case 'ready':
-      return 'green';
-    case 'error':
-    case 'provisioning_error':
-    case 'deprovisioning_error':
-      return 'red';
-    case 'deprovisioning':
-      return 'yellow';
-    case 'not_ready':
-    default:
-      return 'gray';
-  }
-}
+import type { ProvisionState } from '@/api/types/graph';
+import { badgeVariantForColor, badgeVariantForState, isFailedProvisionState } from '../entities/provisionStatusDisplay';
 
 export function NodeStatusBadges({ state, isPaused, detail }: { state: ProvisionState | string; isPaused: boolean; detail: unknown }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <Badge variant={badgeVariantFor(statusColor(state as ProvisionState))}>{state}</Badge>
-      {isPaused && <Badge variant={badgeVariantFor('yellow')}>paused</Badge>}
-      {(state === 'error' || state === 'provisioning_error' || state === 'deprovisioning_error') && detail ? (
+      <Badge variant={badgeVariantForState(state)}>{state}</Badge>
+      {isPaused && <Badge variant={badgeVariantForColor('yellow')}>paused</Badge>}
+      {isFailedProvisionState(state) && detail ? (
         <span className="text-[10px] text-red-600" title={typeof detail === 'string' ? detail : JSON.stringify(detail)}>
           details
         </span>
