@@ -13,12 +13,10 @@ import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
-import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 
 interface TestCredentialFormValues {
   model: string;
-  mode: string;
   input: string;
 }
 
@@ -26,8 +24,6 @@ export interface TestCredentialDialogProps {
   open: boolean;
   credentialName: string;
   defaultModel?: string | null;
-  healthCheckModes: string[];
-  healthCheckModesLoading: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TestCredentialFormValues) => Promise<void> | void;
   submitting: boolean;
@@ -37,8 +33,6 @@ export function TestCredentialDialog({
   open,
   credentialName,
   defaultModel,
-  healthCheckModes,
-  healthCheckModesLoading,
   submitting,
   onOpenChange,
   onSubmit,
@@ -46,14 +40,13 @@ export function TestCredentialDialog({
   const form = useForm<TestCredentialFormValues>({
     defaultValues: {
       model: defaultModel ?? '',
-      mode: 'chat',
       input: '',
     },
   });
 
   useEffect(() => {
     if (open) {
-      form.reset({ model: defaultModel ?? '', mode: 'chat', input: '' });
+      form.reset({ model: defaultModel ?? '', input: '' });
     }
   }, [open, defaultModel, form]);
 
@@ -64,7 +57,6 @@ export function TestCredentialDialog({
     }
     await onSubmit({
       model: values.model.trim(),
-      mode: values.mode,
       input: values.input,
     });
   });
@@ -104,25 +96,6 @@ export function TestCredentialDialog({
                   </FormControl>
                   <FormDescription>Enter a model identifier that this credential should access.</FormDescription>
                   <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="mode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mode</FormLabel>
-                  <FormControl>
-                    <Dropdown
-                      value={field.value || undefined}
-                      onValueChange={(value) => field.onChange(value)}
-                      disabled={healthCheckModesLoading}
-                      placeholder="Select mode"
-                      options={healthCheckModes.map((modeOption) => ({ value: modeOption, label: modeOption }))}
-                    />
-                  </FormControl>
-                  <FormDescription>LiteLLM request mode for the test invocation.</FormDescription>
                 </FormItem>
               )}
             />

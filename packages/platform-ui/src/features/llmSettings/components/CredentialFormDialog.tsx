@@ -15,13 +15,16 @@ import { Input } from '@/components/Input';
 import { Textarea } from '@/components/Textarea';
 import { Dropdown } from '@/components/Dropdown';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
-import { createProviderOptionMap, type CredentialRecord, type ProviderField, type ProviderOption } from '../types';
+import { createProviderOptionMap, isOpenAIProvider, type CredentialRecord, type ProviderField, type ProviderOption } from '../types';
 
 type CredentialFormValues = FieldValues & {
   name: string;
   providerKey: string;
   values: Record<string, string>;
 };
+
+const OPENAI_BASE_URL_DEFAULT = 'https://api.openai.com/v1';
+const BASE_URL_FIELD_KEYS = new Set(['api_base', 'api_base_url', 'base_url']);
 
 export interface CredentialFormPayload {
   name: string;
@@ -89,6 +92,23 @@ function getFieldDescription(field: ProviderField, isMasked: boolean): string | 
   return undefined;
 }
 
+function isBaseUrlFieldKey(key: string): boolean {
+  return BASE_URL_FIELD_KEYS.has(key);
+}
+
+function validateUrl(value: string): true | string {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) {
+      return 'Enter a valid http(s) URL';
+    }
+    return true;
+  } catch {
+    return 'Enter a valid URL';
+  }
+}
+
 export function CredentialFormDialog({
   open,
   mode,
@@ -111,6 +131,7 @@ export function CredentialFormDialog({
   const providerKey = useWatch({ control: form.control, name: 'providerKey' });
 
   const selectedProvider = providerKey ? providerMap.get(providerKey) : undefined;
+  const selectedProviderIsOpenAI = selectedProvider ? isOpenAIProvider(selectedProvider.litellmProvider) : false;
 
   useEffect(() => {
     if (!selectedProvider) return;
@@ -137,10 +158,21 @@ export function CredentialFormDialog({
       }
     }
 
+    if (selectedProviderIsOpenAI) {
+      const baseField = selectedProvider.fields.find((field) => isBaseUrlFieldKey(field.key));
+      if (baseField) {
+        const current = nextValues[baseField.key];
+        if (!current || !current.trim()) {
+          nextValues[baseField.key] = OPENAI_BASE_URL_DEFAULT;
+          changed = true;
+        }
+      }
+    }
+
     if (changed) {
       form.setValue('values', nextValues, { shouldDirty: false, shouldTouch: false });
     }
-  }, [selectedProvider, form]);
+  }, [selectedProvider, selectedProviderIsOpenAI, form]);
 
   const maskedFields = credential?.maskedFields ?? new Set<string>();
 
@@ -243,12 +275,18 @@ export function CredentialFormDialog({
                         const isMasked = maskedFields.has(fieldDef.key);
                         const isRequired = fieldDef.required && (mode === 'create' || !isMasked);
                         const description = getFieldDescription(fieldDef, isMasked);
+                        const requiresUrlValidation = isBaseUrlFieldKey(fieldDef.key);
+                        const rules: Record<string, unknown> = {};
+                        if (isRequired) rules.required = 'Required field';
+                        if (requiresUrlValidation) {
+                          rules.validate = (value: string) => validateUrl(value);
+                        }
                         return (
                           <FormField
                             key={fieldDef.key}
                             control={form.control}
                             name={fieldName}
-                            rules={isRequired ? { required: 'Required field' } : undefined}
+                            rules={Object.keys(rules).length ? rules : undefined}
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>{fieldDef.label}</FormLabel>

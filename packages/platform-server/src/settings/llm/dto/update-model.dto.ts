@@ -23,11 +23,6 @@ export class UpdateModelDto {
   credentialName?: string;
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  mode?: string;
-
-  @IsOptional()
   @IsNumber()
   temperature?: number;
 

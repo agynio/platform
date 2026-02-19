@@ -82,7 +82,7 @@ describe.sequential('LLMSettingsService', () => {
     scope.done();
   });
 
-  it('normalizes provider identifiers returned from LiteLLM', async () => {
+  it('preserves raw provider identifiers while exposing canonical metadata', async () => {
     const scope = nock(BASE_URL)
       .get('/public/providers/fields')
       .matchHeader('authorization', 'Bearer sk-master')
@@ -98,8 +98,9 @@ describe.sequential('LLMSettingsService', () => {
     const service = new LLMSettingsService(createConfig());
     const result = await service.listProviders();
     expect(result).toHaveLength(1);
-    expect(result[0]?.provider).toBe('azure');
-    expect(result[0]?.litellm_provider).toBe('openai');
+    expect(result[0]?.provider).toBe('Azure-OpenAI');
+    expect(result[0]?.litellm_provider).toBe('openai_chat');
+    expect(result[0]?.canonical_provider).toBe('openai');
     scope.done();
   });
 
@@ -255,7 +256,7 @@ describe.sequential('LLMSettingsService', () => {
     const testScope = nock(BASE_URL)
       .post('/health/test_connection', (body) => {
         expect(body).toMatchObject({
-          mode: 'chat',
+          mode: 'responses',
           litellm_params: {
             model: 'gpt-4o',
             custom_llm_provider: 'openai',
@@ -264,11 +265,11 @@ describe.sequential('LLMSettingsService', () => {
         });
         return true;
       })
-      .reply(200, { success: true });
+      .reply(200, { success: true, status: 'success' });
 
     const service = new LLMSettingsService(createConfig());
     const res = await service.testCredential({ name: 'openai-dev', model: 'gpt-4o' });
-    expect(res).toMatchObject({ success: true });
+    expect(res).toMatchObject({ status: 'success' });
     detailScope.done();
     testScope.done();
   });
@@ -285,7 +286,7 @@ describe.sequential('LLMSettingsService', () => {
     const testScope = nock(BASE_URL)
       .post('/health/test_connection', (body) => {
         expect(body).toMatchObject({
-          mode: 'chat',
+          mode: 'responses',
           litellm_params: {
             model: 'gpt-4o-mini',
             custom_llm_provider: 'openai',
@@ -294,11 +295,30 @@ describe.sequential('LLMSettingsService', () => {
         });
         return true;
       })
-      .reply(200, { success: true });
+      .reply(200, { success: true, status: 'success' });
 
     const service = new LLMSettingsService(createConfig());
     const res = await service.testCredential({ name: 'legacy-openai', model: 'gpt-4o-mini' });
-    expect(res).toMatchObject({ success: true });
+    expect(res).toMatchObject({ status: 'success' });
+    detailScope.done();
+    testScope.done();
+  });
+
+  it('throws BadRequestException when LiteLLM credential test reports failure', async () => {
+    const detailScope = nock(BASE_URL)
+      .get('/credentials/by_name/openai-dev')
+      .reply(200, {
+        credential_name: 'openai-dev',
+        credential_info: { litellm_provider: 'openai' },
+        credential_values: { api_key: 'sk***' },
+      });
+
+    const testScope = nock(BASE_URL)
+      .post('/health/test_connection')
+      .reply(200, { status: 'error', message: 'invalid key' });
+
+    const service = new LLMSettingsService(createConfig());
+    await expect(service.testCredential({ name: 'openai-dev', model: 'gpt-4o' })).rejects.toBeInstanceOf(BadRequestException);
     detailScope.done();
     testScope.done();
   });
@@ -330,7 +350,7 @@ describe.sequential('LLMSettingsService', () => {
             litellm_credential_name: 'cred-2',
             temperature: 0.2,
           },
-          model_info: { id: 'openai/gpt-4o', mode: 'chat' },
+          model_info: { id: 'openai/gpt-4o', mode: 'responses' },
         });
         return true;
       })
@@ -563,7 +583,7 @@ describe.sequential('LLMSettingsService', () => {
           },
         });
         expect(body.model_info).not.toHaveProperty('id');
-        expect(body.model_info).not.toHaveProperty('mode');
+        expect(body.model_info).toHaveProperty('mode', 'responses');
         return true;
       })
       .reply(200, {
@@ -609,7 +629,7 @@ describe.sequential('LLMSettingsService', () => {
     const testScope = nock(BASE_URL)
       .post('/health/test_connection', (body) => {
         expect(body).toMatchObject({
-          mode: 'chat',
+          mode: 'responses',
           litellm_params: {
             model: 'claude-3',
             custom_llm_provider: 'anthropic',
@@ -618,11 +638,39 @@ describe.sequential('LLMSettingsService', () => {
         });
         return true;
       })
-      .reply(200, { status: 'ok' });
+      .reply(200, { status: 'success' });
 
     const service = new LLMSettingsService(createConfig());
     const response = await service.testModel({ id: 'model-uuid-1' });
-    expect(response).toMatchObject({ status: 'ok' });
+    expect(response).toMatchObject({ status: 'success' });
+    listScope.done();
+    testScope.done();
+  });
+
+  it('throws BadRequestException when LiteLLM model test reports failure', async () => {
+    const listScope = nock(BASE_URL)
+      .get('/model/info')
+      .reply(200, {
+        data: [
+          {
+            model_name: 'anthropic/support',
+            model_id: 'model-uuid-1',
+            litellm_params: {
+              model: 'claude-3',
+              custom_llm_provider: 'anthropic',
+              litellm_credential_name: 'anthropic-dev',
+            },
+            model_info: {},
+          },
+        ],
+      });
+
+    const testScope = nock(BASE_URL)
+      .post('/health/test_connection')
+      .reply(200, { status: 'error', message: 'runtime failure' });
+
+    const service = new LLMSettingsService(createConfig());
+    await expect(service.testModel({ id: 'model-uuid-1' })).rejects.toBeInstanceOf(BadRequestException);
     listScope.done();
     testScope.done();
   });

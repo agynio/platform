@@ -29,7 +29,6 @@ import {
   useProviderOptions,
   useCredentialRecords,
   useModelRecords,
-  useHealthCheckModes,
   useAdminStatus,
 } from './hooks';
 import type { CredentialRecord, ModelRecord } from './types';
@@ -148,7 +147,6 @@ export function SettingsLlmContainer(): ReactElement {
   }, [adminStatusReason, missingEnvKeys, adminStatus?.baseUrl, fallbackErrorMessage]);
 
   const showAdminBanner = adminDisabled;
-  const { modes: healthCheckModes, isLoading: healthCheckModesLoading } = useHealthCheckModes();
   const adminBannerDescription = useMemo(() => {
     if (adminStatusReason === 'missing_env') {
       return (
@@ -362,7 +360,6 @@ export function SettingsLlmContainer(): ReactElement {
         provider: payload.providerKey,
         model: payload.model,
         credentialName: payload.credentialName,
-        mode: payload.mode,
         temperature: payload.temperature,
         maxTokens: payload.maxTokens,
         topP: payload.topP,
@@ -390,7 +387,6 @@ export function SettingsLlmContainer(): ReactElement {
         provider: payload.providerKey,
         model: payload.model,
         credentialName: payload.credentialName,
-        mode: payload.mode,
         temperature: payload.temperature,
         maxTokens: payload.maxTokens,
         topP: payload.topP,
@@ -422,9 +418,8 @@ export function SettingsLlmContainer(): ReactElement {
   });
 
   const testModelMutation = useMutation({
-    mutationFn: async ({ id, mode, input }: { id: string; mode?: string; input?: string }) =>
+    mutationFn: async ({ id, input }: { id: string; input?: string }) =>
       testModel(id, {
-        mode,
         input,
       }),
     onMutate: () => {
@@ -457,7 +452,6 @@ export function SettingsLlmContainer(): ReactElement {
     mutationFn: async ({ payload }: { snapshot: ModelFormSnapshot; payload: ModelFormPayload }) =>
       testCredential(payload.credentialName, {
         model: payload.model,
-        mode: payload.mode,
         input: '',
       }),
     onMutate: ({ snapshot }) => {
@@ -635,12 +629,6 @@ export function SettingsLlmContainer(): ReactElement {
             : undefined
         }
         testPending={modelDraftTestMutation.isPending}
-        testRequired={modelDialog?.mode === 'create'}
-        canSubmit={
-          modelDialog?.mode === 'create'
-            ? modelFormTestState.status === 'success' && modelFormTestState.fingerprint === modelFormFingerprint
-            : true
-        }
         testStatus={modelDialog?.mode === 'create' ? modelFormTestState.status : 'idle'}
         testResultView={modelFormResultViewProps}
       />
@@ -649,8 +637,6 @@ export function SettingsLlmContainer(): ReactElement {
         <TestModelDialog
           open={testModelState !== null}
           model={testModelState.model}
-          healthCheckModes={healthCheckModes}
-          healthCheckModesLoading={healthCheckModesLoading}
           submitting={testModelMutation.isPending}
           onOpenChange={(open) => {
             if (!open) {
@@ -663,7 +649,6 @@ export function SettingsLlmContainer(): ReactElement {
             try {
               await testModelMutation.mutateAsync({
                 id: resolveModelIdentifier(testModelState.model),
-                mode: values.mode,
                 input: values.input,
               });
             } catch {

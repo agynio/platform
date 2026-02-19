@@ -610,7 +610,7 @@ describe('Settings/LLM page', () => {
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: modelRecords })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
       http.post(abs('/api/settings/llm/credentials/zz-anthropic-legacy/test'), async ({ request }) => {
-        const body = (await request.json()) as { model?: string; mode?: string | null; input?: string | null };
+        const body = (await request.json()) as { model?: string; input?: string | null };
         expect(body).toMatchObject({ model: 'claude-3-opus', input: '' });
         return HttpResponse.json({ success: true, status: 'ok', detail: 'connected' });
       }),
@@ -620,7 +620,6 @@ describe('Settings/LLM page', () => {
           provider: string;
           model: string;
           credentialName: string;
-          mode?: string;
         };
         expect(body).toMatchObject({
           name: 'anthropic-support',
@@ -628,6 +627,7 @@ describe('Settings/LLM page', () => {
           model: 'claude-3-opus',
           credentialName: 'zz-anthropic-legacy',
         });
+        const mode = 'responses';
         modelRecords.push({
           model_name: body.name,
           litellm_params: {
@@ -635,7 +635,7 @@ describe('Settings/LLM page', () => {
             custom_llm_provider: body.provider,
             litellm_credential_name: body.credentialName,
           },
-          model_info: { id: body.name, mode: body.mode ?? 'chat' },
+          model_info: { id: body.name, mode },
         });
         return HttpResponse.json({
           model_name: body.name,
@@ -644,7 +644,7 @@ describe('Settings/LLM page', () => {
             custom_llm_provider: body.provider,
             litellm_credential_name: body.credentialName,
           },
-          model_info: { id: body.name, mode: body.mode ?? 'chat' },
+          model_info: { id: body.name, mode },
         });
       }),
     );
@@ -687,7 +687,7 @@ describe('Settings/LLM page', () => {
     await user.clear(modelInput);
     await user.type(modelInput, 'claude-3-opus');
 
-    expect(within(dialog).getByRole('button', { name: 'Create Model' })).toBeDisabled();
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Create Model' })).toBeEnabled());
 
     const testButton = within(dialog).getByRole('button', { name: 'Test Model' });
     await user.click(testButton);
@@ -713,7 +713,7 @@ describe('Settings/LLM page', () => {
     expect(within(createdRow).getByText('zz-anthropic-legacy')).toBeInTheDocument();
   });
 
-  it('requires a successful test before enabling create and invalidates on changes', async () => {
+  it('allows creating a model without running a test', async () => {
     const providers = [
       {
         provider: 'OpenAI',
@@ -734,6 +734,8 @@ describe('Settings/LLM page', () => {
       },
     ];
 
+    let createdPayload: Record<string, unknown> | null = null;
+
     server.use(
       http.get(abs('/api/settings/llm/admin-status'), () =>
         HttpResponse.json({
@@ -748,10 +750,23 @@ describe('Settings/LLM page', () => {
       http.get(abs('/api/settings/llm/credentials'), () => HttpResponse.json(credentialRecords)),
       http.get(abs('/api/settings/llm/models'), () => HttpResponse.json({ models: [] })),
       http.get(abs('/api/settings/llm/health-check-modes'), () => HttpResponse.json({ modes: DEFAULT_HEALTH_CHECK_MODES })),
-      http.post(abs('/api/settings/llm/credentials/openai-prod/test'), async ({ request }) => {
-        const body = (await request.json()) as { model?: string; input?: string | null };
-        expect(body).toMatchObject({ model: 'gpt-4o-mini', input: '' });
-        return HttpResponse.json({ success: true, status: 'ok' });
+      http.post(abs('/api/settings/llm/models'), async ({ request }) => {
+        const body = (await request.json()) as {
+          name: string;
+          provider: string;
+          model: string;
+          credentialName: string;
+        };
+        createdPayload = body;
+        return HttpResponse.json({
+          model_name: body.name,
+          litellm_params: {
+            model: body.model,
+            litellm_credential_name: body.credentialName,
+            litellm_provider: body.provider,
+          },
+          model_info: { id: body.name, mode: 'responses' },
+        });
       }),
     );
 
@@ -779,24 +794,18 @@ describe('Settings/LLM page', () => {
     await user.clear(modelInput);
     await user.type(modelInput, 'gpt-4o-mini');
 
-    expect(within(dialog).getByRole('button', { name: 'Create Model' })).toBeDisabled();
-
-    const testButton = within(dialog).getByRole('button', { name: 'Test Model' });
-    await user.click(testButton);
-
-    const resultDialog = await screen.findByRole('dialog', { name: 'Test Result — openai-live' });
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
-    const backToFormButton = within(resultDialog).getByRole('button', { name: 'Back to form' });
-    await user.click(backToFormButton);
-
-    const formDialog = await screen.findByRole('dialog', { name: /Create Model/i });
-    const submitButton = within(formDialog).getByRole('button', { name: 'Create Model' });
-    const modelInputAfterResult = within(formDialog).getByLabelText('Provider Model Identifier');
-
+    const submitButton = within(dialog).getByRole('button', { name: 'Create Model' });
     await waitFor(() => expect(submitButton).toBeEnabled());
 
-    await user.type(modelInputAfterResult, '-latest');
-    expect(submitButton).toBeDisabled();
+    await user.click(submitButton);
+
+    await waitFor(() => expect(notifyMocks.success).toHaveBeenCalledWith('Model created'));
+    expect(createdPayload).toMatchObject({
+      name: 'openai-live',
+      model: 'gpt-4o-mini',
+      credentialName: 'openai-prod',
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Create Model/i })).not.toBeInTheDocument());
   });
 
   it('does not expose credential test actions', async () => {

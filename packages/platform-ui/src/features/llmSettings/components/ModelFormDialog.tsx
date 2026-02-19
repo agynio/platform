@@ -24,7 +24,6 @@ type ModelFormValues = FieldValues & {
   name: string;
   model: string;
   credentialName: string;
-  mode: string;
   temperature: string;
   maxTokens: string;
   topP: string;
@@ -41,7 +40,6 @@ export interface ModelFormPayload {
   providerKey: string;
   model: string;
   credentialName: string;
-  mode?: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
@@ -58,7 +56,6 @@ export type ModelFormSnapshot = {
   name: string;
   model: string;
   credentialName: string;
-  mode: string;
   temperature: string;
   maxTokens: string;
   topP: string;
@@ -82,8 +79,6 @@ interface ModelFormDialogProps {
   onValuesChange?: (snapshot: ModelFormSnapshot) => void;
   onTest?: (params: { snapshot: ModelFormSnapshot; payload: ModelFormPayload }) => Promise<void> | void;
   testPending?: boolean;
-  testRequired?: boolean;
-  canSubmit?: boolean;
   testStatus?: 'idle' | 'pending' | 'success' | 'error';
   testResultView?: {
     visible: boolean;
@@ -109,7 +104,6 @@ function buildDefaultValues(
       name: model.id,
       model: model.model,
       credentialName: model.credentialName,
-      mode: model.mode ?? 'chat',
       temperature: toInputString(model.temperature),
       maxTokens: toInputString(model.maxTokens),
       topP: toInputString(model.topP),
@@ -126,7 +120,6 @@ function buildDefaultValues(
     name: '',
     model: '',
     credentialName: '',
-    mode: 'chat',
     temperature: '',
     maxTokens: '',
     topP: '',
@@ -160,7 +153,6 @@ function buildSnapshot(values: ModelFormValues): ModelFormSnapshot {
     name: values.name ?? '',
     model: values.model ?? '',
     credentialName: values.credentialName ?? '',
-    mode: values.mode ?? '',
     temperature: values.temperature ?? '',
     maxTokens: values.maxTokens ?? '',
     topP: values.topP ?? '',
@@ -185,8 +177,6 @@ export function ModelFormDialog({
   onValuesChange,
   onTest,
   testPending = false,
-  testRequired = false,
-  canSubmit = true,
   testStatus = 'idle',
   testResultView,
 }: ModelFormDialogProps): ReactElement {
@@ -256,7 +246,6 @@ export function ModelFormDialog({
       providerKey: credentialProviderKey,
       model: values.model.trim(),
       credentialName: values.credentialName,
-      mode: values.mode?.trim() ? values.mode.trim() : undefined,
       temperature: toOptionalNumber(values.temperature),
       maxTokens: toOptionalNumber(values.maxTokens),
       topP: toOptionalNumber(values.topP),
@@ -408,20 +397,6 @@ export function ModelFormDialog({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="mode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mode</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="chat" size="sm" />
-                        </FormControl>
-                        <FormDescription>LiteLLM mode (chat, completion, embedding, etc.).</FormDescription>
-                      </FormItem>
-                    )}
-                  />
-
                   <div className="grid gap-4 md:grid-cols-2">
                     <NumericField label="Temperature" name="temperature" control={form.control} placeholder="0.7" />
                     <NumericField label="Top P" name="topP" control={form.control} placeholder="0.95" />
@@ -501,30 +476,11 @@ export function ModelFormDialog({
                     form="llm-model-form"
                     variant="primary"
                     size="md"
-                    disabled={submitting || (mode === 'create' && testRequired && !canSubmit)}
+                    disabled={submitting}
                   >
                     {submitting ? 'Saving…' : mode === 'create' ? 'Create Model' : 'Save Changes'}
                   </Button>
                 </ScreenDialogFooter>
-                {mode === 'create' && testRequired ? (
-                  <p
-                    className={`mt-1 text-xs ${
-                      testStatus === 'success'
-                        ? 'text-[var(--agyn-status-finished)]'
-                        : testStatus === 'error'
-                          ? 'text-[var(--agyn-status-failed)]'
-                          : 'text-[var(--agyn-text-subtle)]'
-                    }`}
-                  >
-                    {testStatus === 'success'
-                      ? 'Test passed for current values.'
-                      : testStatus === 'error'
-                        ? 'Test failed. Update the configuration and try again.'
-                        : testStatus === 'pending'
-                          ? 'Testing current configuration…'
-                          : 'Run a test to enable creation.'}
-                  </p>
-                ) : null}
               </>
             )}
           </div>

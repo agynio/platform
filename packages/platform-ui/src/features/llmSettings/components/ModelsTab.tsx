@@ -45,11 +45,10 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
           <div data-testid="llm-models-table-container" className="flex-1 overflow-auto">
             <table className="w-full table-fixed border-collapse text-sm" data-testid="llm-models-table">
               <colgroup>
-                <col className="w-[26%]" />
-                <col className="w-[22%]" />
+                <col className="w-[28%]" />
+                <col className="w-[24%]" />
                 <col className="w-[18%]" />
-                <col className="w-[12%]" />
-                <col className="w-[16%]" />
+                <col className="w-[18%]" />
                 <col className="w-[120px]" />
               </colgroup>
               <thead data-testid="llm-models-table-header" className="sticky top-0 z-10 text-[var(--agyn-text-subtle)]">
@@ -76,12 +75,6 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
                     scope="col"
                     className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
                   >
-                    Mode
-                  </th>
-                  <th
-                    scope="col"
-                    className="bg-white px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide"
-                  >
                     Limits
                   </th>
                   <th
@@ -95,13 +88,13 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-6 text-center text-[var(--agyn-text-subtle)]">
+                    <td colSpan={5} className="px-6 py-6 text-center text-[var(--agyn-text-subtle)]">
                       Loading models…
                     </td>
                   </tr>
                 ) : models.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-[var(--agyn-text-subtle)]">
+                    <td colSpan={5} className="px-6 py-10 text-center text-[var(--agyn-text-subtle)]">
                       No models configured yet.
                     </td>
                   </tr>
@@ -135,7 +128,6 @@ export function ModelsTab({ models, loading, readOnly, canCreateModel, error, on
                           {model.credentialName}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 align-top text-[var(--agyn-dark)]">{model.mode ?? 'chat'}</td>
                       <td className="px-6 py-4 align-top">
                         <div className="space-y-1 text-xs text-[var(--agyn-text-subtle)]">
                           <p>RPM: {model.rpm ?? '—'}</p>

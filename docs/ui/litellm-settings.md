@@ -21,6 +21,8 @@ _Context: PR #1164 aligns the LiteLLM settings experience with the Secrets scree
 - **Components**: `CredentialFormDialog`, `ModelFormDialog`, `TestCredentialDialog`, `TestModelDialog`
 - Modals use the shared `ScreenDialog` primitives plus `Button`, `Input`, `Textarea`, `SelectInput`, and `SwitchControl` from `src/components` (no shadcn/ui imports).
 - Provide short descriptions for each dialog so `aria-describedby` is populated. Keep the dismiss button first (`variant="outline"`) and primary action last inside `ScreenDialogFooter`.
+- When a credential resolves to the canonical OpenAI provider and the base URL is empty, `CredentialFormDialog` auto-populates `https://api.openai.com/v1` and validates user overrides.
+- Model tests are optional. `ModelFormDialog` keeps the create/save button enabled once required fields are filled; the `Test Model` flow simply surfaces admin responses without gating submission, and editing form values clears any prior test result view.
 
 ## Testing expectations
 
