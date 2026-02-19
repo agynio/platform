@@ -1,5 +1,4 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { Badge } from '@/components/Badge';
 import type { GraphEntitySummary } from '@/features/entities/types';
 
 export type EntityTableSortKey = 'title' | 'template';
@@ -19,14 +18,6 @@ interface EntityTableProps {
   sort: EntityTableSortState;
   onSortChange: (key: EntityTableSortKey) => void;
 }
-
-const kindLabel: Record<GraphEntitySummary['templateKind'], string> = {
-  agent: 'Agent',
-  trigger: 'Trigger',
-  tool: 'Tool',
-  mcp: 'MCP Server',
-  workspace: 'Workspace',
-};
 
 export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sort, onSortChange }: EntityTableProps) {
   if (!isLoading && rows.length === 0) {
@@ -72,24 +63,14 @@ export function EntityTable({ rows, isLoading, emptyLabel, onEdit, onDelete, sor
                 className="border-b border-[var(--agyn-border-subtle)] hover:bg-[var(--agyn-bg-light)]/50 transition-colors"
               >
                 <td className="px-6 h-[60px]">
-                  <div className="flex flex-col">
-                    <span className="font-medium" data-testid="entity-title">
-                      {entity.title}
-                    </span>
-                    <span className="text-xs text-[var(--agyn-text-subtle)]">
-                      {typeof entity.config.description === 'string'
-                        ? entity.config.description
-                        : entity.templateName}
-                    </span>
-                  </div>
+                  <span className="font-medium" data-testid="entity-title">
+                    {entity.title}
+                  </span>
                 </td>
                 <td className="px-6 h-[60px]">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm">{entity.templateTitle}</span>
-                    <Badge variant="secondary" className="w-fit text-[11px]">
-                      {kindLabel[entity.templateKind]}
-                    </Badge>
-                  </div>
+                  <span className="text-sm" data-testid="entity-template">
+                    {entity.templateTitle ?? entity.templateName}
+                  </span>
                 </td>
                 <td className="px-6 h-[60px]">
                   <code className="rounded bg-[var(--agyn-bg-light)] px-2 py-1 text-xs text-[var(--agyn-dark)]">

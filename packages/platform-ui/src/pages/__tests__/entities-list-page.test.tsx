@@ -156,9 +156,17 @@ describe('Entity list pages', () => {
 
     renderWithGraphProviders(<AgentsListPage />);
 
-    await screen.findByText('Core Agent');
+    const titleElement = await screen.findByText('Core Agent', { selector: '[data-testid="entity-title"]' });
+    const titleCell = titleElement.closest('td');
+    expect(titleCell).not.toBeNull();
+    expect(within(titleCell as HTMLTableCellElement).queryByText('Primary responder')).not.toBeInTheDocument();
+
+    const row = titleElement.closest('tr');
+    expect(row).not.toBeNull();
+    const templateLabel = within(row as HTMLTableRowElement).getByTestId('entity-template');
+    expect(templateLabel).toHaveTextContent('Support Agent');
+
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
-    expect(screen.getByText('Core Agent')).toBeVisible();
   });
 
   it('renders only workspaces on the workspaces page without memory controls', async () => {
