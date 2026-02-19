@@ -267,6 +267,19 @@ function ensureRecord(value?: Record<string, unknown> | null): Record<string, un
   return {};
 }
 
+const RESERVED_CONFIG_KEYS = new Set(['title', 'template', 'kind']);
+
+function stripConfigMetadata(config: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (RESERVED_CONFIG_KEYS.has(key)) {
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
 function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeViewKind {
   switch ((rawKind ?? '').toString().toLowerCase()) {
     case 'trigger':
@@ -444,7 +457,7 @@ export function EntityUpsertForm({
 
   const templateSelection = form.watch('template');
   const titleValue = form.watch('title');
-  const [configState, setConfigState] = useState<Record<string, unknown>>(() => ensureRecord(entity?.config));
+  const [configState, setConfigState] = useState<Record<string, unknown>>(() => stripConfigMetadata(ensureRecord(entity?.config)));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const previewNodeIdRef = useRef<string>('');
   const configTitleRef = useRef('');
@@ -458,7 +471,7 @@ export function EntityUpsertForm({
       template: entity?.templateName ?? '',
       title: entity?.title ?? '',
     });
-    setConfigState(ensureRecord(entity?.config));
+    setConfigState(stripConfigMetadata(ensureRecord(entity?.config)));
     const initialConfigTitle = typeof entity?.config?.title === 'string' ? entity.config.title.trim() : '';
     configTitleRef.current = initialConfigTitle;
   }, [entity, form, mode]);
@@ -620,9 +633,7 @@ export function EntityUpsertForm({
             if (trimmed.length > 0) {
               configTitleRef.current = trimmed;
             }
-            if (stringValue.length > 0) {
-              next.title = stringValue;
-            } else {
+            if ('title' in next) {
               delete next.title;
             }
             continue;
@@ -970,66 +981,60 @@ export function EntityUpsertForm({
               <div className="space-y-8">
                 {configView}
                 {relationDefinitions.length > 0 ? (
-                  <div className="space-y-4 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-4">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-[var(--agyn-dark)]">Relations</p>
-                      <p className="text-xs text-[var(--agyn-text-subtle)]">Connect this entity to downstream nodes.</p>
-                    </div>
-                    <div className="space-y-4">
-                      {relationDefinitions.map((definition) => {
-                        const options = relationOptionsMap[definition.id] ?? [];
-                        const selections = relationSelections[definition.id] ?? [];
-                        const helperText = options.length === 0
-                          ? 'No eligible nodes available in this workspace.'
-                          : definition.description ?? 'Select an option.';
-                        if (definition.mode === 'single') {
-                          const controlId = `relation-${definition.id}`;
-                          return (
-                            <div key={definition.id} className="space-y-2">
-                              <label htmlFor={controlId} className="text-sm font-medium text-[var(--agyn-dark)]">
-                                {definition.label}
-                              </label>
-                              <SelectInput
-                                id={controlId}
-                                placeholder={definition.placeholder ?? 'Select an option'}
-                                value={selections[0] ?? ''}
-                                allowEmptyOption
-                                disabled={isSubmitting || options.length === 0}
-                                onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
-                                helperText={helperText}
-                                options={options.map((option) => ({
-                                  value: option.id,
-                                  label: option.label,
-                                }))}
-                              />
-                            </div>
-                          );
-                        }
-                        const labelId = `relation-${definition.id}-label`;
+                  <div className="space-y-6">
+                    {relationDefinitions.map((definition) => {
+                      const options = relationOptionsMap[definition.id] ?? [];
+                      const selections = relationSelections[definition.id] ?? [];
+                      const helperText = options.length === 0
+                        ? 'No eligible nodes available in this workspace.'
+                        : definition.description ?? 'Select an option.';
+                      if (definition.mode === 'single') {
+                        const controlId = `relation-${definition.id}`;
                         return (
                           <div key={definition.id} className="space-y-2">
-                            <label id={labelId} className="text-sm font-medium text-[var(--agyn-dark)]">
+                            <label htmlFor={controlId} className="text-sm font-medium text-[var(--agyn-dark)]">
                               {definition.label}
                             </label>
-                            {options.length === 0 ? (
-                              <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
-                            ) : (
-                              <MultiSelectDropdown
-                                id={`relation-${definition.id}`}
-                                aria-labelledby={labelId}
-                                aria-label={definition.label}
-                                value={selections}
-                                options={options.map((option) => ({ value: option.id, label: option.label }))}
-                                disabled={isSubmitting}
-                                helperText={helperText}
-                                placeholder={definition.placeholder ?? 'Select options'}
-                                onChange={(next) => handleMultiRelationChange(definition.id, next)}
-                              />
-                            )}
+                            <SelectInput
+                              id={controlId}
+                              placeholder={definition.placeholder ?? 'Select an option'}
+                              value={selections[0] ?? ''}
+                              allowEmptyOption
+                              disabled={isSubmitting || options.length === 0}
+                              onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
+                              helperText={helperText}
+                              options={options.map((option) => ({
+                                value: option.id,
+                                label: option.label,
+                              }))}
+                            />
                           </div>
                         );
-                      })}
-                    </div>
+                      }
+                      const labelId = `relation-${definition.id}-label`;
+                      return (
+                        <div key={definition.id} className="space-y-2">
+                          <label id={labelId} className="text-sm font-medium text-[var(--agyn-dark)]">
+                            {definition.label}
+                          </label>
+                          {options.length === 0 ? (
+                            <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
+                          ) : (
+                            <MultiSelectDropdown
+                              id={`relation-${definition.id}`}
+                              aria-labelledby={labelId}
+                              aria-label={definition.label}
+                              value={selections}
+                              options={options.map((option) => ({ value: option.id, label: option.label }))}
+                              disabled={isSubmitting}
+                              helperText={helperText}
+                              placeholder={definition.placeholder ?? 'Select options'}
+                              onChange={(next) => handleMultiRelationChange(definition.id, next)}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

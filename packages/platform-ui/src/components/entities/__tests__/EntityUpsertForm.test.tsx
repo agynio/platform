@@ -236,7 +236,26 @@ describe('EntityUpsertForm', () => {
 
     const payload = onSubmit.mock.calls[0][0];
     expect(payload.template).toBe('agent-template');
+    expect(payload.title).toBe('Existing Agent');
     expect(payload.config).toMatchObject({ model: 'claude-3' });
+    expect(payload.config).not.toHaveProperty('title');
+    expect(payload.config).not.toHaveProperty('template');
+    expect(payload.config).not.toHaveProperty('kind');
+
+    await userEvent.clear(modelInput);
+    await userEvent.type(modelInput, 'qwen-plus');
+    await userEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(2);
+    });
+
+    const secondPayload = onSubmit.mock.calls[1][0];
+    expect(secondPayload.title).toBe('Existing Agent');
+    expect(secondPayload.config).toMatchObject({ model: 'qwen-plus' });
+    expect(secondPayload.config).not.toHaveProperty('title');
+    expect(secondPayload.config).not.toHaveProperty('template');
+    expect(secondPayload.config).not.toHaveProperty('kind');
   });
 
   it('falls back to config title and strips env sources before submit', async () => {
