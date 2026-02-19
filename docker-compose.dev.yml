@@ -1,0 +1,79 @@
+services:
+  platform-server:
+    build:
+      context: .
+      dockerfile: packages/platform-server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agents-db:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+      docker-runner:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: ${PLATFORM_SERVER_PORT:-3010}
+      AGENTS_DATABASE_URL: ${AGENTS_DATABASE_URL:-postgresql://agents:agents@agents-db:5432/agents}
+      LLM_PROVIDER: ${LLM_PROVIDER:-litellm}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm:4000}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
+      DOCKER_RUNNER_BASE_URL: http://docker-runner:7071
+      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
+      WORKSPACE_NETWORK_NAME: ${WORKSPACE_NETWORK_NAME:-agents_net}
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-dev-root}
+      ZITI_ENABLED: ${ZITI_ENABLED:-false}
+      ZITI_MANAGEMENT_URL: ${ZITI_MANAGEMENT_URL:-https://ziti-controller:1280/edge/management/v1}
+      ZITI_USERNAME: ${ZITI_USERNAME:-admin}
+      ZITI_PASSWORD: ${ZITI_PASSWORD:-admin}
+      ZITI_INSECURE_TLS: ${ZITI_INSECURE_TLS:-true}
+      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
+      ZITI_ROUTER_NAME: ${ZITI_ROUTER_NAME:-dev-edge-router}
+      ZITI_RUNNER_PROXY_HOST: ${ZITI_RUNNER_PROXY_HOST:-0.0.0.0}
+      ZITI_RUNNER_PROXY_PORT: ${ZITI_RUNNER_PROXY_PORT:-17071}
+      ZITI_PLATFORM_IDENTITY_FILE: ${ZITI_PLATFORM_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.platform-server.json}
+      ZITI_RUNNER_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
+      ZITI_IDENTITIES_DIR: ${ZITI_IDENTITIES_DIR:-/opt/app/.ziti/identities}
+      ZITI_TMP_DIR: ${ZITI_TMP_DIR:-/opt/app/.ziti/tmp}
+    ports:
+      - "${PLATFORM_SERVER_PORT:-3010}:3010"
+      - "${ZITI_RUNNER_PROXY_PORT:-17071}:17071"
+    volumes:
+      - type: bind
+        source: ./.ziti
+        target: /opt/app/.ziti
+      - type: bind
+        source: ./data/graph
+        target: /opt/app/data/graph
+    networks:
+      - agents_net
+
+  docker-runner:
+    build:
+      context: .
+      dockerfile: packages/docker-runner/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      ziti-edge-router:
+        condition: service_started
+    environment:
+      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
+      DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
+      ZITI_ENABLED: ${ZITI_ENABLED:-false}
+      ZITI_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
+      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - type: bind
+        source: ./.ziti
+        target: /opt/app/.ziti
+        read_only: true
+    ports:
+      - "${DOCKER_RUNNER_PORT:-7071}:7071"
+    networks:
+      - agents_net
