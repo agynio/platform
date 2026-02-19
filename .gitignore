@@ -10,6 +10,7 @@ packages/platform-server/dist
 packages/platform-server/vitest-report.json
 # LangGraph API
 .langgraph_api
+data/
 agent_instances
 # Local MCP tool cache
 codex-tools-mcp

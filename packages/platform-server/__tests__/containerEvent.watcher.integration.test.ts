@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
 import type { ContainerStatus, ContainerEventType } from '@prisma/client';
-import type { ContainerService } from '../src/infra/container/container.service';
+import type { ContainerService, DockerEventFilters } from '@agyn/docker-runner';
 
 type ContainerRow = {
   id: number;
@@ -187,17 +187,11 @@ class FakePrismaService {
   }
 }
 
-class FakeDocker {
-  constructor(private readonly stream: PassThrough) {}
-  getEvents(_opts: unknown, cb: (err?: Error, stream?: PassThrough) => void) {
-    cb(undefined, this.stream);
-  }
-}
-
 class FakeContainerService {
-  constructor(private readonly docker: FakeDocker) {}
-  getDocker(): FakeDocker {
-    return this.docker;
+  constructor(private readonly stream: PassThrough) {}
+
+  async getEventsStream(_options: { since?: number; filters?: DockerEventFilters }): Promise<PassThrough> {
+    return this.stream;
   }
 }
 
@@ -224,8 +218,7 @@ describe('DockerWorkspaceEventsWatcher integration', () => {
     });
     stream = new PassThrough();
     processor = new ContainerEventProcessor(new FakePrismaService(prisma));
-    const docker = new FakeDocker(stream);
-    const containerService = new FakeContainerService(docker);
+    const containerService = new FakeContainerService(stream);
     watcher = new DockerWorkspaceEventsWatcher(containerService as unknown as ContainerService, processor);
     watcher.start();
   });

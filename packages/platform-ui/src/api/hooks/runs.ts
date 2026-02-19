@@ -48,3 +48,17 @@ export function useRunTimelineEvents(
     refetchOnWindowFocus: false,
   });
 }
+
+export function useRunTimelineEventTotals(runId: string | undefined, filters: { types: string[]; statuses: string[] }) {
+  return useQuery({
+    enabled: !!runId,
+    queryKey: ['agents', 'runs', runId, 'timeline', 'events', 'totals', filters],
+    queryFn: () =>
+      runs.timelineEventTotals(runId as string, {
+        types: filters.types.length > 0 ? filters.types.join(',') : undefined,
+        statuses: filters.statuses.length > 0 ? filters.statuses.join(',') : undefined,
+      }),
+    staleTime: 15000,
+    refetchOnWindowFocus: false,
+  });
+}

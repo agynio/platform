@@ -4,6 +4,7 @@ import type {
   RunMeta,
   RunTimelineEventsResponse,
   RunTimelineSummary,
+  RunTimelineTotalsResponse,
   ToolOutputSnapshot,
 } from '@/api/types/agents';
 
@@ -37,6 +38,15 @@ export const runs = {
           limit: params.limit,
           order: params.order,
           ...buildCursorParams(params),
+        },
+      }),
+    ),
+  timelineEventTotals: (runId: string, params?: { types?: string; statuses?: string }) =>
+    asData<RunTimelineTotalsResponse>(
+      http.get<RunTimelineTotalsResponse>(`/api/agents/runs/${encodeURIComponent(runId)}/events/totals`, {
+        params: {
+          ...(params?.types ? { types: params.types } : {}),
+          ...(params?.statuses ? { statuses: params.statuses } : {}),
         },
       }),
     ),

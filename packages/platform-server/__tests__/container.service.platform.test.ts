@@ -1,41 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
-import Docker from 'dockerode';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService, PLATFORM_LABEL } from '@agyn/docker-runner';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
-import { PLATFORM_LABEL } from '../src/core/constants.js';
 
-vi.mock('dockerode', () => {
-  class MockContainer {
-    start = vi.fn(async () => {});
-    inspect = vi.fn(async () => ({ Id: 'deadbeefcafebabe', State: { Status: 'running' }, Name: '/mock-container', Config: { Labels: {} }, Mounts: [] }));
-  }
-  class MockDocker {
-    modem: { followProgress: (stream: NodeJS.ReadableStream, onFinished: (err?: Error) => void) => void; demuxStream: (...args: unknown[]) => void };
-    constructor() {
-      this.modem = {
-        followProgress: vi.fn((stream: NodeJS.ReadableStream, cb: (err?: Error) => void) => {
-          setTimeout(() => cb(undefined), 0);
-        }),
-        demuxStream: vi.fn(),
-      };
-    }
-    getImage = vi.fn(() => ({ inspect: vi.fn(async () => { throw new Error('not found'); }) }))
-    pull = vi.fn((image: string, optsOrCb?: object | ((err?: Error, stream?: NodeJS.ReadableStream) => void), maybeCb?: (err?: Error, stream?: NodeJS.ReadableStream) => void) => {
+const createMockContainer = () => ({
+  start: vi.fn(async () => {}),
+  inspect: vi.fn(async () => ({ Id: 'deadbeefcafebabe', State: { Status: 'running' }, Name: '/mock-container', Config: { Labels: {} }, Mounts: [] })),
+});
+
+const createMockDocker = () => {
+  const modem = {
+    followProgress: vi.fn((stream: NodeJS.ReadableStream, cb: (err?: Error) => void) => {
+      setTimeout(() => cb(undefined), 0);
+    }),
+    demuxStream: vi.fn(),
+  };
+  const docker = {
+    modem,
+    getImage: vi.fn(() => ({ inspect: vi.fn(async () => { throw new Error('not found'); }) })),
+    pull: vi.fn((image: string, optsOrCb?: object | ((err?: Error, stream?: NodeJS.ReadableStream) => void), maybeCb?: (err?: Error, stream?: NodeJS.ReadableStream) => void) => {
       const cb = (typeof optsOrCb === 'function' ? optsOrCb : maybeCb) as (err?: Error, stream?: NodeJS.ReadableStream) => void;
-      // Return a dummy PassThrough stream
       const stream = new PassThrough();
       setTimeout(() => {
         stream.end();
-        cb(undefined, stream);
+        cb?.(undefined, stream);
       }, 0);
-    });
-    createContainer = vi.fn(async (_opts: unknown) => new MockContainer());
-    listContainers = vi.fn(async () => []);
-    getContainer = vi.fn((_id: string) => new MockContainer());
-  }
-  return { default: MockDocker };
-});
+    }),
+    createContainer: vi.fn(async (_opts: unknown) => createMockContainer()),
+    listContainers: vi.fn(async () => []),
+    getContainer: vi.fn((_id: string) => createMockContainer()),
+  };
+  return docker;
+};
+
+const attachMockDocker = (svc: ContainerService) => {
+  const docker = createMockDocker();
+  (svc as unknown as { docker: ReturnType<typeof createMockDocker> }).docker = docker;
+  return docker;
+};
 
 const makeRegistry = () => ({
   registerStart: vi.fn(async () => undefined),
@@ -56,7 +58,7 @@ describe('ContainerService platform support', () => {
 
   it('threads platform to pull and createContainer and labels when set', async () => {
     const svc = new ContainerService(makeRegistry());
-    const docker = (svc as any).docker as Docker;
+    const docker = attachMockDocker(svc);
 
     const pullSpy = vi.spyOn(docker, 'pull');
     const createSpy = vi.spyOn(docker, 'createContainer');
@@ -82,7 +84,7 @@ describe('ContainerService platform support', () => {
 
   it('omits platform from pull and createContainer when undefined', async () => {
     const svc = new ContainerService(makeRegistry());
-    const docker = (svc as any).docker as Docker;
+    const docker = attachMockDocker(svc);
 
     const pullSpy = vi.spyOn(docker, 'pull');
     const createSpy = vi.spyOn(docker, 'createContainer');
@@ -107,7 +109,7 @@ describe('ContainerService platform support', () => {
 
   it('pulls even if image exists when platform is specified', async () => {
     const svc = new ContainerService(makeRegistry());
-    const docker = (svc as any).docker as Docker;
+    const docker = attachMockDocker(svc);
     // Simulate image already present
     (docker.getImage as any).mockReturnValue({ inspect: vi.fn(async () => ({ Id: 'img' })) });
 
@@ -122,7 +124,7 @@ describe('ContainerService platform support', () => {
 
   it('applies networkMode to HostConfig when provided', async () => {
     const svc = new ContainerService(makeRegistry());
-    const docker = (svc as any).docker as Docker;
+    const docker = attachMockDocker(svc);
     const createSpy = vi.spyOn(docker, 'createContainer');
 
     const container = await svc.start({ image: 'alpine:3', cmd: ['sleep', '1'], networkMode: 'host' });
@@ -134,7 +136,7 @@ describe('ContainerService platform support', () => {
 
   it('merges NetworkingConfig from createExtras', async () => {
     const svc = new ContainerService(makeRegistry());
-    const docker = (svc as any).docker as Docker;
+    const docker = attachMockDocker(svc);
     const createSpy = vi.spyOn(docker, 'createContainer');
 
     const container = await svc.start({

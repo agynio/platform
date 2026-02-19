@@ -4,7 +4,7 @@ import { ConfigService } from '../core/services/config.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';
-import { ContainerService } from './container/container.service';
+import { ContainerAdminService } from './container/containerAdmin.service';
 import { ContainerCleanupService } from './container/containerCleanup.job';
 import { VolumeGcService } from './container/volumeGc.job';
 import { ContainerThreadTerminationService } from './container/containerThreadTermination.service';
@@ -22,6 +22,9 @@ import { ContainerEventProcessor } from './container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
 import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
+import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
+import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
+import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -37,37 +40,43 @@ import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.wo
       inject: [PrismaService],
     },
     {
+      provide: DOCKER_CLIENT,
+      useFactory: (config: ConfigService) =>
+        new HttpDockerRunnerClient({
+          baseUrl: config.getDockerRunnerBaseUrl(),
+          sharedSecret: config.getDockerRunnerSharedSecret(),
+          requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
+        }),
+      inject: [ConfigService],
+    },
+    DockerRunnerConnectivityProbe,
+    {
       provide: ContainerCleanupService,
-      useFactory: (registry: ContainerRegistry, containers: ContainerService) => {
+      useFactory: (registry: ContainerRegistry, containers: DockerClient) => {
         const svc = new ContainerCleanupService(registry, containers);
         svc.start();
 
         return svc;
       },
-      inject: [ContainerRegistry, ContainerService],
+      inject: [ContainerRegistry, DOCKER_CLIENT],
     },
     {
       provide: VolumeGcService,
-      useFactory: (prisma: PrismaService, containers: ContainerService) => {
+      useFactory: (prisma: PrismaService, containers: DockerClient) => {
         const svc = new VolumeGcService(prisma, containers);
         const interval = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
         svc.start(interval);
         return svc;
       },
-      inject: [PrismaService, ContainerService],
-    },
-    {
-      provide: ContainerService,
-      useFactory: (containerRegistry: ContainerRegistry) => {
-        return new ContainerService(containerRegistry);
-      },
-      inject: [ContainerRegistry],
+      inject: [PrismaService, DOCKER_CLIENT],
     },
     {
       provide: WorkspaceProvider,
-      useFactory: (containerService: ContainerService) => new DockerWorkspaceRuntimeProvider(containerService),
-      inject: [ContainerService],
+      useFactory: (dockerClient: DockerClient, registry: ContainerRegistry) =>
+        new DockerWorkspaceRuntimeProvider(dockerClient, registry),
+      inject: [DOCKER_CLIENT, ContainerRegistry],
     },
+    ContainerAdminService,
     TerminalSessionsService,
     ContainerTerminalGateway,
     ContainerThreadTerminationService,
@@ -75,14 +84,14 @@ import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.wo
     {
       provide: DockerWorkspaceEventsWatcher,
       useFactory: (
-        containerService: ContainerService,
+        dockerClient: DockerClient,
         processor: ContainerEventProcessor,
       ) => {
-        const watcher = new DockerWorkspaceEventsWatcher(containerService, processor);
+        const watcher = new DockerWorkspaceEventsWatcher(dockerClient, processor);
         watcher.start();
         return watcher;
       },
-      inject: [ContainerService, ContainerEventProcessor],
+      inject: [DOCKER_CLIENT, ContainerEventProcessor],
     },
     {
       provide: NcpsKeyService,
@@ -100,7 +109,7 @@ import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.wo
   controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController],
   exports: [
     VaultModule,
-    ContainerService,
+    DOCKER_CLIENT,
     ContainerCleanupService,
     VolumeGcService,
     TerminalSessionsService,

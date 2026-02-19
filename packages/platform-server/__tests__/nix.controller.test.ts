@@ -5,6 +5,7 @@ import type { FastifyReply } from 'fastify';
 
 import { NixController } from '../src/infra/ncps/nix.controller';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const BASE = 'https://www.nixhub.io';
 
@@ -79,6 +80,7 @@ describe.sequential('NixController', () => {
         ncpsEnabled: 'false',
         ncpsUrl: 'http://ncps:8501',
         ncpsRefreshIntervalMs: '0',
+        ...runnerConfigDefaults,
       }),
     );
     controller = new NixController(cfg);

@@ -1,9 +1,26 @@
-import { BadRequestException, Controller, Get, Inject, Query, Logger, Param } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Query,
+  Logger,
+  Param,
+  NotFoundException,
+  HttpCode,
+  HttpStatus,
+  HttpException,
+  Req,
+} from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
+import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
+import { ContainerAdminService } from './containerAdmin.service';
+import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { ConfigService } from '../../core/services/config.service';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -64,6 +81,38 @@ const decodeEventCursor = (value: string): { createdAt: Date; id: number } => {
 
 const isHealth = (value: unknown): value is ContainerHealth =>
   value === 'healthy' || value === 'unhealthy' || value === 'starting';
+
+type DeleteFailureKind =
+  | 'precondition_failed'
+  | 'db_not_found'
+  | 'auth'
+  | 'runner_unreachable'
+  | 'runner_4xx'
+  | 'runner_5xx'
+  | 'unknown';
+
+type DeleteFailureContext = {
+  requestId?: string;
+  runnerCalled: boolean;
+  dbRecordFound: boolean;
+};
+
+type DeleteFailureLog = {
+  containerId: string;
+  requestId: string | null;
+  runnerCalled: boolean;
+  runnerBaseUrl: string;
+  failureKind: DeleteFailureKind;
+  runnerStatusCode?: number;
+  runnerErrorCode?: string;
+  runnerMessage?: string;
+  runnerRetryable?: boolean;
+  httpStatus?: number;
+  httpResponse?: unknown;
+  errorName?: string;
+  errorMessage?: string;
+  errorStack?: string;
+};
 
 export class ListContainersQueryDto {
   @IsOptional()
@@ -139,11 +188,15 @@ export class ListContainerEventsQueryDto {
 export class ContainersController {
   private prisma: PrismaClient;
   private readonly logger = new Logger(ContainersController.name);
+  private readonly runnerBaseUrl: string;
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
+    @Inject(ContainerAdminService) private readonly containerAdmin: ContainerAdminService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.prisma = prismaSvc.getClient();
+    this.runnerBaseUrl = this.configService.getDockerRunnerBaseUrl();
   }
 
   @Get()
@@ -497,5 +550,223 @@ export class ContainersController {
         nextAfter,
       },
     };
+  }
+
+  @Delete(':containerId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Param('containerId') containerIdParam: string, @Req() req?: unknown): Promise<void> {
+    const containerId = typeof containerIdParam === 'string' ? containerIdParam.trim() : '';
+    if (!containerId) {
+      throw new BadRequestException('containerId is required');
+    }
+    const shortId = this.shortId(containerId);
+    const requestId = this.extractRequestId(req);
+    this.logger.log('Delete container requested', { containerId: shortId, requestId });
+    const failureContext: DeleteFailureContext = {
+      requestId,
+      runnerCalled: false,
+      dbRecordFound: false,
+    };
+    try {
+      const existing = await this.prisma.container.findUnique({ where: { containerId } });
+      if (!existing) {
+        this.logger.warn('Delete container requested for missing record', {
+          containerId: shortId,
+          prismaHit: false,
+          requestId,
+        });
+        throw new NotFoundException({ code: 'container_not_found', message: 'Container not found' });
+      }
+      failureContext.dbRecordFound = true;
+      this.logger.debug('Resolved container delete target', {
+        containerId: shortId,
+        prismaHit: true,
+        status: existing.status,
+        threadId: existing.threadId,
+        nodeId: existing.nodeId,
+        requestId,
+      });
+      failureContext.runnerCalled = true;
+      await this.containerAdmin.deleteContainer(containerId);
+      this.logger.log('Container delete completed', { containerId: shortId, requestId });
+    } catch (error) {
+      this.handleDeleteError(containerId, error, failureContext);
+    }
+  }
+
+  private buildDeleteFailureLog(containerId: string, error: unknown, context: DeleteFailureContext): DeleteFailureLog {
+    const payload: DeleteFailureLog = {
+      containerId: this.shortId(containerId),
+      requestId: context.requestId ?? null,
+      runnerCalled: context.runnerCalled,
+      runnerBaseUrl: this.runnerBaseUrl,
+      failureKind: this.resolveFailureKind(error, context),
+    };
+    if (error instanceof DockerRunnerRequestError) {
+      payload.runnerStatusCode = error.statusCode;
+      payload.runnerErrorCode = error.errorCode;
+      payload.runnerMessage = error.message;
+      payload.runnerRetryable = error.retryable;
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
+      if (error.stack) {
+        payload.errorStack = error.stack;
+      }
+      return payload;
+    }
+    if (error instanceof HttpException) {
+      payload.httpStatus = error.getStatus();
+      payload.httpResponse = error.getResponse();
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
+      if (error instanceof Error && error.stack) {
+        payload.errorStack = error.stack;
+      }
+      return payload;
+    }
+    if (error instanceof Error) {
+      payload.errorName = error.name;
+      payload.errorMessage = error.message;
+      if (error.stack) {
+        payload.errorStack = error.stack;
+      }
+      return payload;
+    }
+    payload.errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
+    return payload;
+  }
+
+  private handleDeleteError(containerId: string, error: unknown, context: DeleteFailureContext): never {
+    const logPayload = this.buildDeleteFailureLog(containerId, error, context);
+    const stack = error instanceof Error ? error.stack : undefined;
+    this.logger.error(`Container delete failed ${JSON.stringify(logPayload)}`, stack);
+    if (error instanceof HttpException) {
+      throw error;
+    }
+    throw this.mapDeleteError(error, context.requestId);
+  }
+
+  private resolveFailureKind(error: unknown, context: DeleteFailureContext): DeleteFailureKind {
+    if (!context.dbRecordFound) {
+      return 'db_not_found';
+    }
+    if (error instanceof DockerRunnerRequestError) {
+      if (error.statusCode >= 500) {
+        return 'runner_5xx';
+      }
+      if (error.statusCode >= 400 && error.statusCode < 500) {
+        return 'runner_4xx';
+      }
+      return 'runner_unreachable';
+    }
+    if (error instanceof HttpException) {
+      const status = error.getStatus();
+      if (!context.runnerCalled && status === HttpStatus.NOT_FOUND) {
+        return 'db_not_found';
+      }
+      if (status === HttpStatus.BAD_REQUEST) {
+        return 'precondition_failed';
+      }
+      if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN) {
+        return 'auth';
+      }
+      if (context.runnerCalled && status >= 500) {
+        return 'runner_5xx';
+      }
+      if (context.runnerCalled && status >= 400 && status < 500) {
+        return 'runner_4xx';
+      }
+    }
+    if (!context.runnerCalled) {
+      return 'precondition_failed';
+    }
+    return 'unknown';
+  }
+
+  private mapDeleteError(error: unknown, requestId?: string): HttpException {
+    if (error instanceof DockerRunnerRequestError) {
+      const status = this.normalizeRunnerStatus(error.statusCode);
+      const body = {
+        code: error.errorCode ?? 'docker_runner_error',
+        message: error.message,
+        ...(requestId ? { requestId } : {}),
+      };
+      if (status === HttpStatus.NOT_FOUND) {
+        return new NotFoundException(body);
+      }
+      return new HttpException(body, status);
+    }
+    return new HttpException(
+      {
+        code: 'container_delete_failed',
+        message: 'Failed to delete container',
+        ...(requestId ? { requestId } : {}),
+      },
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+
+  private normalizeRunnerStatus(status?: number): number {
+    if (typeof status === 'number' && status >= 400 && status < 600) {
+      return status;
+    }
+    return HttpStatus.BAD_GATEWAY;
+  }
+
+  private extractRequestId(req?: unknown): string | undefined {
+    if (!req || typeof req !== 'object') {
+      return undefined;
+    }
+    const candidate = req as { id?: unknown; headers?: unknown; raw?: { id?: unknown; headers?: unknown } };
+    const idSources = [candidate.id, candidate.raw?.id];
+    for (const source of idSources) {
+      if (typeof source === 'string') {
+        const trimmed = source.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    const headerSources = [candidate.headers, candidate.raw?.headers];
+    for (const headers of headerSources) {
+      const headerValue = this.extractHeaderValue(headers, 'x-request-id') ?? this.extractHeaderValue(headers, 'request-id');
+      if (headerValue) {
+        return headerValue;
+      }
+    }
+    return undefined;
+  }
+
+  private extractHeaderValue(headers: unknown, key: string): string | undefined {
+    if (!headers || typeof headers !== 'object') {
+      return undefined;
+    }
+    const normalizedKey = key.toLowerCase();
+    const source = headers as Record<string, unknown>;
+    const value = source[key] ?? source[normalizedKey];
+    if (Array.isArray(value)) {
+      return this.firstDefinedString(value);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || undefined;
+    }
+    return undefined;
+  }
+
+  private shortId(containerId: string): string {
+    return containerId.length > 12 ? containerId.slice(0, 12) : containerId;
+  }
+
+  private firstDefinedString(values: unknown[]): string | undefined {
+    for (const entry of values) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    return undefined;
   }
 }

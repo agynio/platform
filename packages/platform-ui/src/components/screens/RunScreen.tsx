@@ -140,7 +140,7 @@ export default function RunScreen({
 
   const formatNumber = (value: number) => value.toLocaleString();
 
-  const totalEvents = events.length;
+  const totalEvents = statistics.totalEvents ?? events.length;
   const runsByStatus = {
     running: events.filter((event) => event.status === 'running').length,
     finished: events.filter((event) => event.status === 'finished').length,

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService, type ContainerOpts } from '../src/infra/container/container.service';
-import { ContainerHandle } from '../src/infra/container/container.handle';
+import { ContainerService, ContainerHandle, type ContainerOpts } from '@agyn/docker-runner';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';

@@ -8,6 +8,7 @@ import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.
 import { WorkspaceProvider } from '../../workspace/providers/workspace.provider';
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
 import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
+import { DockerRunnerRequestError } from './httpDockerRunner.client';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -179,7 +180,22 @@ export class ContainerTerminalGateway {
           params: { workspaceId },
           query: Object.fromEntries(parsedUrl.searchParams.entries()),
         } as unknown as FastifyRequest;
-        void this.handleConnection(stream, fakeReq);
+        const handleFailure = (error: unknown) => {
+          this.logger.error('terminal websocket handler failed', {
+            path: parsedUrl.pathname,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          safeClose(stream.socket, 1011, 'terminal_internal_error', this.logger);
+        };
+        try {
+          const maybePromise = this.handleConnection(stream, fakeReq);
+          if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === 'function') {
+            void (maybePromise as Promise<unknown>).catch(handleFailure);
+          }
+        } catch (error) {
+          handleFailure(error);
+        }
       });
     });
     this.registered = true;
@@ -745,6 +761,19 @@ export class ContainerTerminalGateway {
         refreshActivity();
       });
     } catch (err) {
+      if (err instanceof DockerRunnerRequestError && (err.statusCode === 404 || err.statusCode === 409)) {
+        const code = err.statusCode === 404 ? 'terminal_container_not_found' : 'terminal_container_conflict';
+        send({ type: 'error', code, message: err.message });
+        this.logger.warn('terminal container unavailable', {
+          sessionId,
+          workspaceId: workspaceShortId,
+          execId,
+          status: err.statusCode,
+          errorCode: err.errorCode,
+        });
+        await cleanup(code, { skipStatus: true });
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       send({ type: 'error', code: 'exec_start_failed', message });
       logStatus('error', { reason: message, code: 'exec_start_failed' });

@@ -7,7 +7,7 @@ import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
 import type { EnvService } from '../../src/env/env.service';
 import type { ArchiveService } from '../../src/infra/archive/archive.service';
-import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { ContainerHandle } from '@agyn/docker-runner';
 
 class FakeContainer implements ContainerHandle {
   public lastPut?: { data: Buffer; options: { path: string } };

@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto, ListContainerEventsQueryDto } from '../src/infra/container/containers.controller';
 import type { PrismaClient, ContainerEventType } from '@prisma/client';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
+import { NotFoundException, HttpException, Logger } from '@nestjs/common';
+import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { ConfigService } from '../src/core/services/config.service';
+import { PrismaService } from '../src/core/services/prisma.service';
 
 type ContainerHealth = 'healthy' | 'unhealthy' | 'starting';
 type RowMetadata = {
@@ -130,6 +135,11 @@ class InMemoryPrismaClient {
         metadata: r.metadata,
       }));
     },
+    async findUnique(args: { where: { containerId: string } }): Promise<Row | null> {
+      const id = args?.where?.containerId;
+      if (!id) return null;
+      return this.rows.find((row) => row.containerId === id) ?? null;
+    },
   };
   containerEvent = {
     rows: [] as ContainerEventRow[],
@@ -232,7 +242,11 @@ class InMemoryPrismaClient {
 }
 
 type MinimalPrismaClient = {
-  container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] };
+  container: {
+    findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>;
+    findUnique(args: { where: { containerId: string } }): Promise<Row | null>;
+    rows: Row[];
+  };
   containerEvent: { findMany(args: ContainerEventFindManyArgs): Promise<Array<Partial<ContainerEventRow>>>; rows: ContainerEventRow[] };
 };
 class PrismaStub {
@@ -262,11 +276,22 @@ class PrismaStubWithQueryRaw {
 }
 
 describe('ContainersController routes', () => {
-  let fastify: FastifyInstance; let prismaSvc: PrismaStub; let controller: ContainersController;
+  let fastify: FastifyInstance;
+  let prismaSvc: PrismaStub;
+  let controller: ContainersController;
+  let containerAdmin: Pick<ContainerAdminService, 'deleteContainer'>;
+  let configService: Pick<ConfigService, 'dockerRunnerBaseUrl'>;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc);
+    containerAdmin = {
+      deleteContainer: vi.fn().mockResolvedValue(undefined),
+    } as Pick<ContainerAdminService, 'deleteContainer'>;
+    configService = {
+      dockerRunnerBaseUrl: 'http://runner.local',
+      getDockerRunnerBaseUrl: () => 'http://runner.local',
+    } as ConfigService;
+    controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] | 'all' =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed', 'all'].includes(v);
@@ -473,7 +498,11 @@ describe('ContainersController routes', () => {
       },
     ];
     const prismaSvcWithRaw = new PrismaStubWithQueryRaw(rows);
-    const rawController = new ContainersController(prismaSvcWithRaw);
+    const rawController = new ContainersController(
+      prismaSvcWithRaw as unknown as PrismaService,
+      containerAdmin as ContainerAdminService,
+      configService as ConfigService,
+    );
     const result = await rawController.list({} as ListContainersQueryDto);
     expect(result.items).toEqual([]);
     expect(prismaSvcWithRaw.queryRawCalls.length).toBe(0);
@@ -583,5 +612,91 @@ describe('ContainersController routes', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json() as { message: string };
     expect(body.message).toMatch(/cursor/i);
+  });
+
+  it('calls ContainerAdminService when deleting an existing container', async () => {
+    await expect(controller.delete('cid-1')).resolves.toBeUndefined();
+    expect(containerAdmin.deleteContainer).toHaveBeenCalledWith('cid-1');
+  });
+
+  it('rejects with NotFound when deleting a missing container', async () => {
+    await expect(controller.delete('missing-cid')).rejects.toBeInstanceOf(NotFoundException);
+    expect(containerAdmin.deleteContainer).not.toHaveBeenCalled();
+  });
+
+  it('returns structured HttpException when runner delete fails', async () => {
+    const runnerError = new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(runnerError);
+
+    const error = await controller.delete('cid-1').catch((err) => err);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatus()).toBe(503);
+    expect((error as HttpException).getResponse()).toEqual({ code: 'runner_unreachable', message: 'runner offline' });
+  });
+
+  it('logs structured metadata when the runner is unreachable', async () => {
+    const runnerError = new DockerRunnerRequestError(0, 'runner_connection_refused', true, 'runner offline');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(runnerError);
+    const loggerInstance = (controller as unknown as { logger: Logger }).logger;
+    const errorSpy = vi.spyOn(loggerInstance, 'error');
+
+    await controller.delete('cid-1', { id: 'req-log-1' } as unknown as FastifyRequest).catch(() => undefined);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [loggedMessage, stackArg] = errorSpy.mock.calls[0] as [string, string?];
+    expect(loggedMessage).toMatch(/^Container delete failed /);
+    const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      containerId: 'cid-1',
+      requestId: 'req-log-1',
+      runnerCalled: true,
+      runnerBaseUrl: 'http://runner.local',
+      failureKind: 'runner_unreachable',
+      runnerStatusCode: 0,
+      runnerErrorCode: 'runner_connection_refused',
+      runnerMessage: 'runner offline',
+      errorStack: runnerError.stack,
+    });
+    expect(stackArg).toBe(runnerError.stack);
+    errorSpy.mockRestore();
+  });
+
+  it('maps unexpected delete errors to structured 503 with request id context', async () => {
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(new Error('tcp connection reset'));
+
+    const fakeRequest = { id: 'req-delete-123', headers: { 'x-request-id': 'hdr-req-456' } };
+    const error = (await controller.delete('cid-1', fakeRequest as unknown as FastifyRequest).catch((err) => err)) as HttpException;
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect(error.getStatus()).toBe(503);
+    expect(error.getResponse()).toEqual({
+      code: 'container_delete_failed',
+      message: 'Failed to delete container',
+      requestId: 'req-delete-123',
+    });
+  });
+
+  it('logs metadata for unexpected delete failures', async () => {
+    const deleteError = new Error('tcp connection reset');
+    (containerAdmin.deleteContainer as vi.Mock).mockRejectedValueOnce(deleteError);
+    const loggerInstance = (controller as unknown as { logger: Logger }).logger;
+    const errorSpy = vi.spyOn(loggerInstance, 'error');
+
+    await controller.delete('cid-1', { id: 'req-log-2' } as unknown as FastifyRequest).catch(() => undefined);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [loggedMessage, stackArg] = errorSpy.mock.calls[0] as [string, string?];
+    const payload = JSON.parse(loggedMessage.replace(/^Container delete failed /, '')) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      containerId: 'cid-1',
+      requestId: 'req-log-2',
+      runnerCalled: true,
+      runnerBaseUrl: 'http://runner.local',
+      failureKind: 'unknown',
+      errorMessage: 'tcp connection reset',
+      errorStack: deleteError.stack,
+    });
+    expect(stackArg).toBe(deleteError.stack);
+    errorSpy.mockRestore();
   });
 });

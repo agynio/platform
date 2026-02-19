@@ -51,6 +51,22 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
+  dockerRunnerBaseUrl: z
+    .string()
+    .min(1, 'DOCKER_RUNNER_BASE_URL is required')
+    .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
+    .transform((value) => value.trim().replace(/\/+$/, '')),
+  dockerRunnerSharedSecret: z
+    .string()
+    .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
+    .transform((value) => value.trim()),
+  dockerRunnerTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) ? num : 30_000;
+    }),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -297,6 +313,30 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
+  get dockerRunnerBaseUrl(): string {
+    return this.params.dockerRunnerBaseUrl;
+  }
+
+  get dockerRunnerSharedSecret(): string {
+    return this.params.dockerRunnerSharedSecret;
+  }
+
+  get dockerRunnerTimeoutMs(): number {
+    return this.params.dockerRunnerTimeoutMs;
+  }
+
+  getDockerRunnerBaseUrl(): string {
+    return this.dockerRunnerBaseUrl;
+  }
+
+  getDockerRunnerSharedSecret(): string {
+    return this.dockerRunnerSharedSecret;
+  }
+
+  getDockerRunnerTimeoutMs(): number {
+    return this.dockerRunnerTimeoutMs;
+  }
+
   get workspaceNetworkName(): string {
     return this.params.workspaceNetworkName;
   }
@@ -403,6 +443,9 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
+      dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
+      dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
+      dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

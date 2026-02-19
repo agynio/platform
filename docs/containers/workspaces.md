@@ -51,4 +51,15 @@ Terminal WebSocket
 - Close semantics:
   - The gateway closes with code `1000` for normal termination (e.g., client request or exec exit) and `1008` when the request is invalid or the session cannot be validated (`workspace_id_required`, `invalid_query`, `workspace_mismatch`, etc.).
   - Before issuing close frames the server always sends the corresponding `error` or `status` payload so clients can surface user-facing feedback.
-  - Socket shutdown attempts `ws.close(code, reason)` first, then falls back to `ws.terminate()` and finally invokes `ws.end()` to guarantee transport teardown even when Fastify exposes only a `SocketStream` façade.
+- Socket shutdown attempts `ws.close(code, reason)` first, then falls back to `ws.terminate()` and finally invokes `ws.end()` to guarantee transport teardown even when Fastify exposes only a `SocketStream` façade.
+
+## Test-only provisioning endpoint
+
+- The docker-backed full-stack integration test (`packages/platform-server/__tests__/containers.fullstack.docker.integration.test.ts`)
+  boots a real docker-runner + platform server pair and exercises the HTTP lifecycle.
+- Because there is no public "create workspace" REST endpoint, the test registers a private controller at
+  `POST /test/workspaces`. This controller uses the production `WorkspaceProvider.ensureWorkspace` flow and
+  stores the resulting container/thread IDs so that `/api/containers/:id` deletion can be exercised end-to-end.
+- The controller always provisions an `nginx:1.25-alpine` workspace on the `bridge` network and tags all
+  containers with `TEST_SUITE=containers-fullstack` for deterministic cleanup.
+- The route is only mounted inside the integration test module; it is **not** part of the public API surface.

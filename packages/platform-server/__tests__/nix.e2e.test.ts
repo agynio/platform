@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { NixController } from '../src/infra/ncps/nix.controller';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const BASE = 'https://www.nixhub.io';
 
@@ -23,6 +24,7 @@ describe('NixController E2E (Fastify)', () => {
         nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
         mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',
         ncpsRefreshIntervalMs: '0',
+        ...runnerConfigDefaults,
       })
     );
 

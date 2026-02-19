@@ -5,6 +5,7 @@ import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
+import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from './helpers/ws';
@@ -118,6 +119,89 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     if (errorMessage && typeof errorMessage === 'object') {
       expect(errorMessage).toMatchObject({ code: 'invalid_query' });
     }
+
+    await app.close();
+  });
+
+  it('catches handleConnection rejections and closes the socket with error', async () => {
+    const record = createSessionRecord({ workspaceId: 'c'.repeat(64) });
+    const sessionMocks = {
+      validate: vi.fn(),
+      markConnected: vi.fn(),
+      get: vi.fn(),
+      touch: vi.fn(),
+      close: vi.fn(),
+    };
+    const providerMocks = {
+      openInteractiveExec: vi.fn(),
+      resize: vi.fn(),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      sessionMocks as unknown as TerminalSessionsService,
+      providerMocks as unknown as WorkspaceProvider,
+    );
+
+    const handleSpy = vi
+      .spyOn(gateway as unknown as { handleConnection: (...args: unknown[]) => Promise<void> }, 'handleConnection')
+      .mockRejectedValue(new Error('terminal boom'));
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.workspaceId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+
+    const closeInfo = await waitForWsClose(ws, 3000);
+
+    expect(handleSpy).toHaveBeenCalledTimes(1);
+    expect(closeInfo.code).toBe(1011);
+    expect(closeInfo.reason).toBe('terminal_internal_error');
+
+    await app.close();
+  });
+
+  it('returns graceful error when workspace container is missing', async () => {
+    const { service, baseRecord } = createSessionServiceHarness({ workspaceId: 'd'.repeat(64) });
+    const providerMocks = {
+      openInteractiveExec: vi
+        .fn()
+        .mockRejectedValue(new DockerRunnerRequestError(404, 'no_such_container', false, 'No such container')),
+      resize: vi.fn(),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      service as unknown as TerminalSessionsService,
+      providerMocks as unknown as WorkspaceProvider,
+    );
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${baseRecord.workspaceId}/terminal/ws?sessionId=${baseRecord.sessionId}&token=${baseRecord.token}`,
+    );
+
+    const messages: Array<{ code?: string; [key: string]: unknown }> = [];
+    ws.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      try {
+        messages.push(JSON.parse(text));
+      } catch {
+        messages.push({ raw: text });
+      }
+    });
+
+    await waitFor(() => messages.length > 0, 2000);
+    const closeInfo = await waitForWsClose(ws, 2000);
+
+    expect(providerMocks.openInteractiveExec).toHaveBeenCalledTimes(1);
+    expect(messages.some((msg) => msg?.code === 'terminal_container_not_found')).toBe(true);
+    expect(closeInfo.code).toBe(1000);
+    expect(closeInfo.reason).toBe('terminal_container_not_found');
 
     await app.close();
   });

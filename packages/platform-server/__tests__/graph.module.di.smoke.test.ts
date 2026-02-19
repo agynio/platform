@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GraphApiModule } from '../src/graph/graph-api.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService } from '@agyn/docker-runner';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
@@ -26,6 +26,7 @@ import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { runnerConfigDefaults } from './helpers/config';
 
 process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -171,6 +172,7 @@ if (!shouldRunDbTests) {
         configSchema.parse({
           llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
+          ...runnerConfigDefaults,
         }),
       );
 

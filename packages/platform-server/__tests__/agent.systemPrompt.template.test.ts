@@ -14,6 +14,7 @@ import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import type { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { runnerConfigDefaults } from './helpers/config';
 
 const EmptySchema = z.object({});
 
@@ -67,6 +68,7 @@ const createAgentHarness = async () => {
             agentsDatabaseUrl: 'postgres://localhost/agents',
             litellmBaseUrl: 'http://localhost:4000',
             litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
           }),
         ),
       },

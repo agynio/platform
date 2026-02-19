@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EnvService } from '../../src/env/env.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
-import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { ContainerHandle } from '@agyn/docker-runner';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../src/utils/execTimeout';
 
 type OutputChunk = { source: 'stdout' | 'stderr'; data: string | Buffer };

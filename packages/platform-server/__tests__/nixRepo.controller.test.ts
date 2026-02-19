@@ -4,6 +4,7 @@ import type { FastifyReply } from 'fastify';
 
 import { NixRepoController } from '../src/infra/ncps/nixRepo.controller';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { runnerConfigDefaults } from './helpers/config';
 
 const API_BASE = 'https://api.github.com';
 
@@ -36,6 +37,7 @@ describe('NixRepoController', () => {
         graphRepoPath: './data/graph',
         graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
+        ...runnerConfigDefaults,
       }),
     );
     controller = new NixRepoController(cfg);
@@ -118,6 +120,7 @@ describe('NixRepoController', () => {
         graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
         nixRepoAllowlist: 'allowed/repo',
+        ...runnerConfigDefaults,
       }),
     );
     controller = new NixRepoController(cfg);
