@@ -19,3 +19,5 @@ export type {
   ResolutionEventSource,
   ResolutionErrorCode,
 } from './references';
+
+export * from './notifications';

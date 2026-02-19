@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { PrismaService } from '../src/core/services/prisma.service';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 
 describe('SQL: WITH RECURSIVE and UUID casts', () => {
   it('getThreadsMetrics uses WITH RECURSIVE and ::uuid[] and returns expected aggregation', async () => {
@@ -64,16 +64,17 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) };
     const runtimeStub = { subscribe: () => () => {} } as any;
     const eventsBusStub = {} as any;
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub, eventsBusStub);
+    const brokerStub = { connect: vi.fn(), publish: vi.fn(), close: vi.fn() };
+    const publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, brokerStub as any);
 
     const scheduled: string[] = [];
     // Spy/override scheduleThreadMetrics to capture scheduled ids
-    type SchedFn = GraphSocketGateway['scheduleThreadMetrics'];
+    type SchedFn = NotificationsPublisher['scheduleThreadMetrics'];
     const override = ((id: string) => { scheduled.push(id); }) satisfies SchedFn;
     // Assign using bracket notation to avoid broad casts
-    (gateway as any)['scheduleThreadMetrics'] = override;
+    (publisher as any)['scheduleThreadMetrics'] = override;
 
-    await gateway.scheduleThreadAndAncestorsMetrics(leaf);
+    await publisher.scheduleThreadAndAncestorsMetrics(leaf);
 
     expect(captured.length).toBe(1);
     const call = captured[0];

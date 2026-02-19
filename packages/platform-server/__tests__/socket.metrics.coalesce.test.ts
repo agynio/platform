@@ -1,51 +1,57 @@
-import { describe, it, expect, vi } from 'vitest';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { NotificationEnvelope } from '@agyn/shared';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 
-describe('GraphSocketGateway metrics coalescing', () => {
+describe('NotificationsPublisher metrics coalescing', () => {
+  const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+  const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as any;
+  const eventsBusStub = {
+    subscribeToRunEvents: () => () => {},
+    subscribeToToolOutputChunk: () => () => {},
+    subscribeToToolOutputTerminal: () => () => {},
+    subscribeToReminderCount: () => () => {},
+    subscribeToNodeState: () => () => {},
+    subscribeToThreadCreated: () => () => {},
+    subscribeToThreadUpdated: () => () => {},
+    subscribeToMessageCreated: () => () => {},
+    subscribeToRunStatusChanged: () => () => {},
+    subscribeToThreadMetrics: () => () => {},
+    subscribeToThreadMetricsAncestors: () => () => {},
+  } as any;
+
+  let metricsStub: { getThreadsMetrics: ReturnType<typeof vi.fn> };
+  let brokerStub: { connect: ReturnType<typeof vi.fn>; publish: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+  let publisher: NotificationsPublisher;
+
+  beforeEach(() => {
+    metricsStub = {
+      getThreadsMetrics: vi.fn(async (ids: string[]) =>
+        Object.fromEntries(ids.map((id) => [id, { remindersCount: 0, activity: 'idle' as const }])),
+      ),
+    };
+    brokerStub = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publish: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, brokerStub as any);
+  });
+
   it('coalesces multiple schedules into single batch computation', async () => {
     vi.useFakeTimers();
-    const adapter = new FastifyAdapter();
-    const fastify = adapter.getInstance();
-    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
-    // Stub metrics service to capture calls
-    const getThreadsMetrics = vi.fn(async (_ids: string[]) =>
-      Object.fromEntries(_ids.map((id) => [id, { remindersCount: 0, containersCount: 0, activity: 'idle' as const }])),
-    );
-    const metricsStub = { getThreadsMetrics } as any;
-    const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as any;
-    const eventsBusStub = {
-      subscribeToRunEvents: () => () => {},
-      subscribeToToolOutputChunk: () => () => {},
-      subscribeToToolOutputTerminal: () => () => {},
-      subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
-      subscribeToThreadCreated: () => () => {},
-      subscribeToThreadUpdated: () => () => {},
-      subscribeToMessageCreated: () => () => {},
-      subscribeToRunStatusChanged: () => () => {},
-      subscribeToThreadMetrics: () => () => {},
-      subscribeToThreadMetricsAncestors: () => () => {},
-    };
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub, prismaStub, eventsBusStub as any);
-    // Attach and stub io emit sink
-    gateway.init({ server: fastify.server });
-    const captured: Array<{ room: string; event: string; payload: any }> = [];
-    (gateway as any)['io'] = { to: (room: string) => ({ emit: (event: string, payload: any) => { captured.push({ room, event, payload }); } }) };
+    publisher.scheduleThreadMetrics('t1');
+    publisher.scheduleThreadMetrics('t2');
 
-    gateway.scheduleThreadMetrics('t1');
-    gateway.scheduleThreadMetrics('t2');
-    // Advance timers to trigger flush
-    vi.advanceTimersByTime(120);
+    await vi.advanceTimersByTimeAsync(120);
     await Promise.resolve();
 
-    // Assert single batch computation and grouped emits to both rooms
-    expect(getThreadsMetrics).toHaveBeenCalledTimes(1);
-    expect(getThreadsMetrics).toHaveBeenCalledWith(['t1', 't2']);
-    const activityThreadsRoom = captured.filter((e) => e.event === 'thread_activity_changed' && e.room === 'threads');
-    const remindersThreadsRoom = captured.filter((e) => e.event === 'thread_reminders_count' && e.room === 'threads');
-    expect(activityThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
-    expect(remindersThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    expect(metricsStub.getThreadsMetrics).toHaveBeenCalledTimes(1);
+    expect(metricsStub.getThreadsMetrics).toHaveBeenCalledWith(['t1', 't2']);
+    const envelopes = brokerStub.publish.mock.calls.map(([envelope]) => envelope as NotificationEnvelope);
+    const activityPayloads = envelopes.filter((e) => e.event === 'thread_activity_changed');
+    const remindersPayloads = envelopes.filter((e) => e.event === 'thread_reminders_count');
+    expect(activityPayloads.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    expect(remindersPayloads.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
     vi.useRealTimers();
   });
 });
