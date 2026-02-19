@@ -48,19 +48,23 @@ ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ZITI_ROUTER_NAME=dev-edge-router
 ZITI_RUNNER_PROXY_HOST=127.0.0.1
 ZITI_RUNNER_PROXY_PORT=17071
-ZITI_PLATFORM_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.platform-server.json
-ZITI_RUNNER_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.docker-runner.json
-ZITI_IDENTITIES_DIR=$(pwd)/.ziti/identities
-ZITI_TMP_DIR=$(pwd)/.ziti/tmp
+ZITI_PLATFORM_IDENTITY_FILE=/absolute/path/to/platform/.ziti/identities/dev.agyn-platform.platform-server.json
+ZITI_RUNNER_IDENTITY_FILE=/absolute/path/to/platform/.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_IDENTITIES_DIR=/absolute/path/to/platform/.ziti/identities
+ZITI_TMP_DIR=/absolute/path/to/platform/.ziti/tmp
 ```
 
 - `packages/docker-runner/.env`
 
 ```
 ZITI_ENABLED=true
-ZITI_IDENTITY_FILE=$(pwd)/.ziti/identities/dev.agyn-platform.docker-runner.json
+ZITI_IDENTITY_FILE=/absolute/path/to/platform/.ziti/identities/dev.agyn-platform.docker-runner.json
 ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ```
+
+> Replace `/absolute/path/to/platform` with your local repository root. When using shell exports instead of `.env`
+> files you can set the variables with `$(pwd)` (e.g.,
+> `export ZITI_PLATFORM_IDENTITY_FILE="$(pwd)/.ziti/identities/..."`).
 
 ### Docker compose overlay (`docker-compose.dev.yml`)
 
