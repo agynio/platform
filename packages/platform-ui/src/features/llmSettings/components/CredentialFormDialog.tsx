@@ -48,8 +48,19 @@ function buildDefaultValues(
   providers: ProviderOption[],
   credential?: CredentialRecord,
 ): CredentialFormValues {
+  const resolveSelectionId = (storedKey?: string): string => {
+    if (!providers.length) return '';
+    if (storedKey) {
+      const match = providers.find((option) => option.id === storedKey || option.litellmProvider === storedKey);
+      if (match) {
+        return match.id;
+      }
+    }
+    return providers[0]?.id ?? '';
+  };
+
   if (mode === 'edit' && credential) {
-    const providerKey = credential.providerKey;
+    const providerKey = resolveSelectionId(credential.providerKey);
     const values: Record<string, string> = { ...credential.values };
     return {
       name: credential.name,
@@ -59,7 +70,7 @@ function buildDefaultValues(
   }
 
   const firstProvider = providers[0];
-  const providerKey = firstProvider?.litellmProvider ?? '';
+  const providerKey = resolveSelectionId();
   const values: Record<string, string> = {};
   if (firstProvider) {
     for (const field of firstProvider.fields) {
@@ -185,9 +196,14 @@ export function CredentialFormDialog({
       return;
     }
 
+    if (!selectedProvider) {
+      form.setError('providerKey', { message: 'Select a provider' });
+      return;
+    }
+
     await onSubmit({
       name: data.name.trim(),
-      providerKey: data.providerKey,
+      providerKey: selectedProvider.litellmProvider,
       values: sanitizeValues(data.values ?? {}),
       metadata: credential?.metadata ?? {},
     });
@@ -258,7 +274,7 @@ export function CredentialFormDialog({
                           disabled={providers.length === 0}
                           placeholder="Select provider"
                           options={providers.map((provider) => ({
-                            value: provider.litellmProvider,
+                            value: provider.id,
                             label: provider.label,
                           }))}
                           size="sm"

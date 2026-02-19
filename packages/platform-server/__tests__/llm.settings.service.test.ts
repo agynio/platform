@@ -57,6 +57,7 @@ describe.sequential('LLMSettingsService', () => {
     const result = await service.listProviders();
     expect(result).toHaveLength(1);
     expect(result[0]?.provider).toBe('openai');
+    expect(result[0]?.catalog_id).toBe('openai::openai');
     scope.done();
   });
 
@@ -101,6 +102,7 @@ describe.sequential('LLMSettingsService', () => {
     expect(result[0]?.provider).toBe('Azure-OpenAI');
     expect(result[0]?.litellm_provider).toBe('openai_chat');
     expect(result[0]?.canonical_provider).toBe('openai');
+    expect(result[0]?.catalog_id).toBe('openai_chat::azure openai');
     scope.done();
   });
 

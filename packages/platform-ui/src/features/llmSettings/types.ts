@@ -19,6 +19,7 @@ export type ProviderField = {
 
 export type ProviderOption = {
   id: string;
+  catalogId: string;
   label: string;
   litellmProvider: string;
   canonicalProvider?: string | null;
@@ -92,6 +93,26 @@ const PROVIDER_ALIAS_MAP: Record<string, string> = {
 
 const CANONICAL_LOOKUP_PREFIX = '__canonical__:';
 
+function normalizeCatalogIdPart(value?: string | null): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase();
+}
+
+function buildProviderCatalogId(
+  item: LiteLLMProviderInfo,
+  litellmProvider: string,
+  label: string,
+  index: number,
+): string {
+  const provided = normalizeCatalogIdPart(item.catalog_id);
+  if (provided) return provided;
+  const providerPart = normalizeCatalogIdPart(litellmProvider) ?? `provider-${index + 1}`;
+  const labelPart = normalizeCatalogIdPart(label) ?? `entry-${index + 1}`;
+  return `${providerPart}::${labelPart}`;
+}
+
 function sanitizeProviderKey(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value.trim();
@@ -130,6 +151,7 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
       canonicalizeProviderKey(rawLitellmProvider) ||
       canonicalizeProviderKey(rawProvider);
     const labelBase = labelSource || litellmProvider;
+    const catalogId = buildProviderCatalogId(item, litellmProvider, labelBase, index);
     const fields: ProviderField[] = Array.isArray(item.credential_fields)
       ? item.credential_fields.map((field) => ({
           key: field.key,
@@ -143,7 +165,8 @@ export function mapProviders(items: LiteLLMProviderInfo[] | undefined): Provider
         }))
       : [];
     return {
-      id: litellmProvider,
+      id: catalogId,
+      catalogId,
       label: labelBase,
       litellmProvider,
       canonicalProvider,
@@ -298,6 +321,7 @@ export function createProviderOptionMap(providers: ProviderOption[]): Map<string
 
   for (const provider of providers) {
     register(provider.id, provider);
+    register(provider.catalogId, provider);
     register(provider.litellmProvider, provider);
     if (provider.canonicalProvider) {
       map.set(`${CANONICAL_LOOKUP_PREFIX}${provider.canonicalProvider}`, provider);

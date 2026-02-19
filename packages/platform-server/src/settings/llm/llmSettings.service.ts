@@ -179,6 +179,23 @@ function extractCredentialProvider(info?: Record<string, unknown>): string | und
   return undefined;
 }
 
+function normalizeCatalogIdPart(value?: string | null): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase();
+}
+
+function buildProviderCatalogId(
+  litellmProvider: string | undefined,
+  displayName: string | undefined,
+  index: number,
+): string {
+  const providerPart = normalizeCatalogIdPart(litellmProvider) ?? `provider-${index + 1}`;
+  const displayPart = normalizeCatalogIdPart(displayName) ?? `entry-${index + 1}`;
+  return `${providerPart}::${displayPart}`;
+}
+
 @Injectable()
 export class LLMSettingsService {
   private readonly logger = new Logger(LLMSettingsService.name);
@@ -190,13 +207,16 @@ export class LLMSettingsService {
 
   async listProviders(): Promise<LiteLLMProviderInfo[]> {
     const providers = await this.fetchProviders();
-    return providers.map((provider) => {
+    return providers.map((provider, index) => {
       const providerName = sanitizeLiteLLMProviderKey(provider.provider) ?? provider.provider;
       const litellm = sanitizeLiteLLMProviderKey(provider.litellm_provider) ?? provider.litellm_provider;
+      const catalogId =
+        normalizeCatalogIdPart(provider.catalog_id) ?? buildProviderCatalogId(litellm, provider.provider_display_name, index);
       return withCanonicalProviderInfo({
         ...provider,
         provider: providerName,
         litellm_provider: litellm,
+        catalog_id: catalogId,
       });
     });
   }
@@ -353,6 +373,7 @@ export class LLMSettingsService {
     const params = { ...current.litellm_params } as Record<string, unknown>;
     if (input.overrideModel) params.model = input.overrideModel;
     if (input.credentialName) params.litellm_credential_name = input.credentialName;
+    this.normalizeModelProviderKeys(params);
     const modelInfo: Record<string, unknown> = { ...(current.model_info ?? {}) };
     if (input.input) modelInfo.test_prompt = input.input;
     const payload = {
@@ -472,6 +493,7 @@ export class LLMSettingsService {
     if (input.frequencyPenalty !== undefined) params.frequency_penalty = input.frequencyPenalty;
     if (input.presencePenalty !== undefined) params.presence_penalty = input.presencePenalty;
     if (input.stream !== undefined) params.stream = input.stream;
+    this.normalizeModelProviderKeys(params);
     return params;
   }
 
@@ -549,17 +571,7 @@ export class LLMSettingsService {
 
   private mergeModelParams(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {
     const next = { ...(existing || {}) };
-    const rawProvider =
-      (next.custom_llm_provider as string | undefined) ?? (next.litellm_provider as string | undefined);
-    const currentProvider =
-      sanitizeLiteLLMProviderKey(rawProvider) ?? normalizeLiteLLMProvider(rawProvider) ?? undefined;
-    if (currentProvider) {
-      next.custom_llm_provider = currentProvider;
-      next.litellm_provider = currentProvider;
-    } else {
-      delete next.litellm_provider;
-      delete next.custom_llm_provider;
-    }
+    this.normalizeModelProviderKeys(next);
     if (input.provider) {
       const providerKey = resolveLiteLLMProviderOrThrow(input.provider);
       next.custom_llm_provider = providerKey;
@@ -583,6 +595,19 @@ export class LLMSettingsService {
       }
     }
     return next;
+  }
+
+  private normalizeModelProviderKeys(target: Record<string, unknown>): void {
+    const rawProvider =
+      (target.custom_llm_provider as string | undefined) ?? (target.litellm_provider as string | undefined);
+    const normalized = normalizeLiteLLMProvider(rawProvider);
+    if (normalized) {
+      target.custom_llm_provider = normalized;
+      target.litellm_provider = normalized;
+      return;
+    }
+    delete target.custom_llm_provider;
+    delete target.litellm_provider;
   }
 
   private mergeModelInfo(existing: Record<string, unknown>, input: UpdateModelInput): Record<string, unknown> {

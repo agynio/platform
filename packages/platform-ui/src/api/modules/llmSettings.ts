@@ -19,6 +19,7 @@ export type LiteLLMProviderInfo = {
   credential_fields: LiteLLMProviderField[];
   default_model_placeholder?: string | null;
   canonical_provider?: string | null;
+  catalog_id?: string | null;
 };
 
 export type LiteLLMCredential = {

@@ -19,7 +19,8 @@ describe('LLM settings provider normalization', () => {
     const providers = mapProviders(providerPayload);
     expect(providers).toHaveLength(1);
     const [provider] = providers;
-    expect(provider.id).toBe('azure_openai');
+    expect(provider.id).toBe('azure_openai::azure openai');
+    expect(provider.catalogId).toBe('azure_openai::azure openai');
     expect(provider.litellmProvider).toBe('azure_openai');
     expect(provider.label).toBe('Azure OpenAI');
     expect(provider.canonicalProvider).toBe('azure');
@@ -30,6 +31,7 @@ describe('LLM settings provider normalization', () => {
     const map = createProviderOptionMap(providers);
 
     expect(map.get('azure_openai')).toBeDefined();
+    expect(map.get('azure_openai::azure openai')).toBeDefined();
     expect(map.get('AZURE_OPENAI'.toLowerCase())).toBeDefined();
   });
 
