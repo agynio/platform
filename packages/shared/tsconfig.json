@@ -4,13 +4,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "outDir": "dist",
     "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "baseUrl": "."
+    "forceConsistentCasingInFileNames": true,
+    "strict": true
   },
   "include": ["src"],
   "exclude": ["dist", "node_modules"]

@@ -1,4 +1,4 @@
-import type { GraphErrorDetails } from '../shared/types/graph.types';
+import type { GraphErrorDetails } from '@agyn/shared';
 
 export class GraphError extends Error implements GraphErrorDetails {
   code: string;

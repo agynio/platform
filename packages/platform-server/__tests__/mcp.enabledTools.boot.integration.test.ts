@@ -13,7 +13,7 @@ import { ModuleRef } from '@nestjs/core';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
-import type { GraphDefinition, PersistedGraph } from '../src/shared/types/graph.types';
+import type { GraphDefinition, PersistedGraph } from '@agyn/shared';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { EventsBusService } from '../src/events/events-bus.service';

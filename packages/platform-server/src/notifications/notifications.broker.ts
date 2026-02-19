@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
-import type { NotificationEnvelope } from '../shared/types/notifications';
+import type { NotificationEnvelope } from '@agyn/shared';
 import { ConfigService } from '../core/services/config.service';
 
 @Injectable()

@@ -7,7 +7,7 @@ import type {
   PersistedGraphNode,
   PersistedGraphUpsertRequest,
   PersistedGraphUpsertResponse,
-} from '../shared/types/graph.types';
+} from '@agyn/shared';
 import { validatePersistedGraph } from './graphSchema.validator';
 import { GraphRepository } from './graph.repository';
 import type { GraphAuthor } from './graph.repository';

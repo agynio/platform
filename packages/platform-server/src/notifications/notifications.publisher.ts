@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { NotificationEnvelope, NotificationRoom } from '../shared/types/notifications';
+import type { NotificationEnvelope, NotificationRoom } from '@agyn/shared';
 import { z } from 'zod';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';

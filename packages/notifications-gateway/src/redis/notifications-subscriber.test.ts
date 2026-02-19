@@ -11,7 +11,8 @@ class RedisStub extends EventEmitter {
 
 type RedisCtorArgs = [string, Record<string, unknown>?];
 
-const redisFactory = vi.fn<RedisStub, RedisCtorArgs>();
+type RedisFactory = (...args: RedisCtorArgs) => RedisStub;
+const redisFactory = vi.fn<RedisFactory>();
 
 vi.mock('ioredis', () => ({
   default: vi.fn((...args: RedisCtorArgs) => redisFactory(...args)),
