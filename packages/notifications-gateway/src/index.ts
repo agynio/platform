@@ -4,6 +4,8 @@ import { loadConfig } from './config';
 import { createLogger } from './logger';
 import { createSocketServer } from './socket/server';
 import { NotificationsSubscriber } from './redis/notifications-subscriber';
+import { dispatchToRooms } from './dispatch';
+import { serializeError } from './errors';
 import type { NotificationEnvelope } from '@agyn/shared';
 import type { Logger } from './logger';
 import type { Server as SocketIOServer } from 'socket.io';
@@ -45,28 +47,6 @@ async function main(): Promise<void> {
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 }
-
-const dispatchToRooms = (io: SocketIOServer, envelope: NotificationEnvelope, logger: Logger) => {
-  for (const room of envelope.rooms) {
-    try {
-      io.to(room).emit(envelope.event, envelope.payload);
-    } catch (error) {
-      logger.warn({ room, event: envelope.event, error: serializeError(error) }, 'emit failed');
-    }
-  }
-};
-
-const serializeError = (error: unknown): { name?: string; message: string } => {
-  if (error instanceof Error) return { name: error.name, message: error.message };
-  if (typeof error === 'object') {
-    try {
-      return { message: JSON.stringify(error) };
-    } catch {
-      return { message: '[object]' };
-    }
-  }
-  return { message: String(error) };
-};
 
 void main().catch((error) => {
   const serialized = serializeError(error);
