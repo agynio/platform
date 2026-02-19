@@ -26,6 +26,8 @@ import { ToolsListPage } from './pages/ToolsListPage';
 import { WorkspacesListPage } from './pages/WorkspacesListPage';
 import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
 import { McpServersListPage } from './pages/McpServersListPage';
+import { EntityUpsertPage } from './pages/entities/EntityUpsertPage';
+import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from './features/entities/api/graphEntities';
 
 const queryClient = new QueryClient();
 
@@ -42,6 +44,8 @@ function App() {
               <Route element={<RootLayout />}>
                 {/* Agents */}
                 <Route path="/agents" element={<AgentsListPage />} />
+                <Route path="/agents/new" element={<EntityUpsertPage kind="agent" mode="create" listPath="/agents" />} />
+                <Route path="/agents/:entityId/edit" element={<EntityUpsertPage kind="agent" mode="edit" listPath="/agents" />} />
                 <Route path="/agents/graph" element={<AgentsGraphContainer />} />
                 <Route path="/agents/chat" element={<AgentsChat />} />
                 <Route path="/agents/threads" element={<AgentsThreads />} />
@@ -52,10 +56,60 @@ function App() {
 
                 {/* Entities */}
                 <Route path="/triggers" element={<TriggersListPage />} />
+                <Route path="/triggers/new" element={<EntityUpsertPage kind="trigger" mode="create" listPath="/triggers" />} />
+                <Route path="/triggers/:entityId/edit" element={<EntityUpsertPage kind="trigger" mode="edit" listPath="/triggers" />} />
                 <Route path="/tools" element={<ToolsListPage />} />
+                <Route path="/tools/new" element={<EntityUpsertPage kind="tool" mode="create" listPath="/tools" />} />
+                <Route path="/tools/:entityId/edit" element={<EntityUpsertPage kind="tool" mode="edit" listPath="/tools" />} />
                 <Route path="/mcp" element={<McpServersListPage />} />
+                <Route path="/mcp/new" element={<EntityUpsertPage kind="mcp" mode="create" listPath="/mcp" />} />
+                <Route path="/mcp/:entityId/edit" element={<EntityUpsertPage kind="mcp" mode="edit" listPath="/mcp" />} />
                 <Route path="/workspaces" element={<WorkspacesListPage />} />
+                <Route
+                  path="/workspaces/new"
+                  element={(
+                    <EntityUpsertPage
+                      kind="workspace"
+                      mode="create"
+                      listPath="/workspaces"
+                      templateExcludeNames={EXCLUDED_WORKSPACE_TEMPLATES}
+                    />
+                  )}
+                />
+                <Route
+                  path="/workspaces/:entityId/edit"
+                  element={(
+                    <EntityUpsertPage
+                      kind="workspace"
+                      mode="edit"
+                      listPath="/workspaces"
+                      templateExcludeNames={EXCLUDED_WORKSPACE_TEMPLATES}
+                    />
+                  )}
+                />
                 <Route path="/memory" element={<MemoryEntitiesListPage />} />
+                <Route
+                  path="/memory/new"
+                  element={(
+                    <EntityUpsertPage
+                      kind="workspace"
+                      mode="create"
+                      listPath="/memory"
+                      templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+                    />
+                  )}
+                />
+                <Route
+                  path="/memory/:entityId/edit"
+                  element={(
+                    <EntityUpsertPage
+                      kind="workspace"
+                      mode="edit"
+                      listPath="/memory"
+                      templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+                    />
+                  )}
+                />
 
                 {/* Tracing */}
                 <Route path="/tracing/traces" element={<TracingTraces />} />

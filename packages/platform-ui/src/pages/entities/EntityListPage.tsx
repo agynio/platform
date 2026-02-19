@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
-import { EntityFormDialog } from '@/components/entities/EntityFormDialog';
 import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
 import { getTemplateOptions } from '@/features/entities/api/graphEntities';
-import { mapPersistedGraphToNodes } from '@/features/graph/mappers';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
-import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
 interface ToolbarAction {
   label: string;
@@ -19,6 +16,7 @@ interface EntityListPageProps {
   kind: GraphEntityKind;
   title: string;
   description: string;
+  listPath: string;
   createLabel: string;
   emptyLabel: string;
   toolbarActions?: ToolbarAction[];
@@ -30,15 +28,15 @@ export function EntityListPage({
   kind,
   title,
   description,
+  listPath,
   createLabel,
   emptyLabel,
   toolbarActions = [],
   templateIncludeNames,
   templateExcludeNames,
 }: EntityListPageProps) {
-  const { entities, createEntity, updateEntity, deleteEntity, graphQuery, templatesQuery, conflict, resolveConflict, isSaving } = useGraphEntities();
-  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
-  const [activeEntity, setActiveEntity] = useState<GraphEntitySummary | undefined>();
+  const navigate = useNavigate();
+  const { entities, deleteEntity, graphQuery, templatesQuery, conflict, resolveConflict, isSaving } = useGraphEntities();
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => {
@@ -48,16 +46,6 @@ export function EntityListPage({
     }
     return options.filter((option) => templateIncludeNames.has(option.name));
   }, [kind, templateExcludeNames, templateIncludeNames, templatesQuery.data]);
-
-  const graphNodes = useMemo<GraphNodeConfig[]>(() => {
-    if (!graphQuery.data) return [];
-    return mapPersistedGraphToNodes(graphQuery.data, templatesQuery.data ?? []).nodes;
-  }, [graphQuery.data, templatesQuery.data]);
-
-  const graphEdges = useMemo<GraphPersistedEdge[]>(() => {
-    if (!graphQuery.data?.edges) return [];
-    return graphQuery.data.edges.filter((edge): edge is GraphPersistedEdge => Boolean(edge));
-  }, [graphQuery.data]);
 
   const filteredEntities = useMemo(() => {
     return entities.filter((entity) => {
@@ -86,16 +74,13 @@ export function EntityListPage({
   }, [filteredEntities, sort]);
 
   const isLoading = graphQuery.isLoading || templatesQuery.isLoading;
-  const dialogOpen = dialogMode !== null;
 
   const handleCreateClick = () => {
-    setActiveEntity(undefined);
-    setDialogMode('create');
+    navigate(`${listPath}/new`);
   };
 
   const handleEditClick = (entity: GraphEntitySummary) => {
-    setActiveEntity(entity);
-    setDialogMode('edit');
+    navigate(`${listPath}/${entity.id}/edit`);
   };
 
   const handleDeleteClick = async (entity: GraphEntitySummary) => {
@@ -103,14 +88,6 @@ export function EntityListPage({
     if (!confirmed) return;
     await deleteEntity({ id: entity.id });
   };
-
-  const closeDialog = () => {
-    setDialogMode(null);
-    setActiveEntity(undefined);
-  };
-
-  const dialogModeForSubmit = dialogMode ?? 'create';
-  const dialogSubmit = dialogMode === 'edit' ? updateEntity : createEntity;
 
   const showEmptyLabel = emptyLabel;
   const disableCreate = templates.length === 0 || isSaving || templatesQuery.isLoading;
@@ -195,24 +172,6 @@ export function EntityListPage({
         />
       </div>
 
-      <EntityFormDialog
-        open={dialogOpen}
-        mode={dialogModeForSubmit}
-        kind={kind}
-        entity={dialogMode === 'edit' ? activeEntity : undefined}
-        templates={templates}
-        isSubmitting={isSaving}
-        graphNodes={graphNodes}
-        graphEdges={graphEdges}
-        onOpenChange={(openState) => {
-          if (!openState) {
-            closeDialog();
-          } else if (!dialogMode) {
-            setDialogMode('create');
-          }
-        }}
-        onSubmit={dialogSubmit}
-      />
     </div>
   );
 }

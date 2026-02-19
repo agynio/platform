@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { ScreenDialog, ScreenDialogContent, ScreenDialogDescription, ScreenDialogTitle } from '@/components/Dialog';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
@@ -24,9 +23,9 @@ import type {
   TemplateOption,
 } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
-import { X } from 'lucide-react';
 import { useMcpNodeState } from '@/lib/graph/hooks';
 import { listTargetsByEdge, sanitizeConfigForPersistence } from '@/features/entities/api/graphEntities';
+import { ChipsMultiSelect } from '@/components/ChipsMultiSelect';
 
 type EntityFormValues = {
   template: string;
@@ -412,8 +411,7 @@ function useVariableSuggestions() {
   return { variableSuggestions, ensureVariableKeys } as const;
 }
 
-interface EntityFormDialogProps {
-  open: boolean;
+export interface EntityUpsertFormProps {
   mode: 'create' | 'edit';
   kind: GraphEntityKind;
   entity?: GraphEntitySummary;
@@ -421,12 +419,11 @@ interface EntityFormDialogProps {
   isSubmitting?: boolean;
   graphNodes?: GraphNodeConfig[];
   graphEdges?: GraphPersistedEdge[];
-  onOpenChange: (open: boolean) => void;
   onSubmit: (input: GraphEntityUpsertInput) => Promise<void>;
+  onCancel?: () => void;
 }
 
-export function EntityFormDialog({
-  open,
+export function EntityUpsertForm({
   mode,
   kind,
   entity,
@@ -434,9 +431,9 @@ export function EntityFormDialog({
   isSubmitting,
   graphNodes,
   graphEdges,
-  onOpenChange,
   onSubmit,
-}: EntityFormDialogProps) {
+  onCancel,
+}: EntityUpsertFormProps) {
   const templateMap = useMemo(() => new Map(templates.map((tpl) => [tpl.name, tpl])), [templates]);
   const form = useForm<EntityFormValues>({
     defaultValues: {
@@ -456,9 +453,6 @@ export function EntityFormDialog({
   const { variableSuggestions, ensureVariableKeys } = useVariableSuggestions();
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
     setSubmitError(null);
     form.reset({
       template: entity?.templateName ?? '',
@@ -467,13 +461,20 @@ export function EntityFormDialog({
     setConfigState(ensureRecord(entity?.config));
     const initialConfigTitle = typeof entity?.config?.title === 'string' ? entity.config.title.trim() : '';
     configTitleRef.current = initialConfigTitle;
-  }, [entity, form, open]);
+  }, [entity, form, mode]);
 
   useEffect(() => {
-    if (!open) {
+    if (mode === 'edit') {
       previewNodeIdRef.current = '';
+      return;
     }
-  }, [open]);
+    if (!previewNodeIdRef.current) {
+      previewNodeIdRef.current = generatePreviewNodeId(kind);
+    }
+    return () => {
+      previewNodeIdRef.current = '';
+    };
+  }, [kind, mode]);
 
   const selectedTemplate = templateSelection ? templateMap.get(templateSelection) : undefined;
   const nodeKind = useMemo<NodeViewKind>(() => {
@@ -502,14 +503,14 @@ export function EntityFormDialog({
     if (mode === 'edit' && entity?.id) {
       return entity.id;
     }
-    if (!open) {
-      return '';
+    if (mode === 'create') {
+      if (!previewNodeIdRef.current) {
+        previewNodeIdRef.current = generatePreviewNodeId(kind);
+      }
+      return previewNodeIdRef.current;
     }
-    if (!previewNodeIdRef.current) {
-      previewNodeIdRef.current = generatePreviewNodeId(kind);
-    }
-    return previewNodeIdRef.current;
-  }, [mode, entity?.id, open, kind]);
+    return '';
+  }, [mode, entity?.id, kind]);
 
   const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
   const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);
@@ -556,7 +557,6 @@ export function EntityFormDialog({
   }, [relationDefinitions, safeGraphNodes]);
   const [relationSelections, setRelationSelections] = useState<Record<string, string[]>>({});
   useEffect(() => {
-    if (!open) return;
     if (relationDefinitions.length === 0) {
       setRelationSelections({});
       return;
@@ -568,7 +568,7 @@ export function EntityFormDialog({
       });
       return next;
     });
-  }, [open, relationDefinitions, relationPrefillMap]);
+  }, [relationDefinitions, relationPrefillMap]);
   const handleSingleRelationChange = useCallback((relationId: string, nextValue: string) => {
     setRelationSelections((current) => ({
       ...current,
@@ -576,17 +576,12 @@ export function EntityFormDialog({
     }));
   }, []);
 
-  const handleMultiRelationChange = useCallback(
-    (relationId: string, event: ChangeEvent<HTMLSelectElement>) => {
-      const selectedOptions = Array.from(event.target?.selectedOptions ?? []);
-      const nextValues = selectedOptions.map((option) => option.value).filter((value) => value.length > 0);
-      setRelationSelections((current) => ({
-        ...current,
-        [relationId]: uniqueStrings(nextValues),
-      }));
-    },
-    [],
-  );
+  const handleMultiRelationChange = useCallback((relationId: string, nextValues: string[]) => {
+    setRelationSelections((current) => ({
+      ...current,
+      [relationId]: uniqueStrings(nextValues),
+    }));
+  }, []);
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
@@ -824,7 +819,10 @@ export function EntityFormDialog({
   ]);
 
   const disableTemplateSelect = mode === 'edit';
-  const dialogTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
+  const pageTitle = mode === 'create' ? `Create ${kind}` : `Edit ${entity?.title ?? kind}`;
+  const pageSubtitle = mode === 'create'
+    ? `Configure the template and metadata for this ${kind}.`
+    : `Update the template and metadata for this ${kind}.`;
 
   const handleFormSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
@@ -875,194 +873,177 @@ export function EntityFormDialog({
 
     try {
       await onSubmit(payload);
-      onOpenChange(false);
     } catch {
       setSubmitError('Unable to save entity. Please try again.');
     }
   });
 
+  const handleCancel = useCallback(() => {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.history.back();
+    }
+  }, [onCancel]);
+
   return (
-    <ScreenDialog open={open} onOpenChange={onOpenChange}>
-      <ScreenDialogContent className="flex h-[90vh] max-h-[90vh] flex-col overflow-hidden p-0" hideCloseButton>
-        <Form {...form}>
-          <form className="flex h-full flex-col" onSubmit={handleFormSubmit}>
-            <ScreenDialogTitle className="sr-only">{dialogTitle}</ScreenDialogTitle>
-            <ScreenDialogDescription className="sr-only">
-              Configure the template and metadata for this {kind}.
-            </ScreenDialogDescription>
-            <div className="border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
-              <div className="flex items-start gap-4">
-                <div className="flex-1 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--agyn-text-subtle)]">{dialogTitle}</p>
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem className="space-y-2">
-                        <FormLabel>Title</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            aria-label="Entity title"
-                            placeholder="Enter a title"
-                            disabled={isSubmitting}
-                            onChange={(event) => {
-                              field.onChange(event);
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <Form {...form}>
+        <form className="flex h-full flex-col" onSubmit={handleFormSubmit}>
+          <div className="border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="min-w-[240px] flex-1 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--agyn-text-subtle)]">{pageTitle}</p>
+                  <p className="text-sm text-[var(--agyn-text-subtle)]">{pageSubtitle}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="inline-flex size-8 items-center justify-center rounded-full text-[var(--agyn-gray)] transition-colors hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-dark)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--agyn-blue)] focus-visible:ring-offset-2"
-                  aria-label="Close dialog"
-                >
-                  <X className="size-4" />
-                </button>
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel>Title</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          aria-label="Entity title"
+                          placeholder="Enter a title"
+                          disabled={isSubmitting}
+                          onChange={(event) => {
+                            field.onChange(event);
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex items-center gap-3 self-end">
+                <Button type="button" variant="outline" onClick={handleCancel} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting || (mode === 'create' && !templateSelection)}>
+                  {mode === 'create' ? 'Create' : 'Save changes'}
+                </Button>
               </div>
             </div>
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-              {templates.length === 0 && (
-                <Alert variant="destructive">
-                  <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
-                </Alert>
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            {templates.length === 0 && (
+              <Alert variant="destructive">
+                <AlertDescription>No templates available. Please add templates before creating entities.</AlertDescription>
+              </Alert>
+            )}
+
+            <FormField
+              control={form.control}
+              name="template"
+              rules={{ required: mode === 'create' }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Template</FormLabel>
+                  <FormControl>
+                    <SelectInput
+                      value={field.value ?? ''}
+                      onChange={(event) => {
+                        field.onChange(event.target.value);
+                        if (mode === 'create') {
+                          setConfigState({});
+                        }
+                      }}
+                      disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
+                      placeholder="Select a template"
+                      options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
+                      allowEmptyOption
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
+            />
 
-              <FormField
-                control={form.control}
-                name="template"
-                rules={{ required: mode === 'create' }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Template</FormLabel>
-                    <FormControl>
-                      <SelectInput
-                        value={field.value ?? ''}
-                        onChange={(event) => {
-                          field.onChange(event.target.value);
-                          if (mode === 'create') {
-                            setConfigState({});
-                          }
-                        }}
-                        disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
-                        placeholder="Select a template"
-                        options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
-                        allowEmptyOption
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {templateSelection ? (
-                <div className="space-y-8">
-                  {configView}
-                  {relationDefinitions.length > 0 ? (
-                    <div className="space-y-4 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-4">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-[var(--agyn-dark)]">Relations</p>
-                        <p className="text-xs text-[var(--agyn-text-subtle)]">
-                          Connect this entity to downstream nodes.
-                        </p>
-                      </div>
-                      <div className="space-y-4">
-                        {relationDefinitions.map((definition) => {
-                          const options = relationOptionsMap[definition.id] ?? [];
-                          const selections = relationSelections[definition.id] ?? [];
-                          const helperText = options.length === 0
-                            ? 'No eligible nodes available in this workspace.'
-                            : definition.description ?? 'Select an option.';
-                          if (definition.mode === 'single') {
-                            const controlId = `relation-${definition.id}`;
-                            return (
-                              <div key={definition.id} className="space-y-2">
-                                <label
-                                  htmlFor={controlId}
-                                  className="text-sm font-medium text-[var(--agyn-dark)]"
-                                >
-                                  {definition.label}
-                                </label>
-                                <SelectInput
-                                  id={controlId}
-                                  placeholder={definition.placeholder ?? 'Select an option'}
-                                  value={selections[0] ?? ''}
-                                  allowEmptyOption
-                                  disabled={isSubmitting || options.length === 0}
-                                  onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
-                                  helperText={helperText}
-                                  options={options.map((option) => ({
-                                    value: option.id,
-                                    label: option.label,
-                                  }))}
-                                />
-                              </div>
-                            );
-                          }
+            {templateSelection ? (
+              <div className="space-y-8">
+                {configView}
+                {relationDefinitions.length > 0 ? (
+                  <div className="space-y-4 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-[var(--agyn-dark)]">Relations</p>
+                      <p className="text-xs text-[var(--agyn-text-subtle)]">Connect this entity to downstream nodes.</p>
+                    </div>
+                    <div className="space-y-4">
+                      {relationDefinitions.map((definition) => {
+                        const options = relationOptionsMap[definition.id] ?? [];
+                        const selections = relationSelections[definition.id] ?? [];
+                        const helperText = options.length === 0
+                          ? 'No eligible nodes available in this workspace.'
+                          : definition.description ?? 'Select an option.';
+                        if (definition.mode === 'single') {
+                          const controlId = `relation-${definition.id}`;
                           return (
                             <div key={definition.id} className="space-y-2">
-                              <label
-                                htmlFor={`relation-${definition.id}`}
-                                className="text-sm font-medium text-[var(--agyn-dark)]"
-                              >
+                              <label htmlFor={controlId} className="text-sm font-medium text-[var(--agyn-dark)]">
                                 {definition.label}
                               </label>
-                              {options.length === 0 ? (
-                                <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
-                              ) : (
-                                <SelectInput
-                                  id={`relation-${definition.id}`}
-                                  multiple
-                                  htmlSize={Math.min(6, Math.max(3, options.length))}
-                                  value={selections}
-                                  disabled={isSubmitting}
-                                  onChange={(event) => handleMultiRelationChange(definition.id, event)}
-                                  helperText={
-                                    helperText
-                                      ? `${helperText} Hold Cmd/Ctrl to select multiple.`
-                                      : 'Select one or more targets. Hold Cmd/Ctrl to select multiple.'
-                                  }
-                                  options={options.map((option) => ({
-                                    value: option.id,
-                                    label: option.label,
-                                  }))}
-                                />
-                              )}
+                              <SelectInput
+                                id={controlId}
+                                placeholder={definition.placeholder ?? 'Select an option'}
+                                value={selections[0] ?? ''}
+                                allowEmptyOption
+                                disabled={isSubmitting || options.length === 0}
+                                onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
+                                helperText={helperText}
+                                options={options.map((option) => ({
+                                  value: option.id,
+                                  label: option.label,
+                                }))}
+                              />
                             </div>
                           );
-                        })}
-                      </div>
+                        }
+                        return (
+                          <div key={definition.id} className="space-y-2">
+                            <label htmlFor={`relation-${definition.id}`} className="text-sm font-medium text-[var(--agyn-dark)]">
+                              {definition.label}
+                            </label>
+                            {options.length === 0 ? (
+                              <p className="text-xs text-[var(--agyn-text-subtle)]">No eligible nodes available.</p>
+                            ) : (
+                              <ChipsMultiSelect
+                                id={`relation-${definition.id}`}
+                                value={selections}
+                                options={options.map((option) => ({ value: option.id, label: option.label }))}
+                                disabled={isSubmitting}
+                                helperText={
+                                  helperText ?? 'Select one or more targets. Use Backspace to remove the last chip.'
+                                }
+                                placeholder={definition.placeholder ?? 'Search nodes'}
+                                onChange={(next) => handleMultiRelationChange(definition.id, next)}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--agyn-text-subtle)]">Select a template to configure this {kind}.</p>
-              )}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--agyn-text-subtle)]">Select a template to configure this {kind}.</p>
+            )}
 
-              {submitError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{submitError}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--agyn-border-subtle)] bg-white px-6 py-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting || (mode === 'create' && !templateSelection)}>
-                {mode === 'create' ? 'Create' : 'Save changes'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </ScreenDialogContent>
-    </ScreenDialog>
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ export function McpServersListPage() {
       kind="mcp"
       title="MCP Servers"
       description="Configure Model Context Protocol servers that expose MCP tools to your agents."
+      listPath="/mcp"
       createLabel="New MCP server"
       emptyLabel="No MCP servers configured yet."
     />

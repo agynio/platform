@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server, TestProviders, abs } from '../../../__tests__/integration/testUtils';
 import { TemplatesProvider } from '@/lib/graph/templates.provider';
 
@@ -32,6 +32,8 @@ import { ToolsListPage } from '../ToolsListPage';
 import { WorkspacesListPage } from '../WorkspacesListPage';
 import { MemoryEntitiesListPage } from '../MemoryEntitiesListPage';
 import { McpServersListPage } from '../McpServersListPage';
+import { EntityUpsertPage } from '../entities/EntityUpsertPage';
+import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from '@/features/entities/api/graphEntities';
 
 const notifications = vi.hoisted(() => ({
   success: vi.fn(),
@@ -128,6 +130,18 @@ function renderWithGraphProviders(children: React.ReactNode) {
   );
 }
 
+function renderWithEntityRoutes(initialEntries: string[], routes: React.ReactNode) {
+  render(
+    <TestProviders>
+      <TemplatesProvider>
+        <MemoryRouter initialEntries={initialEntries}>
+          <Routes>{routes}</Routes>
+        </MemoryRouter>
+      </TemplatesProvider>
+    </TestProviders>,
+  );
+}
+
 describe('Entity list pages', () => {
   beforeAll(() => server.listen());
   afterAll(() => server.close());
@@ -176,18 +190,26 @@ describe('Entity list pages', () => {
     expect(screen.queryByText('Memory Connector')).not.toBeInTheDocument();
   });
 
-  it('excludes memory workspace templates from the create dialog', async () => {
+  it('excludes memory workspace templates from the workspace create page', async () => {
     primeGraphHandlers();
 
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
-
-    renderWithGraphProviders(<WorkspacesListPage />);
-
-    await screen.findByText('Worker Pool');
-    await user.click(screen.getByRole('button', { name: /new workspace/i }));
+    renderWithEntityRoutes(
+      ['/workspaces/new'],
+      <Route
+        path="/workspaces/new"
+        element={(
+          <EntityUpsertPage
+            kind="workspace"
+            mode="create"
+            listPath="/workspaces"
+            templateExcludeNames={EXCLUDED_WORKSPACE_TEMPLATES}
+          />
+        )}
+      />,
+    );
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    expect(within(templateSelect).getByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
+    await within(templateSelect).findByRole('option', { name: 'Worker Service' });
     expect(within(templateSelect).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
     expect(within(templateSelect).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
   });
@@ -205,7 +227,13 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<ToolsListPage />);
+    renderWithEntityRoutes(
+      ['/tools'],
+      <>
+        <Route path="/tools" element={<ToolsListPage />} />
+        <Route path="/tools/new" element={<EntityUpsertPage kind="tool" mode="create" listPath="/tools" />} />
+      </>,
+    );
 
     await screen.findByText('Slack Tool', { selector: '[data-testid="entity-title"]' });
     expect(screen.queryByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' })).not.toBeInTheDocument();
@@ -236,7 +264,7 @@ describe('Entity list pages', () => {
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
   });
 
-  it('limits the memory create dialog to memory templates only', async () => {
+  it('limits the memory create page to memory templates only', async () => {
     const graphOverride = {
       ...baseGraph,
       nodes: [{ id: 'memory-1', template: 'memory', config: { title: 'Memory Root' } }],
@@ -244,15 +272,23 @@ describe('Entity list pages', () => {
     };
     primeGraphHandlers(graphOverride);
 
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
-
-    renderWithGraphProviders(<MemoryEntitiesListPage />);
-
-    await screen.findByText('Memory Root');
-    await user.click(screen.getByRole('button', { name: /new memory workspace/i }));
+    renderWithEntityRoutes(
+      ['/memory/new'],
+      <Route
+        path="/memory/new"
+        element={(
+          <EntityUpsertPage
+            kind="workspace"
+            mode="create"
+            listPath="/memory"
+            templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+          />
+        )}
+      />,
+    );
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    expect(within(templateSelect).getByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
+    await within(templateSelect).findByRole('option', { name: 'Memory Workspace' });
     expect(within(templateSelect).getByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
     expect(within(templateSelect).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
   });
@@ -270,7 +306,13 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<McpServersListPage />);
+    renderWithEntityRoutes(
+      ['/mcp'],
+      <>
+        <Route path="/mcp" element={<McpServersListPage />} />
+        <Route path="/mcp/new" element={<EntityUpsertPage kind="mcp" mode="create" listPath="/mcp" />} />
+      </>,
+    );
 
     await screen.findByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' });
     expect(screen.queryByText('Slack Tool', { selector: '[data-testid="entity-title"]' })).not.toBeInTheDocument();
@@ -278,7 +320,7 @@ describe('Entity list pages', () => {
     await user.click(screen.getByRole('button', { name: /new mcp server/i }));
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    expect(within(templateSelect).getByRole('option', { name: 'Filesystem MCP' })).toBeInTheDocument();
+    await within(templateSelect).findByRole('option', { name: 'Filesystem MCP' });
     expect(within(templateSelect).queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
   });
 
@@ -298,14 +340,19 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<McpServersListPage />);
+    renderWithEntityRoutes(
+      ['/mcp'],
+      <>
+        <Route path="/mcp" element={<McpServersListPage />} />
+        <Route path="/mcp/:entityId/edit" element={<EntityUpsertPage kind="mcp" mode="edit" listPath="/mcp" />} />
+      </>,
+    );
 
     const titleCell = await screen.findByText('Filesystem MCP', { selector: '[data-testid="entity-title"]' });
     const row = titleCell.closest('tr');
     expect(row).not.toBeNull();
     await user.click(within(row as HTMLTableRowElement).getByRole('button', { name: /edit/i }));
 
-    await screen.findByRole('dialog');
     await screen.findByText('Namespace');
     expect(screen.getByPlaceholderText('npx -y @modelcontextprotocol/server-everything')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
@@ -338,12 +385,28 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<MemoryEntitiesListPage />);
+    renderWithEntityRoutes(
+      ['/memory'],
+      <>
+        <Route path="/memory" element={<MemoryEntitiesListPage />} />
+        <Route
+          path="/memory/:entityId/edit"
+          element={(
+            <EntityUpsertPage
+              kind="workspace"
+              mode="edit"
+              listPath="/memory"
+              templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+            />
+          )}
+        />
+      </>,
+    );
 
     await screen.findByText('Memory Root');
     await user.click(screen.getAllByRole('button', { name: /edit/i })[0]);
 
-    const titleInput = await screen.findByLabelText('Title');
+    const titleInput = await screen.findByLabelText('Entity title');
     await user.clear(titleInput);
     await user.type(titleInput, 'Memory Updated');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
@@ -381,15 +444,22 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<AgentsListPage />);
+    renderWithEntityRoutes(
+      ['/agents'],
+      <>
+        <Route path="/agents" element={<AgentsListPage />} />
+        <Route path="/agents/new" element={<EntityUpsertPage kind="agent" mode="create" listPath="/agents" />} />
+      </>,
+    );
 
     await screen.findByText('Core Agent');
     await user.click(screen.getByRole('button', { name: /new agent/i }));
 
     const templateSelect = screen.getByRole('combobox', { name: /template/i });
+    await within(templateSelect).findByRole('option', { name: 'Support Agent' });
     await user.selectOptions(templateSelect, 'support-agent');
 
-    const titleInput = await screen.findByLabelText('Title');
+    const titleInput = await screen.findByLabelText('Entity title');
     await user.clear(titleInput);
     await user.type(titleInput, 'Responder');
 
@@ -415,17 +485,27 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<AgentsListPage />);
+    renderWithEntityRoutes(
+      ['/agents'],
+      <>
+        <Route path="/agents" element={<AgentsListPage />} />
+        <Route path="/agents/:entityId/edit" element={<EntityUpsertPage kind="agent" mode="edit" listPath="/agents" />} />
+      </>,
+    );
 
     await screen.findByText('Core Agent');
     await user.click(screen.getAllByRole('button', { name: /edit/i })[0]);
 
-    const titleInput = await screen.findByLabelText('Title');
+    const titleInput = await screen.findByLabelText('Entity title');
     await user.clear(titleInput);
     await user.type(titleInput, 'Updated');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(notifications.error).toHaveBeenCalled());
+    await screen.findByText('Unable to save entity. Please try again.');
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+
     const alert = await screen.findByText('Graph updated elsewhere');
     expect(alert).toBeVisible();
 
@@ -439,15 +519,17 @@ describe('Entity list pages', () => {
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
-    renderWithGraphProviders(<AgentsListPage />);
-
-    await screen.findByText('Core Agent');
-    await user.click(screen.getByRole('button', { name: /new agent/i }));
+    renderWithEntityRoutes(
+      ['/agents/new'],
+      <Route path="/agents/new" element={<EntityUpsertPage kind="agent" mode="create" listPath="/agents" />} />,
+    );
 
     const createButton = screen.getByRole('button', { name: /create/i });
     expect(createButton).toBeDisabled();
 
-    const templateSelect = screen.getByRole('combobox', { name: /template/i });
+    const templateSelect = await screen.findByRole('combobox', { name: /template/i });
+    await within(templateSelect).findByRole('option', { name: 'Support Agent' });
+    await waitFor(() => expect(templateSelect).not.toBeDisabled());
     await user.selectOptions(templateSelect, 'support-agent');
 
     await waitFor(() => expect(createButton).not.toBeDisabled());

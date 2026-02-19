@@ -7,6 +7,7 @@ export function MemoryEntitiesListPage() {
       kind="workspace"
       title="Memory"
       description="Manage memory stores and connectors available to agents."
+      listPath="/memory"
       createLabel="New memory workspace"
       emptyLabel="No memory workspaces configured yet."
       templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}

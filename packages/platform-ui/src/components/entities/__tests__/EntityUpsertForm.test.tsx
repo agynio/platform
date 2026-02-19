@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -14,7 +14,7 @@ vi.mock('@/lib/graph/templates.provider', () => ({
   }),
 }));
 
-import { EntityFormDialog } from '../EntityFormDialog';
+import { EntityUpsertForm } from '../EntityUpsertForm';
 import type { GraphEntityKind, GraphEntitySummary, TemplateOption } from '@/features/entities/types';
 import type { PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
@@ -92,7 +92,7 @@ function createGraphEdge(overrides: Partial<GraphPersistedEdge> & { source: stri
   } satisfies GraphPersistedEdge;
 }
 
-type RelationDialogRenderOptions = {
+interface RelationDialogRenderOptions {
   kind: GraphEntityKind;
   templateName: string;
   graphNodes: GraphNodeConfig[];
@@ -100,7 +100,7 @@ type RelationDialogRenderOptions = {
   entity?: GraphEntitySummary;
   mode?: 'create' | 'edit';
   templates?: TemplateOption[];
-};
+}
 
 function renderRelationDialog(options: RelationDialogRenderOptions) {
   const {
@@ -125,17 +125,16 @@ function renderRelationDialog(options: RelationDialogRenderOptions) {
 
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <EntityFormDialog
-        open
+      <EntityUpsertForm
         mode={mode}
         kind={kind}
         templates={templates}
         entity={mode === 'edit' ? resolvedEntity : undefined}
-        onOpenChange={vi.fn()}
         onSubmit={onSubmit}
         isSubmitting={false}
         graphNodes={graphNodes}
         graphEdges={graphEdges}
+        onCancel={vi.fn()}
       />
     </QueryClientProvider>,
   );
@@ -143,28 +142,26 @@ function renderRelationDialog(options: RelationDialogRenderOptions) {
   return { onSubmit };
 }
 
-describe('EntityFormDialog', () => {
+describe('EntityUpsertForm', () => {
   it('embeds workspace config fields and submits updated values', async () => {
     const templates = [createTemplate('workspace-template', 'workspace')];
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const onOpenChange = vi.fn();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <EntityFormDialog
-          open
+        <EntityUpsertForm
           mode="create"
           kind="workspace"
           templates={templates}
-          onOpenChange={onOpenChange}
           onSubmit={onSubmit}
           isSubmitting={false}
+          onCancel={vi.fn()}
         />
       </QueryClientProvider>,
     );
 
     const templateSelect = screen.getByLabelText('Template');
-    fireEvent.change(templateSelect, { target: { value: 'workspace-template' } });
+    await userEvent.selectOptions(templateSelect, 'workspace-template');
 
     const titleInput = await screen.findByLabelText('Entity title');
     await userEvent.clear(titleInput);
@@ -193,10 +190,6 @@ describe('EntityFormDialog', () => {
     expect(payload.config).not.toHaveProperty('title');
     expect(payload.config).not.toHaveProperty('template');
     expect(payload.config).not.toHaveProperty('kind');
-
-    await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
-    });
   });
 
   it('disables template selection and shows agent config fields for edit mode', async () => {
@@ -213,15 +206,14 @@ describe('EntityFormDialog', () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <EntityFormDialog
-          open
+        <EntityUpsertForm
           mode="edit"
           kind="agent"
           templates={templates}
           entity={entity}
-          onOpenChange={vi.fn()}
           onSubmit={onSubmit}
           isSubmitting={false}
+          onCancel={vi.fn()}
         />
       </QueryClientProvider>,
     );
@@ -279,15 +271,14 @@ describe('EntityFormDialog', () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <EntityFormDialog
-          open
+        <EntityUpsertForm
           mode="edit"
           kind="workspace"
           templates={templates}
           entity={entity}
-          onOpenChange={vi.fn()}
           onSubmit={onSubmit}
           isSubmitting={false}
+          onCancel={vi.fn()}
         />
       </QueryClientProvider>,
     );
@@ -310,7 +301,7 @@ describe('EntityFormDialog', () => {
   });
 });
 
-describe('EntityFormDialog relations', () => {
+describe('EntityUpsertForm relations', () => {
   it('prefills Slack trigger agent relation and persists edits', async () => {
     const graphNodes = [
       createGraphNode({ id: 'trigger-1', template: 'slackTrigger', kind: 'Trigger', title: 'Slack Trigger' }),
@@ -376,9 +367,9 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    const toolsSelect = await screen.findByLabelText('Tools');
-    expect(Array.from(toolsSelect.selectedOptions).map((option) => option.value)).toEqual(['tool-1']);
-    await userEvent.selectOptions(toolsSelect, ['tool-2']);
+    await screen.findByLabelText('Tools');
+    expect(screen.getByLabelText('Remove Tool One')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: 'Tool Two' }));
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -415,9 +406,9 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    const mcpSelect = await screen.findByLabelText('MCP servers');
-    expect(Array.from(mcpSelect.selectedOptions).map((option) => option.value)).toEqual(['mcp-1']);
-    await userEvent.selectOptions(mcpSelect, ['mcp-2']);
+    await screen.findByLabelText('MCP servers');
+    expect(screen.getByLabelText('Remove MCP One')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: 'MCP Two' }));
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -527,9 +518,10 @@ describe('EntityFormDialog relations', () => {
       entity,
     });
 
-    const agentsSelect = await screen.findByLabelText('Managed agents');
-    expect(Array.from(agentsSelect.selectedOptions).map((option) => option.value)).toEqual(['agent-1', 'agent-2']);
-    await userEvent.selectOptions(agentsSelect, ['agent-3']);
+    await screen.findByLabelText('Managed agents');
+    expect(screen.getByLabelText('Remove Agent One')).toBeInTheDocument();
+    expect(screen.getByLabelText('Remove Agent Two')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: 'Agent Three' }));
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

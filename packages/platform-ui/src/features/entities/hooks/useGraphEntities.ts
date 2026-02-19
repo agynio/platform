@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graph as graphApi } from '@/api/modules/graph';
 import { useTemplates } from '@/lib/graph/hooks';
@@ -15,6 +15,7 @@ import {
 import type { GraphEntityDeleteInput, GraphEntitySummary, GraphEntityUpsertInput } from '../types';
 
 const GRAPH_QUERY_KEY = ['graph', 'full'] as const;
+const CONFLICT_QUERY_KEY = ['graph', 'conflict'] as const;
 
 type ConflictState = {
   code: string;
@@ -43,13 +44,21 @@ function extractGraphError(error: unknown): { code: string | null; current?: Per
 
 export function useGraphEntities() {
   const qc = useQueryClient();
-  const [conflict, setConflict] = useState<ConflictState | null>(null);
 
   const graphQuery = useQuery({
     queryKey: GRAPH_QUERY_KEY,
     queryFn: () => graphApi.getFullGraph(),
     staleTime: 15_000,
   });
+
+  const conflictQuery = useQuery<ConflictState | null>({
+    queryKey: CONFLICT_QUERY_KEY,
+    queryFn: async () => null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
+  const conflict = conflictQuery.data ?? null;
 
   const templatesQuery = useTemplates();
 
@@ -62,12 +71,12 @@ export function useGraphEntities() {
     mutationFn: (payload: ReturnType<typeof buildGraphPayload>) => graphApi.saveFullGraph(payload),
     onSuccess: (saved) => {
       qc.setQueryData(GRAPH_QUERY_KEY, saved);
-      setConflict(null);
+      qc.setQueryData(CONFLICT_QUERY_KEY, null);
     },
     onError: (error: unknown) => {
       const { code, current } = extractGraphError(error);
       if (code === 'VERSION_CONFLICT') {
-        setConflict({ code, current });
+        qc.setQueryData(CONFLICT_QUERY_KEY, { code, current });
         notifyError('Graph is out of date. Refresh to continue.');
         return;
       }
@@ -114,11 +123,11 @@ export function useGraphEntities() {
     const snapshot = conflict?.current;
     if (snapshot) {
       qc.setQueryData(GRAPH_QUERY_KEY, snapshot);
-      setConflict(null);
+      qc.setQueryData(CONFLICT_QUERY_KEY, null);
       return;
     }
     await graphQuery.refetch();
-    setConflict(null);
+    qc.setQueryData(CONFLICT_QUERY_KEY, null);
   }, [conflict, graphQuery, qc]);
 
   const refreshGraph = useCallback(async () => {
