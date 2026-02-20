@@ -58,4 +58,24 @@ describe('dispatchToRooms', () => {
     );
     expect(emit).toHaveBeenCalledTimes(envelope.rooms.length);
   });
+
+  it('dispatches run status events to both thread and run rooms', () => {
+    const emit = vi.fn();
+    const to = vi.fn(() => ({ emit }));
+    const io = { to } as unknown as SocketIOServer;
+    const logger = createLogger();
+    const envelope: NotificationEnvelope = {
+      ...createEnvelope(),
+      event: 'run_status_changed',
+      rooms: ['thread:abc123', 'run:run-123'],
+      payload: { threadId: 'abc123', runId: 'run-123', status: 'running' },
+    };
+
+    dispatchToRooms(io, envelope, logger);
+
+    expect(to).toHaveBeenNthCalledWith(1, 'thread:abc123');
+    expect(to).toHaveBeenNthCalledWith(2, 'run:run-123');
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 });
