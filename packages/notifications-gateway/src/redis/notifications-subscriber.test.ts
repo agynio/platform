@@ -90,4 +90,22 @@ describe('NotificationsSubscriber', () => {
     );
     expect(errorSpy).toHaveBeenCalledWith(failure);
   });
+
+  it('emits error events when Redis errors after subscribing', async () => {
+    const logger = createLogger();
+    const subscriber = new NotificationsSubscriber(options, logger);
+    const errorSpy = vi.fn();
+    subscriber.on('error', errorSpy);
+
+    await subscriber.start();
+    const runtimeError = new Error('redis down');
+    redis.emit('error', runtimeError);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { name: 'Error', message: runtimeError.message } }),
+      'redis subscriber error',
+    );
+    expect(errorSpy).toHaveBeenCalledWith(runtimeError);
+    await subscriber.stop();
+  });
 });
