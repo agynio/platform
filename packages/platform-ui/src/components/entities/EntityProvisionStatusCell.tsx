@@ -16,13 +16,11 @@ const PROVISIONABLE_STATES: ReadonlySet<ProvisionState | string> = new Set([
   'error',
   'provisioning_error',
   'deprovisioning_error',
-  'provisioning',
 ]);
 
 const DEPROVISIONABLE_STATES: ReadonlySet<ProvisionState | string> = new Set([
   'ready',
   'provisioning',
-  'deprovisioning',
 ]);
 
 export function EntityProvisionStatusCell({ entityId, state, details }: EntityProvisionStatusCellProps) {
@@ -31,7 +29,7 @@ export function EntityProvisionStatusCell({ entityId, state, details }: EntityPr
   const nodeAction = useNodeAction(entityId);
   const canProvision = PROVISIONABLE_STATES.has(currentState);
   const canDeprovision = DEPROVISIONABLE_STATES.has(currentState);
-  const actionKind: 'provision' | 'deprovision' | null = canProvision ? 'provision' : canDeprovision ? 'deprovision' : null;
+  const actionKind: 'provision' | 'deprovision' | null = canDeprovision ? 'deprovision' : canProvision ? 'provision' : null;
   const actionLabel = actionKind === 'provision' ? 'Provision' : actionKind === 'deprovision' ? 'Deprovision' : null;
 
   const handleAction = () => {

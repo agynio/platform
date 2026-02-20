@@ -679,11 +679,53 @@ describe('Entity list pages', () => {
     expect(within(readyStatusCell).queryByRole('button', { name: /^Provision$/i })).toBeNull();
 
     await user.click(readyDeprovisionButton);
-    await waitFor(() => expect(readyDeprovisionButton).not.toBeDisabled());
+    expect(readyDeprovisionButton).toBeDisabled();
+    const reenabledDeprovisionButton = await within(readyStatusCell).findByRole('button', { name: /^Deprovision$/i });
+    expect(reenabledDeprovisionButton).not.toBeDisabled();
 
     expect(requests).toEqual([
       { nodeId: 'agent-error', action: 'provision' },
       { nodeId: 'agent-ready', action: 'deprovision' },
     ]);
+  });
+
+  it('shows the stop icon while provisioning and sends a deprovision request', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [{ id: 'agent-provisioning', template: 'support-agent', config: { title: 'Provisioning Agent' } }],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+    mockNodeStatuses({
+      'agent-provisioning': { state: 'provisioning' },
+    });
+
+    const requests: Array<{ nodeId: string; action?: string }> = [];
+    server.use(
+      http.post(abs('/api/graph/nodes/:nodeId/actions'), async ({ request, params }) => {
+        const body = (await request.json()) as { action?: string };
+        requests.push({ nodeId: params.nodeId as string, action: body?.action });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+
+    renderWithGraphProviders(<AgentsListPage />);
+
+    const provisioningAgentCell = await screen.findByText('Provisioning Agent', { selector: '[data-testid="entity-title"]' });
+    const provisioningRow = provisioningAgentCell.closest('tr') as HTMLTableRowElement;
+    const provisioningStatusCell = within(provisioningRow).getByTestId('entity-status-cell');
+    await waitFor(() => expect(provisioningStatusCell).toHaveTextContent(/\bprovisioning\b/));
+    const stopButton = await within(provisioningStatusCell).findByRole('button', { name: /^Deprovision$/i });
+
+    expect(stopButton).not.toBeDisabled();
+    expect(provisioningStatusCell.querySelector('svg.lucide-square')).not.toBeNull();
+
+    await user.click(stopButton);
+    expect(stopButton).toBeDisabled();
+
+    await waitFor(() => expect(requests).toEqual([{ nodeId: 'agent-provisioning', action: 'deprovision' }]));
   });
 });
