@@ -51,8 +51,8 @@ RUN cd /opt/app/packages/docker-runner \
 FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
-    PORT=7071 \
-    NODE_OPTIONS=--experimental-specifier-resolution=node
+    DOCKER_RUNNER_HOST=0.0.0.0 \
+    DOCKER_RUNNER_PORT=7071
 
 WORKDIR /opt/app/packages/docker-runner
 
