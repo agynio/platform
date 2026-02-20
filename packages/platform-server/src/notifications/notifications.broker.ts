@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import type { NotificationEnvelope } from '@agyn/shared';
 import { ConfigService } from '../core/services/config.service';
@@ -9,7 +9,8 @@ export class NotificationsBroker {
   private readonly channel: string;
   private connected = false;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
+    ConfigService.assertInitialized(config);
     this.channel = config.notificationsChannel;
     this.redis = new Redis(config.notificationsRedisUrl, {
       lazyConnect: true,

@@ -47,7 +47,7 @@ export class NotificationsPublisher implements OnModuleInit, OnModuleDestroy {
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
-    private readonly broker: NotificationsBroker,
+    @Inject(NotificationsBroker) private readonly broker: NotificationsBroker,
   ) {}
 
   async onModuleInit(): Promise<void> {
