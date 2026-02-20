@@ -2,7 +2,6 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { useNodeStatus } from '@/features/graph/hooks/useNodeStatus';
 import type { GraphEntitySummary } from '@/features/entities/types';
 import { EntityProvisionStatusCell } from './EntityProvisionStatusCell';
-import { EntityProvisionActions } from './EntityProvisionActions';
 
 export type EntityTableSortKey = 'title' | 'template';
 export type EntityTableSortDirection = 'asc' | 'desc';
@@ -119,7 +118,7 @@ function EntityTableRow({ entity, onEdit, onDelete }: EntityTableRowProps) {
         </span>
       </td>
       <td className="h-[60px] px-6">
-        <EntityProvisionStatusCell state={provisionState} details={provisionDetails} />
+        <EntityProvisionStatusCell entityId={entity.id} state={provisionState} details={provisionDetails} />
       </td>
       <td className="h-[60px] px-6">
         <code className="rounded bg-[var(--agyn-bg-light)] px-2 py-1 text-xs text-[var(--agyn-dark)]">
@@ -127,24 +126,21 @@ function EntityTableRow({ entity, onEdit, onDelete }: EntityTableRowProps) {
         </code>
       </td>
       <td className="h-[60px] px-6">
-        <div className="flex flex-col items-end gap-2">
-          <EntityProvisionActions entityId={entity.id} state={provisionState} />
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onEdit(entity)}
-              className="rounded-md border border-[var(--agyn-border-subtle)] px-3 py-1.5 text-xs text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)]"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(entity)}
-              className="rounded-md px-3 py-1.5 text-xs text-[var(--agyn-text-subtle)] transition-colors hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)]"
-            >
-              Delete
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(entity)}
+            className="rounded-md border border-[var(--agyn-border-subtle)] px-3 py-1.5 text-xs text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)]"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(entity)}
+            className="rounded-md px-3 py-1.5 text-xs text-[var(--agyn-text-subtle)] transition-colors hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)]"
+          >
+            Delete
+          </button>
         </div>
       </td>
     </tr>

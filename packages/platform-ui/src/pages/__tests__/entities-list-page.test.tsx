@@ -660,25 +660,23 @@ describe('Entity list pages', () => {
 
     const brokenAgentCell = await screen.findByText('Broken Agent', { selector: '[data-testid="entity-title"]' });
     const brokenRow = brokenAgentCell.closest('tr') as HTMLTableRowElement;
-    const provisionButton = within(brokenRow).getByRole('button', { name: /^Provision entity$/i });
-    const deprovisionButton = within(brokenRow).getByRole('button', { name: /^Deprovision entity$/i });
-    expect(provisionButton).not.toBeDisabled();
-    expect(deprovisionButton).toBeDisabled();
-
     const brokenStatusCell = within(brokenRow).getByTestId('entity-status-cell');
+    const provisionButton = within(brokenStatusCell).getByRole('button', { name: /^Provision$/i });
+    expect(provisionButton).not.toBeDisabled();
+    expect(within(brokenStatusCell).queryByRole('button', { name: /^Deprovision$/i })).toBeNull();
+
     await user.click(provisionButton);
     expect(provisionButton).toBeDisabled();
-    expect(deprovisionButton).toBeDisabled();
     await waitFor(() => expect(brokenStatusCell).toHaveTextContent('provisioning'));
     await waitFor(() => expect(provisionButton).not.toBeDisabled());
     await waitFor(() => expect(brokenStatusCell).toHaveTextContent('error'));
 
     const readyAgentCell = await screen.findByText('Ready Agent', { selector: '[data-testid="entity-title"]' });
     const readyRow = readyAgentCell.closest('tr') as HTMLTableRowElement;
-    const readyProvisionButton = within(readyRow).getByRole('button', { name: /^Provision entity$/i });
-    const readyDeprovisionButton = within(readyRow).getByRole('button', { name: /^Deprovision entity$/i });
-    expect(readyProvisionButton).toBeDisabled();
+    const readyStatusCell = within(readyRow).getByTestId('entity-status-cell');
+    const readyDeprovisionButton = within(readyStatusCell).getByRole('button', { name: /^Deprovision$/i });
     expect(readyDeprovisionButton).not.toBeDisabled();
+    expect(within(readyStatusCell).queryByRole('button', { name: /^Provision$/i })).toBeNull();
 
     await user.click(readyDeprovisionButton);
     await waitFor(() => expect(readyDeprovisionButton).not.toBeDisabled());
