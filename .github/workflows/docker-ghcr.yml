@@ -29,6 +29,11 @@ jobs:
             dockerfile: packages/platform-ui/Dockerfile
             context: .
             cache-scope: platform-ui
+          - name: docker-runner
+            image: ghcr.io/agynio/docker-runner
+            dockerfile: packages/docker-runner/Dockerfile
+            context: .
+            cache-scope: docker-runner
 
     steps:
       - name: Checkout
