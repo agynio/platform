@@ -53,6 +53,36 @@ The Socket.IO endpoint is exposed on the same origin under `/socket.io`. Any UI
 or client library that previously connected to the in-process gateway can now
 point to `http://localhost:8080` and reuse the existing configuration.
 
+## Dev-local Envoy bridge
+
+When you run the platform server on `:3010` and the notifications gateway on
+`:4000` directly on your host, you can still terminate everything behind a
+single origin by running Envoy in a standalone container:
+
+```
+docker run --rm --name envoy-dev \
+  -p 8080:8080 \
+  -p 9901:9901 \
+  -v "$(pwd)/ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro" \
+  envoyproxy/envoy:v1.31-latest
+```
+
+This configuration forwards `/socket.io` upgrades to
+`host.docker.internal:4000` (the notifications gateway) with a one-hour idle
+timeout and `/api` traffic to `host.docker.internal:3010` (the platform server).
+
+> [!NOTE]
+> On Linux, `host.docker.internal` is not created automatically. If you prefer
+> to manage the Envoy sidecar through Compose, add
+> `extra_hosts: ["host.docker.internal:host-gateway"]` to the service so the
+> container can resolve the host network address.
+
+Point the UI (Vite dev server or production build) at Envoy via:
+
+```
+VITE_API_BASE_URL=http://localhost:8080
+```
+
 ## Shutdown and cleanup
 
 Press `Ctrl+C` to stop the stack, then remove containers and volumes with:

@@ -294,6 +294,26 @@ Secrets handling:
 - Vault auto-init script under vault/auto-init.sh is dev-only; do not use in production.
 - Never commit secrets; use environment injection and secure secret managers.
 
+### Dev-local Envoy proxy
+
+When the platform server (:3010) and notifications gateway (:4000) run directly
+on your host, you can still front them with a single origin by mounting the
+dev-local Envoy configuration:
+
+```
+docker run --rm --name envoy-dev \
+  -p 8080:8080 \
+  -p 9901:9901 \
+  -v "$(pwd)/ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro" \
+  envoyproxy/envoy:v1.31-latest
+```
+
+Linux users that prefer docker-compose can add
+`extra_hosts: ["host.docker.internal:host-gateway"]` to the Envoy service so the
+container can resolve the host network. Point the UI (dev server or production
+build) at Envoy with `VITE_API_BASE_URL=http://localhost:8080` to reuse the
+single ingress endpoint for both REST and Socket.IO traffic.
+
 ## Observability / Logging / Metrics
 - Server logging: nestjs-pino with redaction of sensitive headers (packages/platform-server/src/bootstrap/app.module.ts)
 - Prometheus scrapes Prometheus and cAdvisor; Grafana is pre-provisioned (monitoring/)
