@@ -186,14 +186,14 @@ export class ZitiReconciler {
       name: `${profile.serviceName}.dial`,
       type: 'Dial',
       semantic: 'AllOf',
-      identityRoles: profile.identities.runner.selectors,
+      identityRoles: profile.identities.platform.selectors,
       serviceRoles: profile.serviceSelectors,
     });
     await this.ensureServicePolicy(client, {
       name: `${profile.serviceName}.bind`,
       type: 'Bind',
       semantic: 'AllOf',
-      identityRoles: profile.identities.platform.selectors,
+      identityRoles: profile.identities.runner.selectors,
       serviceRoles: profile.serviceSelectors,
     });
   }

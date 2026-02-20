@@ -182,8 +182,17 @@ overlay instead of the Docker bridge network:
 1. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
 2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
    `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
-3. Start the controller stack: `docker compose up -d ziti-controller ziti-controller-init ziti-edge-router`.
-4. Launch docker-runner and platform-server normally (either via `pnpm dev` or
+3. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
+4. Bootstrap the controller state (service, policies, identities) via the bundled init job:
+
+```bash
+docker compose run --rm ziti-controller-init
+```
+
+The init container wraps the OpenZiti CLI, mirrors identity JSON into `./.ziti/identities`, and can be re-run
+whenever you need to regenerate enrollment material (no host `ziti` binary required).
+
+5. Launch docker-runner and platform-server normally (either via `pnpm dev` or
    `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
    - Host `pnpm` dev keeps the ConfigService defaults, so the proxy binds to `127.0.0.1:17071` unless you override
      `ZITI_RUNNER_PROXY_HOST`.
