@@ -5,7 +5,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
-import { Reducer, Loop, ResponseMessage, HumanMessage } from '@agyn/llm';
+import { AIMessage, Reducer, Loop, ResponseMessage, HumanMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
 import { runnerConfigDefaults } from './helpers/config';
 
@@ -71,7 +71,11 @@ describe('AgentNode termination flow', () => {
     const result = await invokePromise;
 
     expect(result.text).toBe('terminated');
-    expect(completeRun).toHaveBeenCalledWith('run-terminate', 'terminated', []);
+    expect(completeRun).toHaveBeenCalledWith('run-terminate', 'terminated', expect.any(Array));
+    const terminationOutputs = completeRun.mock.calls[0][2];
+    expect(terminationOutputs).toHaveLength(1);
+    expect(terminationOutputs[0]).toBeInstanceOf(AIMessage);
+    expect(terminationOutputs[0].text).toBe('terminated');
     expect(beginRunThread).toHaveBeenCalledTimes(1);
   });
 });
