@@ -54,8 +54,7 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
     (value: string) => {
       setAgentNameDirty(true);
       setAgentNameInput(value);
-      const trimmed = value.trim();
-      const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+      const normalizedNext = value.length > 0 ? value : undefined;
       const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
       if (normalizedNext === normalizedCurrent) {
         return;
@@ -66,12 +65,9 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
   );
 
   const handleAgentNameBlur = useCallback(() => {
-    const trimmed = agentNameInput.trim();
-    const nextInputValue = trimmed.length > 0 ? trimmed : '';
-    setAgentNameInput(nextInputValue);
     setAgentNameDirty(false);
 
-    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedNext = agentNameInput.length > 0 ? agentNameInput : undefined;
     const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
     if (normalizedNext === normalizedCurrent) {
       return;
@@ -84,8 +80,7 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
     (value: string) => {
       setAgentRoleDirty(true);
       setAgentRoleInput(value);
-      const trimmed = value.trim();
-      const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+      const normalizedNext = value.length > 0 ? value : undefined;
       const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
       if (normalizedNext === normalizedCurrent) {
         return;
@@ -96,12 +91,9 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
   );
 
   const handleAgentRoleBlur = useCallback(() => {
-    const trimmed = agentRoleInput.trim();
-    const nextInputValue = trimmed.length > 0 ? trimmed : '';
-    setAgentRoleInput(nextInputValue);
     setAgentRoleDirty(false);
 
-    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedNext = agentRoleInput.length > 0 ? agentRoleInput : undefined;
     const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
     if (normalizedNext === normalizedCurrent) {
       return;
@@ -112,7 +104,7 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
 
   const handleAgentModelChange = useCallback(
     (value: string) => {
-      onConfigChange?.({ model: value.trim() });
+      onConfigChange?.({ model: value });
     },
     [onConfigChange],
   );
@@ -133,8 +125,7 @@ function AgentNodeConfigContent({ config, onConfigChange, nodeId, graphNodes, gr
 
   const handleAgentRestrictionMessageChange = useCallback(
     (value: string) => {
-      const trimmed = value.trim();
-      onConfigChange?.({ restrictionMessage: trimmed.length > 0 ? trimmed : undefined });
+      onConfigChange?.({ restrictionMessage: value.length > 0 ? value : undefined });
     },
     [onConfigChange],
   );

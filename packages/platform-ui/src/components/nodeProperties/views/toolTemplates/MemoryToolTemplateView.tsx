@@ -20,16 +20,14 @@ export function MemoryToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
 
   const handleDescriptionChange = useCallback(
     (value: string) => {
-      const trimmed = value.trim();
-      onConfigChange?.({ description: trimmed.length > 0 ? trimmed : undefined });
+      onConfigChange?.({ description: value.length > 0 ? value : undefined });
     },
     [onConfigChange],
   );
 
   const handlePromptChange = useCallback(
     (value: string) => {
-      const trimmed = value.trim();
-      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined });
+      onConfigChange?.({ prompt: value.length > 0 ? value : undefined });
     },
     [onConfigChange],
   );

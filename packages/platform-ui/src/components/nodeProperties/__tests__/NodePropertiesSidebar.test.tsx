@@ -63,19 +63,21 @@ describe('NodePropertiesSidebar tool name field', () => {
     expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
   });
 
-  it('trims whitespace before validating and persisting', async () => {
+  it('does not trim whitespace and instead surfaces a validation error', async () => {
     const user = userEvent.setup();
     const { input, onConfigChange } = setup();
 
     await user.clear(input);
     onConfigChange.mockClear();
-    await user.type(input, '  custom_tool  ');
 
-    await waitFor(() => {
-      expect(onConfigChange).toHaveBeenCalled();
-    });
-    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ name: 'custom_tool' });
-    expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
+    await user.type(input, 'custom_tool');
+    const callsBeforeSpaces = onConfigChange.mock.calls.length;
+
+    await user.type(input, '  ');
+
+    expect(onConfigChange.mock.calls.length).toBe(callsBeforeSpaces);
+    expect(await screen.findByText('Name must match ^[a-z0-9_]{1,64}$')).toBeInTheDocument();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
   });
 
   it('rejects invalid tool names and shows an error', async () => {
@@ -107,19 +109,18 @@ describe('NodePropertiesSidebar tool name field', () => {
     expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
   });
 
-  it('clears the name when the trimmed input is empty', async () => {
+  it('treats whitespace-only names as invalid and keeps the previous config value', async () => {
     const user = userEvent.setup();
     const { input, onConfigChange } = setup({
       config: { kind: 'Tool', title: 'Shell tool', name: 'custom_tool' } as NodeConfig,
     });
 
-    onConfigChange.mockClear();
     await user.clear(input);
+    onConfigChange.mockClear();
     await user.type(input, '   ');
 
-    await waitFor(() => {
-      expect(onConfigChange).toHaveBeenCalledWith({ name: undefined });
-    });
-    expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
+    expect(onConfigChange).not.toHaveBeenCalled();
+    expect(await screen.findByText('Name must match ^[a-z0-9_]{1,64}$')).toBeInTheDocument();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
   });
 });

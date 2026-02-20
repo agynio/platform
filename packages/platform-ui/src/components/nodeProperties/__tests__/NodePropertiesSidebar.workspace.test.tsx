@@ -137,7 +137,7 @@ describe('NodePropertiesSidebar workspace limits', () => {
       const cpuCalls = onConfigChange.mock.calls.filter((call) =>
         Object.prototype.hasOwnProperty.call(call[0], 'cpu_limit'),
       );
-      expect(cpuCalls.at(-1)?.[0]).toEqual({ cpu_limit: '500m' });
+      expect(cpuCalls.at(-1)?.[0]).toEqual({ cpu_limit: ' 500m ' });
     });
 
     onConfigChange.mockClear();
@@ -156,7 +156,7 @@ describe('NodePropertiesSidebar workspace limits', () => {
       const memoryCalls = onConfigChange.mock.calls.filter((call) =>
         Object.prototype.hasOwnProperty.call(call[0], 'memory_limit'),
       );
-      expect(memoryCalls.at(-1)?.[0]).toEqual({ memory_limit: '1Gi' });
+      expect(memoryCalls.at(-1)?.[0]).toEqual({ memory_limit: ' 1Gi ' });
     });
 
     onConfigChange.mockClear();

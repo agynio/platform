@@ -177,8 +177,7 @@ export function WorkspaceSection({
               value={cpuLimit ?? ''}
               onChange={(event) => {
                 const rawValue = event.target.value;
-                const normalized = rawValue.trim();
-                onCpuLimitChange(normalized.length > 0 ? normalized : undefined);
+                onCpuLimitChange(rawValue.length > 0 ? rawValue : undefined);
               }}
               size="sm"
             />
@@ -190,8 +189,7 @@ export function WorkspaceSection({
               value={memoryLimit ?? ''}
               onChange={(event) => {
                 const rawValue = event.target.value;
-                const normalized = rawValue.trim();
-                onMemoryLimitChange(normalized.length > 0 ? normalized : undefined);
+                onMemoryLimitChange(rawValue.length > 0 ? rawValue : undefined);
               }}
               size="sm"
             />
