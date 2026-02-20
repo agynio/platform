@@ -183,6 +183,14 @@ overlay instead of the Docker bridge network:
 2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
    `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
 3. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
+   - Watch `docker compose logs -f ziti-edge-router` until you see the router enroll and connect to `ziti-controller`.
+   - For a clean bootstrap, stop the stack and wipe any stale state first:
+
+```bash
+docker compose down -v ziti-controller ziti-edge-router
+rm -rf ./.ziti/controller ./.ziti/identities ./.ziti/tmp
+```
+
 4. Bootstrap the controller state (service, policies, identities) via the bundled init job:
 
 ```bash
@@ -190,7 +198,8 @@ docker compose run --rm ziti-controller-init
 ```
 
 The init container wraps the OpenZiti CLI, mirrors identity JSON into `./.ziti/identities`, and can be re-run
-whenever you need to regenerate enrollment material (no host `ziti` binary required).
+whenever you need to regenerate enrollment material (no host `ziti` binary required). If the job reports that the
+router has not enrolled yet, keep the `ziti-edge-router` container running, wait for it to connect, then re-run the init job.
 
 5. Launch docker-runner and platform-server normally (either via `pnpm dev` or
    `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).

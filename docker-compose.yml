@@ -347,7 +347,7 @@ services:
       ZITI_ROUTER_ADVERTISED_ADDRESS: ziti-edge-router
       ZITI_ROUTER_PORT: "3022"
       ZITI_ROUTER_LISTENER_BIND_PORT: "10080"
-      ZITI_ROUTER_ROLES: public
+      ZITI_ROUTER_ROLES: router.platform
       ZITI_USER: admin
       ZITI_PWD: admin
     ports:

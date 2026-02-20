@@ -26,7 +26,7 @@ pnpm approve-builds
 > pnpm --dir node_modules/.pnpm/@openziti+ziti-sdk-nodejs@0.27.0/node_modules/@openziti/ziti-sdk-nodejs run install
 > ```
 
-2. Ensure the OpenZiti controller stack is running:
+2. Ensure the OpenZiti controller stack is running and the router finishes enrolling:
 
 ```bash
 docker compose up -d ziti-controller ziti-edge-router
@@ -36,11 +36,19 @@ docker compose up -d ziti-controller ziti-edge-router
 > start them with `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
 > so they share the same controller and network.
 
+Watch `docker compose logs -f ziti-edge-router` until you see the router enroll ("successfully connected to controller")
+before attempting the init job. If the router refuses to start, wipe `.ziti/controller` using the reset steps below and
+retry.
+
 3. Bootstrap the controller via the init job (idempotent; re-run whenever identity JSON needs to be regenerated):
 
 ```bash
 docker compose run --rm ziti-controller-init
 ```
+
+The job now waits up to five minutes for the router named by `ZITI_ROUTER_NAME` (default `dev-edge-router`). If the
+router is still missing after the timeout it logs a warning, skips router role updates, and exits so you can rerun it
+later. Set `ZITI_SKIP_ROUTER_WAIT=true` to disable the wait entirely.
 
 4. Copy `.env` files and enable OpenZiti flags. Use the template that matches how you run the services:
 
@@ -137,3 +145,17 @@ Seeing the readiness log after step 1 indicates the end-to-end tunnel is operati
 
 > To reset the environment delete `./.ziti/identities` and `./.ziti/tmp` (or the `/opt/app/.ziti/*` mounts inside Docker), then restart the stack so the platform-server
 > can re-enroll identities.
+
+## Resetting OpenZiti state
+
+The controller stores PKI and router enrollment artifacts in `./.ziti/controller`. Stale files can cause hostname or TLS
+conflicts, so a clean bootstrap consists of:
+
+```bash
+docker compose down -v ziti-controller ziti-edge-router
+rm -rf ./.ziti/controller ./.ziti/identities ./.ziti/tmp
+docker compose up -d ziti-controller ziti-edge-router
+docker compose run --rm ziti-controller-init
+```
+
+Re-run the init job whenever it warns that the router has not registered so role attributes stay in sync.
