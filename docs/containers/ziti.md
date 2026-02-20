@@ -13,7 +13,13 @@ bridge network.
 
 ## Prerequisites
 
-1. Install dependencies and explicitly allow the OpenZiti SDK build step (pnpm blocks install scripts by default):
+1. Prepare the local `.ziti` directory (creates controller/identity/tmp folders with permissive permissions and SELinux labels when available):
+
+```bash
+pnpm ziti:prepare
+```
+
+2. Install dependencies and explicitly allow the OpenZiti SDK build step (pnpm blocks install scripts by default):
 
 ```bash
 pnpm approve-builds
@@ -26,7 +32,7 @@ pnpm approve-builds
 > pnpm --dir node_modules/.pnpm/@openziti+ziti-sdk-nodejs@0.27.0/node_modules/@openziti/ziti-sdk-nodejs run install
 > ```
 
-2. Ensure the OpenZiti controller stack is running and the router finishes enrolling:
+3. Ensure the OpenZiti controller stack is running and the router finishes enrolling:
 
 ```bash
 docker compose up -d ziti-controller ziti-edge-router
@@ -40,10 +46,10 @@ Watch `docker compose logs -f ziti-edge-router` until you see the router enroll 
 before attempting the init job. If the router refuses to start, wipe `.ziti/controller` using the reset steps below and
 retry.
 
-3. Bootstrap the controller via the init job (idempotent; re-run whenever identity JSON needs to be regenerated):
+4. Bootstrap the controller via the init job (idempotent; re-run whenever identity JSON needs to be regenerated). Running the job with your host UID/GID keeps the generated identity files readable without extra chmod steps:
 
 ```bash
-docker compose run --rm ziti-controller-init
+docker compose run --rm --user "$(id -u):$(id -g)" ziti-controller-init
 ```
 
 The job now waits up to five minutes for the router named by `ZITI_ROUTER_NAME` (default `dev-edge-router`). If the
@@ -104,6 +110,45 @@ ZITI_TMP_DIR=/opt/app/.ziti/tmp
 
 # docker-runner container
 ZITI_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
+```
+
+## Host-mode workflow
+
+After completing the prerequisites and enabling the `.env` entries above, the developer stack can be verified on the host with the following sequence (clean-room friendly):
+
+1. Bring up the persistence dependencies:
+
+```bash
+docker compose up -d postgres agents-db litellm-db litellm
+```
+
+2. Start the docker-runner in a terminal (requires `ZITI_ENABLED=true`). Wait for both the Fastify log and the Ziti ingress message:
+
+```bash
+pnpm --filter @agyn/docker-runner dev
+# ...
+# {"level":30,..."msg":"Server listening at http://127.0.0.1:7071"}
+# Ziti ingress ready for service dev.agyn-platform.platform-api
+```
+
+3. Start the platform-server in a separate terminal:
+
+```bash
+pnpm --filter @agyn/platform-server dev
+```
+
+The `DockerRunnerConnectivityProbe` now waits for the local Ziti proxy before giving up. It retries 30 times with a 2s interval by default (~60s). Override the timing via `DOCKER_RUNNER_PROBE_MAX_ATTEMPTS` and `DOCKER_RUNNER_PROBE_INTERVAL_MS` if you need longer windows for slower machines.
+
+4. Validate the tunnel:
+
+```bash
+curl http://127.0.0.1:17071/v1/ready
+```
+
+Expected response:
+
+```json
+{"status":"ready"}
 ```
 
 ## Runtime flow

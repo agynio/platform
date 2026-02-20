@@ -285,6 +285,8 @@ services:
       - type: bind
         source: ./.ziti/controller
         target: /persistent
+        bind:
+          selinux: z
     networks:
       - agents_net
 
@@ -317,12 +319,18 @@ services:
       - type: bind
         source: ./.ziti/controller
         target: /persistent
+        bind:
+          selinux: z
       - type: bind
         source: ./.ziti/identities
         target: /identities
+        bind:
+          selinux: z
       - type: bind
         source: ./.ziti/tmp
         target: /ziti-tmp
+        bind:
+          selinux: z
       - type: bind
         source: ./scripts/ziti
         target: /scripts/ziti
@@ -358,6 +366,8 @@ services:
       - type: bind
         source: ./.ziti/controller
         target: /persistent
+        bind:
+          selinux: z
     networks:
       - agents_net
 

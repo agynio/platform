@@ -179,10 +179,12 @@ docker run --rm -p 8080:80 \
 The dev stack now ships an OpenZiti controller, initializer, and edge router. To route docker-runner traffic through the
 overlay instead of the Docker bridge network:
 
-1. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
-2. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
+1. Prepare the shared volumes once per checkout (`pnpm ziti:prepare`). This keeps `.ziti/controller`,
+   `.ziti/identities`, and `.ziti/tmp` writable even on SELinux hosts.
+2. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
+3. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
    `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
-3. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
+4. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
    - Watch `docker compose logs -f ziti-edge-router` until you see the router enroll and connect to `ziti-controller`.
    - For a clean bootstrap, stop the stack and wipe any stale state first:
 
@@ -191,17 +193,18 @@ docker compose down -v ziti-controller ziti-edge-router
 rm -rf ./.ziti/controller ./.ziti/identities ./.ziti/tmp
 ```
 
-4. Bootstrap the controller state (service, policies, identities) via the bundled init job:
+5. Bootstrap the controller state (service, policies, identities) via the bundled init job. Passing your UID/GID keeps
+   the emitted identity files readable without a manual `chmod`:
 
 ```bash
-docker compose run --rm ziti-controller-init
+docker compose run --rm --user "$(id -u):$(id -g)" ziti-controller-init
 ```
 
 The init container wraps the OpenZiti CLI, mirrors identity JSON into `./.ziti/identities`, and can be re-run
 whenever you need to regenerate enrollment material (no host `ziti` binary required). If the job reports that the
 router has not enrolled yet, keep the `ziti-edge-router` container running, wait for it to connect, then re-run the init job.
 
-5. Launch docker-runner and platform-server normally (either via `pnpm dev` or
+6. Launch docker-runner and platform-server normally (either via `pnpm dev` or
    `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
    - Host `pnpm` dev keeps the ConfigService defaults, so the proxy binds to `127.0.0.1:17071` unless you override
      `ZITI_RUNNER_PROXY_HOST`.
@@ -209,7 +212,11 @@ router has not enrolled yet, keep the `ziti-edge-router` container running, wait
      the host.
    In both cases traffic is accessible from the host via `127.0.0.1:17071` once the proxy reports ready.
 
-See [docs/containers/ziti.md](docs/containers/ziti.md) for the full walkthrough and smoke test commands.
+The platform-server now retries the connectivity probe (defaults: 30 attempts, 2s interval). Override via
+`DOCKER_RUNNER_PROBE_MAX_ATTEMPTS` / `DOCKER_RUNNER_PROBE_INTERVAL_MS` if you need a longer window before the runner
+comes online.
+
+See [docs/containers/ziti.md](docs/containers/ziti.md) for the step-by-step host-mode workflow and smoke test commands.
 
 ## Configuration
 
