@@ -309,6 +309,8 @@ export function serializeEnvVars(list: EnvVar[]): Array<Record<string, unknown>>
     const base = item.meta.original ? deepClone(item.meta.original) : {};
     const record = base as Record<string, unknown>;
 
+    record.id = item.id;
+
     if (item.meta.keyField === 'key') {
       record.key = item.name;
       if (!item.meta.original) delete record.name;
