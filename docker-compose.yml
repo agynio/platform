@@ -73,6 +73,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - agents_net
 
   vault:
     image: hashicorp/vault:1.17

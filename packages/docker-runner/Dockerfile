@@ -23,7 +23,10 @@ FROM base AS build
 
 COPY . .
 
-RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile
+RUN pnpm install \
+    --filter @agyn/docker-runner... \
+    --filter @agyn/platform-server \
+    --offline --frozen-lockfile
 
 RUN pnpm --filter @agyn/docker-runner run build
 
@@ -32,9 +35,10 @@ RUN pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
 FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
-    PORT=7071
+    PORT=7071 \
+    NODE_OPTIONS=--experimental-specifier-resolution=node
 
-WORKDIR /opt/app/packages/docker-runner
+WORKDIR /opt/app
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
