@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server, TestProviders, abs } from '../../../__tests__/integration/testUtils';
+import type { ProvisionState } from '@/api/types/graph';
 import { TemplatesProvider } from '@/lib/graph/templates.provider';
 
 const pointerProto = Element.prototype as typeof Element.prototype & {
@@ -117,6 +118,18 @@ function primeGraphHandlers(graphOverride = baseGraph) {
   server.use(
     http.get(abs('/api/graph'), () => HttpResponse.json(payload)),
     http.get(abs('/api/graph/templates'), () => HttpResponse.json(templateSet)),
+  );
+}
+
+type MockProvisionStatus = { state: ProvisionState; details?: unknown };
+
+function mockNodeStatuses(statuses: Record<string, MockProvisionStatus>) {
+  server.use(
+    http.get(abs('/api/graph/nodes/:nodeId/status'), ({ params }) => {
+      const nodeId = params.nodeId as string;
+      const payload = statuses[nodeId] ?? { state: 'not_ready' as ProvisionState };
+      return HttpResponse.json({ nodeId, isPaused: false, provisionStatus: payload });
+    }),
   );
 }
 
@@ -270,6 +283,42 @@ describe('Entity list pages', () => {
     expect(screen.queryByText('Worker Pool')).not.toBeInTheDocument();
     expect(screen.queryByText('Core Agent')).not.toBeInTheDocument();
     expect(screen.queryByText('Webhook Trigger')).not.toBeInTheDocument();
+  });
+
+  it('displays provision statuses (ready/provisioning/error) with inline error details', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'agent-ready', template: 'support-agent', config: { title: 'Ready Agent' } },
+        { id: 'agent-provisioning', template: 'support-agent', config: { title: 'Provisioning Agent' } },
+        { id: 'agent-error', template: 'support-agent', config: { title: 'Broken Agent' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+    mockNodeStatuses({
+      'agent-ready': { state: 'ready' },
+      'agent-provisioning': { state: 'provisioning' },
+      'agent-error': { state: 'error', details: { message: 'boom' } },
+    });
+
+    renderWithGraphProviders(<AgentsListPage />);
+
+    const readyCell = await screen.findByText('Ready Agent', { selector: '[data-testid="entity-title"]' });
+    const readyRow = readyCell.closest('tr');
+    expect(readyRow).not.toBeNull();
+    expect(within(readyRow as HTMLTableRowElement).getByTestId('entity-status-cell')).toHaveTextContent('ready');
+
+    const provisioningCell = await screen.findByText('Provisioning Agent', { selector: '[data-testid="entity-title"]' });
+    const provisioningRow = provisioningCell.closest('tr');
+    expect(provisioningRow).not.toBeNull();
+    expect(within(provisioningRow as HTMLTableRowElement).getByTestId('entity-status-cell')).toHaveTextContent('provisioning');
+
+    const errorCell = await screen.findByText('Broken Agent', { selector: '[data-testid="entity-title"]' });
+    const errorRow = errorCell.closest('tr');
+    expect(errorRow).not.toBeNull();
+    expect(within(errorRow as HTMLTableRowElement).getByTestId('entity-status-cell')).toHaveTextContent('error');
+    expect(within(errorRow as HTMLTableRowElement).getByTestId('entity-status-error')).toHaveTextContent('{"message":"boom"}');
   });
 
   it('limits the memory create page to memory templates only', async () => {
@@ -578,5 +627,105 @@ describe('Entity list pages', () => {
 
     await user.click(screen.getByRole('button', { name: /sort by template/i }));
     expect(readTitles()).toEqual(['Alpha Agent', 'Zulu Agent']);
+  });
+
+  it('sends provision/deprovision requests with correct payloads and disables both controls while pending', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [
+        { id: 'agent-error', template: 'support-agent', config: { title: 'Broken Agent' } },
+        { id: 'agent-ready', template: 'support-agent', config: { title: 'Ready Agent' } },
+      ],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+    mockNodeStatuses({
+      'agent-error': { state: 'error' },
+      'agent-ready': { state: 'ready' },
+    });
+
+    const requests: Array<{ nodeId: string; action?: string }> = [];
+    server.use(
+      http.post(abs('/api/graph/nodes/:nodeId/actions'), async ({ request, params }) => {
+        const body = (await request.json()) as { action?: string };
+        requests.push({ nodeId: params.nodeId as string, action: body?.action });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+
+    renderWithGraphProviders(<AgentsListPage />);
+
+    const brokenAgentCell = await screen.findByText('Broken Agent', { selector: '[data-testid="entity-title"]' });
+    const brokenRow = brokenAgentCell.closest('tr') as HTMLTableRowElement;
+    const brokenStatusCell = within(brokenRow).getByTestId('entity-status-cell');
+    const provisionButton = within(brokenStatusCell).getByRole('button', { name: /^Provision$/i });
+    expect(provisionButton).not.toBeDisabled();
+    expect(within(brokenStatusCell).queryByRole('button', { name: /^Deprovision$/i })).toBeNull();
+
+    await user.click(provisionButton);
+    expect(provisionButton).toBeDisabled();
+    await waitFor(() => expect(brokenStatusCell).toHaveTextContent('provisioning'));
+    await waitFor(() => expect(provisionButton).not.toBeDisabled());
+    await waitFor(() => expect(brokenStatusCell).toHaveTextContent('error'));
+
+    const readyAgentCell = await screen.findByText('Ready Agent', { selector: '[data-testid="entity-title"]' });
+    const readyRow = readyAgentCell.closest('tr') as HTMLTableRowElement;
+    const readyStatusCell = within(readyRow).getByTestId('entity-status-cell');
+    const readyDeprovisionButton = within(readyStatusCell).getByRole('button', { name: /^Deprovision$/i });
+    expect(readyDeprovisionButton).not.toBeDisabled();
+    expect(within(readyStatusCell).queryByRole('button', { name: /^Provision$/i })).toBeNull();
+
+    await user.click(readyDeprovisionButton);
+    expect(readyDeprovisionButton).toBeDisabled();
+    const reenabledDeprovisionButton = await within(readyStatusCell).findByRole('button', { name: /^Deprovision$/i });
+    expect(reenabledDeprovisionButton).not.toBeDisabled();
+
+    expect(requests).toEqual([
+      { nodeId: 'agent-error', action: 'provision' },
+      { nodeId: 'agent-ready', action: 'deprovision' },
+    ]);
+  });
+
+  it('shows the stop icon while provisioning and sends a deprovision request', async () => {
+    const graphOverride = {
+      ...baseGraph,
+      nodes: [{ id: 'agent-provisioning', template: 'support-agent', config: { title: 'Provisioning Agent' } }],
+      edges: [],
+    };
+    primeGraphHandlers(graphOverride);
+    mockNodeStatuses({
+      'agent-provisioning': { state: 'provisioning' },
+    });
+
+    const requests: Array<{ nodeId: string; action?: string }> = [];
+    server.use(
+      http.post(abs('/api/graph/nodes/:nodeId/actions'), async ({ request, params }) => {
+        const body = (await request.json()) as { action?: string };
+        requests.push({ nodeId: params.nodeId as string, action: body?.action });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+
+    renderWithGraphProviders(<AgentsListPage />);
+
+    const provisioningAgentCell = await screen.findByText('Provisioning Agent', { selector: '[data-testid="entity-title"]' });
+    const provisioningRow = provisioningAgentCell.closest('tr') as HTMLTableRowElement;
+    const provisioningStatusCell = within(provisioningRow).getByTestId('entity-status-cell');
+    await waitFor(() => expect(provisioningStatusCell).toHaveTextContent(/\bprovisioning\b/));
+    const stopButton = await within(provisioningStatusCell).findByRole('button', { name: /^Deprovision$/i });
+
+    expect(stopButton).not.toBeDisabled();
+    expect(provisioningStatusCell.querySelector('svg.lucide-square')).not.toBeNull();
+
+    await user.click(stopButton);
+    expect(stopButton).toBeDisabled();
+
+    await waitFor(() => expect(requests).toEqual([{ nodeId: 'agent-provisioning', action: 'deprovision' }]));
   });
 });
