@@ -63,12 +63,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /opt/app /opt/app
-COPY --from=build --chown=node:node /workspace/packages/docker-runner/package.json /opt/app/packages/docker-runner/package.json
-COPY --from=build --chown=node:node /workspace/packages/docker-runner/src /opt/app/packages/docker-runner/src
-COPY --from=build --chown=node:node /workspace/packages/docker-runner/tsconfig.json /opt/app/packages/docker-runner/tsconfig.json
 
 USER node
 
 EXPOSE 7071
 
-CMD ["tsx", "src/service/main.ts"]
+CMD ["node", "dist/service/main.js"]
