@@ -124,7 +124,7 @@ describe('nodeProperties/EnvEditor', () => {
     expect(props.onAdd).toHaveBeenCalled();
   });
 
-  it('keeps the value input focused across multi-character typing', () => {
+  it('keeps the value input focused while typing and deleting characters', () => {
     render(<ControlledEnvEditor />);
 
     const valueInput = screen.getByPlaceholderText('Value or reference...') as HTMLInputElement;
@@ -136,20 +136,11 @@ describe('nodeProperties/EnvEditor', () => {
 
     fireEvent.change(valueInput, { target: { value: 'AB' } });
     expect(document.activeElement).toBe(valueInput);
-  });
 
-  it('prevents backspace events from reaching an outer delete handler', () => {
-    const outerHandler = vi.fn();
-    render(
-      <div onKeyDown={outerHandler}>
-        <EnvEditor {...baseEnv} />
-      </div>,
-    );
+    fireEvent.change(valueInput, { target: { value: 'A' } });
+    expect(document.activeElement).toBe(valueInput);
 
-    const valueInput = screen.getByPlaceholderText('Value or reference...');
-    valueInput.focus();
-    fireEvent.keyDown(valueInput, { key: 'Backspace', code: 'Backspace' });
-
-    expect(outerHandler).not.toHaveBeenCalled();
+    fireEvent.change(valueInput, { target: { value: '' } });
+    expect(document.activeElement).toBe(valueInput);
   });
 });

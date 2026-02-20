@@ -140,10 +140,6 @@ export function ReferenceInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      e.stopPropagation();
-    }
-
     if (sourceType === 'secret' && showAutocomplete && filteredKeys.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
