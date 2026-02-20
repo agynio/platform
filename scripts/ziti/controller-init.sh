@@ -9,9 +9,10 @@ ZITI_SCRIPTS=${ZITI_SCRIPTS:-/var/openziti/scripts}
 ZITI_HOME=${ZITI_HOME:-/persistent}
 IDENTITIES_DIR=${ZITI_IDENTITIES_DIR:-/identities}
 TMP_DIR=${ZITI_IDENTITIES_TMP:-/ziti-tmp}
-ROUTER_DISCOVERY_TIMEOUT=${ZITI_ROUTER_DISCOVERY_TIMEOUT_SECONDS:-120}
+ROUTER_DISCOVERY_TIMEOUT=${ZITI_ROUTER_DISCOVERY_TIMEOUT_SECONDS:-300}
 ROUTER_DISCOVERY_INTERVAL=${ZITI_ROUTER_DISCOVERY_INTERVAL_SECONDS:-2}
 ENROLLMENT_DURATION_MINUTES=${ZITI_ENROLLMENT_DURATION_MINUTES:-1440}
+ROUTER_PRESENT=false
 
 APP_ATTRIBUTE='app.agyn-platform'
 SERVICE_ATTRIBUTE='service.platform-api'
@@ -87,20 +88,30 @@ ensure_access_control_seed() {
 }
 
 wait_for_router() {
+  if [[ "${ZITI_SKIP_ROUTER_WAIT:-false}" == "true" ]]; then
+    log 'router wait disabled via ZITI_SKIP_ROUTER_WAIT'
+    return
+  fi
   local deadline=$(( $(date +%s) + ROUTER_DISCOVERY_TIMEOUT ))
+  log "waiting for router ${ZITI_ROUTER_NAME} to register (timeout ${ROUTER_DISCOVERY_TIMEOUT}s)"
   while (( $(date +%s) < deadline )); do
     if entity_exists 'edge-routers' "$ZITI_ROUTER_NAME"; then
       log "router ${ZITI_ROUTER_NAME} registered"
+      ROUTER_PRESENT=true
       return
     fi
     log "waiting for router ${ZITI_ROUTER_NAME}"
     sleep "$ROUTER_DISCOVERY_INTERVAL"
   done
-  log "router ${ZITI_ROUTER_NAME} not found before timeout"
-  exit 1
+  log "router ${ZITI_ROUTER_NAME} not found before timeout — skipping router-specific updates."
+  log "Ensure 'docker compose up -d ziti-edge-router' succeeded, then re-run this init job once the router enrolls."
 }
 
 ensure_router_roles() {
+  if [[ "$ROUTER_PRESENT" != true ]]; then
+    log "router ${ZITI_ROUTER_NAME} not registered yet; skipping router role assignment"
+    return
+  fi
   log "ensuring router role attributes for ${ZITI_ROUTER_NAME}"
   "${ZITI_BIN}" edge update edge-router "$ZITI_ROUTER_NAME" --role-attributes "$ROUTER_ROLE_ATTRIBUTES" >/dev/null
 }
