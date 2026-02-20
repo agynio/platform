@@ -1,10 +1,10 @@
-import './env';
+import './env.js';
 
 import type { FastifyInstance } from 'fastify';
 
-import { loadRunnerConfig } from './config';
-import { createRunnerApp } from './app';
-import { startZitiIngress } from './ziti.ingress';
+import { loadRunnerConfig } from './config.js';
+import { createRunnerApp } from './app.js';
+import { startZitiIngress } from './ziti.ingress.js';
 
 async function bootstrap(): Promise<void> {
   let app: FastifyInstance | undefined;

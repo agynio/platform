@@ -38,6 +38,7 @@ services:
       ZITI_RUNNER_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
       ZITI_IDENTITIES_DIR: ${ZITI_IDENTITIES_DIR:-/opt/app/.ziti/identities}
       ZITI_TMP_DIR: ${ZITI_TMP_DIR:-/opt/app/.ziti/tmp}
+      GRAPH_REPO_PATH: ${GRAPH_REPO_PATH:-/opt/app/data/graph}
     ports:
       - "${PLATFORM_SERVER_PORT:-3010}:3010"
       - "${ZITI_RUNNER_PROXY_PORT:-17071}:17071"
@@ -55,6 +56,7 @@ services:
     build:
       context: .
       dockerfile: packages/docker-runner/Dockerfile
+    user: root
     restart: unless-stopped
     depends_on:
       ziti-edge-router:

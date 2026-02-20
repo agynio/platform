@@ -73,7 +73,15 @@ entity_exists() {
   if ! output=$("${ZITI_BIN}" edge list "$resource" "$filter" -j 2>/dev/null); then
     return 1
   fi
-  printf '%s' "$output" | grep -F "\"name\":\"${name}\"" >/dev/null
+  printf '%s' "$output" | jq -e --arg name "$name" 'any((.data // [])[]; .name == $name)' >/dev/null 2>&1
+}
+
+fetch_pending_identity_jwt() {
+  local name=$1
+  local filter
+  filter=$(printf 'name = "%s"' "$name")
+  "${ZITI_BIN}" edge list identities "$filter" -j 2>/dev/null \
+    | jq -r --arg name "$name" '((.data // [])[] | select(.name == $name) | .enrollment.ott.jwt // empty)'
 }
 
 ensure_access_control_seed() {
@@ -178,13 +186,17 @@ ensure_identity_router_policy() {
 ensure_identity_entity() {
   local name=$1
   local role_attributes=$2
+  local enrollment_seed=${3:-${TMP_DIR}/${name}.jwt}
   if entity_exists 'identities' "$name"; then
     log "updating identity attributes for ${name}"
     "${ZITI_BIN}" edge update identity "$name" --role-attributes "$role_attributes" >/dev/null
+    rm -f "$enrollment_seed"
     return
   fi
   log "creating identity ${name}"
-  "${ZITI_BIN}" edge create identity "$name" --role-attributes "$role_attributes" >/dev/null
+  "${ZITI_BIN}" edge create identity "$name" \
+    --role-attributes "$role_attributes" \
+    --jwt-output-file "$enrollment_seed" >/dev/null
 }
 
 enroll_identity() {
@@ -196,19 +208,31 @@ enroll_identity() {
   fi
   mkdir -p "$(dirname "$destination")"
   local jwt_file="${TMP_DIR}/${identity_name}.jwt"
-  rm -f "$jwt_file"
-  log "creating enrollment for ${identity_name}"
-  "${ZITI_BIN}" edge create enrollment ott "$identity_name" \
-    --duration "$ENROLLMENT_DURATION_MINUTES" \
-    --jwt-output-file "$jwt_file" >/dev/null
+  if [[ ! -s "$jwt_file" ]]; then
+    local pending_jwt
+    pending_jwt=$(fetch_pending_identity_jwt "$identity_name" || true)
+    if [[ -n "$pending_jwt" ]]; then
+      printf '%s' "$pending_jwt" >"$jwt_file"
+    else
+      log "creating enrollment for ${identity_name}"
+      if ! "${ZITI_BIN}" edge create enrollment ott "$identity_name" \
+        --duration "$ENROLLMENT_DURATION_MINUTES" \
+        --jwt-output-file "$jwt_file" >/dev/null; then
+        log "failed to create enrollment for ${identity_name}; see controller logs for details"
+        return 1
+      fi
+    fi
+  fi
   log "enrolling identity material for ${identity_name}"
   "${ZITI_BIN}" edge enroll "$jwt_file" --out "$destination" --rm >/dev/null
   rm -f "$jwt_file"
 }
 
 ensure_identities() {
-  ensure_identity_entity "$ZITI_PLATFORM_IDENTITY_NAME" "$PLATFORM_ROLE_ATTRIBUTES"
-  ensure_identity_entity "$ZITI_RUNNER_IDENTITY_NAME" "$RUNNER_ROLE_ATTRIBUTES"
+  local platform_jwt="${TMP_DIR}/${ZITI_PLATFORM_IDENTITY_NAME}.jwt"
+  local runner_jwt="${TMP_DIR}/${ZITI_RUNNER_IDENTITY_NAME}.jwt"
+  ensure_identity_entity "$ZITI_PLATFORM_IDENTITY_NAME" "$PLATFORM_ROLE_ATTRIBUTES" "$platform_jwt"
+  ensure_identity_entity "$ZITI_RUNNER_IDENTITY_NAME" "$RUNNER_ROLE_ATTRIBUTES" "$runner_jwt"
   enroll_identity "$ZITI_PLATFORM_IDENTITY_NAME" "$ZITI_PLATFORM_IDENTITY_FILE"
   enroll_identity "$ZITI_RUNNER_IDENTITY_NAME" "$ZITI_RUNNER_IDENTITY_FILE"
 }

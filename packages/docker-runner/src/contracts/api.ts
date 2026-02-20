@@ -1,5 +1,5 @@
 import type Docker from 'dockerode';
-import type { ContainerOpts, ExecOptions, ExecResult, Platform } from '../lib/types';
+import type { ContainerOpts, ExecOptions, ExecResult, Platform } from '../lib/types.js';
 
 export type ErrorPayload = {
   error: {
