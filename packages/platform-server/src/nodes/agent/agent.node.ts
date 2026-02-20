@@ -775,10 +775,12 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       );
 
       if (terminateSignal.isActive) {
-        await persistence.completeRun(ensuredRunId, 'terminated', []);
         const terminationMessage = ResponseMessage.fromText('terminated');
+        const terminationText = terminationMessage.text?.trim() ?? '';
+        const terminationOutputs = terminationText.length > 0 ? [AIMessage.fromText(terminationText)] : [];
+        await persistence.completeRun(ensuredRunId, 'terminated', terminationOutputs);
         if (this.isAutoSendEnabled(effectiveBehavior)) {
-          await this.autoSendFinalResponse(thread, terminationMessage, [], ensuredRunId);
+          await this.autoSendFinalResponse(thread, terminationMessage, terminationOutputs, ensuredRunId);
         }
         result = terminationMessage;
       } else {
