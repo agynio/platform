@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { Reducer, Loop, HumanMessage } from '@agyn/llm';
+import { Reducer, Loop, HumanMessage, AIMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -65,7 +65,11 @@ describe('AgentNode error termination handling', () => {
     await expect(agent.invoke('thread-1', [HumanMessage.fromText('hi')])).rejects.toThrow('LLM failure');
 
     expect(beginRunThread).toHaveBeenCalledTimes(1);
-    expect(completeRun).toHaveBeenCalledWith('run-error', 'terminated', []);
+    expect(completeRun).toHaveBeenCalledWith('run-error', 'terminated', expect.any(Array));
+    const [, , outputs] = completeRun.mock.calls[0];
+    expect(outputs).toHaveLength(1);
+    expect(outputs?.[0]).toBeInstanceOf(AIMessage);
+    expect(outputs?.[0].text).toContain('LLM failure');
     expect(runStatusChanged).toHaveBeenCalledWith(
       expect.objectContaining({ run: expect.objectContaining({ id: 'run-error', status: 'terminated' }) }),
     );

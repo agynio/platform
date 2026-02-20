@@ -11,7 +11,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { ThreadTransportService } from '../src/messaging/threadTransport.service';
 import { runnerConfigDefaults } from './helpers/config';
 
-import { HumanMessage, Loop, Reducer, ResponseMessage } from '@agyn/llm';
+import { AIMessage, HumanMessage, Loop, Reducer, ResponseMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
 
 class DelayReducer extends Reducer<LLMState, LLMContext> {
@@ -90,7 +90,11 @@ describe('AgentNode termination auto-send', () => {
         'terminated',
         expect.objectContaining({ runId: 'run-terminate', source: 'auto_response' }),
       );
-      expect(completeRun).toHaveBeenCalledWith('run-terminate', 'terminated', []);
+      expect(completeRun).toHaveBeenCalledWith('run-terminate', 'terminated', expect.any(Array));
+      const terminationOutputs = completeRun.mock.calls[0][2];
+      expect(terminationOutputs).toHaveLength(1);
+      expect(terminationOutputs[0]).toBeInstanceOf(AIMessage);
+      expect(terminationOutputs[0].text).toBe('terminated');
     } finally {
       await moduleRef.close();
     }

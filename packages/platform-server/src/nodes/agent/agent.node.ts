@@ -775,10 +775,12 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       );
 
       if (terminateSignal.isActive) {
-        await persistence.completeRun(ensuredRunId, 'terminated', []);
         const terminationMessage = ResponseMessage.fromText('terminated');
+        const terminationText = terminationMessage.text?.trim() ?? '';
+        const terminationOutputs = terminationText.length > 0 ? [AIMessage.fromText(terminationText)] : [];
+        await persistence.completeRun(ensuredRunId, 'terminated', terminationOutputs);
         if (this.isAutoSendEnabled(effectiveBehavior)) {
-          await this.autoSendFinalResponse(thread, terminationMessage, [], ensuredRunId);
+          await this.autoSendFinalResponse(thread, terminationMessage, terminationOutputs, ensuredRunId);
         }
         result = terminationMessage;
       } else {
@@ -809,10 +811,14 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
         result = last;
       }
     } catch (err) {
+      const normalized = normalizeError(err);
+      const trimmed = normalized.message?.trim() ?? '';
+      const errorText = trimmed.length > 0 ? `Agent run failed: ${trimmed}` : 'Agent run failed.';
+
       if (runId) {
         try {
           const persistence = this.getPersistenceOrThrow();
-          await persistence.completeRun(runId, 'terminated', []);
+          await persistence.completeRun(runId, 'terminated', [AIMessage.fromText(errorText)]);
         } catch (completeErr) {
           this.logger.error(`Failed to mark run ${runId} as terminated after error:`, completeErr);
         }
@@ -821,9 +827,6 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       const autoSendEnabled = this.isAutoSendEnabled(effectiveBehavior);
 
       if (runId && autoSendEnabled) {
-        const normalized = normalizeError(err);
-        const trimmed = normalized.message?.trim() ?? '';
-        const errorText = trimmed.length > 0 ? `Agent run failed: ${trimmed}` : 'Agent run failed.';
         try {
           await this.autoSendFinalResponse(thread, ResponseMessage.fromText(errorText), [], runId);
         } catch (autoErr) {

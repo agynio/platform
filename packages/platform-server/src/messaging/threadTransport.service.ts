@@ -48,6 +48,11 @@ export class ThreadTransportService {
     const source = options?.source ?? null;
 
     if (!channelNodeId) {
+      if (source === 'auto_response') {
+        // Auto responses for UI threads are already persisted via completeRun outputs.
+        return { ok: true, threadId: normalizedThreadId };
+      }
+
       try {
         await this.persistence.recordTransportAssistantMessage({
           threadId: normalizedThreadId,
