@@ -33,7 +33,24 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
       this.status.markUnknown();
     }
 
-    this.loopPromise = this.runLoop(client);
+    // Loop must start in the background so bootstrap never waits on connectivity probes.
+    setImmediate(() => {
+      if (this.stopRequested) {
+        return;
+      }
+      this.loopPromise = this.runLoop(client);
+      if (this.loopPromise) {
+        void this.loopPromise.catch((error) => {
+          if (this.stopRequested) {
+            return;
+          }
+          this.logger.error('Docker runner connectivity loop crashed', error instanceof Error ? error.stack : undefined, {
+            dependency: 'docker-runner',
+            baseUrl: this.status.getSnapshot().baseUrl,
+          });
+        });
+      }
+    });
   }
 
   async onModuleDestroy(): Promise<void> {

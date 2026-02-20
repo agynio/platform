@@ -13,6 +13,8 @@ type MonitorHarness = {
   client: DockerClient & { checkConnectivity: ReturnType<typeof vi.fn>; getBaseUrl: () => string };
 };
 
+const waitForMonitorTick = async () => new Promise<void>((resolve) => setImmediate(resolve));
+
 function buildHarness(overrides: {
   optional?: boolean;
   maxRetries?: number;
@@ -46,11 +48,8 @@ function buildHarness(overrides: {
   return { monitor, status, logger, client };
 }
 
-describe('DockerRunnerConnectivityMonitor', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
 
+describe('DockerRunnerConnectivityMonitor', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -61,7 +60,7 @@ describe('DockerRunnerConnectivityMonitor', () => {
     harness.client.checkConnectivity.mockRejectedValue(failure);
 
     await harness.monitor.onModuleInit();
-    await Promise.resolve();
+    await waitForMonitorTick();
 
     const snapshot = harness.status.getSnapshot();
     expect(snapshot.status).toBe('down');
@@ -95,7 +94,7 @@ describe('DockerRunnerConnectivityMonitor', () => {
     const harness = buildHarness();
 
     await harness.monitor.onModuleInit();
-    await Promise.resolve();
+    await waitForMonitorTick();
 
     const snapshot = harness.status.getSnapshot();
     expect(snapshot.status).toBe('up');
@@ -105,12 +104,14 @@ describe('DockerRunnerConnectivityMonitor', () => {
   });
 
   it('stops retrying once max retries are exhausted', async () => {
+    vi.useFakeTimers();
     const harness = buildHarness({ maxRetries: 2 });
     harness.client.checkConnectivity.mockRejectedValue(
       new DockerRunnerRequestError(500, 'runner_unreachable', true, 'network down'),
     );
 
     await harness.monitor.onModuleInit();
+    await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
 
