@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { Logger } from '@nestjs/common';
 import { VolumeGcService } from '../src/infra/container/volumeGc.job';
+import type { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 
 const envKeys = [
   'VOLUME_GC_ENABLED',
@@ -7,6 +9,7 @@ const envKeys = [
   'VOLUME_GC_CONCURRENCY',
   'VOLUME_GC_COOLDOWN_MS',
   'VOLUME_GC_INTERVAL_MS',
+  'VOLUME_GC_SWEEP_TIMEOUT_MS',
 ];
 
 describe('VolumeGcService', () => {
@@ -19,7 +22,7 @@ describe('VolumeGcService', () => {
     for (const key of envKeys) delete process.env[key];
   });
 
-  const makeService = () => {
+  const makeService = (options: { runnerStatus?: { status: string } } = {}) => {
     const prisma = {
       thread: {
         findMany: vi.fn(async () => [] as Array<{ id: string }>),
@@ -30,8 +33,21 @@ describe('VolumeGcService', () => {
       listContainersByVolume: vi.fn(async () => [] as string[]),
       removeVolume: vi.fn(async () => undefined),
     };
-    const service = new VolumeGcService(prismaService as any, containerService as any);
-    return { service, prisma, containerService };
+    const dockerRunnerStatus = options.runnerStatus
+      ? ({
+          getSnapshot: vi.fn(() => ({
+            status: options.runnerStatus?.status,
+            baseUrl: 'http://docker-runner',
+            optional: true,
+          })),
+        } satisfies Partial<DockerRunnerStatusService>)
+      : undefined;
+    const service = new VolumeGcService(
+      prismaService as any,
+      containerService as any,
+      dockerRunnerStatus as DockerRunnerStatusService | undefined,
+    );
+    return { service, prisma, containerService, dockerRunnerStatus };
   };
 
   it('removes volumes with no live references', async () => {
@@ -92,5 +108,27 @@ describe('VolumeGcService', () => {
 
     expect(containerService.listContainersByVolume).toHaveBeenCalledTimes(1);
     expect(containerService.removeVolume).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips sweeps when docker runner is not up', async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { service, containerService } = makeService({ runnerStatus: { status: 'down' } });
+
+    await service.sweep();
+
+    expect(containerService.listContainersByVolume).not.toHaveBeenCalled();
+    expect(warnSpy.mock.calls.some(([msg]) => typeof msg === 'string' && msg.includes('skipping sweep'))).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it('logs sweep completion when docker runner is up', async () => {
+    const logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const { service, prisma } = makeService({ runnerStatus: { status: 'up' } });
+    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-log' }]);
+
+    await service.sweep(new Date('2024-01-01T00:00:00Z'));
+
+    expect(logSpy.mock.calls.some(([msg]) => typeof msg === 'string' && msg.includes('sweep complete'))).toBe(true);
+    logSpy.mockRestore();
   });
 });

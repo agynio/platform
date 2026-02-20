@@ -67,13 +67,12 @@ import { HealthController } from './health/health.controller';
     },
     {
       provide: VolumeGcService,
-      useFactory: (prisma: PrismaService, containers: DockerClient) => {
-        const svc = new VolumeGcService(prisma, containers);
-        const interval = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
-        svc.start(interval);
-        return svc;
-      },
-      inject: [PrismaService, DOCKER_CLIENT],
+      useFactory: (
+        prisma: PrismaService,
+        containers: DockerClient,
+        dockerRunnerStatus: DockerRunnerStatusService,
+      ) => new VolumeGcService(prisma, containers, dockerRunnerStatus),
+      inject: [PrismaService, DOCKER_CLIENT, DockerRunnerStatusService],
     },
     {
       provide: WorkspaceProvider,

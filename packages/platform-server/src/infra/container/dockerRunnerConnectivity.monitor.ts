@@ -23,6 +23,8 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
   ) {}
 
   async onModuleInit(): Promise<void> {
+    const initStartedAt = Date.now();
+    this.logger.log(`onModuleInit start ${initStartedAt}`);
     const client = this.dockerClient;
     const baseUrl = this.resolveBaseUrl(client);
     this.status.setBaseUrl(baseUrl);
@@ -33,8 +35,12 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
       this.status.markUnknown();
     }
 
+    const initCompletedAt = Date.now();
+    this.logger.log(`onModuleInit complete ${initCompletedAt} (duration=${initCompletedAt - initStartedAt}ms)`);
+
     // Loop must start in the background so bootstrap never waits on connectivity probes.
     setImmediate(() => {
+      this.logger.log(`connectivity loop scheduled ${Date.now()}`);
       if (this.stopRequested) {
         return;
       }

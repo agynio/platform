@@ -20,6 +20,7 @@ import { ConfigService } from './core/services/config.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
+import { VolumeGcService } from './infra/container/volumeGc.job';
 
 const bootstrapLogger = new Logger('Bootstrap');
 
@@ -67,8 +68,11 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors(corsOptions);
+  const appInitStartedAt = Date.now();
+  bootstrapLogger.log(`app.init start ${appInitStartedAt}`);
   await app.init();
-  bootstrapLogger.log('Nest application initialized');
+  const appInitCompletedAt = Date.now();
+  bootstrapLogger.log(`app.init complete ${appInitCompletedAt} (duration=${appInitCompletedAt - appInitStartedAt}ms)`);
 
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
@@ -81,6 +85,12 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
   bootstrapLogger.log(`HTTP server listening on :${PORT}`);
+
+  const volumeGc = app.get(VolumeGcService);
+  setImmediate(() => {
+    const interval = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
+    volumeGc.start(interval);
+  });
 
   fastifyInstance.server.on('upgrade', (req, _socket, _head) => {
     bootstrapLogger.log(

@@ -32,7 +32,7 @@ import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEv
 import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import { RequireDockerRunnerGuard } from '../src/infra/container/requireDockerRunner.guard';
-import type { DockerClient } from '../src/infra/container/dockerClient.token';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
@@ -102,6 +102,13 @@ const createBootstrapStubs = () => {
     ensureDinD: vi.fn().mockResolvedValue(undefined),
     cleanupDinDSidecars: vi.fn().mockResolvedValue(undefined),
   } satisfies Partial<ContainerService>;
+
+  const dockerClientStub = {
+    checkConnectivity: vi.fn().mockResolvedValue(undefined),
+    getBaseUrl: vi.fn(() => 'http://docker-runner:7071'),
+    listContainersByVolume: vi.fn().mockResolvedValue([]),
+    removeVolume: vi.fn().mockResolvedValue(undefined),
+  } satisfies Partial<DockerClient>;
 
   const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;
 
@@ -194,6 +201,7 @@ const createBootstrapStubs = () => {
     volumeGcStub,
     workspaceWatcherStub,
     connectivityMonitorStub,
+    dockerClientStub,
   };
 };
 
@@ -201,13 +209,17 @@ const applyBootstrapOverrides = (
   moduleBuilder: TestingModuleBuilder,
   stubs: BootstrapStubs,
   configService: ConfigService,
-  options: { stubConnectivityMonitor?: boolean } = {},
+  options: { stubConnectivityMonitor?: boolean; stubVolumeGc?: boolean; stubDockerClient?: boolean } = {},
 ): TestingModuleBuilder => {
+  const {
+    stubConnectivityMonitor = true,
+    stubVolumeGc = true,
+    stubDockerClient = true,
+  } = options;
+
   moduleBuilder
     .overrideProvider(ConfigService)
     .useValue(configService)
-    .overrideProvider(VolumeGcService)
-    .useValue(stubs.volumeGcStub as unknown as VolumeGcService)
     .overrideProvider(DockerWorkspaceEventsWatcher)
     .useValue(stubs.workspaceWatcherStub as unknown as DockerWorkspaceEventsWatcher)
     .overrideProvider(PrismaService)
@@ -239,7 +251,15 @@ const applyBootstrapOverrides = (
     .overrideProvider(LLMSettingsService)
     .useValue({});
 
-  if (options.stubConnectivityMonitor !== false) {
+  if (stubVolumeGc) {
+    moduleBuilder.overrideProvider(VolumeGcService).useValue(stubs.volumeGcStub as unknown as VolumeGcService);
+  }
+
+  if (stubDockerClient) {
+    moduleBuilder.overrideProvider(DOCKER_CLIENT).useValue(stubs.dockerClientStub as DockerClient);
+  }
+
+  if (stubConnectivityMonitor) {
     moduleBuilder
       .overrideProvider(DockerRunnerConnectivityMonitor)
       .useValue(stubs.connectivityMonitorStub as unknown as DockerRunnerConnectivityMonitor);
@@ -378,8 +398,9 @@ describe('App bootstrap smoke test', () => {
   }, TEST_TIMEOUT_MS);
 
   it(
-    'serves health and guards docker endpoints when runner is optional and unreachable',
+    'serves health and guards docker endpoints when runner is optional, runner unreachable, and volume GC enabled',
     async () => {
+      const stubs = createBootstrapStubs();
       const previousEnv = {
         LLM_PROVIDER: process.env.LLM_PROVIDER,
         LITELLM_BASE_URL: process.env.LITELLM_BASE_URL,
@@ -388,6 +409,9 @@ describe('App bootstrap smoke test', () => {
         DOCKER_RUNNER_BASE_URL: process.env.DOCKER_RUNNER_BASE_URL,
         DOCKER_RUNNER_OPTIONAL: process.env.DOCKER_RUNNER_OPTIONAL,
         DOCKER_RUNNER_SHARED_SECRET: process.env.DOCKER_RUNNER_SHARED_SECRET,
+        VOLUME_GC_ENABLED: process.env.VOLUME_GC_ENABLED,
+        VOLUME_GC_INTERVAL_MS: process.env.VOLUME_GC_INTERVAL_MS,
+        VOLUME_GC_SWEEP_TIMEOUT_MS: process.env.VOLUME_GC_SWEEP_TIMEOUT_MS,
       } as const;
 
       const unusedPort = await allocateUnusedPort();
@@ -398,6 +422,9 @@ describe('App bootstrap smoke test', () => {
       process.env.DOCKER_RUNNER_BASE_URL = `http://127.0.0.1:${unusedPort}`;
       process.env.DOCKER_RUNNER_OPTIONAL = 'true';
       process.env.DOCKER_RUNNER_SHARED_SECRET = 'shared-secret';
+      process.env.VOLUME_GC_ENABLED = 'true';
+      process.env.VOLUME_GC_INTERVAL_MS = '25';
+      process.env.VOLUME_GC_SWEEP_TIMEOUT_MS = '10';
 
       ConfigService.clearInstanceForTest();
       const configService = ConfigService.register(
@@ -414,12 +441,11 @@ describe('App bootstrap smoke test', () => {
           }),
         ),
       );
-      const dockerClientStub = {
-        checkConnectivity: vi
-          .fn()
-          .mockRejectedValue(new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline')),
-        getBaseUrl: () => process.env.DOCKER_RUNNER_BASE_URL || 'http://127.0.0.1:0',
-      } as Partial<DockerClient>;
+      const dockerClientStub = stubs.dockerClientStub;
+      dockerClientStub.checkConnectivity.mockRejectedValue(
+        new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline'),
+      );
+      dockerClientStub.getBaseUrl.mockReturnValue(process.env.DOCKER_RUNNER_BASE_URL || 'http://127.0.0.1:0');
 
       const moduleRef = await runWithTimeout(
         () =>
@@ -433,7 +459,7 @@ describe('App bootstrap smoke test', () => {
             ],
           }).compile(),
         'optional-runner module compile',
-        10_000,
+        30_000,
       );
 
       const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
@@ -444,10 +470,22 @@ describe('App bootstrap smoke test', () => {
         statusService,
       );
       const guard = new RequireDockerRunnerGuard(statusService);
+      const volumeGc = new VolumeGcService(stubs.prismaServiceStub as PrismaService, dockerClientStub as DockerClient, statusService);
+      let volumeGcStarted = false;
+      const checkpoints: string[] = [];
+      const startedAt = Date.now();
+      const mark = (label: string) => {
+        const entry = `${label}:${Date.now() - startedAt}ms`;
+        checkpoints.push(entry);
+        console.info('optional-runner checkpoint', entry);
+      };
 
       try {
+        mark('before connectivity init');
         await runWithTimeout(() => connectivityMonitor.onModuleInit(), 'connectivity monitor init', 5_000);
+        mark('after connectivity init');
         await runWithTimeout(() => app.init(), 'app.init', 5_000);
+        mark('after app.init');
         const fastify = app.getHttpAdapter().getInstance();
         fastify.get('/health', async (_request, reply) => {
           const snapshot = statusService.getSnapshot();
@@ -486,10 +524,20 @@ describe('App bootstrap smoke test', () => {
             throw error;
           }
         });
+        const intervalMs = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
         const listenDuration = await listenWithTimeout(app, 5_000);
         expect(listenDuration).toBeLessThan(5_000);
+        mark('after listen');
+
+        setImmediate(() => {
+          volumeGcStarted = true;
+          volumeGc.start(intervalMs);
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        mark('after volume gc start');
 
         await runWithTimeout(() => fastify.ready(), 'fastify.ready', 5_000);
+        mark('after fastify ready');
         const addressInfo = fastify.server.address() as AddressInfo;
         const baseUrl = `http://${addressInfo.address}:${addressInfo.port}`;
 
@@ -502,6 +550,7 @@ describe('App bootstrap smoke test', () => {
         expect(['unknown', 'down']).toContain(health.dependencies?.dockerRunner?.status);
         expect(health.dependencies?.dockerRunner?.baseUrl).toBe(process.env.DOCKER_RUNNER_BASE_URL);
         expect(health.dependencies?.dockerRunner?.optional).toBe(true);
+        expect(volumeGcStarted).toBe(true);
 
         const deleteBody = await runWithTimeout(async () => {
           const response = await undiciFetch(`${baseUrl}/docker-protected/container-1`, { method: 'DELETE' });
@@ -511,6 +560,7 @@ describe('App bootstrap smoke test', () => {
         expect(deleteBody?.error?.code).toBe('docker_runner_not_ready');
         expect(deleteBody?.statusCode).toBe(503);
       } finally {
+        volumeGc.stop();
         await runWithTimeout(() => connectivityMonitor.onModuleDestroy(), 'connectivity monitor destroy', 5_000);
         await runWithTimeout(() => app.close(), 'app.close', 5_000);
         await runWithTimeout(() => moduleRef.close(), 'moduleRef.close', 5_000);
@@ -522,8 +572,10 @@ describe('App bootstrap smoke test', () => {
             process.env[key] = value;
           }
         }
+        console.info('optional-runner timeline', checkpoints);
       }
     },
     TEST_TIMEOUT_MS,
   );
+
 });

@@ -2,12 +2,15 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import pLimit from 'p-limit';
 import { PrismaService } from '../../core/services/prisma.service';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
+import { DockerRunnerStatusService } from './dockerRunnerStatus.service';
 
 const DEFAULT_ENABLED = true;
 const DEFAULT_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_PER_SWEEP = 100;
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_COOLDOWN_MS = 10 * 60 * 1000;
+const DEFAULT_SWEEP_TIMEOUT_MS = 15_000;
+const SWEEP_TIMEOUT_ERROR = 'VolumeGC: sweep timed out';
 
 type SweepOutcome = 'removed' | 'referenced' | 'cooldown' | 'error' | 'not_found';
 
@@ -18,17 +21,20 @@ export class VolumeGcService {
   private readonly maxPerSweep: number;
   private readonly concurrency: number;
   private readonly cooldownMs: number;
+  private readonly sweepTimeoutMs: number;
   private readonly lastAttempt = new Map<string, number>();
   private timer?: NodeJS.Timeout;
 
   constructor(
     private readonly prismaService: PrismaService,
     @Inject(DOCKER_CLIENT) private readonly containerService: DockerClient,
+    private readonly dockerRunnerStatus?: DockerRunnerStatusService,
   ) {
     this.enabled = this.resolveBoolean(process.env.VOLUME_GC_ENABLED, DEFAULT_ENABLED);
     this.maxPerSweep = this.resolveInteger(process.env.VOLUME_GC_MAX_PER_SWEEP, DEFAULT_MAX_PER_SWEEP);
     this.concurrency = this.resolveInteger(process.env.VOLUME_GC_CONCURRENCY, DEFAULT_CONCURRENCY, 1);
     this.cooldownMs = this.resolveInteger(process.env.VOLUME_GC_COOLDOWN_MS, DEFAULT_COOLDOWN_MS, 0);
+    this.sweepTimeoutMs = this.resolveInteger(process.env.VOLUME_GC_SWEEP_TIMEOUT_MS, DEFAULT_SWEEP_TIMEOUT_MS, 0);
   }
 
   start(intervalMs = DEFAULT_INTERVAL_MS): void {
@@ -39,7 +45,12 @@ export class VolumeGcService {
 
     const run = async () => {
       try {
-        await this.sweep();
+        const completed = await this.sweepWithTimeout();
+        if (!completed) {
+          this.logger.warn(
+            `VolumeGC: sweep timed out after ${this.sweepTimeoutMs}ms; scheduling next run`,
+          );
+        }
       } catch (error) {
         this.logger.error('VolumeGC: sweep failed', error as Error);
       } finally {
@@ -59,6 +70,16 @@ export class VolumeGcService {
 
   async sweep(now: Date = new Date()): Promise<void> {
     if (!this.enabled) return;
+
+    if (this.dockerRunnerStatus) {
+      const snapshot = this.dockerRunnerStatus.getSnapshot();
+      if (snapshot.status !== 'up') {
+        this.logger.warn(
+          `VolumeGC: skipping sweep because docker runner is ${snapshot.status ?? 'unknown'}`,
+        );
+        return;
+      }
+    }
 
     const prisma = this.prisma;
     const candidates = await prisma.thread.findMany({
@@ -135,6 +156,34 @@ export class VolumeGcService {
     } catch (error) {
       this.logger.error(`VolumeGC: failed listing containers for volume${this.format({ threadId, volumeName, error })}`);
       return 'error';
+    }
+  }
+
+  private async sweepWithTimeout(): Promise<boolean> {
+    if (this.sweepTimeoutMs <= 0) {
+      await this.sweep();
+      return true;
+    }
+
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(SWEEP_TIMEOUT_ERROR));
+      }, this.sweepTimeoutMs);
+    });
+
+    try {
+      await Promise.race([this.sweep(), timeoutPromise]);
+      return true;
+    } catch (error) {
+      if ((error as Error).message === SWEEP_TIMEOUT_ERROR) {
+        return false;
+      }
+      throw error;
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
   }
 
