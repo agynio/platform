@@ -30,7 +30,7 @@ RUN pnpm install \
 
 RUN pnpm --filter @agyn/docker-runner run build
 
-RUN pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
+RUN pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app/packages/docker-runner
 
 FROM node:20-slim AS runtime
 
@@ -38,7 +38,7 @@ ENV NODE_ENV=production \
     PORT=7071 \
     NODE_OPTIONS=--experimental-specifier-resolution=node
 
-WORKDIR /opt/app
+WORKDIR /opt/app/packages/docker-runner
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
