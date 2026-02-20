@@ -376,6 +376,7 @@ export interface ToolExecutionCompleteArgs {
   status: ToolExecStatus;
   output?: Prisma.InputJsonValue | null;
   errorMessage?: string | null;
+  errorCode?: string | null;
   raw?: Prisma.InputJsonValue | null;
   endedAt?: Date;
 }
@@ -1491,6 +1492,7 @@ export class RunEventsService {
         status: execStatus === ToolExecStatus.success ? RunEventStatus.success : RunEventStatus.error,
         endedAt,
         errorMessage: args.errorMessage ?? null,
+        errorCode: args.errorCode ?? null,
       },
     });
     const durationMs = event.startedAt ? Math.max(0, endedAt.getTime() - event.startedAt.getTime()) : null;
