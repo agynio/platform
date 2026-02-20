@@ -24,6 +24,9 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { runnerConfigDefaults } from '../__tests__/helpers/config';
+import { VolumeGcService } from '../src/infra/container/volumeGc.job';
+import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
+import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -160,17 +163,23 @@ describe('App bootstrap smoke test', () => {
       async teardown(): Promise<void> {}
     }
     const llmProvisionerStub = new StubProvisioner();
+    const volumeGcStub = { sweep: vi.fn(), onModuleInit: vi.fn(), onModuleDestroy: vi.fn() } satisfies Partial<VolumeGcService>;
+    const workspaceWatcherStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<DockerWorkspaceEventsWatcher>;
+    const connectivityMonitorStub = { onModuleInit: vi.fn(), onModuleDestroy: vi.fn() } satisfies Partial<DockerRunnerConnectivityMonitor>;
 
     const subscriptionSpy = vi.spyOn(EventsBusService.prototype, 'subscribeToRunEvents');
 
-    const configService = new ConfigService().init(
-      configSchema.parse({
-        llmProvider: process.env.LLM_PROVIDER || 'litellm',
-        litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
-        litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
-        agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',
-        ...runnerConfigDefaults,
-      }),
+    ConfigService.clearInstanceForTest();
+    const configService = ConfigService.register(
+      new ConfigService().init(
+        configSchema.parse({
+          llmProvider: process.env.LLM_PROVIDER || 'litellm',
+          litellmBaseUrl: process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000',
+          litellmMasterKey: process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234',
+          agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test',
+          ...runnerConfigDefaults,
+        }),
+      ),
     );
 
     const moduleBuilder = Test.createTestingModule({
@@ -185,6 +194,12 @@ describe('App bootstrap smoke test', () => {
     })
       .overrideProvider(ConfigService)
       .useValue(configService)
+      .overrideProvider(VolumeGcService)
+      .useValue(volumeGcStub as unknown as VolumeGcService)
+      .overrideProvider(DockerWorkspaceEventsWatcher)
+      .useValue(workspaceWatcherStub as unknown as DockerWorkspaceEventsWatcher)
+      .overrideProvider(DockerRunnerConnectivityMonitor)
+      .useValue(connectivityMonitorStub as unknown as DockerRunnerConnectivityMonitor)
       .overrideProvider(PrismaService)
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)

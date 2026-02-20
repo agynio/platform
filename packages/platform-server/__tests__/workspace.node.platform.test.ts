@@ -6,7 +6,6 @@ import {
   type ContainerProviderStaticConfig,
 } from '../src/nodes/workspace/workspace.node';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
-import { clearTestConfig } from './helpers/config';
 import {
   createConfigServiceStub,
   createEnvServiceStub,
@@ -23,10 +22,6 @@ describe('WorkspaceNode platform selection', () => {
 
   beforeEach(() => {
     configService = createConfigServiceStub();
-  });
-
-  afterEach(() => {
-    clearTestConfig();
   });
 
   const createWorkspaceNode = async (

@@ -25,6 +25,9 @@ import type {
   WorkspaceLogsSession,
 } from '../../src/workspace/runtime/workspace.runtime.provider';
 import { waitFor, waitForWsClose } from '../helpers/ws';
+import { DockerRunnerStatusService } from '../../src/infra/container/dockerRunnerStatus.service';
+import { RequireDockerRunnerGuard } from '../../src/infra/container/requireDockerRunner.guard';
+import { ConfigService } from '../../src/core/services/config.service';
 
 type TerminalMessage = {
   type?: string;
@@ -139,12 +142,23 @@ describe('ContainerTerminalGateway E2E', () => {
       providers: [
         ContainerTerminalGateway,
         TerminalSessionsService,
+        {
+          provide: ConfigService,
+          useValue: {
+            dockerRunnerBaseUrl: 'http://127.0.0.1:9999',
+            getDockerRunnerBaseUrl: () => 'http://127.0.0.1:9999',
+            isDockerRunnerOptional: () => true,
+          } as ConfigService,
+        },
+        DockerRunnerStatusService,
+        RequireDockerRunnerGuard,
         { provide: WorkspaceProvider, useClass: TestWorkspaceProvider },
       ],
     }).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.init();
+    app.get(DockerRunnerStatusService).markSuccess();
 
     const fastify = app.getHttpAdapter().getInstance();
     const gateway = app.get(ContainerTerminalGateway);

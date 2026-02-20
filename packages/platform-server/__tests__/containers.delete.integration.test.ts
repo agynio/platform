@@ -26,8 +26,11 @@ import { ArchiveService } from '../src/infra/archive/archive.service';
 import { TerminalSessionsService } from '../src/infra/container/terminal.sessions.service';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
-import { registerTestConfig, clearTestConfig } from './helpers/config';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { RequireDockerRunnerGuard } from '../src/infra/container/requireDockerRunner.guard';
+import { registerTestConfig } from './helpers/config';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
@@ -268,6 +271,7 @@ describe('DELETE /api/containers/:id integration', () => {
           useValue: {
             dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
+            isDockerRunnerOptional: () => true,
           } as ConfigService,
         },
         {
@@ -276,11 +280,14 @@ describe('DELETE /api/containers/:id integration', () => {
             new ContainerAdminService(dockerClient, registry),
           inject: [DOCKER_CLIENT, ContainerRegistry],
         },
+        DockerRunnerStatusService,
+        RequireDockerRunnerGuard,
       ],
     }).compile();
 
     app = moduleRef.createNestApplication(new FastifyAdapter());
     await app.init();
+    app.get(DockerRunnerStatusService).markSuccess();
   });
 
   afterAll(async () => {
@@ -398,6 +405,8 @@ describe('ContainersController wiring via InfraModule', () => {
       .useValue({} as ArchiveService)
       .overrideProvider(DOCKER_CLIENT)
       .useValue(createDockerClientStub())
+      .overrideProvider(DockerRunnerConnectivityMonitor)
+      .useValue({ onModuleInit: vi.fn(), onModuleDestroy: vi.fn() } as unknown as DockerRunnerConnectivityMonitor)
       .overrideProvider(ContainerAdminService)
       .useValue(adminMock)
       .compile();
@@ -405,13 +414,13 @@ describe('ContainersController wiring via InfraModule', () => {
     app = moduleRef.createNestApplication(new FastifyAdapter());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    app.get(DockerRunnerStatusService).markSuccess();
   });
 
   afterAll(async () => {
     if (app) {
       await app.close();
     }
-    clearTestConfig();
   });
 
   it('delegates DELETE requests to ContainerAdminService without throwing', async () => {

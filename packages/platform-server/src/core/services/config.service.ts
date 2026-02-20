@@ -67,6 +67,54 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
     }),
+  dockerRunnerOptional: z
+    .union([z.boolean(), z.string()])
+    .default('true')
+    .transform((v) => {
+      if (typeof v === 'boolean') {
+        return v;
+      }
+      const normalized = v.trim().toLowerCase();
+      if (!normalized) return true;
+      if (['false', '0', 'no'].includes(normalized)) return false;
+      if (['true', '1', 'yes'].includes(normalized)) return true;
+      return true;
+    }),
+  dockerRunnerConnectRetryBaseDelayMs: z
+    .union([z.string(), z.number()])
+    .default('500')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 500;
+    }),
+  dockerRunnerConnectRetryMaxDelayMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
+    }),
+  dockerRunnerConnectRetryJitterMs: z
+    .union([z.string(), z.number()])
+    .default('250')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 250;
+    }),
+  dockerRunnerConnectProbeIntervalMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
+    }),
+  dockerRunnerConnectMaxRetries: z
+    .union([z.string(), z.number()])
+    .default('0')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 0;
+    }),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -325,6 +373,30 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerTimeoutMs;
   }
 
+  get dockerRunnerOptional(): boolean {
+    return this.params.dockerRunnerOptional;
+  }
+
+  get dockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryBaseDelayMs;
+  }
+
+  get dockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryMaxDelayMs;
+  }
+
+  get dockerRunnerConnectRetryJitterMs(): number {
+    return this.params.dockerRunnerConnectRetryJitterMs;
+  }
+
+  get dockerRunnerConnectProbeIntervalMs(): number {
+    return this.params.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  get dockerRunnerConnectMaxRetries(): number {
+    return this.params.dockerRunnerConnectMaxRetries;
+  }
+
   getDockerRunnerBaseUrl(): string {
     return this.dockerRunnerBaseUrl;
   }
@@ -335,6 +407,30 @@ export class ConfigService implements Config {
 
   getDockerRunnerTimeoutMs(): number {
     return this.dockerRunnerTimeoutMs;
+  }
+
+  isDockerRunnerOptional(): boolean {
+    return this.dockerRunnerOptional;
+  }
+
+  getDockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.dockerRunnerConnectRetryBaseDelayMs;
+  }
+
+  getDockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.dockerRunnerConnectRetryMaxDelayMs;
+  }
+
+  getDockerRunnerConnectRetryJitterMs(): number {
+    return this.dockerRunnerConnectRetryJitterMs;
+  }
+
+  getDockerRunnerConnectProbeIntervalMs(): number {
+    return this.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  getDockerRunnerConnectMaxRetries(): number {
+    return this.dockerRunnerConnectMaxRetries;
   }
 
   get workspaceNetworkName(): string {
@@ -446,6 +542,12 @@ export class ConfigService implements Config {
       dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
+      dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
+      dockerRunnerConnectRetryBaseDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS,
+      dockerRunnerConnectRetryMaxDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS,
+      dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
+      dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
+      dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

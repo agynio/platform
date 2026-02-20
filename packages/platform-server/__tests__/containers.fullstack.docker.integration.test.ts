@@ -16,6 +16,8 @@ import { ConfigService } from '../src/core/services/config.service';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
 import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { RequireDockerRunnerGuard } from '../src/infra/container/requireDockerRunner.guard';
 
 import {
   DEFAULT_SOCKET,
@@ -118,12 +120,15 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
             new DockerWorkspaceRuntimeProvider(client, registry),
         },
         ContainerAdminService,
+        DockerRunnerStatusService,
+        RequireDockerRunnerGuard,
       ],
     }).compile();
 
     app = moduleRef.createNestApplication(new FastifyAdapter());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    app.get(DockerRunnerStatusService).markSuccess();
 
     prismaService = app.get(PrismaService);
     prismaClient = prismaService.getClient();
@@ -156,7 +161,6 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
     if (dbHandle) {
       await dbHandle.stop();
     }
-    clearTestConfig();
   });
 
   it('provisions and deletes a workspace via HTTP endpoints', async () => {

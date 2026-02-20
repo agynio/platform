@@ -9,6 +9,9 @@ import { ContainerService } from '@agyn/docker-runner';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+import { VolumeGcService } from '../src/infra/container/volumeGc.job';
+import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
+import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -28,7 +31,7 @@ process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-test-mast
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/agents_test';
 
 describe('AppModule bootstrap smoke test', () => {
-  afterEach(() => {
+  beforeEach(() => {
     clearTestConfig();
   });
 
@@ -96,6 +99,9 @@ describe('AppModule bootstrap smoke test', () => {
 
     const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;
     const terminationStub = { enqueue: vi.fn() } satisfies Partial<ContainerThreadTerminationService>;
+    const volumeGcStub = { sweep: vi.fn(), onModuleInit: vi.fn(), onModuleDestroy: vi.fn() } satisfies Partial<VolumeGcService>;
+    const workspaceWatcherStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<DockerWorkspaceEventsWatcher>;
+    const connectivityMonitorStub = { onModuleInit: vi.fn(), onModuleDestroy: vi.fn() } satisfies Partial<DockerRunnerConnectivityMonitor>;
     const ncpsStub = { init: vi.fn(), getKey: vi.fn(), getKeysForInjection: vi.fn().mockReturnValue([]) } satisfies Partial<NcpsKeyService>;
     const runEventsStub = {
       recordInvocationMessage: vi.fn(),
@@ -164,6 +170,12 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(containerServiceStub)
       .overrideProvider(ContainerCleanupService)
       .useValue(cleanupStub)
+      .overrideProvider(VolumeGcService)
+      .useValue(volumeGcStub)
+      .overrideProvider(DockerWorkspaceEventsWatcher)
+      .useValue(workspaceWatcherStub as unknown as DockerWorkspaceEventsWatcher)
+      .overrideProvider(DockerRunnerConnectivityMonitor)
+      .useValue(connectivityMonitorStub as unknown as DockerRunnerConnectivityMonitor)
       .overrideProvider(ContainerThreadTerminationService)
       .useValue(terminationStub)
       .overrideProvider(NcpsKeyService)

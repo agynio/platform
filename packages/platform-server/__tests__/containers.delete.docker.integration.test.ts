@@ -12,6 +12,8 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { RequireDockerRunnerGuard } from '../src/infra/container/requireDockerRunner.guard';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaClient as Prisma } from '@prisma/client';
 
@@ -93,14 +95,18 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
           useValue: {
             dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
+            isDockerRunnerOptional: () => true,
           } as ConfigService,
         },
         ContainerAdminService,
+        DockerRunnerStatusService,
+        RequireDockerRunnerGuard,
       ],
     }).compile();
 
     app = moduleRef.createNestApplication(new FastifyAdapter());
     await app.init();
+    app.get(DockerRunnerStatusService).markSuccess();
     await app.getHttpAdapter().getInstance().ready();
   }, 120_000);
 
@@ -305,15 +311,19 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
           useValue: {
             dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
+            isDockerRunnerOptional: () => true,
           } as ConfigService,
         },
         ContainerAdminService,
+        DockerRunnerStatusService,
+        RequireDockerRunnerGuard,
       ],
     }).compile();
 
     app = moduleRef.createNestApplication(new FastifyAdapter());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    app.get(DockerRunnerStatusService).markSuccess();
   }, 120_000);
 
   afterAll(async () => {

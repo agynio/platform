@@ -24,12 +24,17 @@ import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
 import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
-import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
+import { DockerRunnerStatusService } from './container/dockerRunnerStatus.service';
+import { DockerRunnerConnectivityMonitor } from './container/dockerRunnerConnectivity.monitor';
+import { RequireDockerRunnerGuard } from './container/requireDockerRunner.guard';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [CoreModule, VaultModule],
   providers: [
     ArchiveService,
+    DockerRunnerStatusService,
+    RequireDockerRunnerGuard,
     {
       provide: ContainerRegistry,
       useFactory: async (prismaSvc: PrismaService) => {
@@ -49,7 +54,7 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
         }),
       inject: [ConfigService],
     },
-    DockerRunnerConnectivityProbe,
+    DockerRunnerConnectivityMonitor,
     {
       provide: ContainerCleanupService,
       useFactory: (registry: ContainerRegistry, containers: DockerClient) => {
@@ -106,7 +111,7 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     GithubService,
     PRService,
   ],
-  controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController],
+  controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController, HealthController],
   exports: [
     VaultModule,
     DOCKER_CLIENT,
@@ -123,6 +128,8 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     ContainerRegistry,
     ArchiveService,
     WorkspaceProvider,
+    DockerRunnerStatusService,
+    RequireDockerRunnerGuard,
   ],
 })
 export class InfraModule {}

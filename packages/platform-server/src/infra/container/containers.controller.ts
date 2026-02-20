@@ -12,6 +12,7 @@ import {
   HttpStatus,
   HttpException,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { Prisma, type PrismaClient, type ContainerStatus } from '@prisma/client';
@@ -21,6 +22,7 @@ import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runne
 import { ContainerAdminService } from './containerAdmin.service';
 import { DockerRunnerRequestError } from './httpDockerRunner.client';
 import { ConfigService } from '../../core/services/config.service';
+import { RequireDockerRunnerGuard } from './requireDockerRunner.guard';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -553,6 +555,7 @@ export class ContainersController {
   }
 
   @Delete(':containerId')
+  @UseGuards(RequireDockerRunnerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(@Param('containerId') containerIdParam: string, @Req() req?: unknown): Promise<void> {
     const containerId = typeof containerIdParam === 'string' ? containerIdParam.trim() : '';

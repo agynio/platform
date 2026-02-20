@@ -24,10 +24,6 @@ describeLiteLLM('LiteLLM admin integration', () => {
     await ensureCredential(service, credentialName);
   }, 120_000);
 
-  afterAll(async () => {
-    clearTestConfig();
-  });
-
   it('creates, lists, and deletes models via LiteLLM admin API', async () => {
     const modelName = `integration/test-${Date.now()}`;
     let created: LiteLLMModelRecord | undefined;

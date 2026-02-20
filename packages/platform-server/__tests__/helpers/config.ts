@@ -23,3 +23,7 @@ export function registerTestConfig(overrides: Partial<ConfigInput> = {}): Config
 export function clearTestConfig(): void {
   ConfigService.clearInstanceForTest();
 }
+
+export function createStandaloneTestConfig(overrides: Partial<ConfigInput> = {}): ConfigService {
+  return new ConfigService().init(configSchema.parse({ ...defaultConfigInput, ...overrides }));
+}
