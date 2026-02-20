@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import { request as httpRequest } from 'node:http';
 import Fastify from 'fastify';
 import type { AddressInfo } from 'net';
 import WebSocket from 'ws';
@@ -7,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from './helpers/ws';
 
@@ -63,6 +65,16 @@ const createSessionServiceHarness = (overrides: Partial<TerminalSessionRecord> =
   };
 };
 
+const createRunnerStatus = (status: 'up' | 'down' = 'up'): DockerRunnerStatusService => {
+  const svc = new DockerRunnerStatusService();
+  if (status === 'up') {
+    svc.markSuccess();
+  } else {
+    svc.markFailure({ code: 'test', message: 'runner_down' }, 1);
+  }
+  return svc;
+};
+
 const listenFastify = async (app: ReturnType<typeof Fastify>): Promise<number> => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo | null;
@@ -90,6 +102,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -123,6 +136,65 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     await app.close();
   });
 
+  it('returns 503 when docker runner is unavailable during upgrade', async () => {
+    const record = createSessionRecord({ workspaceId: 'b'.repeat(64) });
+    const sessionMocks = {
+      validate: vi.fn(),
+      markConnected: vi.fn(),
+      get: vi.fn(),
+      touch: vi.fn(),
+      close: vi.fn(),
+    };
+    const providerMocks = {
+      openInteractiveExec: vi.fn(),
+      resize: vi.fn(),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      sessionMocks as unknown as TerminalSessionsService,
+      providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus('down'),
+    );
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: `/api/containers/${record.workspaceId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+          headers: {
+            Connection: 'Upgrade',
+            Upgrade: 'websocket',
+            'Sec-WebSocket-Version': '13',
+            'Sec-WebSocket-Key': Buffer.from('runner-unavailable').toString('base64'),
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => {
+            body += chunk.toString('utf8');
+          });
+          res.on('end', () => {
+            resolve({ statusCode: res.statusCode ?? 0, body });
+          });
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(() => JSON.parse(response.body)).not.toThrow();
+    const parsed = JSON.parse(response.body) as { error?: { code?: string } };
+    expect(parsed).toMatchObject({ error: { code: 'docker_runner_not_ready' } });
+  });
+
   it('catches handleConnection rejections and closes the socket with error', async () => {
     const record = createSessionRecord({ workspaceId: 'c'.repeat(64) });
     const sessionMocks = {
@@ -140,6 +212,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const handleSpy = vi
@@ -175,6 +248,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       service as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -248,6 +322,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -305,6 +380,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -354,6 +430,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -441,6 +518,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatus(),
     );
 
     const app = Fastify();
@@ -537,7 +615,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
         resize: vi.fn().mockResolvedValue(undefined),
       } as unknown as WorkspaceProvider;
 
-      const gateway = new ContainerTerminalGateway(sessionMocks, providerMocks);
+      const gateway = new ContainerTerminalGateway(sessionMocks, providerMocks, createRunnerStatus());
 
       const app = Fastify();
       gateway.registerRoutes(app);

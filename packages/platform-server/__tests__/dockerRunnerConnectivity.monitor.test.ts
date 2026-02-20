@@ -31,7 +31,7 @@ function buildHarness(overrides: {
   const client =
     overrides.client ??
     ({
-      checkConnectivity: vi.fn().mockResolvedValue(undefined),
+      checkConnectivity: vi.fn().mockResolvedValue({ status: 'ready' }),
       getBaseUrl: () => config.getDockerRunnerBaseUrl(),
     } as unknown as MonitorHarness['client']);
   const monitor = new DockerRunnerConnectivityMonitor(client, config, status);

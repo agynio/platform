@@ -116,7 +116,7 @@ Configuration matrix (server env vars)
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000).
+  - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000), DOCKER_RUNNER_OPTIONAL (default true), and connectivity monitor tuning variables (DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS / MAX / JITTER / PROBE_INTERVAL_MS / MAX_RETRIES with defaults 500 / 30000 / 250 / 30000 / 0).
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)

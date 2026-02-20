@@ -8,11 +8,6 @@ import {
   type DockerRunnerStatusError,
 } from './dockerRunnerStatus.service';
 
-type ConnectivityCapableClient = DockerClient & {
-  checkConnectivity: () => Promise<unknown>;
-  getBaseUrl?: () => string;
-};
-
 @Injectable()
 export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DockerRunnerConnectivityMonitor.name);
@@ -28,12 +23,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const client = this.resolveConnectivityClient();
-    if (!client) {
-      this.logger.log('Docker runner connectivity monitor skipped (client lacks checkConnectivity)');
-      return;
-    }
-
+    const client = this.dockerClient;
     const baseUrl = this.resolveBaseUrl(client);
     this.status.setBaseUrl(baseUrl);
 
@@ -58,18 +48,11 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
     }
   }
 
-  private resolveConnectivityClient(): ConnectivityCapableClient | null {
-    const candidate = this.dockerClient as Partial<ConnectivityCapableClient> | undefined;
-    if (candidate && typeof candidate.checkConnectivity === 'function') {
-      return candidate as ConnectivityCapableClient;
-    }
-    return null;
-  }
-
-  private resolveBaseUrl(client: ConnectivityCapableClient): string {
-    if (typeof client.getBaseUrl === 'function') {
+  private resolveBaseUrl(client: DockerClient): string {
+    const accessor = client as { getBaseUrl?: () => string };
+    if (typeof accessor.getBaseUrl === 'function') {
       try {
-        return client.getBaseUrl();
+        return accessor.getBaseUrl();
       } catch {
         // ignore failures and fallback to config
       }
@@ -77,7 +60,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
     return this.config.getDockerRunnerBaseUrl();
   }
 
-  private async verifyOrThrow(client: ConnectivityCapableClient): Promise<void> {
+  private async verifyOrThrow(client: DockerClient): Promise<void> {
     try {
       await client.checkConnectivity();
       const now = new Date();
@@ -91,7 +74,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
     }
   }
 
-  private async runLoop(client: ConnectivityCapableClient): Promise<void> {
+  private async runLoop(client: DockerClient): Promise<void> {
     while (!this.stopRequested) {
       try {
         await client.checkConnectivity();

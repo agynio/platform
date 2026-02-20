@@ -38,4 +38,5 @@ export interface DockerClientPort {
   putArchive(containerId: string, data: Buffer | NodeJS.ReadableStream, options: { path: string }): Promise<void>;
   inspectContainer(containerId: string): Promise<import('dockerode').ContainerInspectInfo>;
   getEventsStream(options: { since?: number; filters?: DockerEventFilters }): Promise<NodeJS.ReadableStream>;
+  checkConnectivity(): Promise<{ status: string }>;
 }

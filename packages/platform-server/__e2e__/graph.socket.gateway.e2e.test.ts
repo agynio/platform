@@ -16,6 +16,7 @@ import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -322,6 +323,7 @@ describe('Socket gateway real server handshakes', () => {
         { provide: WorkspaceProvider, useClass: WorkspaceProviderStub },
         EventsBusService,
         RunEventsService,
+        DockerRunnerStatusService,
       ],
     }).compile();
 
@@ -335,6 +337,7 @@ describe('Socket gateway real server handshakes', () => {
 
     const terminalGateway = app.get(ContainerTerminalGateway);
     terminalGateway.registerRoutes(fastify);
+    app.get(DockerRunnerStatusService).markSuccess();
 
     graphGateway = app.get(GraphSocketGateway);
     graphGateway.init({ server: fastify.server });

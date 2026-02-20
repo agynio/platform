@@ -974,4 +974,9 @@ export class ContainerService implements DockerClientPort {
     else await container.putArchive(data, options);
     void this.touchLastUsed(inspectData.Id);
   }
+
+  async checkConnectivity(): Promise<{ status: string }> {
+    await this.docker.ping();
+    return { status: 'ok' };
+  }
 }

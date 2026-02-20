@@ -9,6 +9,7 @@ import { WorkspaceProvider } from '../../workspace/providers/workspace.provider'
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
 import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
 import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerStatusService } from './dockerRunnerStatus.service';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -142,6 +143,7 @@ export class ContainerTerminalGateway {
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
     @Inject(WorkspaceProvider) private readonly workspaceProvider: WorkspaceProvider,
+    @Inject(DockerRunnerStatusService) private readonly runnerStatus: DockerRunnerStatusService,
   ) {}
 
   private wss: WebSocketServer | null = null;
@@ -174,6 +176,11 @@ export class ContainerTerminalGateway {
         });
       });
 
+      if (!this.isRunnerReady()) {
+        this.respondRunnerUnavailable(socket, parsedUrl.pathname, workspaceId);
+        return;
+      }
+
       wss.handleUpgrade(req, socket, head, (ws) => {
         const stream: SocketStream = { socket: ws };
         const fakeReq = {
@@ -199,6 +206,40 @@ export class ContainerTerminalGateway {
       });
     });
     this.registered = true;
+  }
+
+  private isRunnerReady(): boolean {
+    return this.runnerStatus.getSnapshot().status === 'up';
+  }
+
+  private respondRunnerUnavailable(socket: Duplex, path: string, workspaceId: string): void {
+    const payload = {
+      error: {
+        code: 'docker_runner_not_ready',
+        message: 'docker-runner not ready',
+      },
+    };
+    const body = JSON.stringify(payload);
+    const response = [
+      'HTTP/1.1 503 Service Unavailable',
+      'Content-Type: application/json',
+      `Content-Length: ${Buffer.byteLength(body, 'utf8')}`,
+      'Connection: close',
+      '',
+      body,
+    ].join('\r\n');
+
+    this.logger.warn('terminal websocket rejected: docker runner unavailable', { path, workspaceId });
+
+    try {
+      socket.end(response);
+    } catch (err) {
+      this.logger.warn('failed to write docker runner unavailable response', {
+        path,
+        workspaceId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private async handleConnection(connection: SocketStream, request: FastifyRequest): Promise<void> {
@@ -258,6 +299,12 @@ export class ContainerTerminalGateway {
     let maxTimer: NodeJS.Timeout | null = null;
     let execId: string | null = null;
     let sessionMarkedConnected = false;
+
+    if (!this.isRunnerReady()) {
+      send({ code: 'docker_runner_not_ready' });
+      close(1013, 'docker_runner_not_ready');
+      return;
+    }
     let started = false;
     let closedEarly = false;
     let stdin: NodeJS.WritableStream | null = null;
