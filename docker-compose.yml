@@ -291,16 +291,35 @@ services:
       ziti-controller:
         condition: service_healthy
     entrypoint:
-      - "/var/openziti/scripts/run-with-ziti-cli.sh"
-    command:
-      - "/var/openziti/scripts/access-control.sh"
+      - "/bin/bash"
+      - "/scripts/ziti/controller-init.sh"
     environment:
       ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
       ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
+      ZITI_USER: ${ZITI_USER:-admin}
+      ZITI_PWD: ${ZITI_PWD:-admin}
+      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
+      ZITI_PLATFORM_IDENTITY_NAME: ${ZITI_PLATFORM_IDENTITY_NAME:-dev.agyn-platform.platform-server}
+      ZITI_RUNNER_IDENTITY_NAME: ${ZITI_RUNNER_IDENTITY_NAME:-dev.agyn-platform.docker-runner}
+      ZITI_ROUTER_NAME: ${ZITI_ROUTER_NAME:-dev-edge-router}
+      ZITI_ENROLLMENT_DURATION_MINUTES: ${ZITI_ENROLLMENT_DURATION_MINUTES:-1440}
+      ZITI_IDENTITIES_DIR: /identities
+      ZITI_IDENTITIES_TMP: /ziti-tmp
+      ZITI_PLATFORM_IDENTITY_FILE: ${ZITI_PLATFORM_IDENTITY_FILE:-/identities/dev.agyn-platform.platform-server.json}
+      ZITI_RUNNER_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/identities/dev.agyn-platform.docker-runner.json}
     volumes:
       - type: bind
         source: ./.ziti/controller
         target: /persistent
+      - type: bind
+        source: ./.ziti/identities
+        target: /identities
+      - type: bind
+        source: ./.ziti/tmp
+        target: /ziti-tmp
+      - type: bind
+        source: ./scripts/ziti
+        target: /scripts/ziti
     networks:
       - agents_net
 
@@ -309,8 +328,8 @@ services:
     container_name: ziti-edge-router
     restart: unless-stopped
     depends_on:
-      ziti-controller-init:
-        condition: service_completed_successfully
+      ziti-controller:
+        condition: service_healthy
     entrypoint: /bin/bash
     command: "/var/openziti/scripts/run-router.sh edge"
     environment:
