@@ -5,18 +5,53 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { EnvEditorProps } from '../EnvEditor';
 import { EnvEditor } from '../EnvEditor';
-import { readEnvList } from '../utils';
+import { readEnvList, serializeEnvVars } from '../utils';
 
 const latestReferenceProps: { current: any } = { current: null };
 
-vi.mock('../../ReferenceInput', () => ({
-  ReferenceInput: (props: any) => {
-    latestReferenceProps.current = props;
-    return (
-      <input data-testid="reference-input" value={props.value} onChange={props.onChange} onFocus={props.onFocus} />
-    );
-  },
-}));
+vi.mock('../../ReferenceInput', async () => {
+  const actual = await vi.importActual('../../ReferenceInput');
+  return {
+    ReferenceInput: (props: any) => {
+      latestReferenceProps.current = props;
+      return <actual.ReferenceInput {...props} />;
+    },
+  };
+});
+
+const noop = () => {};
+
+function ControlledEnvEditor() {
+  const [configRecord, setConfigRecord] = React.useState<{ env?: Array<Record<string, unknown>> }>(() => ({
+    env: [{ name: 'API_KEY', value: '', source: 'static' }],
+  }));
+  const envVars = React.useMemo(() => readEnvList(configRecord.env), [configRecord.env]);
+
+  const handleValueChange = React.useCallback((index: number, value: string) => {
+    const next = envVars.map((envVar, idx) => (idx === index ? { ...envVar, value } : envVar));
+    setConfigRecord((prev) => ({
+      ...prev,
+      env: serializeEnvVars(next),
+    }));
+  }, [envVars]);
+
+  return (
+    <EnvEditor
+      title="Environment Variables"
+      isOpen
+      onOpenChange={noop}
+      envVars={envVars}
+      onAdd={noop}
+      onRemove={noop}
+      onNameChange={noop}
+      onValueChange={handleValueChange}
+      onValueFocus={noop}
+      onSourceTypeChange={noop}
+      secretSuggestions={['secret/data']}
+      variableSuggestions={['API_TOKEN']}
+    />
+  );
+}
 
 describe('nodeProperties/EnvEditor', () => {
   const baseEnv: EnvEditorProps = {
@@ -36,6 +71,17 @@ describe('nodeProperties/EnvEditor', () => {
 
   beforeEach(() => {
     latestReferenceProps.current = null;
+  });
+
+  beforeAll(() => {
+    if (typeof window !== 'undefined' && !('ResizeObserver' in window)) {
+      class ResizeObserverStub {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+    }
   });
 
   it('emits callbacks for env mutations', async () => {
@@ -59,7 +105,7 @@ describe('nodeProperties/EnvEditor', () => {
     fireEvent.change(nameInput, { target: { value: 'NEW_KEY' } });
     expect(props.onNameChange).toHaveBeenCalledWith(0, 'NEW_KEY');
 
-    const referenceInput = screen.getByTestId('reference-input');
+    const referenceInput = screen.getByPlaceholderText('Value or reference...');
     fireEvent.focus(referenceInput);
     expect(props.onValueFocus).toHaveBeenCalledWith(0);
 
@@ -76,5 +122,34 @@ describe('nodeProperties/EnvEditor', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /add variable/i }));
     expect(props.onAdd).toHaveBeenCalled();
+  });
+
+  it('keeps the value input focused across multi-character typing', () => {
+    render(<ControlledEnvEditor />);
+
+    const valueInput = screen.getByPlaceholderText('Value or reference...') as HTMLInputElement;
+    valueInput.focus();
+    expect(document.activeElement).toBe(valueInput);
+
+    fireEvent.change(valueInput, { target: { value: 'A' } });
+    expect(document.activeElement).toBe(valueInput);
+
+    fireEvent.change(valueInput, { target: { value: 'AB' } });
+    expect(document.activeElement).toBe(valueInput);
+  });
+
+  it('prevents backspace events from reaching an outer delete handler', () => {
+    const outerHandler = vi.fn();
+    render(
+      <div onKeyDown={outerHandler}>
+        <EnvEditor {...baseEnv} />
+      </div>,
+    );
+
+    const valueInput = screen.getByPlaceholderText('Value or reference...');
+    valueInput.focus();
+    fireEvent.keyDown(valueInput, { key: 'Backspace', code: 'Backspace' });
+
+    expect(outerHandler).not.toHaveBeenCalled();
   });
 });

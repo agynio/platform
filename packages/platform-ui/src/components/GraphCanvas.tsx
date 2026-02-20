@@ -33,6 +33,27 @@ export type GraphNodeData = {
 
 const DRAGGABLE_NODE_KINDS: NodeKind[] = ['Trigger', 'Agent', 'Tool', 'MCP', 'Workspace'];
 
+function isDeletionKey(key: string): boolean {
+	return key === 'Backspace' || key === 'Delete';
+}
+
+function isEditableElement(element: Element | null): element is HTMLElement {
+	if (!element) return false;
+	if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+		return true;
+	}
+	if (element instanceof HTMLElement) {
+		if (element.isContentEditable && element.getAttribute('contenteditable') !== 'false') {
+			return true;
+		}
+		const role = element.getAttribute('role');
+		if (role === 'textbox') {
+			return true;
+		}
+	}
+	return false;
+}
+
 function isDraggedNodeData(value: unknown): value is GraphCanvasDragData {
 	if (!value || typeof value !== 'object') {
 		return false;
@@ -182,6 +203,18 @@ function ReactFlowInner({
 		onDrop?.(event, { position, data: parsed });
 	}, [onDrop, reactFlowInstance]);
 
+	const handleKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+		if (!isDeletionKey(event.key)) {
+			return;
+		}
+
+		const activeElement = typeof document !== 'undefined' ? (document.activeElement as Element | null) : null;
+		const target = event.target as Element | null;
+		if (isEditableElement(target) || isEditableElement(activeElement)) {
+			event.stopPropagation();
+		}
+	}, []);
+
 	return (
 		<div className="w-full h-full">
 			<ReactFlow
@@ -195,6 +228,7 @@ function ReactFlowInner({
 				onDrop={handleDrop}
 				onDragOver={handleDragOver}
 				onNodesDelete={onNodesDelete}
+				onKeyDownCapture={handleKeyDownCapture}
 				tabIndex={0}
 				panOnScroll
 				panOnScrollSpeed={2}

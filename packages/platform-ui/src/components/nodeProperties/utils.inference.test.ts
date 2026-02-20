@@ -36,9 +36,18 @@ describe('nodeProperties env inference', () => {
     ]);
 
     const payload = serializeEnvVars(initial);
-    expect(payload).toEqual([
-      { name: 'DB_SECRET', source: 'vault', value: { kind: 'vault', mount: 'kv', path: 'prod/db', key: 'PASSWORD' } },
-      { name: 'API_VAR', source: 'variable', value: { kind: 'var', name: 'API_TOKEN' } },
-    ]);
+    expect(payload).toHaveLength(2);
+    expect(payload[0]?.id).toBe(initial[0]?.id);
+    expect(payload[1]?.id).toBe(initial[1]?.id);
+    expect(payload[0]).toMatchObject({
+      name: 'DB_SECRET',
+      source: 'vault',
+      value: { kind: 'vault', mount: 'kv', path: 'prod/db', key: 'PASSWORD' },
+    });
+    expect(payload[1]).toMatchObject({
+      name: 'API_VAR',
+      source: 'variable',
+      value: { kind: 'var', name: 'API_TOKEN' },
+    });
   });
 });

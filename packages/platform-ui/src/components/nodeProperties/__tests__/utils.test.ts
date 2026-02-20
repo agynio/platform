@@ -127,35 +127,36 @@ describe('nodeProperties utils', () => {
       );
 
       const payload = serializeEnvVars(updated);
-      expect(payload).toEqual([
-        {
-          key: 'SECRET',
-          source: 'vault',
-          value: {
-            kind: 'vault',
-            mount: 'secret',
-            path: 'app/db',
-            key: 'NEW',
-            extra: 'keep',
-          },
+      expect(payload).toHaveLength(1);
+      expect(payload[0]?.id).toBe(initial[0]?.id);
+      expect(payload[0]).toMatchObject({
+        key: 'SECRET',
+        source: 'vault',
+        value: {
+          kind: 'vault',
+          mount: 'secret',
+          path: 'app/db',
+          key: 'NEW',
+          extra: 'keep',
         },
-      ]);
+      });
     });
 
     it('omits source for static entries when none was provided originally', () => {
       const initial = readEnvList([{ name: 'PLAIN', value: 'x' }]);
       const payload = serializeEnvVars(initial.map((item) => ({ ...item, value: 'updated' })));
-      expect(payload).toEqual([
-        { name: 'PLAIN', value: 'updated' },
-      ]);
+      expect(payload).toHaveLength(1);
+      expect(payload[0]?.id).toBe(initial[0]?.id);
+      expect(payload[0]).toMatchObject({ name: 'PLAIN', value: 'updated' });
+      expect(payload[0]).not.toHaveProperty('source');
     });
 
     it('retains additional fields on static object values', () => {
       const initial = readEnvList([{ name: 'CONFIG', value: { value: 'v1', extra: true } }]);
       const payload = serializeEnvVars(initial.map((item) => ({ ...item, value: 'v2' })));
-      expect(payload).toEqual([
-        { name: 'CONFIG', value: { value: 'v2', extra: true } },
-      ]);
+      expect(payload).toHaveLength(1);
+      expect(payload[0]?.id).toBe(initial[0]?.id);
+      expect(payload[0]).toMatchObject({ name: 'CONFIG', value: { value: 'v2', extra: true } });
     });
 
     it('writes variable references using canonical structure', () => {
@@ -169,9 +170,13 @@ describe('nodeProperties utils', () => {
       );
 
       const payload = serializeEnvVars(updated);
-      expect(payload).toEqual([
-        { name: 'FROM_VAR', source: 'variable', value: { kind: 'var', name: 'TARGET' } },
-      ]);
+      expect(payload).toHaveLength(1);
+      expect(payload[0]?.id).toBe(initial[0]?.id);
+      expect(payload[0]).toMatchObject({
+        name: 'FROM_VAR',
+        source: 'variable',
+        value: { kind: 'var', name: 'TARGET' },
+      });
     });
   });
 
