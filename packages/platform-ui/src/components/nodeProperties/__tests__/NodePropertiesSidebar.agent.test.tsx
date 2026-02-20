@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
@@ -74,15 +74,73 @@ describe('NodePropertiesSidebar - agent', () => {
     const nameInput = screen.getByPlaceholderText('e.g., Casey Quinn') as HTMLInputElement;
     expect(nameInput.value).toBe('Casey Quinn');
     fireEvent.change(nameInput, { target: { value: '  Delta  ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'Delta' }));
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ name: '  Delta  ' }));
 
     const roleInput = screen.getByPlaceholderText('e.g., Incident Commander') as HTMLInputElement;
     expect(roleInput.value).toBe('Lead Planner');
     fireEvent.change(roleInput, { target: { value: '  Support  ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ role: 'Support' }));
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ role: '  Support  ' }));
 
     fireEvent.change(titleInput, { target: { value: '   ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ title: '' }));
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ title: '   ' }));
+  });
+
+  it('preserves trailing whitespace across editable agent fields', async () => {
+    const onConfigChange = vi.fn();
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: 'Custom Dispatch',
+      template: 'agent',
+      name: 'Casey',
+      role: 'Lead',
+      model: 'gpt-4',
+      restrictOutput: true,
+      restrictionMessage: 'Use tools first',
+    } as NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const nameInput = screen.getByPlaceholderText('e.g., Casey Quinn') as HTMLInputElement;
+    onConfigChange.mockClear();
+    fireEvent.change(nameInput, { target: { value: 'Nova ' } });
+    await waitFor(() => {
+      expect(nameInput.value).toBe('Nova ');
+    });
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ name: 'Nova ' });
+    fireEvent.blur(nameInput);
+
+    const roleInput = screen.getByPlaceholderText('e.g., Incident Commander') as HTMLInputElement;
+    onConfigChange.mockClear();
+    fireEvent.change(roleInput, { target: { value: 'Commander ' } });
+    await waitFor(() => {
+      expect(roleInput.value).toBe('Commander ');
+    });
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ role: 'Commander ' });
+    fireEvent.blur(roleInput);
+
+    const modelInput = screen.getByPlaceholderText('gpt-4') as HTMLInputElement;
+    onConfigChange.mockClear();
+    fireEvent.change(modelInput, { target: { value: 'gpt-4 ' } });
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ model: 'gpt-4 ' });
+
+    const restrictionTextarea = screen.getByPlaceholderText(
+      'You must use at least one tool before finishing.',
+    ) as HTMLTextAreaElement;
+    onConfigChange.mockClear();
+    fireEvent.change(restrictionTextarea, { target: { value: 'Finish only with tools ' } });
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ restrictionMessage: 'Finish only with tools ' });
   });
 
   it('uses combined name and role placeholder when title empty', () => {

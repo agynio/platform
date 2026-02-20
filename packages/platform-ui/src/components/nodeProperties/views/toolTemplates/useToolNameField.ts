@@ -34,9 +34,7 @@ export function useToolNameField({ config, onConfigChange }: ToolNodeProps): Too
   const handleChange = useCallback(
     (rawValue: string) => {
       setInputValue(rawValue);
-      const normalized = rawValue.trim();
-
-      if (normalized.length === 0) {
+      if (rawValue.length === 0) {
         setInputError(null);
         if (toolName !== '') {
           onConfigChange?.({ name: undefined });
@@ -44,14 +42,14 @@ export function useToolNameField({ config, onConfigChange }: ToolNodeProps): Too
         return;
       }
 
-      if (!isValidToolName(normalized)) {
+      if (!isValidToolName(rawValue)) {
         setInputError('Name must match ^[a-z0-9_]{1,64}$');
         return;
       }
 
       setInputError(null);
-      if (normalized !== toolName) {
-        onConfigChange?.({ name: normalized });
+      if (rawValue !== toolName) {
+        onConfigChange?.({ name: rawValue });
       }
     },
     [onConfigChange, toolName],
@@ -64,4 +62,3 @@ export function useToolNameField({ config, onConfigChange }: ToolNodeProps): Too
     onChange: handleChange,
   } satisfies ToolNameFieldState;
 }
-

@@ -63,26 +63,9 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
 
   const handleConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
-      if (!onConfigChange) {
-        return;
-      }
-
-      if (nodeKind !== 'Agent') {
-        onConfigChange(partial);
-        return;
-      }
-
-      if (!Object.prototype.hasOwnProperty.call(partial, 'title')) {
-        onConfigChange(partial);
-        return;
-      }
-
-      const rawTitle = partial.title;
-      const stringTitle = typeof rawTitle === 'string' ? rawTitle : '';
-      const trimmedTitle = stringTitle.trim();
-      onConfigChange({ ...partial, title: trimmedTitle });
+      onConfigChange?.(partial);
     },
-    [nodeKind, onConfigChange],
+    [onConfigChange],
   );
 
   const secretSuggestions = useMemo(() => (Array.isArray(secretKeys) ? secretKeys : []), [secretKeys]);

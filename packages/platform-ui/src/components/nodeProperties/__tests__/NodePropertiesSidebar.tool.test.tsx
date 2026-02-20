@@ -142,6 +142,36 @@ describe('NodePropertiesSidebar - shell tool', () => {
     await user.click(logToggle);
     expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ logToPid1: false }));
   });
+
+  it('preserves trailing whitespace in the shell tool prompt value', () => {
+    const onConfigChange = vi.fn();
+
+    const config: NodeConfig = {
+      kind: 'Tool',
+      title: 'Shell Tool',
+      template: 'shellTool',
+    } as NodeConfig;
+    const state: NodeState = { status: 'ready' };
+
+    render(
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        onConfigChange={onConfigChange}
+        onProvision={vi.fn()}
+        onDeprovision={vi.fn()}
+        canProvision={false}
+        canDeprovision={true}
+        isActionPending={false}
+      />,
+    );
+
+    const promptTextarea = screen.getByPlaceholderText('Describe how shell access should be used...') as HTMLTextAreaElement;
+    onConfigChange.mockClear();
+    fireEvent.change(promptTextarea, { target: { value: 'Run read-only diagnostics ' } });
+
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ prompt: 'Run read-only diagnostics ' });
+  });
 });
 
 describe('NodePropertiesSidebar - manage tool', () => {

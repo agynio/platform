@@ -109,8 +109,7 @@ export function ShellToolTemplateView(props: NodePropertiesViewProps<'Tool'>) {
 
   const handlePromptChange = useCallback(
     (value: string) => {
-      const trimmed = value.trim();
-      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined } as Partial<NodeConfig>);
+      onConfigChange?.({ prompt: value.length > 0 ? value : undefined } as Partial<NodeConfig>);
     },
     [onConfigChange],
   );

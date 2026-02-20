@@ -452,7 +452,7 @@ describe('GraphLayout', () => {
     const lastCall = updateNode.mock.calls.at(-1);
     expect(lastCall?.[0]).toBe('node-1');
     expect(lastCall?.[1]).toEqual({
-      config: { systemPrompt: 'New prompt' },
+      config: { title: 'Updated Agent', systemPrompt: 'New prompt' },
       title: 'Updated Agent',
     });
 
@@ -526,15 +526,15 @@ describe('GraphLayout', () => {
     await waitFor(() => expect(updateNode).toHaveBeenCalled());
     const payload = updateNode.mock.calls.at(-1)?.[1] as { config: Record<string, unknown>; title?: string };
     expect(payload).toBeDefined();
-    expect(payload?.config).toEqual({ name: 'Atlas', role: 'Navigator' });
-    expect(payload?.title).toBe('');
+    expect(payload?.config).toEqual({ title: '   ', name: 'Atlas', role: 'Navigator' });
+    expect(payload?.title).toBe('   ');
     const sidebarCountBeforeRefresh = sidebarProps.length;
     graph.nodes = graph.nodes.map((node) =>
       node.id === 'node-1'
         ? {
             ...node,
-            title: '',
-            config: { ...(node.config ?? {}), title: '', name: 'Atlas', role: 'Navigator' },
+            title: '   ',
+            config: { ...(node.config ?? {}), title: '   ', name: 'Atlas', role: 'Navigator' },
           }
         : node,
     );
@@ -554,8 +554,8 @@ describe('GraphLayout', () => {
       config: Record<string, unknown>;
       displayTitle?: string;
     };
-    expect(refreshedSidebar.config).toEqual(expect.objectContaining({ title: '' }));
-    expect(refreshedSidebar.displayTitle).toBe('');
+    expect(refreshedSidebar.config).toEqual(expect.objectContaining({ title: '   ' }));
+    expect(refreshedSidebar.displayTitle).toBe('   ');
   });
 
   it('persists agent title edits and restores the saved value after refresh', async () => {
@@ -618,7 +618,10 @@ describe('GraphLayout', () => {
       config: Record<string, unknown>;
       title?: string;
     };
-    expect(payload).toEqual({ config: { name: 'Atlas', role: 'Navigator' }, title: 'Mission Control' });
+    expect(payload).toEqual({
+      config: { title: 'Mission Control', name: 'Atlas', role: 'Navigator' },
+      title: 'Mission Control',
+    });
 
     graph.nodes = graph.nodes.map((node) =>
       node.id === 'node-1'
@@ -712,7 +715,9 @@ describe('GraphLayout', () => {
       config: Record<string, unknown>;
       title?: string;
     };
-    expect(payload).toEqual({ config: { name: 'Voyager', role: 'Pathfinder' } });
+    expect(payload).toEqual({
+      config: { title: 'Mission Control', name: 'Voyager', role: 'Pathfinder' },
+    });
 
     const sidebarCountBeforeRefresh = sidebarProps.length;
     graph.nodes = graph.nodes.map((node) =>
@@ -811,7 +816,7 @@ describe('GraphLayout', () => {
       config: Record<string, unknown>;
       title?: string;
     };
-    expect(payload).toEqual({ config: { name: 'Orion', role: 'Pathfinder' } });
+    expect(payload).toEqual({ config: { title: '', name: 'Orion', role: 'Pathfinder' } });
 
     const sidebarCountBeforeRefresh = sidebarProps.length;
     graph.nodes = graph.nodes.map((node) =>
@@ -1733,14 +1738,14 @@ describe('GraphLayout', () => {
     const lastCall = updateNode.mock.calls.at(-1);
     expect(lastCall?.[0]).toBe('agent-2');
     const payload = lastCall?.[1] as { config: Record<string, unknown>; title?: string };
-    expect(payload.title).toBe('Updated Agent');
+    expect(payload.title).toBe('  Updated Agent  ');
     expect(payload.config).toMatchObject({
+      title: '  Updated Agent  ',
       systemPrompt: 'Updated prompt',
       debounceMs: 325,
       role: 'Navigator',
     });
     expect(payload.config).not.toHaveProperty('kind');
-    expect(payload.config).not.toHaveProperty('title');
     expect(payload.config).not.toHaveProperty('template');
   });
 });

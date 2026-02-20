@@ -770,13 +770,11 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
       const baseConfig = { ...(node.config ?? {}) } as Record<string, unknown>;
       delete baseConfig.kind;
-      delete baseConfig.title;
       delete baseConfig.template;
 
       const patch = { ...(nextConfig ?? {}) } as Record<string, unknown>;
       const rawTitleUpdate = typeof patch.title === 'string' ? (patch.title as string) : undefined;
       delete patch.kind;
-      delete patch.title;
       delete patch.template;
 
       const updatedConfig: Record<string, unknown> = {
@@ -789,10 +787,9 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       };
 
       if (rawTitleUpdate !== undefined) {
-        const trimmedTitle = rawTitleUpdate.trim();
         const currentTitle = typeof node.title === 'string' ? node.title : '';
-        if (trimmedTitle !== currentTitle) {
-          updates.title = trimmedTitle;
+        if (rawTitleUpdate !== currentTitle) {
+          updates.title = rawTitleUpdate;
         }
       }
 

@@ -82,8 +82,7 @@ export function GithubCloneRepoToolTemplateView(props: NodePropertiesViewProps<'
 
   const handlePromptChange = useCallback(
     (value: string) => {
-      const trimmed = value.trim();
-      onConfigChange?.({ prompt: trimmed.length > 0 ? trimmed : undefined });
+      onConfigChange?.({ prompt: value.length > 0 ? value : undefined });
     },
     [onConfigChange],
   );
