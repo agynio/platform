@@ -10,6 +10,8 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { ThreadTransportService } from '../src/messaging/threadTransport.service';
+import { PrismaService } from '../src/core/services/prisma.service';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
 import { AIMessage, HumanMessage, Loop, Reducer, ResponseMessage, Router, ToolCallMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
@@ -118,6 +120,70 @@ const createAgentFixture = async () => {
   };
 };
 
+const createAgentWithTransportFixture = async () => {
+  let runCounter = 0;
+  const beginRunThread = vi.fn(async () => ({ runId: `run-${++runCounter}` }));
+  const completeRun = vi.fn(async () => undefined);
+  const ensureThreadModel = vi.fn(async (_threadId: string, model: string) => model);
+  const recordInjected = vi.fn(async () => ({ messageIds: [] }));
+  const recordTransportAssistantMessage = vi.fn(async () => ({ messageId: 'msg-transport' }));
+  const prismaThreadFindUnique = vi
+    .fn()
+    .mockResolvedValue({ id: 'thread-transport', channelNodeId: null });
+  const prismaService = {
+    getClient: () => ({ thread: { findUnique: prismaThreadFindUnique } }),
+  } as unknown as PrismaService;
+
+  const moduleRef = await Test.createTestingModule({
+    providers: [
+      {
+        provide: ConfigService,
+        useValue: new ConfigService().init(
+          configSchema.parse({
+            llmProvider: 'openai',
+            agentsDatabaseUrl: 'postgres://user:pass@host/db',
+            litellmBaseUrl: 'http://localhost:4000',
+            litellmMasterKey: 'sk-test',
+            ...runnerConfigDefaults,
+          }),
+        ),
+      },
+      AutoSendTestAgentNode,
+      { provide: AgentNode, useExisting: AutoSendTestAgentNode },
+      RunSignalsRegistry,
+      {
+        provide: LLMProvisioner,
+        useValue: { getLLM: vi.fn(async () => ({ call: vi.fn(async () => ({ text: 'ok' })) })) },
+      },
+      {
+        provide: AgentsPersistenceService,
+        useValue: {
+          beginRunThread,
+          completeRun,
+          ensureThreadModel,
+          recordInjected,
+          recordTransportAssistantMessage,
+        },
+      },
+      { provide: PrismaService, useValue: prismaService },
+      { provide: LiveGraphRuntime, useValue: { getNodeInstance: vi.fn() } },
+      ThreadTransportService,
+    ],
+  }).compile();
+
+  const agent = await moduleRef.resolve(AutoSendTestAgentNode);
+  agent.init({ nodeId: 'agent-auto-transport' });
+
+  return {
+    moduleRef,
+    agent,
+    beginRunThread,
+    completeRun,
+    ensureThreadModel,
+    recordTransportAssistantMessage,
+  };
+};
+
 describe('AgentNode auto-send final response', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -182,7 +248,7 @@ describe('AgentNode auto-send final response', () => {
   });
 
   it('auto-sends terminal error messages when invocation fails', async () => {
-    const { moduleRef, agent, transport } = await createAgentFixture();
+    const { moduleRef, agent, transport, completeRun } = await createAgentFixture();
     await agent.setConfig({});
 
     agent.setResponseFactory(() => {
@@ -195,6 +261,32 @@ describe('AgentNode auto-send final response', () => {
       expect.stringContaining('loop failure'),
       expect.objectContaining({ runId: 'run-1', source: 'auto_response' }),
     );
+    expect(completeRun).toHaveBeenCalledWith('run-1', 'terminated', expect.any(Array));
+    const [, , errorOutputs] = completeRun.mock.calls[0];
+    expect(errorOutputs).toHaveLength(1);
+    expect(errorOutputs?.[0]).toBeInstanceOf(AIMessage);
+    expect(errorOutputs?.[0].text).toContain('loop failure');
+
+    await moduleRef.close();
+  });
+});
+
+describe('AgentNode auto-send persistence coordination', () => {
+  it.each([false, true])('persists exactly one assistant message when restrictOutput=%s', async (restrictOutput) => {
+    const { moduleRef, agent, completeRun, recordTransportAssistantMessage } = await createAgentWithTransportFixture();
+    await agent.setConfig({ restrictOutput });
+
+    agent.setResponseFactory(() => new ResponseMessage({ output: [AIMessage.fromText('final reply').toPlain()] }));
+
+    const result = await agent.invoke('thread-transport', [HumanMessage.fromText('coordination')]);
+
+    expect(result).toBeInstanceOf(ResponseMessage);
+    expect(completeRun).toHaveBeenCalledTimes(1);
+    expect(recordTransportAssistantMessage).not.toHaveBeenCalled();
+    const [, , outputs] = completeRun.mock.calls[0];
+    expect(outputs).toHaveLength(1);
+    expect(outputs?.[0]).toBeInstanceOf(AIMessage);
+    expect(outputs?.[0].text).toBe('final reply');
 
     await moduleRef.close();
   });

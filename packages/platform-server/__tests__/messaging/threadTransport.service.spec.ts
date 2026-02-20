@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { AIMessage } from '@agyn/llm';
 
 import { ThreadTransportService } from '../../src/messaging/threadTransport.service';
 import type { PrismaService } from '../../src/core/services/prisma.service';
@@ -157,6 +158,30 @@ describe('ThreadTransportService', () => {
       source: null,
     });
     expect(getNodeInstance).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate assistant messages for UI auto responses', async () => {
+    threadFindUnique.mockResolvedValue({ id: 'thread-6', channelNodeId: null });
+    const assistantTexts: string[] = [];
+    (persistence as any).completeRun = async (_runId: string, _status: string, outputs: AIMessage[]) => {
+      for (const msg of outputs) {
+        assistantTexts.push(msg.text ?? '');
+      }
+    };
+    recordTransportAssistantMessage.mockImplementation(async ({ text }: { text: string }) => {
+      assistantTexts.push(text);
+      return { messageId: `msg-${assistantTexts.length}` };
+    });
+
+    await (persistence as any).completeRun('run-dup-check', 'finished', [AIMessage.fromText('hello')]);
+    const result = await service.sendTextToThread('thread-6', 'hello', {
+      runId: 'run-dup-check',
+      source: 'auto_response',
+    });
+
+    expect(result).toEqual({ ok: true, threadId: 'thread-6' });
+    expect(recordTransportAssistantMessage).not.toHaveBeenCalled();
+    expect(assistantTexts).toEqual(['hello']);
   });
 
   it('returns missing_thread when thread not found', async () => {
