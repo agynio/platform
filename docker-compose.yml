@@ -250,23 +250,26 @@ services:
   ziti-controller:
     image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
     container_name: ziti-controller
+    hostname: ziti-controller
     restart: unless-stopped
     oom_score_adj: -900
     entrypoint:
       - "/var/openziti/scripts/run-controller.sh"
     environment:
-      ZITI_CTRL_NAME: ${ZITI_CTRL_NAME:-dev-controller}
-      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
-      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
-      ZITI_CTRL_EDGE_IP_OVERRIDE: ${ZITI_CTRL_EDGE_IP_OVERRIDE:-127.0.0.1}
-      ZITI_CTRL_ADVERTISED_PORT: ${ZITI_CTRL_ADVERTISED_PORT:-6262}
-      ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION: ${ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION:-168h}
-      ZITI_ROUTER_ENROLLMENT_DURATION: ${ZITI_ROUTER_ENROLLMENT_DURATION:-168h}
-      ZITI_USER: ${ZITI_USER:-admin}
-      ZITI_PWD: ${ZITI_PWD:-admin}
+      ZITI_NETWORK: ${ZITI_NETWORK:-dev.agyn-platform}
+      ZITI_CTRL_NAME: dev-controller
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: "1280"
+      ZITI_CTRL_EDGE_IP_OVERRIDE: 127.0.0.1
+      ZITI_CTRL_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_ADVERTISED_PORT: "6262"
+      ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION: 168h
+      ZITI_ROUTER_ENROLLMENT_DURATION: 168h
+      ZITI_USER: admin
+      ZITI_PWD: admin
     ports:
-      - "127.0.0.1:${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}:${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}"
-      - "127.0.0.1:${ZITI_CTRL_ADVERTISED_PORT:-6262}:${ZITI_CTRL_ADVERTISED_PORT:-6262}"
+      - "127.0.0.1:1280:1280"
+      - "127.0.0.1:6262:6262"
     healthcheck:
       test:
         [
@@ -294,19 +297,20 @@ services:
       - "/bin/bash"
       - "/scripts/ziti/controller-init.sh"
     environment:
-      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
-      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
-      ZITI_USER: ${ZITI_USER:-admin}
-      ZITI_PWD: ${ZITI_PWD:-admin}
-      ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
-      ZITI_PLATFORM_IDENTITY_NAME: ${ZITI_PLATFORM_IDENTITY_NAME:-dev.agyn-platform.platform-server}
-      ZITI_RUNNER_IDENTITY_NAME: ${ZITI_RUNNER_IDENTITY_NAME:-dev.agyn-platform.docker-runner}
-      ZITI_ROUTER_NAME: ${ZITI_ROUTER_NAME:-dev-edge-router}
-      ZITI_ENROLLMENT_DURATION_MINUTES: ${ZITI_ENROLLMENT_DURATION_MINUTES:-1440}
+      ZITI_NETWORK: ${ZITI_NETWORK:-dev.agyn-platform}
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: "1280"
+      ZITI_USER: admin
+      ZITI_PWD: admin
+      ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
+      ZITI_PLATFORM_IDENTITY_NAME: dev.agyn-platform.platform-server
+      ZITI_RUNNER_IDENTITY_NAME: dev.agyn-platform.docker-runner
+      ZITI_ROUTER_NAME: dev-edge-router
+      ZITI_ENROLLMENT_DURATION_MINUTES: "1440"
       ZITI_IDENTITIES_DIR: /identities
       ZITI_IDENTITIES_TMP: /ziti-tmp
-      ZITI_PLATFORM_IDENTITY_FILE: ${ZITI_PLATFORM_IDENTITY_FILE:-/identities/dev.agyn-platform.platform-server.json}
-      ZITI_RUNNER_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/identities/dev.agyn-platform.docker-runner.json}
+      ZITI_PLATFORM_IDENTITY_FILE: /identities/dev.agyn-platform.platform-server.json
+      ZITI_RUNNER_IDENTITY_FILE: /identities/dev.agyn-platform.docker-runner.json
     volumes:
       - type: bind
         source: ./.ziti/controller
@@ -326,6 +330,7 @@ services:
   ziti-edge-router:
     image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
     container_name: ziti-edge-router
+    hostname: ziti-edge-router
     restart: unless-stopped
     depends_on:
       ziti-controller:
@@ -333,19 +338,20 @@ services:
     entrypoint: /bin/bash
     command: "/var/openziti/scripts/run-router.sh edge"
     environment:
-      ZITI_CTRL_ADVERTISED_ADDRESS: ${ZITI_CTRL_ADVERTISED_ADDRESS:-ziti-controller}
-      ZITI_CTRL_ADVERTISED_PORT: ${ZITI_CTRL_ADVERTISED_PORT:-6262}
-      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-controller}
-      ZITI_CTRL_EDGE_ADVERTISED_PORT: ${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
-      ZITI_ROUTER_NAME: ${ZITI_ROUTER_NAME:-dev-edge-router}
-      ZITI_ROUTER_ADVERTISED_ADDRESS: ${ZITI_ROUTER_ADVERTISED_ADDRESS:-ziti-edge-router}
-      ZITI_ROUTER_PORT: ${ZITI_ROUTER_PORT:-3022}
-      ZITI_ROUTER_LISTENER_BIND_PORT: ${ZITI_ROUTER_LISTENER_BIND_PORT:-10080}
-      ZITI_ROUTER_ROLES: ${ZITI_ROUTER_ROLES:-public}
-      ZITI_USER: ${ZITI_USER:-admin}
-      ZITI_PWD: ${ZITI_PWD:-admin}
+      ZITI_NETWORK: ${ZITI_NETWORK:-dev.agyn-platform}
+      ZITI_CTRL_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_ADVERTISED_PORT: "6262"
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: "1280"
+      ZITI_ROUTER_NAME: dev-edge-router
+      ZITI_ROUTER_ADVERTISED_ADDRESS: ziti-edge-router
+      ZITI_ROUTER_PORT: "3022"
+      ZITI_ROUTER_LISTENER_BIND_PORT: "10080"
+      ZITI_ROUTER_ROLES: public
+      ZITI_USER: admin
+      ZITI_PWD: admin
     ports:
-      - "127.0.0.1:${ZITI_ROUTER_PORT:-3022}:${ZITI_ROUTER_PORT:-3022}"
+      - "127.0.0.1:3022:3022"
     volumes:
       - type: bind
         source: ./.ziti/controller
