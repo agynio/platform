@@ -83,6 +83,23 @@ services:
     networks:
       - agents_net
 
+  envoy:
+    image: envoyproxy/envoy:v1.30-latest
+    container_name: envoy
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - ./ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agents_net
+
   vault:
     image: hashicorp/vault:1.17
     oom_score_adj: -900

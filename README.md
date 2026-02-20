@@ -296,23 +296,52 @@ Secrets handling:
 
 ### Dev-local Envoy proxy
 
-When the platform server (:3010) and notifications gateway (:4000) run directly
-on your host, you can still front them with a single origin by mounting the
-dev-local Envoy configuration:
+The default `docker-compose.yml` exposes an `envoy` sidecar that proxies
+`/api` → platform server (`:3010`) and `/socket.io` → notifications gateway
+(`:4000`) while sharing the same origin.
+
+1. Start Redis and Envoy:
+
+   ```
+   docker compose up -d redis envoy
+   ```
+
+2. Run the platform server and notifications gateway locally. Each process must
+   publish/consume notifications via Redis:
+
+   ```
+   # platform server
+   NOTIFICATIONS_REDIS_URL=redis://localhost:6379 \
+   NOTIFICATIONS_CHANNEL=notifications.v1 \
+   pnpm --filter @agyn/platform-server dev
+
+   # notifications gateway
+   NOTIFICATIONS_REDIS_URL=redis://localhost:6379 \
+   NOTIFICATIONS_CHANNEL=notifications.v1 \
+   pnpm --filter @agyn/notifications-gateway dev
+   ```
+
+3. Point the UI (Vite dev server or production build) at Envoy:
+
+   ```
+   VITE_API_BASE_URL=http://localhost:8080
+   ```
+
+The Envoy service mounts `ops/envoy/envoy.dev.local.yaml` automatically and
+includes `extra_hosts: ["host.docker.internal:host-gateway"]` so Linux hosts can
+resolve the loopback address. If you prefer a standalone container, you can run
+the same config manually:
 
 ```
 docker run --rm --name envoy-dev \
   -p 8080:8080 \
   -p 9901:9901 \
   -v "$(pwd)/ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro" \
-  envoyproxy/envoy:v1.31-latest
+  envoyproxy/envoy:v1.30-latest
 ```
 
-Linux users that prefer docker-compose can add
-`extra_hosts: ["host.docker.internal:host-gateway"]` to the Envoy service so the
-container can resolve the host network. Point the UI (dev server or production
-build) at Envoy with `VITE_API_BASE_URL=http://localhost:8080` to reuse the
-single ingress endpoint for both REST and Socket.IO traffic.
+This keeps the browser pointed at `http://localhost:8080` for both REST and
+WebSocket traffic.
 
 ## Observability / Logging / Metrics
 - Server logging: nestjs-pino with redaction of sensitive headers (packages/platform-server/src/bootstrap/app.module.ts)
