@@ -23,7 +23,8 @@ FROM base AS build
 
 COPY . .
 
-RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile
+# Avoid workspace-wide postinstall/prepare (platform-server runs prisma generate)
+RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile --ignore-scripts
 
 RUN pnpm --filter @agyn/docker-runner run build
 
