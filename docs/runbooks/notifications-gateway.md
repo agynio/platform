@@ -95,6 +95,33 @@ docker run --rm --name envoy-dev \
   envoyproxy/envoy:v1.30-latest
 ```
 
+## Troubleshooting & environment notes
+
+- **Docker Compose v2 required** – The default stack relies on `tmpfs` mounts
+  and the `host-gateway` extra host entry. Install the Docker Compose v2 plugin
+  (`docker compose version` should report `v2.29.0` or newer). The legacy
+  `docker-compose` binary will not work.
+- **Remote Docker daemons** – Codespaces/CI setups that export
+  `DOCKER_HOST=tcp://localhost:2375` cannot bind-mount files from this repo.
+  In that environment Envoy will log `Unable to convert YAML as JSON` because
+  `/etc/envoy/envoy.yaml` is replaced by an empty directory. Run the stack on a
+  machine where the daemon can see the workspace, or bake the config into a
+  volume/image.
+- **pnpm/Node prerequisites** – Use Node 22 (`nix profile install
+  nixpkgs#nodejs_22`) and enable Corepack so `pnpm@10.x` matches the lockfile
+  (`corepack enable && corepack install pnpm@10.30.1`).
+- **EMFILE watch limits** – When `pnpm --filter @agyn/notifications-gateway
+  dev` exits with `EMFILE`, raise the limits first:
+
+  ```
+  ulimit -n 4096
+  sudo sysctl fs.inotify.max_user_watches=524288
+  ```
+
+  Alternatively run the gateway via `pnpm --filter @agyn/notifications-gateway
+  exec tsx src/index.ts` after a one-time `pnpm --filter
+  @agyn/notifications-gateway build`.
+
 ## Shutdown and cleanup
 
 Press `Ctrl+C` to stop the stack, then remove containers and volumes with:

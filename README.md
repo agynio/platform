@@ -372,6 +372,24 @@ WebSocket traffic.
   - Symptom: UI cannot reach backend in Docker.
   - Fix: set API_UPSTREAM=http://host.docker.internal:3010 when running UI container locally.
 
+### Docker / Compose setup issues
+- **Missing v2 plugin** – `docker compose up -d redis envoy` fails with `docker: 'compose' is not a docker command`. Install the v2 plugin (Docker Desktop or `apt install docker-compose-plugin`) and confirm `docker compose version` reports `v2.29.0` or newer. Envoy relies on `tmpfs` and `host-gateway` features that only exist in Compose v2.
+- **Remote daemon bind-mounts** – CI/Codespaces contexts often export `DOCKER_HOST=tcp://localhost:2375`. That remote daemon cannot see files inside this workspace, so bind-mounting `ops/envoy/envoy.dev.local.yaml` turns `/etc/envoy/envoy.yaml` into an empty directory and Envoy exits with `Unable to convert YAML as JSON`. Use a laptop/desktop where the Docker daemon shares the repo filesystem, or copy the config into a Docker volume/image before starting Envoy.
+- **Port conflicts** – Envoy uses `8080/9901`, Redis `6379`, notifications gateway `4000`, and LiteLLM `4000` in e2e compose. Stop any other process on those ports before running `docker compose up`.
+
+### Node / pnpm alignment
+- **Node version drift** – The workspace targets Node 22. Install via Nix (`nix profile install nixpkgs#nodejs_22`), Volta, or asdf, then verify with `node -v`.
+- **pnpm via Corepack** – Enable Corepack (`corepack enable`) and pin pnpm 10.x (`corepack install pnpm@10.30.1`). Running arbitrary global pnpm versions will mutate the lockfile.
+- **Missing pnpm binary** – When Corepack is disabled, `pnpm` is not on `$PATH`. Either enable Corepack or install pnpm globally (`npm i -g pnpm`).
+- **File watcher EMFILE errors** – `pnpm --filter @agyn/notifications-gateway dev` can hit the default inotify/file-descriptor limit and fail with `EMFILE: too many open files, watch`. Raise the limit before launching dev servers:
+
+  ```
+  ulimit -n 4096
+  sudo sysctl fs.inotify.max_user_watches=524288
+  ```
+
+  If raising limits is not possible (e.g., inside constrained CI containers), build once (`pnpm --filter @agyn/notifications-gateway build`) and launch the gateway with `pnpm --filter @agyn/notifications-gateway exec tsx src/index.ts` instead of the watch-mode dev server.
+
 ## Contributing & License
 - Contributing: see docs/contributing/ and docs/adr/ for architectural decisions.
 - Code owners: CODEOWNERS file exists at repo root.
