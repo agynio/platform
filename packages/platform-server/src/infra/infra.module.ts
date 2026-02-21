@@ -52,8 +52,17 @@ import { HealthController } from './health/health.controller';
         }),
       inject: [ConfigService],
     },
-    DockerRunnerStatusService,
-    DockerRunnerConnectivityMonitor,
+    {
+      provide: DockerRunnerStatusService,
+      useFactory: (config: ConfigService) => new DockerRunnerStatusService(config),
+      inject: [ConfigService],
+    },
+    {
+      provide: DockerRunnerConnectivityMonitor,
+      useFactory: (docker: DockerClient, config: ConfigService, status: DockerRunnerStatusService) =>
+        new DockerRunnerConnectivityMonitor(docker, config, status),
+      inject: [DOCKER_CLIENT, ConfigService, DockerRunnerStatusService],
+    },
     RequireDockerRunnerGuard,
     {
       provide: ContainerCleanupService,

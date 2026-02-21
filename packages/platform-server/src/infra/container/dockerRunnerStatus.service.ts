@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '../../core/services/config.service';
 import { DockerRunnerRequestError } from './httpDockerRunner.client';
 
@@ -27,7 +27,8 @@ export type DockerRunnerStatusSnapshot = {
 export class DockerRunnerStatusService {
   private snapshot: DockerRunnerStatusSnapshot;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(@Inject(ConfigService) private readonly configService: ConfigService) {
+    ConfigService.assertInitialized?.(this.configService);
     this.snapshot = {
       status: 'unknown',
       optional: this.configService.getDockerRunnerOptional(),

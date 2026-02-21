@@ -14,9 +14,11 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
 
   constructor(
     @Inject(DOCKER_CLIENT) private readonly dockerClient: DockerClient,
-    private readonly configService: ConfigService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly statusService: DockerRunnerStatusService,
-  ) {}
+  ) {
+    ConfigService.assertInitialized(configService);
+  }
 
   async onModuleInit(): Promise<void> {
     const baseUrl = this.configService.getDockerRunnerBaseUrl();

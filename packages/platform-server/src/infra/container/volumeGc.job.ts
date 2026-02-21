@@ -30,7 +30,7 @@ export class VolumeGcService {
     private readonly prismaService: PrismaService,
     @Inject(DOCKER_CLIENT) private readonly containerService: DockerClient,
     private readonly dockerRunnerStatus: DockerRunnerStatusService,
-    private readonly configService: ConfigService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.enabled = this.resolveBoolean(process.env.VOLUME_GC_ENABLED, DEFAULT_ENABLED);
     this.maxPerSweep = this.resolveInteger(process.env.VOLUME_GC_MAX_PER_SWEEP, DEFAULT_MAX_PER_SWEEP);
