@@ -28,6 +28,17 @@ const numberFlag = (defaultValue: number) =>
 
 const trimUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
+const normalizeOptionalUrl = (value?: string | null): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimUrl(trimmed);
+};
+
 const defaultZitiConfig = {
   managementUrl: 'https://127.0.0.1:1280/edge/management/v1',
   username: 'admin',
@@ -105,6 +116,13 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
     }),
+  dockerRunnerBaseUrl: z
+    .union([z.string(), z.undefined()])
+    .transform((value) => normalizeOptionalUrl(value))
+    .refine(
+      (value) => !value || /^https?:\/\//.test(value),
+      'DOCKER_RUNNER_BASE_URL must include http:// or https://',
+    ),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -410,6 +428,10 @@ export class ConfigService implements Config {
   }
 
   getDockerRunnerBaseUrl(): string {
+    const explicit = this.params.dockerRunnerBaseUrl;
+    if (explicit) {
+      return explicit;
+    }
     const host = this.getZitiRunnerProxyHost();
     const port = this.getZitiRunnerProxyPort();
     if (!host) {
@@ -599,6 +621,7 @@ export class ConfigService implements Config {
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
+      dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

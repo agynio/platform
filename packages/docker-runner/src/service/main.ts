@@ -14,6 +14,7 @@ async function bootstrap(): Promise<void> {
     const config = loadRunnerConfig();
     app = createRunnerApp(config);
     await app.listen({ port: config.port, host: config.host });
+    console.info(`docker-runner listening on http://${config.host}:${config.port}`);
     const ingress = await startZitiIngress(config);
     closeZiti = ingress.close;
 

@@ -50,13 +50,21 @@ export async function startDockerRunnerProcess(socketPath: string): Promise<Runn
   if (!fs.existsSync(tsxBin)) {
     throw new Error(`tsx binary not found at ${tsxBin}`);
   }
+  const mockModuleRoot = path.resolve(repoRoot, 'packages', 'docker-runner', '__tests__', 'mocks');
+  const mockLoader = path.resolve(mockModuleRoot, 'mock-openziti-loader.mjs');
+  const mockIdentity = path.resolve(repoRoot, '.ziti', 'identities', 'vitest.docker-runner.identity.json');
+  await fs.promises.mkdir(path.dirname(mockIdentity), { recursive: true });
+  await fs.promises.writeFile(mockIdentity, '{"mock":"identity"}');
+  const existingNodeOptions = process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : '';
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DOCKER_RUNNER_HOST: '127.0.0.1',
     DOCKER_RUNNER_PORT: String(port),
     DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
     DOCKER_RUNNER_LOG_LEVEL: 'error',
-    ZITI_BYPASS: '1',
+    ZITI_IDENTITY_FILE: mockIdentity,
+    ZITI_SERVICE_NAME: process.env.ZITI_SERVICE_NAME ?? 'dev.agyn-platform.platform-api',
+    NODE_OPTIONS: `${existingNodeOptions}--loader=${mockLoader}`.trim(),
   };
   if (socketPath) {
     env.DOCKER_SOCKET = socketPath;

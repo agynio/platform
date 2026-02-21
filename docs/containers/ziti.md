@@ -38,9 +38,8 @@ pnpm approve-builds
 docker compose up -d ziti-controller ziti-edge-router
 ```
 
-> Running platform-server and docker-runner inside Docker? After the infra stack is up,
-> start them with `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
-> so they share the same controller and network.
+> Platform-server and docker-runner now run on the host via `pnpm dev`. Docker Compose remains only for shared
+> dependencies (controller, databases, LiteLLM, Vault, etc.).
 
 Watch `docker compose logs -f ziti-edge-router` until you see the router enroll ("successfully connected to controller")
 before attempting the init job. If the router refuses to start, wipe `.ziti/controller` using the reset steps below and
@@ -87,29 +86,6 @@ ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 
 > Replace `/absolute/path/to/platform` with your local repository root (for example `/Users/casey/dev/platform`).
 
-### Docker compose overlay (`docker-compose.dev.yml`)
-
-Compose already mounts `./.ziti` into `/opt/app/.ziti` inside each container. Override the same variables with
-container paths (via `.env` or `docker-compose.dev.yml`):
-
-```
-ZITI_MANAGEMENT_URL=https://ziti-controller:1280/edge/management/v1
-ZITI_USERNAME=admin
-ZITI_PASSWORD=admin
-ZITI_INSECURE_TLS=true
-ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
-ZITI_ROUTER_NAME=dev-edge-router
-ZITI_RUNNER_PROXY_HOST=0.0.0.0
-ZITI_RUNNER_PROXY_PORT=17071
-ZITI_PLATFORM_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.platform-server.json
-ZITI_RUNNER_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
-ZITI_IDENTITIES_DIR=/opt/app/.ziti/identities
-ZITI_TMP_DIR=/opt/app/.ziti/tmp
-
-# docker-runner container
-ZITI_IDENTITY_FILE=/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
-```
-
 ## Host-mode workflow
 
 After completing the prerequisites and enabling the `.env` entries above, the developer stack can be verified on the host with the following sequence (clean-room friendly):
@@ -129,10 +105,10 @@ pnpm --filter @agyn/docker-runner dev
 # Ziti ingress ready for service dev.agyn-platform.platform-api
 ```
 
-3. Start the platform-server in a separate terminal:
+3. Start the platform-server in a separate terminal (ensure `DOCKER_RUNNER_BASE_URL=http://127.0.0.1:17071` via `.env` or env var):
 
 ```bash
-pnpm --filter @agyn/platform-server dev
+DOCKER_RUNNER_BASE_URL=http://127.0.0.1:17071 pnpm --filter @agyn/platform-server dev
 ```
 
 The `DockerRunnerConnectivityProbe` now waits for the local Ziti proxy before giving up. It retries 30 times with a 2s interval by default (~60s). Override the timing via `DOCKER_RUNNER_PROBE_MAX_ATTEMPTS` and `DOCKER_RUNNER_PROBE_INTERVAL_MS` if you need longer windows for slower machines.

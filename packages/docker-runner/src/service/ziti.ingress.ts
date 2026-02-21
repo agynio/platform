@@ -23,19 +23,16 @@ type ZitiExpressListenerModule = {
 let zitiExpressPatched = false;
 
 export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngressHandle> {
-  if (process.env.ZITI_BYPASS === '1') {
-    console.warn('Ziti ingress bypassed via ZITI_BYPASS=1');
-    return {
-      close: async () => {},
-    } satisfies ZitiIngressHandle;
-  }
   const ziti = await import('@openziti/ziti-sdk-nodejs');
-  const identityPath = config.ziti.identityFile;
+  const identityPath = ensureIdentityPath(config.ziti.identityFile);
+  const serviceName = ensureServiceName(config.ziti.serviceName);
   await ensureIdentityReadable(identityPath);
+  console.info(`Initializing OpenZiti ingress (identity=${identityPath}, service=${serviceName})`);
   await ziti.init(identityPath);
+  console.info(`OpenZiti SDK initialized for service ${serviceName}`);
   await ensureZitiExpressServerPatch();
 
-  const app = ziti.express(express, config.ziti.serviceName);
+  const app = ziti.express(express, serviceName);
   const targetHost = resolveTargetHost(config.host);
   const target = `http://${targetHost}:${config.port}`;
   const proxy = httpProxy.createProxyServer({
@@ -56,7 +53,7 @@ export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngres
     proxy.ws(req, socket, head, undefined, () => socket.destroy());
   });
 
-  console.info(`Ziti ingress ready for service ${config.ziti.serviceName}`);
+  console.info(`Ziti ingress ready for service ${serviceName} (target=${target})`);
 
   return {
     close: async () => {
@@ -140,3 +137,19 @@ async function ensureIdentityReadable(file: string): Promise<void> {
     throw new Error(`Ziti identity file missing or unreadable: ${file}`);
   }
 }
+
+const ensureIdentityPath = (file: string | undefined): string => {
+  const trimmed = file?.trim();
+  if (!trimmed) {
+    throw new Error('Ziti identity file path missing (ZITI_IDENTITY_FILE)');
+  }
+  return trimmed;
+};
+
+const ensureServiceName = (service: string | undefined): string => {
+  const trimmed = service?.trim();
+  if (!trimmed) {
+    throw new Error('Ziti service name missing (ZITI_SERVICE_NAME)');
+  }
+  return trimmed;
+};
