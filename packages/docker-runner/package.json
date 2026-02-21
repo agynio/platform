@@ -16,7 +16,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/service/main.js",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare": "pnpm run build"
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
