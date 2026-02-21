@@ -10,22 +10,7 @@ RUN corepack enable \
  && corepack prepare pnpm@10.5.0 --activate
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-    autoconf \
-    automake \
-    build-essential \
-    cmake \
-    curl \
-    git \
-    libtool \
-    m4 \
-    ninja-build \
-    openssl \
-    perl \
-    pkg-config \
-    python3 \
-    unzip \
-    zip \
+ && apt-get install -y --no-install-recommends git openssl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
