@@ -92,6 +92,8 @@ services:
     ports:
       - "8080:8080"
       - "9901:9901"
+    tmpfs:
+      - /etc/envoy
     volumes:
       - ./ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro
     command: ["envoy", "-c", "/etc/envoy/envoy.yaml"]
