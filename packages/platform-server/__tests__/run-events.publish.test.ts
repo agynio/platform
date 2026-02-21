@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -28,18 +27,13 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
   let runEvents: RunEventsService;
   let eventsBus: EventsBusService;
-  let gateway: GraphSocketGateway;
-  let emitRunEventSpy: ReturnType<typeof vi.spyOn>;
+  let events: RunEventBusPayload[];
 
   beforeEach(async () => {
     runEvents = new RunEventsService(prismaService);
     eventsBus = new EventsBusService(runEvents);
-    const runtime = { subscribe: vi.fn() } as any;
-    const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
-    const prismaStub = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
-    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus);
-    emitRunEventSpy = vi.spyOn(gateway, 'emitRunEvent');
-    await gateway.onModuleInit();
+    events = [];
+    eventsBus.subscribeToRunEvents((payload) => events.push(payload));
   });
 
   afterAll(async () => {
@@ -47,8 +41,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
   });
 
   afterEach(() => {
-    gateway.onModuleDestroy();
-    emitRunEventSpy.mockRestore();
+    events = [];
   });
 
   it('emits append and update payloads with tool execution data', async () => {
@@ -65,19 +58,17 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
       const appendEvent = await eventsBus.publishEvent(started.id, 'append');
       expect(appendEvent?.status).toBe('running');
-      expect(emitRunEventSpy).toHaveBeenCalledTimes(1);
-      const appendRecord = emitRunEventSpy.mock.calls[0];
-      expect(appendRecord[0]).toBe(run.id);
-      expect(appendRecord[1]).toBe(thread.id);
-      expect(appendRecord[2].mutation).toBe('append');
-      const appendedEvent = appendRecord[2].event as RunTimelineEvent;
-      expect(appendedEvent.id).toBe(started.id);
-      expect(appendedEvent.status).toBe('running');
-      expect(appendedEvent.toolExecution?.toolName).toBe('search');
-      expect(appendedEvent.toolExecution?.input).toEqual({ query: 'status' });
-      expect(appendedEvent.toolExecution?.output).toBeNull();
-
-      emitRunEventSpy.mockClear();
+      expect(events).toHaveLength(1);
+      const appendedEvent = events[0]!;
+      expect(appendedEvent.runId).toBe(run.id);
+      expect(appendedEvent.mutation).toBe('append');
+      const appendedSnapshot = appendedEvent.event as RunTimelineEvent;
+      expect(appendedSnapshot.id).toBe(started.id);
+      expect(appendedSnapshot.status).toBe('running');
+      expect(appendedSnapshot.toolExecution?.toolName).toBe('search');
+      expect(appendedSnapshot.toolExecution?.input).toEqual({ query: 'status' });
+      expect(appendedSnapshot.toolExecution?.output).toBeNull();
+      events = [];
 
       await runEvents.completeToolExecution({
         eventId: started.id,
@@ -89,12 +80,11 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
       const updateEvent = await eventsBus.publishEvent(started.id, 'update');
       expect(updateEvent?.status).toBe('success');
       expect(updateEvent?.toolExecution?.output).toEqual({ answer: 42 });
-      expect(emitRunEventSpy).toHaveBeenCalledTimes(1);
-      const updateRecord = emitRunEventSpy.mock.calls[0];
-      expect(updateRecord[0]).toBe(run.id);
-      expect(updateRecord[1]).toBe(thread.id);
-      expect(updateRecord[2].mutation).toBe('update');
-      const updatedEvent = updateRecord[2].event as RunTimelineEvent;
+      expect(events).toHaveLength(1);
+      const updatedPayload = events[0]!;
+      expect(updatedPayload.runId).toBe(run.id);
+      expect(updatedPayload.mutation).toBe('update');
+      const updatedEvent = updatedPayload.event as RunTimelineEvent;
       expect(updatedEvent.status).toBe('success');
       expect(updatedEvent.toolExecution?.execStatus).toBe('success');
       expect(updatedEvent.toolExecution?.output).toEqual({ answer: 42 });

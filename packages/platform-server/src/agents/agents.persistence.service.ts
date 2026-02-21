@@ -12,7 +12,7 @@ import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs
 import { PrismaService } from '../core/services/prisma.service';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { GraphRepository } from '../graph/graph.repository';
-import type { PersistedGraphNode } from '../shared/types/graph.types';
+import type { PersistedGraphNode } from '@agyn/shared';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { coerceRole } from '../llm/services/messages.normalization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';

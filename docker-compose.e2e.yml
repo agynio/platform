@@ -1,0 +1,156 @@
+services:
+  agents-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${AGENTS_DB_USER:-agents}
+      POSTGRES_PASSWORD: ${AGENTS_DB_PASSWORD:-agents}
+      POSTGRES_DB: ${AGENTS_DB_NAME:-agents}
+    ports:
+      - "5443:5432"
+    volumes:
+      - agents_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${AGENTS_DB_USER:-agents} -d ${AGENTS_DB_NAME:-agents}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agents_net
+
+  redis:
+    extends:
+      file: ./docker-compose.yml
+      service: redis
+
+  litellm-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agents_net
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
+      PORT: "4000"
+      HOST: "0.0.0.0"
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-dev-salt-1234}
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    networks:
+      - agents_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  docker-runner:
+    build:
+      context: .
+      dockerfile: packages/docker-runner/Dockerfile
+    restart: unless-stopped
+    environment:
+      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
+      DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    networks:
+      - agents_net
+
+  platform-server:
+    build:
+      context: .
+      dockerfile: packages/platform-server/Dockerfile
+    depends_on:
+      agents-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      litellm:
+        condition: service_healthy
+      docker-runner:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      AGENTS_DATABASE_URL: postgresql://${AGENTS_DB_USER:-agents}:${AGENTS_DB_PASSWORD:-agents}@agents-db:5432/${AGENTS_DB_NAME:-agents}
+      LLM_PROVIDER: litellm
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
+      DOCKER_RUNNER_BASE_URL: http://docker-runner:${DOCKER_RUNNER_PORT:-7071}
+      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
+      NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
+      WORKSPACE_NETWORK_NAME: agents_net
+      NCPS_ENABLED: "false"
+      GRAPH_REPO_PATH: /data/graph
+    volumes:
+      - ./data/graph:/data/graph
+    networks:
+      - agents_net
+
+  notifications-gateway:
+    build:
+      context: .
+      dockerfile: packages/notifications-gateway/Dockerfile
+    depends_on:
+      redis:
+        condition: service_started
+    environment:
+      PORT: 3011
+      HOST: 0.0.0.0
+      NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
+      SOCKET_IO_PATH: /socket.io
+    networks:
+      - agents_net
+
+  envoy:
+    image: envoyproxy/envoy:v1.31.2
+    depends_on:
+      platform-server:
+        condition: service_started
+      notifications-gateway:
+        condition: service_started
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - ./ops/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml"]
+    networks:
+      - agents_net
+
+volumes:
+  agents_pgdata:
+  litellm_pgdata:
+
+networks:
+  agents_net:
+    name: agents_net

@@ -67,6 +67,15 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
     }),
+  notificationsRedisUrl: z
+    .string()
+    .min(1, 'NOTIFICATIONS_REDIS_URL is required')
+    .transform((value) => value.trim()),
+  notificationsChannel: z
+    .string()
+    .min(1)
+    .default('notifications.v1')
+    .transform((value) => value.trim()),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -325,6 +334,14 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerTimeoutMs;
   }
 
+  get notificationsRedisUrl(): string {
+    return this.params.notificationsRedisUrl;
+  }
+
+  get notificationsChannel(): string {
+    return this.params.notificationsChannel;
+  }
+
   getDockerRunnerBaseUrl(): string {
     return this.dockerRunnerBaseUrl;
   }
@@ -446,6 +463,8 @@ export class ConfigService implements Config {
       dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
+      notificationsRedisUrl: process.env.NOTIFICATIONS_REDIS_URL,
+      notificationsChannel: process.env.NOTIFICATIONS_CHANNEL,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

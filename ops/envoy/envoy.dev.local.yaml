@@ -1,0 +1,71 @@
+static_resources:
+  listeners:
+    - name: dev_local_ingress
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                '@type': "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+                stat_prefix: dev_local_ingress
+                use_remote_address: true
+                upgrade_configs:
+                  - upgrade_type: websocket
+                route_config:
+                  name: dev_local_route
+                  virtual_hosts:
+                    - name: dev_local_host
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: "/socket.io"
+                          route:
+                            cluster: notifications_gateway
+                            timeout: "0s"
+                            idle_timeout: "3600s"
+                            retry_policy:
+                              num_retries: 0
+                        - match:
+                            prefix: "/api"
+                          route:
+                            cluster: platform_server
+                            timeout: "30s"
+                http_filters:
+                  - name: envoy.filters.http.router
+  clusters:
+    - name: platform_server
+      connect_timeout: "2s"
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: platform_server
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: host.docker.internal
+                      port_value: 3010
+    - name: notifications_gateway
+      connect_timeout: "2s"
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: notifications_gateway
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: host.docker.internal
+                      port_value: 4000
+admin:
+  access_log_path: /tmp/admin-access.log
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901

@@ -91,6 +91,7 @@ Required versions:
 Optional local services (provided in docker-compose.yml for dev):
 - Postgres databases (postgres at 5442, agents-db at 5443)
 - LiteLLM + Postgres (loopback port 4000)
+- Redis (6379) for notifications Pub/Sub
 - Vault (8200) with dev auto-init
 - NCPS (Nix cache proxy) on 8501
 - Prometheus (9090), Grafana (3000), cAdvisor (8080)
@@ -117,9 +118,12 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), docker-runner (7071), redis (6379)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# To launch only Redis for notifications fan-out:
+docker compose up -d redis
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -275,6 +279,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 
 ## Deployment
 - Local compose: docker-compose.yml includes all supporting services required for dev workflows.
+- E2E ingress: docker-compose.e2e.yml builds the platform server, notifications gateway, Redis, and Envoy. See docs/runbooks/notifications-gateway.md for usage.
 - Server container:
   - Image: ghcr.io/agynio/platform-server
   - Required env: AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY, optional Vault and CORS
@@ -288,6 +293,55 @@ pnpm --filter @agyn/platform-server run prisma:generate
 Secrets handling:
 - Vault auto-init script under vault/auto-init.sh is dev-only; do not use in production.
 - Never commit secrets; use environment injection and secure secret managers.
+
+### Dev-local Envoy proxy
+
+The default `docker-compose.yml` exposes an `envoy` sidecar that proxies
+`/api` → platform server (`:3010`) and `/socket.io` → notifications gateway
+(`:4000`) while sharing the same origin.
+
+1. Start Redis and Envoy:
+
+   ```
+   docker compose up -d redis envoy
+   ```
+
+2. Run the platform server and notifications gateway locally. Each process must
+   publish/consume notifications via Redis:
+
+   ```
+   # platform server
+   NOTIFICATIONS_REDIS_URL=redis://localhost:6379 \
+   NOTIFICATIONS_CHANNEL=notifications.v1 \
+   pnpm --filter @agyn/platform-server dev
+
+   # notifications gateway
+   NOTIFICATIONS_REDIS_URL=redis://localhost:6379 \
+   NOTIFICATIONS_CHANNEL=notifications.v1 \
+   pnpm --filter @agyn/notifications-gateway dev
+   ```
+
+3. Point the UI (Vite dev server or production build) at Envoy:
+
+   ```
+   VITE_API_BASE_URL=http://localhost:8080
+   ```
+
+The Envoy service mounts `ops/envoy/envoy.dev.local.yaml` automatically and
+includes `extra_hosts: ["host.docker.internal:host-gateway"]` so Linux hosts can
+resolve the loopback address. If you prefer a standalone container, you can run
+the same config manually:
+
+```
+docker run --rm --name envoy-dev \
+  -p 8080:8080 \
+  -p 9901:9901 \
+  -v "$(pwd)/ops/envoy/envoy.dev.local.yaml:/etc/envoy/envoy.yaml:ro" \
+  envoyproxy/envoy:v1.30-latest
+```
+
+This keeps the browser pointed at `http://localhost:8080` for both REST and
+WebSocket traffic.
 
 ## Observability / Logging / Metrics
 - Server logging: nestjs-pino with redaction of sensitive headers (packages/platform-server/src/bootstrap/app.module.ts)
@@ -317,6 +371,24 @@ Secrets handling:
 - UI API upstream:
   - Symptom: UI cannot reach backend in Docker.
   - Fix: set API_UPSTREAM=http://host.docker.internal:3010 when running UI container locally.
+
+### Docker / Compose setup issues
+- **Missing v2 plugin** – `docker compose up -d redis envoy` fails with `docker: 'compose' is not a docker command`. Install the v2 plugin (Docker Desktop or `apt install docker-compose-plugin`) and confirm `docker compose version` reports `v2.29.0` or newer. Envoy relies on `tmpfs` and `host-gateway` features that only exist in Compose v2.
+- **Remote daemon bind-mounts** – CI/Codespaces contexts often export `DOCKER_HOST=tcp://localhost:2375`. That remote daemon cannot see files inside this workspace, so bind-mounting `ops/envoy/envoy.dev.local.yaml` turns `/etc/envoy/envoy.yaml` into an empty directory and Envoy exits with `Unable to convert YAML as JSON`. Use a laptop/desktop where the Docker daemon shares the repo filesystem, or copy the config into a Docker volume/image before starting Envoy.
+- **Port conflicts** – Envoy uses `8080/9901`, Redis `6379`, notifications gateway `4000`, and LiteLLM `4000` in e2e compose. Stop any other process on those ports before running `docker compose up`.
+
+### Node / pnpm alignment
+- **Node version drift** – The workspace targets Node 22. Install via Nix (`nix profile install nixpkgs#nodejs_22`), Volta, or asdf, then verify with `node -v`.
+- **pnpm via Corepack** – Enable Corepack (`corepack enable`) and pin pnpm 10.x (`corepack install pnpm@10.30.1`). Running arbitrary global pnpm versions will mutate the lockfile.
+- **Missing pnpm binary** – When Corepack is disabled, `pnpm` is not on `$PATH`. Either enable Corepack or install pnpm globally (`npm i -g pnpm`).
+- **File watcher EMFILE errors** – `pnpm --filter @agyn/notifications-gateway dev` can hit the default inotify/file-descriptor limit and fail with `EMFILE: too many open files, watch`. Raise the limit before launching dev servers:
+
+  ```
+  ulimit -n 4096
+  sudo sysctl fs.inotify.max_user_watches=524288
+  ```
+
+  If raising limits is not possible (e.g., inside constrained CI containers), build once (`pnpm --filter @agyn/notifications-gateway build`) and launch the gateway with `pnpm --filter @agyn/notifications-gateway exec tsx src/index.ts` instead of the watch-mode dev server.
 
 ## Contributing & License
 - Contributing: see docs/contributing/ and docs/adr/ for architectural decisions.

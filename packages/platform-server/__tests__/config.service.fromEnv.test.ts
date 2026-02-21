@@ -7,6 +7,8 @@ const previousEnv: Record<string, string | undefined> = {
   litellmBaseUrl: process.env.LITELLM_BASE_URL,
   litellmMasterKey: process.env.LITELLM_MASTER_KEY,
   agentsDbUrl: process.env.AGENTS_DATABASE_URL,
+  notificationsRedisUrl: process.env.NOTIFICATIONS_REDIS_URL,
+  notificationsChannel: process.env.NOTIFICATIONS_CHANNEL,
 };
 
 describe('ConfigService.fromEnv', () => {
@@ -15,6 +17,8 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_BASE_URL = previousEnv.litellmBaseUrl;
     process.env.LITELLM_MASTER_KEY = previousEnv.litellmMasterKey;
     process.env.AGENTS_DATABASE_URL = previousEnv.agentsDbUrl;
+    process.env.NOTIFICATIONS_REDIS_URL = previousEnv.notificationsRedisUrl;
+    process.env.NOTIFICATIONS_CHANNEL = previousEnv.notificationsChannel;
     ConfigService.clearInstanceForTest();
   });
 
@@ -23,6 +27,8 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_BASE_URL = 'http://127.0.0.1:4000/';
     process.env.LITELLM_MASTER_KEY = '  sk-dev-master-1234  ';
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
+    process.env.NOTIFICATIONS_REDIS_URL = 'redis://localhost:6379/0';
+    process.env.NOTIFICATIONS_CHANNEL = 'notifications.v1';
 
     const config = ConfigService.fromEnv();
 

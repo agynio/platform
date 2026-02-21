@@ -23,8 +23,8 @@ import { ArchiveService } from '../src/infra/archive/archive.service';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { ModuleRef } from '@nestjs/core';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import { GatewayModule } from '../src/gateway/gateway.module';
+import { NotificationsModule } from '../src/notifications/notifications.module';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { runnerConfigDefaults } from './helpers/config';
 
@@ -172,6 +172,8 @@ if (!shouldRunDbTests) {
         configSchema.parse({
           llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
+          notificationsRedisUrl: 'redis://localhost:6379/0',
+          notificationsChannel: 'notifications.v1',
           ...runnerConfigDefaults,
         }),
       );
@@ -191,7 +193,7 @@ if (!shouldRunDbTests) {
       } satisfies Partial<GraphRepository>;
 
       const builder = Test.createTestingModule({
-        imports: [GraphApiModule, GatewayModule],
+        imports: [GraphApiModule, NotificationsModule],
       });
 
       const liveRuntimeStub = ({
@@ -223,15 +225,11 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(ArchiveService).useFactory(() => makeStub({}));
       builder.overrideProvider(TemplateRegistry).useFactory(() => templateRegistryStub as TemplateRegistry);
       builder.overrideProvider(GraphRepository).useFactory(() => graphRepositoryStub as GraphRepository);
-      builder.overrideProvider(GraphSocketGateway).useValue({
-        emitNodeState: vi.fn(),
-        emitThreadCreated: vi.fn(),
-        emitThreadUpdated: vi.fn(),
-        emitRunEvent: vi.fn(),
-        emitRunStatusChanged: vi.fn(),
+      builder.overrideProvider(NotificationsPublisher).useValue({
+        onModuleInit: vi.fn(),
+        onModuleDestroy: vi.fn(),
         scheduleThreadMetrics: vi.fn(),
-        scheduleThreadAndAncestorsMetrics: vi.fn(),
-      } as unknown as GraphSocketGateway);
+      } as unknown as NotificationsPublisher);
 
       builder.useMocker((_token) => makeStub({}));
 

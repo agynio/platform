@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PersistedGraph, PersistedGraphUpsertRequest } from '../shared/types/graph.types';
+import type { PersistedGraph, PersistedGraphUpsertRequest } from '@agyn/shared';
 import { GraphErrorCode } from './errors';
 import type { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import type { NodeStatusState } from '../nodes/base/Node';

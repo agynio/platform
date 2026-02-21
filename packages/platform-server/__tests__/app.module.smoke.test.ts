@@ -21,6 +21,8 @@ import { StartupRecoveryService } from '../src/core/services/startupRecovery.ser
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { clearTestConfig, registerTestConfig } from './helpers/config';
+import { NotificationsBroker } from '../src/notifications/notifications.broker';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
@@ -147,6 +149,15 @@ describe('AppModule bootstrap smoke test', () => {
       init: vi.fn().mockResolvedValue(undefined),
       getLLM: vi.fn().mockResolvedValue({ call: vi.fn() }),
     } satisfies Partial<LLMProvisioner>;
+    const notificationsBrokerStub = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publish: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    } satisfies Partial<NotificationsBroker>;
+    const notificationsPublisherStub = {
+      onModuleInit: vi.fn(),
+      onModuleDestroy: vi.fn(),
+    } satisfies Partial<NotificationsPublisher>;
 
     const config = registerTestConfig({
       llmProvider: process.env.LLM_PROVIDER === 'openai' ? 'openai' : 'litellm',
@@ -186,6 +197,10 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(liveRuntimeStub)
       .overrideProvider(LLMProvisioner)
       .useValue(llmProvisionerStub)
+      .overrideProvider(NotificationsBroker)
+      .useValue(notificationsBrokerStub)
+      .overrideProvider(NotificationsPublisher)
+      .useValue(notificationsPublisherStub)
       .overrideProvider(ConfigService)
       .useValue(config)
       .compile();
