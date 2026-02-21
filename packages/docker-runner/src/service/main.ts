@@ -1,7 +1,7 @@
-import './env';
+import './env.js';
 
-import { loadRunnerConfig } from './config';
-import { createRunnerApp } from './app';
+import { loadRunnerConfig } from './config.js';
+import { createRunnerApp } from './app.js';
 
 async function bootstrap(): Promise<void> {
   try {

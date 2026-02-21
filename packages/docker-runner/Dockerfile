@@ -23,18 +23,21 @@ FROM base AS build
 
 COPY . .
 
-# Avoid workspace-wide postinstall/prepare (platform-server runs prisma generate)
 RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile --ignore-scripts
 
 RUN pnpm --filter @agyn/docker-runner run build
 
-# pnpm deploy copies workspace deps and re-runs postinstall/prepare; skip scripts
-RUN PNPM_SKIP_POSTINSTALL=1 PNPM_SKIP_PREPARE=1 npm_config_ignore_scripts=true pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
+RUN PNPM_SKIP_POSTINSTALL=1 PNPM_SKIP_PREPARE=1 npm_config_ignore_scripts=true \
+    pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
+
+RUN mkdir -p /opt/app/packages/docker-runner/dist \
+ && cp -R /workspace/packages/docker-runner/dist/* /opt/app/packages/docker-runner/dist/
 
 FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
-    PORT=7071
+    DOCKER_RUNNER_HOST=0.0.0.0 \
+    DOCKER_RUNNER_PORT=7071
 
 WORKDIR /opt/app/packages/docker-runner
 
