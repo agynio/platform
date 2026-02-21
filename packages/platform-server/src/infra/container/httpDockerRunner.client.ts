@@ -50,6 +50,7 @@ type RequestOptions = {
   body?: unknown;
   expectedStatus?: number;
   timeoutMs?: number;
+  maxRetries?: number;
 };
 
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
@@ -219,18 +220,19 @@ export class HttpDockerRunnerClient implements DockerClient {
             .map(([k, v]) => [k, String(v ?? '')]),
         ).toString()}`
       : options.path;
-    const headers = buildAuthHeaders({
-      method: options.method,
-      path: pathWithQuery,
-      body: bodyString,
-      secret: this.sharedSecret,
-    });
+    const maxRetries = options.maxRetries ?? this.maxRetries;
 
     type ExecuteResult = { success: true; data: T } | { success: false; error: DockerRunnerRequestError };
 
     const execute = async (): Promise<ExecuteResult> => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? this.requestTimeoutMs);
+      const headers = buildAuthHeaders({
+        method: options.method,
+        path: pathWithQuery,
+        body: bodyString,
+        secret: this.sharedSecret,
+      });
       try {
         const response = await this.fetchImpl(this.buildUrl(options.path, options.query), {
           method: options.method,
@@ -265,12 +267,12 @@ export class HttpDockerRunnerClient implements DockerClient {
     };
 
     let attempt = 0;
-    while (attempt <= this.maxRetries) {
+    while (attempt <= maxRetries) {
       const result = await execute();
       if (result.success) return result.data;
       const { error } = result;
       attempt += 1;
-      if (!error.retryable || attempt > this.maxRetries) {
+      if (!error.retryable || attempt > maxRetries) {
         throw error;
       }
       const backoff = 200 * Math.pow(2, attempt - 1);
@@ -304,7 +306,7 @@ export class HttpDockerRunnerClient implements DockerClient {
   async execContainer(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const body: ExecRunRequest = { containerId, command, options };
     const timeoutMs = this.resolveExecRequestTimeout(options);
-    return this.send<ExecRunResponse>({ method: 'POST', path: '/v1/exec/run', body, timeoutMs });
+    return this.send<ExecRunResponse>({ method: 'POST', path: '/v1/exec/run', body, timeoutMs, maxRetries: 0 });
   }
 
   async openInteractiveExec(
