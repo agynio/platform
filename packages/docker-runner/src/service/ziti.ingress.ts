@@ -133,7 +133,7 @@ async function ensureZitiExpressServerPatch(): Promise<void> {
 async function ensureIdentityReadable(file: string): Promise<void> {
   try {
     await fs.access(file, fsConstants.R_OK);
-  } catch (error) {
+  } catch (_error) {
     throw new Error(`Ziti identity file missing or unreadable: ${file}`);
   }
 }
