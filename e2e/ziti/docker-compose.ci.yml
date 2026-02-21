@@ -1,0 +1,355 @@
+version: '3.9'
+
+services:
+  agents-db:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agents
+      POSTGRES_USER: agents
+      POSTGRES_PASSWORD: agents
+    ports:
+      - '127.0.0.1:5443:5432'
+    volumes:
+      - agents_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agents -d agents']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agents_net
+
+  litellm-db:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U litellm -d litellm']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agents_net
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.80.5-stable
+    restart: unless-stopped
+    environment:
+      LITELLM_MASTER_KEY: sk-litellm-ci
+      LITELLM_SALT_KEY: sk-litellm-salt
+      DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: 'True'
+      UI_USERNAME: admin
+      UI_PASSWORD: admin
+      PORT: '4000'
+      HOST: '0.0.0.0'
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:4000:4000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python3',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/ui')",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agents_net
+
+  ziti-controller:
+    image: openziti/quickstart:1.7.0
+    hostname: ziti-controller
+    restart: unless-stopped
+    user: '0:0'
+    entrypoint:
+      - '/var/openziti/scripts/run-controller.sh'
+    environment:
+      ZITI_NETWORK: dev.agyn-platform
+      ZITI_CTRL_NAME: dev-controller
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: '1280'
+      ZITI_CTRL_EDGE_IP_OVERRIDE: 127.0.0.1
+      ZITI_CTRL_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_ADVERTISED_PORT: '6262'
+      ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION: 168h
+      ZITI_ROUTER_ENROLLMENT_DURATION: 168h
+      ZITI_USER: admin
+      ZITI_PWD: admin
+    ports:
+      - '127.0.0.1:1280:1280'
+      - '127.0.0.1:6262:6262'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl -m 1 -s -k -f https://ziti-controller:1280/edge/client/v1/version',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - type: bind
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/controller
+        target: /persistent
+        bind:
+          create_host_path: true
+    networks:
+      - agents_net
+
+  ziti-controller-init:
+    image: openziti/quickstart:1.7.0
+    restart: 'no'
+    user: '0:0'
+    depends_on:
+      ziti-controller:
+        condition: service_healthy
+    entrypoint:
+      - '/bin/bash'
+      - '/scripts/ziti/controller-init.sh'
+    environment:
+      ZITI_NETWORK: dev.agyn-platform
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: '1280'
+      ZITI_USER: admin
+      ZITI_PWD: admin
+      ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
+      ZITI_PLATFORM_IDENTITY_NAME: dev.agyn-platform.platform-server
+      ZITI_RUNNER_IDENTITY_NAME: dev.agyn-platform.docker-runner
+      ZITI_ROUTER_NAME: dev-edge-router
+      ZITI_ENROLLMENT_DURATION_MINUTES: '1440'
+      ZITI_IDENTITIES_DIR: /identities
+      ZITI_IDENTITIES_TMP: /ziti-tmp
+      ZITI_PLATFORM_IDENTITY_FILE: /identities/dev.agyn-platform.platform-server.json
+      ZITI_RUNNER_IDENTITY_FILE: /identities/dev.agyn-platform.docker-runner.json
+    volumes:
+      - type: bind
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/controller
+        target: /persistent
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities
+        target: /identities
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/tmp
+        target: /ziti-tmp
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${ZITI_E2E_ROOT}/scripts/ziti
+        target: /scripts/ziti
+    networks:
+      - agents_net
+
+  ziti-edge-router:
+    image: openziti/quickstart:1.7.0
+    hostname: ziti-edge-router
+    restart: unless-stopped
+    user: '0:0'
+    depends_on:
+      ziti-controller:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command: '/var/openziti/scripts/run-router.sh edge'
+    environment:
+      ZITI_NETWORK: dev.agyn-platform
+      ZITI_CTRL_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_ADVERTISED_PORT: '6262'
+      ZITI_CTRL_EDGE_ADVERTISED_ADDRESS: ziti-controller
+      ZITI_CTRL_EDGE_ADVERTISED_PORT: '1280'
+      ZITI_ROUTER_NAME: dev-edge-router
+      ZITI_ROUTER_ADVERTISED_ADDRESS: ziti-edge-router
+      ZITI_ROUTER_PORT: '3022'
+      ZITI_ROUTER_LISTENER_BIND_PORT: '10080'
+      ZITI_ROUTER_ROLES: router.platform
+      ZITI_USER: admin
+      ZITI_PWD: admin
+    ports:
+      - '127.0.0.1:3022:3022'
+    volumes:
+      - type: bind
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/controller
+        target: /persistent
+        bind:
+          create_host_path: true
+    networks:
+      - agents_net
+
+  dind:
+    image: public.ecr.aws/docker/library/docker:26.1-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ''
+    command:
+      - '--host=tcp://0.0.0.0:2375'
+      - '--host=unix:///var/run/docker.sock'
+    healthcheck:
+      test: ['CMD-SHELL', 'docker info >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - docker_dind_data:/var/lib/docker
+      - docker_dind_run:/var/run
+    networks:
+      - agents_net
+
+  docker-runner:
+    image: public.ecr.aws/docker/library/node:20.18.0-bookworm
+    working_dir: /workspace/platform
+    command: >-
+      bash -lc "set -euo pipefail;
+      apt-get update >/tmp/apt.log && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 pkg-config git curl zip unzip autoconf automake libtool m4 perl >>/tmp/apt.log;
+      mkdir -p /workspace/platform/.cache;
+      if [ ! -d /workspace/platform/.cache/vcpkg/.git ]; then
+        rm -rf /workspace/platform/.cache/vcpkg;
+        git clone https://github.com/microsoft/vcpkg.git /workspace/platform/.cache/vcpkg >>/tmp/vcpkg-bootstrap.log;
+        cd /workspace/platform/.cache/vcpkg && git checkout 84bab45d415d22042bd0b9081aea57f362da3f35 >>/tmp/vcpkg-bootstrap.log;
+      fi;
+      if [ ! -x /workspace/platform/.cache/vcpkg/vcpkg ]; then
+        cd /workspace/platform/.cache/vcpkg && ./bootstrap-vcpkg.sh -disableMetrics >>/tmp/vcpkg-bootstrap.log;
+      fi;
+      export VCPKG_ROOT=/workspace/platform/.cache/vcpkg;
+      if ! command -v pnpm >/dev/null 2>&1 || [ \"$(pnpm --version 2>/dev/null)\" != \"10.5.0\" ]; then
+        npm install -g pnpm@10.5.0 > /tmp/install-pnpm.log;
+      fi;
+      pnpm install --config.allow-scripts=true --frozen-lockfile --prefer-offline;
+      pnpm rebuild @nestjs/core @openziti/ziti-sdk-nodejs @prisma/client @prisma/engines @swc/core @tailwindcss/oxide cpu-features esbuild msw prisma protobufjs ssh2 unrs-resolver;
+      pnpm --filter @agyn/docker-runner dev"
+    environment:
+      NODE_ENV: production
+      DOCKER_RUNNER_HOST: 0.0.0.0
+      DOCKER_RUNNER_PORT: '7071'
+      DOCKER_RUNNER_SHARED_SECRET: ci-ziti-runner
+      DOCKER_RUNNER_LOG_LEVEL: warn
+      DOCKER_SOCKET: /var/run/docker.sock
+      ZITI_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.docker-runner.json
+      ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
+      ZITI_LOG_LEVEL: ${ZITI_LOG_LEVEL:-}
+      ZITI_SDK_DIR: /workspace/platform/packages/ziti-sdk-c
+      VCPKG_ROOT: /workspace/platform/.cache/vcpkg
+    depends_on:
+      dind:
+        condition: service_healthy
+      ziti-controller-init:
+        condition: service_completed_successfully
+      ziti-edge-router:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:7071/v1/ready || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - type: bind
+        source: ${ZITI_E2E_ROOT}
+        target: /workspace/platform
+      - docker_dind_run:/var/run
+    networks:
+      - agents_net
+
+  platform-server:
+    image: public.ecr.aws/docker/library/node:20.18.0-bookworm
+    working_dir: /workspace/platform
+    command: >-
+      bash -lc "set -euo pipefail;
+      mkdir -p /workspace/platform/.tmp/graph-ziti-e2e;
+      apt-get update >/tmp/apt.log && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 pkg-config git curl zip unzip autoconf automake libtool m4 perl >>/tmp/apt.log;
+      mkdir -p /workspace/platform/.cache;
+      if [ ! -d /workspace/platform/.cache/vcpkg/.git ]; then
+        rm -rf /workspace/platform/.cache/vcpkg;
+        git clone https://github.com/microsoft/vcpkg.git /workspace/platform/.cache/vcpkg >>/tmp/vcpkg-bootstrap.log;
+        cd /workspace/platform/.cache/vcpkg && git checkout 84bab45d415d22042bd0b9081aea57f362da3f35 >>/tmp/vcpkg-bootstrap.log;
+      fi;
+      if [ ! -x /workspace/platform/.cache/vcpkg/vcpkg ]; then
+        cd /workspace/platform/.cache/vcpkg && ./bootstrap-vcpkg.sh -disableMetrics >>/tmp/vcpkg-bootstrap.log;
+      fi;
+      export VCPKG_ROOT=/workspace/platform/.cache/vcpkg;
+      if ! command -v pnpm >/dev/null 2>&1 || [ \"$(pnpm --version 2>/dev/null)\" != \"10.5.0\" ]; then
+        npm install -g pnpm@10.5.0 > /tmp/install-pnpm.log;
+      fi;
+      pnpm install --config.allow-scripts=true --frozen-lockfile --prefer-offline;
+      pnpm rebuild @nestjs/core @openziti/ziti-sdk-nodejs @prisma/client @prisma/engines @swc/core @tailwindcss/oxide cpu-features esbuild msw prisma protobufjs ssh2 unrs-resolver;
+      pnpm --filter @agyn/platform-server exec prisma migrate deploy;
+      pnpm --filter @agyn/platform-server dev"
+    environment:
+      NODE_ENV: production
+      PORT: '3010'
+      AGENTS_DATABASE_URL: postgresql://agents:agents@agents-db:5432/agents
+      LLM_PROVIDER: litellm
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: sk-litellm-ci
+      GRAPH_REPO_PATH: ${ZITI_E2E_ROOT}/.tmp/graph-ziti-e2e
+      WORKSPACE_NETWORK_NAME: agents_net
+      DOCKER_RUNNER_SHARED_SECRET: ci-ziti-runner
+      DOCKER_RUNNER_BASE_URL: http://127.0.0.1:17071
+      ZITI_MANAGEMENT_URL: https://ziti-controller:1280/edge/management/v1
+      ZITI_USERNAME: admin
+      ZITI_PASSWORD: admin
+      ZITI_INSECURE_TLS: 'true'
+      ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
+      ZITI_ROUTER_NAME: dev-edge-router
+      ZITI_RUNNER_PROXY_HOST: 0.0.0.0
+      ZITI_RUNNER_PROXY_PORT: '17071'
+      ZITI_PLATFORM_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.platform-server.json
+      ZITI_RUNNER_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.docker-runner.json
+      ZITI_IDENTITIES_DIR: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities
+      ZITI_TMP_DIR: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/tmp
+      ZITI_LOG_LEVEL: ${ZITI_LOG_LEVEL:-}
+      ZITI_SDK_DIR: /workspace/platform/packages/ziti-sdk-c
+      VCPKG_ROOT: /workspace/platform/.cache/vcpkg
+      ENABLE_TEST_WORKSPACE_API: '1'
+      PRISMA_HIDE_UPDATE_MESSAGE: '1'
+    depends_on:
+      agents-db:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      docker-runner:
+        condition: service_healthy
+      ziti-controller-init:
+        condition: service_completed_successfully
+      ziti-edge-router:
+        condition: service_started
+    ports:
+      - '127.0.0.1:3010:3010'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3010/api/containers?limit=1 || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    volumes:
+      - type: bind
+        source: ${ZITI_E2E_ROOT}
+        target: /workspace/platform
+    networks:
+      - agents_net
+
+volumes:
+  agents_pgdata:
+  litellm_pgdata:
+  docker_dind_data:
+  docker_dind_run:
+
+networks:
+  agents_net:
+    name: agents_net
