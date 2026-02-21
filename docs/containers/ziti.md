@@ -21,6 +21,16 @@ pnpm ziti:prepare
 
 2. Install dependencies and explicitly allow the OpenZiti SDK build step (pnpm blocks install scripts by default):
 
+> **Linux build prerequisites**
+>
+> The OpenZiti Node SDK falls back to a full native build whenever a prebuilt binary
+> is unavailable (for example, when working from the agyn fork). Make sure the host
+> has the standard build toolchain plus `autoconf`, `automake`, `libtool`, `m4`, and
+> `perl` alongside the existing `build-essential`, `cmake`, `ninja-build`,
+> `python3`, `pkg-config`, `git`, `curl`, `zip`, and `unzip` packages. The CI
+> containers install the same list so the docker-runner/platform-server bring-up can
+> compile the SDK reliably.
+
 ```bash
 pnpm approve-builds
 # Select @openziti/ziti-sdk-nodejs and confirm
@@ -85,6 +95,18 @@ ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ```
 
 > Replace `/absolute/path/to/platform` with your local repository root (for example `/Users/casey/dev/platform`).
+
+## CI-aligned smoke test
+
+- Run `pnpm --filter @agyn/platform-server run test:ziti` after the prerequisites above to boot the same lean stack used
+  by CI (`e2e/ziti/docker-compose.ci.yml`).
+- The helper script wipes `.ziti`, brings the controller/router/runner online, ensures the DinD engine exposes the
+  `agents_net` network, and drives a real workspace create → delete cycle via HTTP.
+- No container builds occur; the Node containers mount the local checkout and reuse the existing `node_modules` tree so
+  the loop completes in under five minutes.
+- Logs for `ziti-controller`, `ziti-edge-router`, `docker-runner`, and `platform-server` are dumped automatically on
+  failure to speed up triage.
+- The flow enables the private `/test/workspaces` controller via `ENABLE_TEST_WORKSPACE_API=1`, matching the CI job.
 
 ## Host-mode workflow
 
