@@ -11,9 +11,9 @@ import {
   type ContainerOpts,
   type ExecOptions,
 } from '..';
-import { createDockerEventsParser } from './dockerEvents.parser';
-import type { RunnerConfig } from './config';
-import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util';
+import { createDockerEventsParser } from './dockerEvents.parser.js';
+import type { RunnerConfig } from './config.js';
+import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util.js';
 
 const ensureImageSchema = z.object({
   image: z.string().min(1),
