@@ -196,6 +196,13 @@ export class ZitiManagementClient {
     const response = await this.request<ListEnvelope<T>>('GET', path, {
       searchParams: { filter },
     });
+    if (process.env.ZITI_DEBUG === '1') {
+      this.logger.debug(
+        `findByName path=${path} filter=${filter} count=${response.data?.length ?? 0} raw=${JSON.stringify(
+          response,
+        )}`,
+      );
+    }
     return response.data?.[0];
   }
 
@@ -205,7 +212,9 @@ export class ZitiManagementClient {
   }
 
   private async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
-    const url = new URL(path, this.options.baseUrl);
+    const sanitizedPath = path.replace(/^\/+/, '');
+    const baseUrl = this.options.baseUrl.endsWith('/') ? this.options.baseUrl : `${this.options.baseUrl}/`;
+    const url = new URL(sanitizedPath, baseUrl);
     if (options.searchParams) {
       for (const [key, value] of Object.entries(options.searchParams)) {
         if (typeof value === 'string' && value.length > 0) {

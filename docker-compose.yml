@@ -36,7 +36,7 @@ services:
 
   # Dedicated Postgres for agents persistence
   agents-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:16-alpine}
     oom_score_adj: -900
     container_name: agents-db
     restart: unless-stopped
@@ -250,7 +250,7 @@ services:
       - agents_net
 
   ziti-controller:
-    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    image: ${ZITI_IMAGE:-mirror.gcr.io/openziti/quickstart}:${ZITI_VERSION:-latest}
     container_name: ziti-controller
     hostname: ziti-controller
     restart: unless-stopped
@@ -291,7 +291,7 @@ services:
       - agents_net
 
   ziti-controller-init:
-    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    image: ${ZITI_IMAGE:-mirror.gcr.io/openziti/quickstart}:${ZITI_VERSION:-latest}
     container_name: ziti-controller-init
     restart: "no"
     depends_on:
@@ -338,7 +338,7 @@ services:
       - agents_net
 
   ziti-edge-router:
-    image: ${ZITI_IMAGE:-openziti/quickstart}:${ZITI_VERSION:-latest}
+    image: ${ZITI_IMAGE:-mirror.gcr.io/openziti/quickstart}:${ZITI_VERSION:-latest}
     container_name: ziti-edge-router
     hostname: ziti-edge-router
     restart: unless-stopped

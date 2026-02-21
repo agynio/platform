@@ -36,6 +36,7 @@ export class ZitiReconciler {
   ) {}
 
   async reconcile(): Promise<void> {
+    this.logger.log('Reconciling Ziti control-plane');
     const profile = this.buildProfile();
     const client = new ZitiManagementClient({
       baseUrl: profile.managementUrl,
@@ -70,6 +71,7 @@ export class ZitiReconciler {
         directories: profile.directories,
         client,
       });
+      this.logger.log('Ziti identities reconciled');
     } finally {
       await client.close();
     }
@@ -139,13 +141,16 @@ export class ZitiReconciler {
       try {
         const router = await client.getEdgeRouterByName(profile.routerName);
         if (router) {
+          this.logger.debug(`Ziti router ${profile.routerName} found`);
           return router;
         }
         lastError = new Error(`router ${profile.routerName} not yet registered`);
       } catch (error) {
         lastError = error as Error;
       }
-
+      this.logger.debug(
+        `Waiting for router ${profile.routerName}, lastError=${lastError?.message ?? 'none'} (next poll in ${ROUTER_DISCOVERY_INTERVAL_MS / 1000}s)`,
+      );
       this.logger.log(
         `Waiting for Ziti router ${profile.routerName} to register (retrying in ${ROUTER_DISCOVERY_INTERVAL_MS / 1000}s)`,
       );
