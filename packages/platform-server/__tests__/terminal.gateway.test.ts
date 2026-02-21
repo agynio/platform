@@ -9,6 +9,7 @@ import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunne
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from './helpers/ws';
+import { DockerRunnerStatusService, type DockerRunnerStatusSnapshot } from '../src/infra/container/dockerRunnerStatus.service';
 
 const createSessionRecord = (overrides: Partial<TerminalSessionRecord> = {}): TerminalSessionRecord => {
   const now = Date.now();
@@ -63,6 +64,10 @@ const createSessionServiceHarness = (overrides: Partial<TerminalSessionRecord> =
   };
 };
 
+const createRunnerStatusStub = (override?: Partial<DockerRunnerStatusSnapshot>) => ({
+  getSnapshot: vi.fn(() => ({ status: 'up', optional: false, consecutiveFailures: 0, ...override })),
+}) satisfies Pick<DockerRunnerStatusService, 'getSnapshot'>;
+
 const listenFastify = async (app: ReturnType<typeof Fastify>): Promise<number> => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo | null;
@@ -90,6 +95,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -140,6 +146,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const handleSpy = vi
@@ -175,6 +182,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       service as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -248,6 +256,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -305,6 +314,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -354,6 +364,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -441,6 +452,7 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       providerMocks as unknown as WorkspaceProvider,
+      createRunnerStatusStub() as unknown as DockerRunnerStatusService,
     );
 
     const app = Fastify();
@@ -537,7 +549,11 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
         resize: vi.fn().mockResolvedValue(undefined),
       } as unknown as WorkspaceProvider;
 
-      const gateway = new ContainerTerminalGateway(sessionMocks, providerMocks);
+      const gateway = new ContainerTerminalGateway(
+        sessionMocks,
+        providerMocks,
+        createRunnerStatusStub() as unknown as DockerRunnerStatusService,
+      );
 
       const app = Fastify();
       gateway.registerRoutes(app);

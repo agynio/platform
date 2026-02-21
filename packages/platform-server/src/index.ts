@@ -20,6 +20,7 @@ import { ConfigService } from './core/services/config.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
+import { VolumeGcService } from './infra/container/volumeGc.job';
 
 const bootstrapLogger = new Logger('Bootstrap');
 
@@ -81,6 +82,13 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
   bootstrapLogger.log(`HTTP server listening on :${PORT}`);
+
+  const volumeGc = app.get(VolumeGcService);
+  setImmediate(() => {
+    const interval = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
+    bootstrapLogger.log(`Starting Volume GC background job interval=${interval}`);
+    volumeGc.start(interval);
+  });
 
   fastifyInstance.server.on('upgrade', (req, _socket, _head) => {
     bootstrapLogger.log(

@@ -67,6 +67,31 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
     }),
+  dockerRunnerOptional: z
+    .union([z.boolean(), z.string()])
+    .default('false')
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  dockerRunnerConnectivityIntervalMs: z
+    .union([z.string(), z.number()])
+    .default('5000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 5_000;
+    }),
+  dockerRunnerConnectivityMaxIntervalMs: z
+    .union([z.string(), z.number()])
+    .default('60000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 60_000;
+    }),
+  dockerRunnerConnectivityBackoffFactor: z
+    .union([z.string(), z.number()])
+    .default('2')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 1 ? num : 2;
+    }),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -188,6 +213,13 @@ export const configSchema = z.object({
         .map((x) => x.trim())
         .filter((x) => !!x),
     ),
+  volumeGcSweepTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('15000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 15_000;
+    }),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -325,6 +357,26 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerTimeoutMs;
   }
 
+  get dockerRunnerOptional(): boolean {
+    return this.params.dockerRunnerOptional;
+  }
+
+  get dockerRunnerConnectivityIntervalMs(): number {
+    return this.params.dockerRunnerConnectivityIntervalMs;
+  }
+
+  get dockerRunnerConnectivityMaxIntervalMs(): number {
+    return this.params.dockerRunnerConnectivityMaxIntervalMs;
+  }
+
+  get dockerRunnerConnectivityBackoffFactor(): number {
+    return this.params.dockerRunnerConnectivityBackoffFactor;
+  }
+
+  get volumeGcSweepTimeoutMs(): number {
+    return this.params.volumeGcSweepTimeoutMs;
+  }
+
   getDockerRunnerBaseUrl(): string {
     return this.dockerRunnerBaseUrl;
   }
@@ -335,6 +387,26 @@ export class ConfigService implements Config {
 
   getDockerRunnerTimeoutMs(): number {
     return this.dockerRunnerTimeoutMs;
+  }
+
+  getDockerRunnerOptional(): boolean {
+    return this.dockerRunnerOptional;
+  }
+
+  getDockerRunnerConnectivityIntervalMs(): number {
+    return this.dockerRunnerConnectivityIntervalMs;
+  }
+
+  getDockerRunnerConnectivityMaxIntervalMs(): number {
+    return this.dockerRunnerConnectivityMaxIntervalMs;
+  }
+
+  getDockerRunnerConnectivityBackoffFactor(): number {
+    return this.dockerRunnerConnectivityBackoffFactor;
+  }
+
+  getVolumeGcSweepTimeoutMs(): number {
+    return this.volumeGcSweepTimeoutMs;
   }
 
   get workspaceNetworkName(): string {
@@ -446,6 +518,10 @@ export class ConfigService implements Config {
       dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
+      dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
+      dockerRunnerConnectivityIntervalMs: process.env.DOCKER_RUNNER_CONNECTIVITY_INTERVAL_MS,
+      dockerRunnerConnectivityMaxIntervalMs: process.env.DOCKER_RUNNER_CONNECTIVITY_MAX_INTERVAL_MS,
+      dockerRunnerConnectivityBackoffFactor: process.env.DOCKER_RUNNER_CONNECTIVITY_BACKOFF_FACTOR,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
@@ -471,6 +547,7 @@ export class ConfigService implements Config {
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
+      volumeGcSweepTimeoutMs: process.env.VOLUME_GC_SWEEP_TIMEOUT_MS,
     });
     const config = new ConfigService().init(parsed);
     ConfigService.register(config);

@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/bootstrap/app.module';
@@ -21,6 +22,8 @@ import { StartupRecoveryService } from '../src/core/services/startupRecovery.ser
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { clearTestConfig, registerTestConfig } from './helpers/config';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
@@ -147,6 +150,17 @@ describe('AppModule bootstrap smoke test', () => {
       init: vi.fn().mockResolvedValue(undefined),
       getLLM: vi.fn().mockResolvedValue({ call: vi.fn() }),
     } satisfies Partial<LLMProvisioner>;
+    const dockerRunnerStatusStub = {
+      getSnapshot: vi.fn(() => ({ status: 'up', optional: false })),
+      setBaseUrl: vi.fn(),
+      setOptional: vi.fn(),
+      markUp: vi.fn(),
+      markDown: vi.fn(),
+    } as unknown as DockerRunnerStatusService;
+    const connectivityMonitorStub = {
+      onModuleInit: vi.fn(),
+      onModuleDestroy: vi.fn(),
+    } as unknown as DockerRunnerConnectivityMonitor;
 
     const config = registerTestConfig({
       llmProvider: process.env.LLM_PROVIDER === 'openai' ? 'openai' : 'litellm',
@@ -188,6 +202,10 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(llmProvisionerStub)
       .overrideProvider(ConfigService)
       .useValue(config)
+      .overrideProvider(DockerRunnerStatusService)
+      .useValue(dockerRunnerStatusStub)
+      .overrideProvider(DockerRunnerConnectivityMonitor)
+      .useValue(connectivityMonitorStub)
       .compile();
 
     const adapter = new FastifyAdapter();

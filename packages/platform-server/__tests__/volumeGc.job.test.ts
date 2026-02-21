@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { VolumeGcService } from '../src/infra/container/volumeGc.job';
+import type { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import type { ConfigService } from '../src/core/services/config.service';
 
 const envKeys = [
   'VOLUME_GC_ENABLED',
@@ -7,6 +9,7 @@ const envKeys = [
   'VOLUME_GC_CONCURRENCY',
   'VOLUME_GC_COOLDOWN_MS',
   'VOLUME_GC_INTERVAL_MS',
+  'VOLUME_GC_SWEEP_TIMEOUT_MS',
 ];
 
 describe('VolumeGcService', () => {
@@ -19,7 +22,7 @@ describe('VolumeGcService', () => {
     for (const key of envKeys) delete process.env[key];
   });
 
-  const makeService = () => {
+  const makeService = (options: { runnerStatus?: 'up' | 'down'; sweepTimeoutMs?: number } = {}) => {
     const prisma = {
       thread: {
         findMany: vi.fn(async () => [] as Array<{ id: string }>),
@@ -30,8 +33,24 @@ describe('VolumeGcService', () => {
       listContainersByVolume: vi.fn(async () => [] as string[]),
       removeVolume: vi.fn(async () => undefined),
     };
-    const service = new VolumeGcService(prismaService as any, containerService as any);
-    return { service, prisma, containerService };
+    const dockerRunnerStatus = {
+      getSnapshot: vi.fn(() => ({
+        status: options.runnerStatus ?? 'up',
+        optional: true,
+        baseUrl: 'http://docker-runner',
+        consecutiveFailures: 0,
+      })),
+    } satisfies Partial<DockerRunnerStatusService>;
+    const configService = {
+      getVolumeGcSweepTimeoutMs: vi.fn(() => options.sweepTimeoutMs ?? 15_000),
+    } satisfies Partial<ConfigService>;
+    const service = new VolumeGcService(
+      prismaService as any,
+      containerService as any,
+      dockerRunnerStatus as DockerRunnerStatusService,
+      configService as ConfigService,
+    );
+    return { service, prisma, containerService, dockerRunnerStatus };
   };
 
   it('removes volumes with no live references', async () => {
@@ -92,5 +111,30 @@ describe('VolumeGcService', () => {
 
     expect(containerService.listContainersByVolume).toHaveBeenCalledTimes(1);
     expect(containerService.removeVolume).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips sweep entirely when docker runner is down', async () => {
+    const { service, containerService } = makeService({ runnerStatus: 'down' });
+
+    await service.sweep(new Date('2024-01-01T00:00:00Z'));
+
+    expect(containerService.listContainersByVolume).not.toHaveBeenCalled();
+  });
+
+  it('enforces sweep timeout', async () => {
+    vi.useFakeTimers();
+    const { service } = makeService({ sweepTimeoutMs: 10 });
+    const sweepSpy = vi.spyOn(service, 'sweep').mockImplementation(async () => {
+      await new Promise(() => {});
+    });
+
+    const resultPromise = (service as unknown as { sweepWithTimeout: () => Promise<boolean> }).sweepWithTimeout();
+    await vi.advanceTimersByTimeAsync(15);
+    const result = await resultPromise;
+
+    expect(result).toBe(false);
+    expect(sweepSpy).toHaveBeenCalledTimes(1);
+    sweepSpy.mockRestore();
+    vi.useRealTimers();
   });
 });

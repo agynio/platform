@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import { ContainerTerminalController } from '../../src/infra/container/containerTerminal.controller';
 import { ContainerTerminalGateway } from '../../src/infra/container/terminal.gateway';
 import { TerminalSessionsService } from '../../src/infra/container/terminal.sessions.service';
+import { DockerRunnerStatusService } from '../../src/infra/container/dockerRunnerStatus.service';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -132,6 +133,9 @@ describe('ContainerTerminalGateway E2E', () => {
   let app: NestFastifyApplication;
   let workspaceProvider: TestWorkspaceProvider;
   let baseUrl: string;
+  const runnerStatusStub = {
+    getSnapshot: () => ({ status: 'up', optional: false, consecutiveFailures: 0 }),
+  } satisfies Pick<DockerRunnerStatusService, 'getSnapshot'>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -140,6 +144,7 @@ describe('ContainerTerminalGateway E2E', () => {
         ContainerTerminalGateway,
         TerminalSessionsService,
         { provide: WorkspaceProvider, useClass: TestWorkspaceProvider },
+        { provide: DockerRunnerStatusService, useValue: runnerStatusStub },
       ],
     }).compile();
 

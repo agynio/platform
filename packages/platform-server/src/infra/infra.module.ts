@@ -24,7 +24,10 @@ import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
 import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
-import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
+import { DockerRunnerConnectivityMonitor } from './container/dockerRunnerConnectivity.monitor';
+import { DockerRunnerStatusService } from './container/dockerRunnerStatus.service';
+import { RequireDockerRunnerGuard } from './container/requireDockerRunner.guard';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -49,7 +52,9 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
         }),
       inject: [ConfigService],
     },
-    DockerRunnerConnectivityProbe,
+    DockerRunnerStatusService,
+    DockerRunnerConnectivityMonitor,
+    RequireDockerRunnerGuard,
     {
       provide: ContainerCleanupService,
       useFactory: (registry: ContainerRegistry, containers: DockerClient) => {
@@ -62,13 +67,13 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     },
     {
       provide: VolumeGcService,
-      useFactory: (prisma: PrismaService, containers: DockerClient) => {
-        const svc = new VolumeGcService(prisma, containers);
-        const interval = Number(process.env.VOLUME_GC_INTERVAL_MS ?? '') || 60_000;
-        svc.start(interval);
-        return svc;
-      },
-      inject: [PrismaService, DOCKER_CLIENT],
+      useFactory: (
+        prisma: PrismaService,
+        containers: DockerClient,
+        status: DockerRunnerStatusService,
+        config: ConfigService,
+      ) => new VolumeGcService(prisma, containers, status, config),
+      inject: [PrismaService, DOCKER_CLIENT, DockerRunnerStatusService, ConfigService],
     },
     {
       provide: WorkspaceProvider,
@@ -106,7 +111,7 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     GithubService,
     PRService,
   ],
-  controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController],
+  controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController, HealthController],
   exports: [
     VaultModule,
     DOCKER_CLIENT,
@@ -123,6 +128,7 @@ import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectiv
     ContainerRegistry,
     ArchiveService,
     WorkspaceProvider,
+    DockerRunnerStatusService,
   ],
 })
 export class InfraModule {}
