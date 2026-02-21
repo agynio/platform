@@ -266,7 +266,6 @@ describe('DELETE /api/containers/:id integration', () => {
         {
           provide: ConfigService,
           useValue: {
-            dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
           } as ConfigService,
         },
@@ -362,7 +361,6 @@ describe('ContainersController wiring via InfraModule', () => {
 
   beforeAll(async () => {
     registerTestConfig({
-      dockerRunnerBaseUrl: 'http://runner.test',
       dockerRunnerSharedSecret: 'runner-secret',
       agentsDatabaseUrl: 'postgresql://postgres:postgres@localhost:5432/agents_test',
     });

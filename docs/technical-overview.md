@@ -70,7 +70,7 @@ Remote Docker runner
 - The platform-server always routes container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
 - The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
 - Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default http://docker-runner:7071).
-- When `ZITI_ENABLED=true`, platform-server launches a local proxy bound to `127.0.0.1:17071` by default (`pnpm dev`).
+- Platform-server always launches a local OpenZiti-backed proxy bound to `127.0.0.1:17071` by default (`pnpm dev`).
   The docker-compose overlay overrides it to `0.0.0.0:17071` inside the container so the port can be published. The
   proxy is backed by the OpenZiti Node SDK and docker-runner binds the same API to the OpenZiti service
   (`dev.agyn-platform.platform-api`).

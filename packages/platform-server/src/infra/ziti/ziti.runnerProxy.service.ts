@@ -47,9 +47,6 @@ export class ZitiRunnerProxyService {
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
 
   async start(): Promise<void> {
-    if (!this.config.isZitiEnabled()) {
-      return;
-    }
     if (this.started) {
       return;
     }

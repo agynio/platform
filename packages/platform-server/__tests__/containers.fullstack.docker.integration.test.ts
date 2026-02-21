@@ -20,6 +20,7 @@ import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/c
 import {
   DEFAULT_SOCKET,
   RUNNER_SECRET,
+  dockerReachable,
   hasTcpDocker,
   socketMissing,
   startDockerRunnerProcess,
@@ -31,7 +32,9 @@ import {
 } from './helpers/docker.e2e';
 
 const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1';
-const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
+const missingSocket = socketMissing && !hasTcpDocker;
+const dockerUnavailable = !dockerReachable || missingSocket;
+const describeOrSkip = shouldSkip || dockerUnavailable ? describe.skip : describe;
 const NETWORK_NAME = 'bridge';
 const TEST_IMAGE = 'nginx:1.25-alpine';
 
@@ -90,7 +93,6 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
 
     clearTestConfig();
     configService = registerTestConfig({
-      dockerRunnerBaseUrl: runner.baseUrl,
       dockerRunnerSharedSecret: RUNNER_SECRET,
       agentsDatabaseUrl: dbHandle.connectionString,
       workspaceNetworkName: NETWORK_NAME,
@@ -206,6 +208,8 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
 
 if (shouldSkip) {
   console.warn('Skipping docker full-stack tests due to SKIP_PLATFORM_FULLSTACK_E2E=1');
-} else if (socketMissing && !hasTcpDocker) {
+} else if (!dockerReachable) {
+  console.warn('Skipping docker full-stack tests because Docker daemon is not reachable');
+} else if (missingSocket) {
   console.warn(`Skipping docker full-stack tests because Docker socket is missing at ${DEFAULT_SOCKET}`);
 }

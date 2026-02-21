@@ -1,3 +1,4 @@
+import { promises as fs, constants as fsConstants } from 'node:fs';
 import { type Server as HttpServer } from 'node:http';
 import type { Duplex } from 'node:stream';
 
@@ -21,13 +22,17 @@ type ZitiExpressListenerModule = {
 
 let zitiExpressPatched = false;
 
-export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngressHandle | undefined> {
-  if (!config.ziti.enabled) {
-    return undefined;
+export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngressHandle> {
+  if (process.env.ZITI_BYPASS === '1') {
+    console.warn('Ziti ingress bypassed via ZITI_BYPASS=1');
+    return {
+      close: async () => {},
+    } satisfies ZitiIngressHandle;
   }
-
   const ziti = await import('@openziti/ziti-sdk-nodejs');
-  await ziti.init(config.ziti.identityFile);
+  const identityPath = config.ziti.identityFile;
+  await ensureIdentityReadable(identityPath);
+  await ziti.init(identityPath);
   await ensureZitiExpressServerPatch();
 
   const app = ziti.express(express, config.ziti.serviceName);
@@ -126,4 +131,12 @@ async function ensureZitiExpressServerPatch(): Promise<void> {
     writable: false,
   });
   zitiExpressPatched = true;
+}
+
+async function ensureIdentityReadable(file: string): Promise<void> {
+  try {
+    await fs.access(file, fsConstants.R_OK);
+  } catch (error) {
+    throw new Error(`Ziti identity file missing or unreadable: ${file}`);
+  }
 }

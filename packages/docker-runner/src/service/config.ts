@@ -1,20 +1,6 @@
 import { z } from 'zod';
 
-const booleanFlag = (defaultValue: boolean) =>
-  z
-    .union([z.boolean(), z.string()])
-    .default(defaultValue ? 'true' : 'false')
-    .transform((value) => {
-      if (typeof value === 'boolean') return value;
-      const normalized = value.trim().toLowerCase();
-      if (!normalized) return defaultValue;
-      if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
-      if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
-      return defaultValue;
-    });
-
 const defaultZitiConfig = {
-  enabled: false,
   identityFile: '.ziti/identities/dev.agyn-platform.docker-runner.json',
   serviceName: 'dev.agyn-platform.platform-api',
 } as const;
@@ -40,9 +26,14 @@ const runnerConfigSchema = z.object({
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   ziti: z
     .object({
-      enabled: booleanFlag(defaultZitiConfig.enabled),
-      identityFile: z.string().default(defaultZitiConfig.identityFile),
-      serviceName: z.string().default(defaultZitiConfig.serviceName),
+      identityFile: z
+        .string()
+        .min(1, 'ZITI_IDENTITY_FILE is required')
+        .default(defaultZitiConfig.identityFile),
+      serviceName: z
+        .string()
+        .min(1, 'ZITI_SERVICE_NAME is required')
+        .default(defaultZitiConfig.serviceName),
     })
     .default(() => ({ ...defaultZitiConfig })),
 });
@@ -58,7 +49,6 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerCo
     dockerSocket: env.DOCKER_SOCKET ?? env.DOCKER_RUNNER_SOCKET,
     logLevel: env.DOCKER_RUNNER_LOG_LEVEL,
     ziti: {
-      enabled: env.ZITI_ENABLED,
       identityFile: env.ZITI_IDENTITY_FILE,
       serviceName: env.ZITI_SERVICE_NAME,
     },

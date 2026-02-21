@@ -1,6 +1,5 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
-import { ConfigService } from '../../core/services/config.service';
 import { ZitiReconciler } from './ziti.reconciler';
 import { ZitiRunnerProxyService } from './ziti.runnerProxy.service';
 
@@ -10,15 +9,11 @@ export class ZitiBootstrapService implements OnModuleDestroy {
   private initialization?: Promise<void>;
 
   constructor(
-    private readonly config: ConfigService,
-    private readonly reconciler: ZitiReconciler,
-    private readonly proxy: ZitiRunnerProxyService,
+    @Inject(ZitiReconciler) private readonly reconciler: ZitiReconciler,
+    @Inject(ZitiRunnerProxyService) private readonly proxy: ZitiRunnerProxyService,
   ) {}
 
   ensureReady(): Promise<void> {
-    if (!this.config?.isZitiEnabled()) {
-      return Promise.resolve();
-    }
     if (!this.initialization) {
       this.initialization = this.initialize();
     }
@@ -26,9 +21,6 @@ export class ZitiBootstrapService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (!this.config?.isZitiEnabled()) {
-      return;
-    }
     if (!this.proxy) {
       return;
     }

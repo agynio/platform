@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { fetch } from 'undici';
@@ -13,6 +13,7 @@ export const RUNNER_SECRET = 'docker-e2e-secret';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
 export const hasTcpDocker = Boolean(process.env.DOCKER_HOST);
 export const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
+export const dockerReachable = detectDockerReachable();
 
 export type RunnerHandle = {
   baseUrl: string;
@@ -55,6 +56,7 @@ export async function startDockerRunnerProcess(socketPath: string): Promise<Runn
     DOCKER_RUNNER_PORT: String(port),
     DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
     DOCKER_RUNNER_LOG_LEVEL: 'error',
+    ZITI_BYPASS: '1',
   };
   if (socketPath) {
     env.DOCKER_SOCKET = socketPath;
@@ -212,4 +214,21 @@ function runCommand(command: string, args: string[], options?: { cwd?: string; e
       }
     });
   });
+}
+
+function detectDockerReachable(): boolean {
+  try {
+    const env = {
+      ...process.env,
+      DOCKER_CLIENT_TIMEOUT: process.env.DOCKER_CLIENT_TIMEOUT ?? '3',
+      COMPOSE_HTTP_TIMEOUT: process.env.COMPOSE_HTTP_TIMEOUT ?? '3',
+    };
+    const result = spawnSync('docker', ['info'], { stdio: 'ignore', env, timeout: 4000 });
+    if (result.error) {
+      return false;
+    }
+    return result.status === 0;
+  } catch {
+    return false;
+  }
 }
