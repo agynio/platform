@@ -15,7 +15,7 @@ Table of contents
 - Upgrade and migration
 - Configuration matrix
 - HTTP API and sockets (pointers)
-- Runbooks (local dev and compose)
+- Runbooks (host dev)
 - Release qualification plan
 - Glossary and changelog templates (pointers)
 
@@ -116,7 +116,8 @@ Configuration matrix (server env vars)
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000).
+  - DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000).
+  - ZITI_* (see docs/containers/ziti.md) — required for the OpenZiti transport between platform-server and docker-runner.
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)
@@ -130,18 +131,15 @@ HTTP API and sockets (pointers)
 - See docs/graph/status-updates.md for socket event shapes; UI consumption in docs/ui/graph/index.md
 
 Runbooks
-- Local dev
-  - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
-  - Start deps (compose or local Postgres)
-  - Server: pnpm -w -F @agyn/platform-server dev
-  - UI: pnpm -w -F @agyn/platform-ui dev
-  - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
-- Docker Compose stack
-  - Services: postgres, vault (auto-init), registry-mirror.
-  - Observability: Tracing services have been removed; follow upcoming observability docs for replacements.
-  - Vault init: vault/auto-init.sh populates root token/unseal keys; set VAULT_ENABLED=true and VAULT_ADDR/VAULT_TOKEN.
-  - Postgres checkpointer: LANGGRAPH_CHECKPOINTER defaults to postgres; configure POSTGRES_URL for the checkpointer connection.
+- Host dev
+  - Prereqs: Node 20+, pnpm 10.5, Docker Engine (for dependencies only), Postgres client tools.
+  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_SHARED_SECRET, DOCKER_RUNNER_BASE_URL=http://127.0.0.1:17071, and the ZITI_* variables shared by platform-server and docker-runner. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - OpenZiti is required: run the controller stack and provision identities per docs/containers/ziti.md before starting docker-runner or platform-server.
+  - Start shared dependencies via docker compose (postgres, agents-db, litellm, vault + auto-init, ncps, OpenZiti controller/router, monitoring as needed).
+  - Runner: `pnpm -w -F @agyn/docker-runner dev`.
+  - Server: `DOCKER_RUNNER_BASE_URL=http://127.0.0.1:17071 pnpm -w -F @agyn/platform-server dev`.
+  - UI: `pnpm -w -F @agyn/platform-ui dev`.
+  - Verify: `curl http://localhost:3010/api/templates`; open the UI; connect Socket.IO to observe `node_status` when provisioning.
 
 Release qualification plan
 - Pre-flight config

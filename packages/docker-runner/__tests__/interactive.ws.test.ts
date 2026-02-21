@@ -14,6 +14,10 @@ const runnerConfig: RunnerConfig = {
   signatureTtlMs: 60_000,
   dockerSocket: '/var/run/docker.sock',
   logLevel: 'error',
+  ziti: {
+    identityFile: '/tmp/ziti.identity.json',
+    serviceName: 'dev.agyn-platform.platform-api',
+  },
 };
 
 const buildQuery = () => {

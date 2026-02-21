@@ -41,6 +41,10 @@ describeOrSkip('docker-runner docker-backed container lifecycle', () => {
       signatureTtlMs: 60_000,
       dockerSocket: hasSocket ? DEFAULT_SOCKET : '',
       logLevel: 'error',
+      ziti: {
+        identityFile: '/tmp/ziti.identity.json',
+        serviceName: 'dev.agyn-platform.platform-api',
+      },
     };
     app = createRunnerApp(config);
     await app.ready();

@@ -69,7 +69,9 @@ Per-workspace Docker-in-Docker and registry mirror
 Remote Docker runner
 - The platform-server always routes container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
 - The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
-- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default http://docker-runner:7071).
+- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it via the local OpenZiti proxy (default http://127.0.0.1:17071).
+- Platform-server always launches that proxy when running via `pnpm dev`. The proxy is backed by the OpenZiti Node SDK
+  and docker-runner binds the same API to the OpenZiti service (`dev.agyn-platform.platform-api`).
 - Container events are forwarded via SSE so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
 
 Defaults and toggles

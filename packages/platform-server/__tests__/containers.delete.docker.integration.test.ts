@@ -18,6 +18,7 @@ import { PrismaClient as Prisma } from '@prisma/client';
 import {
   DEFAULT_SOCKET,
   RUNNER_SECRET,
+  dockerReachable,
   hasTcpDocker,
   socketMissing,
   startDockerRunner,
@@ -33,8 +34,10 @@ Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminServic
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
 const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1';
+const missingSocket = socketMissing && !hasTcpDocker;
+const dockerUnavailable = !dockerReachable || missingSocket;
 
-const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
+const describeOrSkip = shouldSkip || dockerUnavailable ? describe.skip : describe;
 
 describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
   let app: NestFastifyApplication;
@@ -91,7 +94,6 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
         {
           provide: ConfigService,
           useValue: {
-            dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
           } as ConfigService,
         },
@@ -303,7 +305,6 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
         {
           provide: ConfigService,
           useValue: {
-            dockerRunnerBaseUrl: runner.baseUrl,
             getDockerRunnerBaseUrl: () => runner.baseUrl,
           } as ConfigService,
         },
@@ -370,6 +371,8 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
 
 if (shouldSkip) {
   console.warn('Skipping docker deletion integration tests due to SKIP_DOCKER_DELETE_E2E=1');
-} else if (socketMissing && !hasTcpDocker) {
+} else if (!dockerReachable) {
+  console.warn('Skipping docker deletion integration tests because Docker daemon is not reachable');
+} else if (missingSocket) {
   console.warn(`Skipping docker deletion integration tests because Docker socket is missing at ${DEFAULT_SOCKET}`);
 }

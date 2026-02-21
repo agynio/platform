@@ -9,7 +9,8 @@
     "test": "pnpm -r --workspace-concurrency=1 run --if-present test",
     "convert-graphs": "pnpm --filter @agyn/graph-converter exec graph-converter",
     "postinstall": "pnpm -r --if-present run prepare",
-    "deps:up:podman": "podman compose up -d"
+    "deps:up:podman": "podman compose up -d",
+    "ziti:prepare": "bash ./scripts/ziti/prepare-volumes.sh"
   },
   "keywords": [],
   "author": "",

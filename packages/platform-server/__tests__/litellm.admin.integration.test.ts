@@ -5,22 +5,23 @@ import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { runnerConfigDefaults } from './helpers/config';
 
-const LITELLM_BASE = 'http://127.0.0.1:4000';
+const DEFAULT_LITELLM_BASE = 'http://127.0.0.1:4000';
 const MASTER_KEY = 'sk-dev-master-1234';
 
-const createConfig = () =>
+const createConfig = (baseUrl = DEFAULT_LITELLM_BASE) =>
   new ConfigService().init(
     configSchema.parse({
       llmProvider: 'litellm',
-      litellmBaseUrl: LITELLM_BASE,
+      litellmBaseUrl: baseUrl,
       litellmMasterKey: MASTER_KEY,
       agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
       ...runnerConfigDefaults,
     }),
   );
 
-function createLiteLLMStubServer(masterKey: string, port = 4000) {
+function createLiteLLMStubServer(masterKey: string, port?: number) {
   const fastify = Fastify({ logger: false });
+  let resolvedPort: number | null = port ?? null;
 
   type CredentialRecord = {
     credential_info: Record<string, unknown>;
@@ -228,11 +229,27 @@ function createLiteLLMStubServer(masterKey: string, port = 4000) {
   });
 
   const start = async () => {
-    await fastify.listen({ port, host: '127.0.0.1' });
+    await fastify.listen({ port: port ?? 0, host: '127.0.0.1' });
+    const address = fastify.server.address();
+    if (address && typeof address === 'object') {
+      resolvedPort = address.port;
+      return `http://${address.address}:${address.port}`;
+    }
+    if (typeof address === 'string') {
+      const url = address.startsWith('http') ? address : `http://${address}`;
+      const parsed = new URL(url);
+      resolvedPort = Number(parsed.port);
+      return `http://${parsed.hostname}:${parsed.port}`;
+    }
+    if (resolvedPort) {
+      return `http://127.0.0.1:${resolvedPort}`;
+    }
+    throw new Error('Failed to determine LiteLLM stub address');
   };
 
   const stop = async () => {
     await fastify.close();
+    resolvedPort = null;
   };
 
   const reset = () => {
@@ -240,19 +257,32 @@ function createLiteLLMStubServer(masterKey: string, port = 4000) {
     models.clear();
   };
 
-  return { start, stop, reset, server: fastify } satisfies {
-    start: () => Promise<void>;
+  return {
+    start,
+    stop,
+    reset,
+    server: fastify,
+    getBaseUrl: () => {
+      if (resolvedPort === null) {
+        throw new Error('LiteLLM stub has not been started');
+      }
+      return `http://127.0.0.1:${resolvedPort}`;
+    },
+  } satisfies {
+    start: () => Promise<string>;
     stop: () => Promise<void>;
     reset: () => void;
     server: FastifyInstance;
+    getBaseUrl: () => string;
   };
 }
 
 describe.sequential('LiteLLM admin integration', () => {
-  const stub = createLiteLLMStubServer(MASTER_KEY, 4000);
+  const stub = createLiteLLMStubServer(MASTER_KEY);
+  let litellmBase = DEFAULT_LITELLM_BASE;
 
   beforeAll(async () => {
-    await stub.start();
+    litellmBase = await stub.start();
   }, 120_000);
 
   afterAll(async () => {
@@ -264,17 +294,17 @@ describe.sequential('LiteLLM admin integration', () => {
   });
 
   it('reports admin status as reachable when LiteLLM responds', async () => {
-    const service = new LLMSettingsService(createConfig());
+    const service = new LLMSettingsService(createConfig(litellmBase));
     const status = await service.getAdminStatus();
     expect(status).toMatchObject({
       configured: true,
       adminReachable: true,
-      baseUrl: LITELLM_BASE,
+      baseUrl: litellmBase,
     });
   });
 
   it('manages credentials and models end-to-end', async () => {
-    const service = new LLMSettingsService(createConfig());
+    const service = new LLMSettingsService(createConfig(litellmBase));
     const credentialName = `integration-cred-${Date.now()}`;
     const modelName = `integration-model-${Date.now()}`;
 
@@ -310,7 +340,7 @@ describe.sequential('LiteLLM admin integration', () => {
     const health = await service.testModel({ id: modelName });
     expect(health).toBeTruthy();
 
-    const runtimeRes = await fetch(`${LITELLM_BASE}/v1/chat/completions`, {
+    const runtimeRes = await fetch(`${litellmBase}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${MASTER_KEY}`,

@@ -3,6 +3,7 @@ node_modules
 .turbo
 node-compile-cache/
 .env
+.ziti/
 packages/platform-server/build-ts
 # Bundled artifacts generated during build
 packages/platform-server/dist
