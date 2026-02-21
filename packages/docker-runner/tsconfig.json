@@ -1,10 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "rootDir": "src",
     "outDir": "dist",
+    "declaration": true,
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "composite": true,
     "types": ["node"]

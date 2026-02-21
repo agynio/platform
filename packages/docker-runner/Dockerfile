@@ -43,12 +43,17 @@ WORKDIR /opt/app/packages/docker-runner
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git openssl \
+ && npm install --global tsx@^4.20.5 \
+ && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /opt/app /opt/app
+COPY --from=build --chown=node:node /workspace/packages/docker-runner/package.json /opt/app/packages/docker-runner/package.json
+COPY --from=build --chown=node:node /workspace/packages/docker-runner/src /opt/app/packages/docker-runner/src
+COPY --from=build --chown=node:node /workspace/packages/docker-runner/tsconfig.json /opt/app/packages/docker-runner/tsconfig.json
 
 USER node
 
 EXPOSE 7071
 
-CMD ["node", "dist/service/main.js"]
+CMD ["tsx", "src/service/main.ts"]

@@ -2,6 +2,7 @@
   "name": "@agyn/docker-runner",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx src/service/main.ts",
