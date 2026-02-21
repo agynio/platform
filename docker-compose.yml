@@ -370,7 +370,6 @@ services:
           selinux: z
     networks:
       - agents_net
-
 volumes:
   vault-file:
     driver: local
