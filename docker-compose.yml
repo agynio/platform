@@ -246,24 +246,7 @@ services:
       start_period: 10s
     networks:
       - agents_net
-
-  docker-runner:
-    build:
-      context: .
-      dockerfile: packages/docker-runner/Dockerfile
-    restart: unless-stopped
-    environment:
-      DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
-      DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
-    volumes:
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-    ports:
-      - "${DOCKER_RUNNER_PORT:-7071}:7071"
-    networks:
-      - agents_net
-
+      
 volumes:
   vault-file:
     driver: local
