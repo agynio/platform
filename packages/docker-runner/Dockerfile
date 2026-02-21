@@ -28,7 +28,8 @@ RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile --i
 
 RUN pnpm --filter @agyn/docker-runner run build
 
-RUN pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
+# pnpm deploy copies workspace deps and re-runs postinstall/prepare; skip scripts
+RUN PNPM_SKIP_POSTINSTALL=1 PNPM_SKIP_PREPARE=1 npm_config_ignore_scripts=true pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
 
 FROM node:20-slim AS runtime
 
