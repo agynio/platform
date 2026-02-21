@@ -27,6 +27,7 @@ const REQUIRED_ENV = {
   VOLUME_GC_ENABLED: 'false',
   NCPS_ENABLED: 'false',
   WORKSPACE_NETWORK_NAME: 'agents_net',
+  SKIP_LLM_PROVISIONER: '1',
 } as const;
 
 const TEST_TIMEOUT_MS = 20_000;
