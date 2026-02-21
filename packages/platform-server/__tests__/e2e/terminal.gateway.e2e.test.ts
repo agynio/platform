@@ -272,14 +272,24 @@ describe('ContainerTerminalGateway E2E', () => {
 
       ws.on('open', () => complete(new Error('websocket unexpectedly opened while runner is down')));
       ws.on('unexpected-response', (_req, res) => {
-        try {
-          expect(res.statusCode).toBe(503);
-        } catch (assertErr) {
-          complete(assertErr as Error);
-          return;
-        }
-        res.resume();
-        complete();
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            expect(res.statusCode).toBe(503);
+            const parsed = JSON.parse(body || '{}');
+            expect(parsed).toEqual({
+              error: { code: 'docker_runner_not_ready', message: 'docker-runner not ready' },
+            });
+          } catch (assertErr) {
+            complete(assertErr as Error);
+            return;
+          }
+          complete();
+        });
       });
       ws.on('error', (err) => {
         if (settled) return;

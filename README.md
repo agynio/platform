@@ -194,6 +194,13 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS (default 250)
   - DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS (default 30000 while runner is healthy)
   - DOCKER_RUNNER_CONNECT_MAX_RETRIES (default 0 → unlimited background retries)
+- Volume GC:
+  - VOLUME_GC_ENABLED (default true)
+  - VOLUME_GC_INTERVAL_MS (default 60000)
+  - VOLUME_GC_MAX_PER_SWEEP (default 100)
+  - VOLUME_GC_CONCURRENCY (default 3)
+  - VOLUME_GC_COOLDOWN_MS (default 600000)
+  - VOLUME_GC_SWEEP_TIMEOUT_MS (default 15000)
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)

@@ -184,7 +184,16 @@ export class ContainerTerminalGateway {
           status: runnerSnapshot.status,
         });
         try {
-          socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+          const payload = JSON.stringify({
+            error: { code: 'docker_runner_not_ready', message: 'docker-runner not ready' },
+          });
+          const headers = [
+            'HTTP/1.1 503 Service Unavailable',
+            'Content-Type: application/json; charset=utf-8',
+            `Content-Length: ${Buffer.byteLength(payload)}`,
+            'Connection: close',
+          ].join('\r\n');
+          socket.end(`${headers}\r\n\r\n${payload}`);
         } catch {
           // ignore
         }
