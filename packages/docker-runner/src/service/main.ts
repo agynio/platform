@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
     app = createRunnerApp(config);
     await app.listen({ port: config.port, host: config.host });
     const ingress = await startZitiIngress(config);
-    closeZiti = ingress?.close;
+    closeZiti = ingress.close;
 
     const shutdown = async () => {
       await closeZiti?.();

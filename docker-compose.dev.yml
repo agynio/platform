@@ -20,12 +20,10 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-litellm}
       LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm:4000}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
-      DOCKER_RUNNER_BASE_URL: http://docker-runner:7071
       DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
       WORKSPACE_NETWORK_NAME: ${WORKSPACE_NETWORK_NAME:-agents_net}
       VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-dev-root}
-      ZITI_ENABLED: ${ZITI_ENABLED:-false}
       ZITI_MANAGEMENT_URL: ${ZITI_MANAGEMENT_URL:-https://ziti-controller:1280/edge/management/v1}
       ZITI_USERNAME: ${ZITI_USERNAME:-admin}
       ZITI_PASSWORD: ${ZITI_PASSWORD:-admin}
@@ -64,7 +62,6 @@ services:
     environment:
       DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
       DOCKER_RUNNER_PORT: ${DOCKER_RUNNER_PORT:-7071}
-      ZITI_ENABLED: ${ZITI_ENABLED:-false}
       ZITI_IDENTITY_FILE: ${ZITI_RUNNER_IDENTITY_FILE:-/opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json}
       ZITI_SERVICE_NAME: ${ZITI_SERVICE_NAME:-dev.agyn-platform.platform-api}
     volumes:

@@ -36,11 +36,6 @@ export class ZitiReconciler {
   ) {}
 
   async reconcile(): Promise<void> {
-    if (!this.config.isZitiEnabled()) {
-      this.logger.log('Ziti disabled; skipping controller reconciliation');
-      return;
-    }
-
     const profile = this.buildProfile();
     const client = new ZitiManagementClient({
       baseUrl: profile.managementUrl,

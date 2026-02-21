@@ -6,7 +6,7 @@ host. It creates/updates the service, policies, and identities, then writes enro
 (mirrored to `/opt/app/.ziti/identities` inside containers). Platform-server still reconciles controller state at
 startup to heal drift, and the docker-runner retains the same service bindings.
 
-When OpenZiti is enabled the platform-server launches a lightweight HTTP proxy: `pnpm` dev binds to
+The platform-server launches a lightweight HTTP proxy: `pnpm` dev binds to
 `127.0.0.1:17071` by default, while the docker-compose overlay overrides it to `0.0.0.0:17071` inside the container so
 the port can be published to the host. All docker-runner traffic is tunneled through this proxy instead of the Docker
 bridge network.
@@ -56,14 +56,14 @@ The job now waits up to five minutes for the router named by `ZITI_ROUTER_NAME` 
 router is still missing after the timeout it logs a warning, skips router role updates, and exits so you can rerun it
 later. Set `ZITI_SKIP_ROUTER_WAIT=true` to disable the wait entirely.
 
-4. Copy `.env` files and enable OpenZiti flags. Use the template that matches how you run the services:
+5. Copy `.env` files and ensure the OpenZiti variables point to the same `.ziti` tree. Use the template that matches
+   how you run the services:
 
 ### Host (`pnpm dev`)
 
 - `packages/platform-server/.env`
 
 ```
-ZITI_ENABLED=true
 ZITI_MANAGEMENT_URL=https://ziti-controller:1280/edge/management/v1
 ZITI_USERNAME=admin
 ZITI_PASSWORD=admin
@@ -81,7 +81,6 @@ ZITI_TMP_DIR=/absolute/path/to/platform/.ziti/tmp
 - `packages/docker-runner/.env`
 
 ```
-ZITI_ENABLED=true
 ZITI_IDENTITY_FILE=/absolute/path/to/platform/.ziti/identities/dev.agyn-platform.docker-runner.json
 ZITI_SERVICE_NAME=dev.agyn-platform.platform-api
 ```
@@ -94,7 +93,6 @@ Compose already mounts `./.ziti` into `/opt/app/.ziti` inside each container. Ov
 container paths (via `.env` or `docker-compose.dev.yml`):
 
 ```
-ZITI_ENABLED=true
 ZITI_MANAGEMENT_URL=https://ziti-controller:1280/edge/management/v1
 ZITI_USERNAME=admin
 ZITI_PASSWORD=admin
@@ -122,7 +120,7 @@ After completing the prerequisites and enabling the `.env` entries above, the de
 docker compose up -d postgres agents-db litellm-db litellm
 ```
 
-2. Start the docker-runner in a terminal (requires `ZITI_ENABLED=true`). Wait for both the Fastify log and the Ziti ingress message:
+2. Start the docker-runner in a terminal. Wait for both the Fastify log and the Ziti ingress message:
 
 ```bash
 pnpm --filter @agyn/docker-runner dev
@@ -160,13 +158,13 @@ Expected response:
    policies, router roles) before launching the local proxy. If the identity files already exist they are reused as-is.
 3. Ziti runner proxy starts on `127.0.0.1:17071` by default when running via `pnpm dev`. The docker-compose overlay
    overrides it to `0.0.0.0:17071` inside the container so the port can be published. All requests to docker-runner are
-   routed through this proxy when `ZITI_ENABLED=true`.
+   routed through this proxy.
 4. Docker-runner continues to listen on the configured TCP port (default `7071`) and now exposes the same API via an
    OpenZiti Express listener that proxies traffic to the local Fastify server.
 
 ## Smoke test
 
-After both services start with `ZITI_ENABLED=true`:
+After both services start:
 
 1. Verify the local proxy is healthy (platform-server side):
 

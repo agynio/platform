@@ -29,7 +29,6 @@ const numberFlag = (defaultValue: number) =>
 const trimUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
 const defaultZitiConfig = {
-  enabled: false,
   managementUrl: 'https://127.0.0.1:1280/edge/management/v1',
   username: 'admin',
   password: 'admin',
@@ -95,11 +94,6 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
-  dockerRunnerBaseUrl: z
-    .string()
-    .min(1, 'DOCKER_RUNNER_BASE_URL is required')
-    .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
-    .transform((value) => value.trim().replace(/\/+$/, '')),
   dockerRunnerSharedSecret: z
     .string()
     .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
@@ -234,25 +228,52 @@ export const configSchema = z.object({
     ),
   ziti: z
     .object({
-      enabled: booleanFlag(defaultZitiConfig.enabled),
       managementUrl: z
         .string()
+        .min(1, 'ZITI_MANAGEMENT_URL is required')
         .default(defaultZitiConfig.managementUrl)
         .transform((value) => trimUrl(value)),
-      username: z.string().default(defaultZitiConfig.username),
-      password: z.string().default(defaultZitiConfig.password),
+      username: z.string().min(1, 'ZITI_USERNAME is required').default(defaultZitiConfig.username),
+      password: z.string().min(1, 'ZITI_PASSWORD is required').default(defaultZitiConfig.password),
       insecureTls: booleanFlag(defaultZitiConfig.insecureTls),
-      serviceName: z.string().default(defaultZitiConfig.serviceName),
-      routerName: z.string().default(defaultZitiConfig.routerName),
-      runnerProxyHost: z.string().default(defaultZitiConfig.runnerProxyHost),
-      runnerProxyPort: numberFlag(defaultZitiConfig.runnerProxyPort),
-      platformIdentityName: z.string().default(defaultZitiConfig.platformIdentityName),
-      platformIdentityFile: z.string().default(defaultZitiConfig.platformIdentityFile),
-      runnerIdentityName: z.string().default(defaultZitiConfig.runnerIdentityName),
-      runnerIdentityFile: z.string().default(defaultZitiConfig.runnerIdentityFile),
-      identitiesDir: z.string().default(defaultZitiConfig.identitiesDir),
-      tmpDir: z.string().default(defaultZitiConfig.tmpDir),
-      enrollmentTtlSeconds: numberFlag(defaultZitiConfig.enrollmentTtlSeconds),
+      serviceName: z
+        .string()
+        .min(1, 'ZITI_SERVICE_NAME is required')
+        .default(defaultZitiConfig.serviceName),
+      routerName: z.string().min(1, 'ZITI_ROUTER_NAME is required').default(defaultZitiConfig.routerName),
+      runnerProxyHost: z
+        .string()
+        .min(1, 'ZITI_RUNNER_PROXY_HOST is required')
+        .default(defaultZitiConfig.runnerProxyHost),
+      runnerProxyPort: numberFlag(defaultZitiConfig.runnerProxyPort).refine(
+        (value) => value > 0,
+        'ZITI_RUNNER_PROXY_PORT must be a positive integer',
+      ),
+      platformIdentityName: z
+        .string()
+        .min(1, 'ZITI_PLATFORM_IDENTITY_NAME is required')
+        .default(defaultZitiConfig.platformIdentityName),
+      platformIdentityFile: z
+        .string()
+        .min(1, 'ZITI_PLATFORM_IDENTITY_FILE is required')
+        .default(defaultZitiConfig.platformIdentityFile),
+      runnerIdentityName: z
+        .string()
+        .min(1, 'ZITI_RUNNER_IDENTITY_NAME is required')
+        .default(defaultZitiConfig.runnerIdentityName),
+      runnerIdentityFile: z
+        .string()
+        .min(1, 'ZITI_RUNNER_IDENTITY_FILE is required')
+        .default(defaultZitiConfig.runnerIdentityFile),
+      identitiesDir: z
+        .string()
+        .min(1, 'ZITI_IDENTITIES_DIR is required')
+        .default(defaultZitiConfig.identitiesDir),
+      tmpDir: z.string().min(1, 'ZITI_TMP_DIR is required').default(defaultZitiConfig.tmpDir),
+      enrollmentTtlSeconds: numberFlag(defaultZitiConfig.enrollmentTtlSeconds).refine(
+        (value) => value > 0,
+        'ZITI_ENROLLMENT_TTL_SECONDS must be positive',
+      ),
     })
     .default(() => ({ ...defaultZitiConfig })),
 });
@@ -380,10 +401,6 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  get dockerRunnerBaseUrl(): string {
-    return this.params.dockerRunnerBaseUrl;
-  }
-
   get dockerRunnerSharedSecret(): string {
     return this.params.dockerRunnerSharedSecret;
   }
@@ -393,12 +410,15 @@ export class ConfigService implements Config {
   }
 
   getDockerRunnerBaseUrl(): string {
-    if (this.isZitiEnabled()) {
-      const host = this.getZitiRunnerProxyHost();
-      const port = this.getZitiRunnerProxyPort();
-      return `http://${host}:${port}`;
+    const host = this.getZitiRunnerProxyHost();
+    const port = this.getZitiRunnerProxyPort();
+    if (!host) {
+      throw new Error('ZITI_RUNNER_PROXY_HOST is required when starting the platform-server');
     }
-    return this.dockerRunnerBaseUrl;
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error('ZITI_RUNNER_PROXY_PORT must be a positive integer');
+    }
+    return `http://${host}:${port}`;
   }
 
   getDockerRunnerSharedSecret(): string {
@@ -497,10 +517,6 @@ export class ConfigService implements Config {
     return this.ziti;
   }
 
-  isZitiEnabled(): boolean {
-    return !!this.params.ziti?.enabled;
-  }
-
   getZitiManagementUrl(): string {
     return this.params.ziti.managementUrl;
   }
@@ -581,7 +597,6 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
-      dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
@@ -610,7 +625,6 @@ export class ConfigService implements Config {
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
       ziti: {
-        enabled: process.env.ZITI_ENABLED,
         managementUrl: process.env.ZITI_MANAGEMENT_URL,
         username: process.env.ZITI_USERNAME,
         password: process.env.ZITI_PASSWORD,

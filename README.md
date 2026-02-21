@@ -176,14 +176,14 @@ docker run --rm -p 8080:80 \
 
 ### Secure docker-runner connectivity (OpenZiti)
 
-The dev stack now ships an OpenZiti controller, initializer, and edge router. To route docker-runner traffic through the
-overlay instead of the Docker bridge network:
+The dev stack now ships an OpenZiti controller, initializer, and edge router. All docker-runner traffic flows through
+the overlay; there is no plain-HTTP fallback:
 
 1. Prepare the shared volumes once per checkout (`pnpm ziti:prepare`). This keeps `.ziti/controller`,
    `.ziti/identities`, and `.ziti/tmp` writable even on SELinux hosts.
 2. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
-3. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
-   `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
+3. Copy `.env.example` to `.env` for both `packages/platform-server` and `packages/docker-runner`, keeping the
+   `ZITI_*` defaults that point to `./.ziti/identities/...` unless you have custom paths.
 4. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
    - Watch `docker compose logs -f ziti-edge-router` until you see the router enroll and connect to `ziti-controller`.
    - For a clean bootstrap, stop the stack and wipe any stale state first:
@@ -238,11 +238,9 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Workspace/Docker:
   - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
-- OpenZiti (optional secure docker-runner tunnel):
-  - ZITI_ENABLED (default false) — enable controller reconciliation + proxy
+- OpenZiti transport (required for runner connectivity):
   - ZITI_MANAGEMENT_URL / ZITI_USERNAME / ZITI_PASSWORD — controller credentials
   - ZITI_SERVICE_NAME / ZITI_ROUTER_NAME — service plus edge router handles
   - ZITI_PLATFORM_IDENTITY_FILE / ZITI_RUNNER_IDENTITY_FILE — identity output paths under `./.ziti/`
