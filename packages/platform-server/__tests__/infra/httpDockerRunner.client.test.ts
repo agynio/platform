@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Response } from 'undici';
 
 import { DockerRunnerRequestError, HttpDockerRunnerClient, EXEC_REQUEST_TIMEOUT_SLACK_MS } from '../../src/infra/container/httpDockerRunner.client';
 
@@ -114,5 +115,54 @@ describe('HttpDockerRunnerClient exec websocket errors', () => {
     expect(error.errorCode).toBe('no_such_container');
     expect(error.retryable).toBe(false);
     expect(error.message).toContain('No such container');
+  });
+});
+
+describe('HttpDockerRunnerClient retries and exec policy', () => {
+  const baseConfig = {
+    baseUrl: 'http://runner.internal:7071',
+    sharedSecret: 'secret',
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('regenerates auth headers for every retry attempt', async () => {
+    const captured: Array<Record<string, string>> = [];
+    const fetchImpl = vi.fn(async (_url: URL | string, init?: { headers?: Record<string, string> }) => {
+      captured.push({ ...(init?.headers ?? {}) });
+      if (captured.length === 1) {
+        throw new Error('network glitch');
+      }
+      return {
+        status: 204,
+        ok: true,
+        json: async () => undefined,
+      } as Response;
+    });
+
+    const client = new HttpDockerRunnerClient({ ...baseConfig, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    await client.ensureImage('alpine:3');
+
+    expect(captured).toHaveLength(2);
+    expect(captured[0]['x-dr-nonce']).toBeDefined();
+    expect(captured[1]['x-dr-nonce']).toBeDefined();
+    expect(captured[0]['x-dr-nonce']).not.toBe(captured[1]['x-dr-nonce']);
+    expect(captured[0]['x-dr-timestamp']).toBeDefined();
+    expect(captured[1]['x-dr-timestamp']).toBeDefined();
+    expect(captured[0]['x-dr-timestamp']).not.toBe(captured[1]['x-dr-timestamp']);
+  });
+
+  it('does not retry exec run requests by default', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('runner offline');
+    });
+
+    const client = new HttpDockerRunnerClient({ ...baseConfig, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    await expect(client.execContainer('cid', ['echo', 'hello'])).rejects.toBeInstanceOf(DockerRunnerRequestError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
