@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 .turbo
 node-compile-cache/
+**/v8-compile-cache-*/
 .env
 packages/platform-server/build-ts
 # Bundled artifacts generated during build

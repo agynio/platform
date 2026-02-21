@@ -1,0 +1,82 @@
+name: E2E Notifications
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  websocket-e2e:
+    name: Notifications Gateway E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.5.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start e2e stack
+        run: docker compose -f docker-compose.e2e.yml up -d --build
+
+      - name: Wait for Envoy readiness
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsS http://localhost:8080 >/dev/null; then
+              echo "Envoy is ready"
+              exit 0
+            fi
+            echo "Waiting for Envoy... (${attempt}/30)"
+            sleep 5
+          done
+          echo "Envoy failed to become ready" >&2
+          docker compose -f docker-compose.e2e.yml ps
+          exit 1
+
+      - name: Run websocket e2e check
+        env:
+          ENVOY_BASE_URL: http://localhost:8080
+          SOCKET_IO_PATH: /socket.io
+          NOTIFICATIONS_REDIS_URL: redis://localhost:6379/0
+          NOTIFICATIONS_CHANNEL: notifications.v1
+          NOTIFICATIONS_ROOM: thread:test
+        run: pnpm exec node scripts/e2e/notifications/ws-check.mjs
+
+      - name: Envoy and gateway logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs --no-color envoy notifications-gateway
+
+      - name: Teardown e2e stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v --remove-orphans
