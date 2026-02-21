@@ -9,7 +9,7 @@ static_resources:
         - filters:
             - name: envoy.filters.network.http_connection_manager
               typed_config:
-                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                '@type': "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
                 stat_prefix: dev_local_ingress
                 use_remote_address: true
                 upgrade_configs:
@@ -25,20 +25,20 @@ static_resources:
                             prefix: "/socket.io"
                           route:
                             cluster: notifications_gateway
-                            timeout: 0s
-                            idle_timeout: 3600s
+                            timeout: "0s"
+                            idle_timeout: "3600s"
                             retry_policy:
                               num_retries: 0
                         - match:
                             prefix: "/api"
                           route:
                             cluster: platform_server
-                            timeout: 30s
+                            timeout: "30s"
                 http_filters:
                   - name: envoy.filters.http.router
   clusters:
     - name: platform_server
-      connect_timeout: 2s
+      connect_timeout: "2s"
       type: STRICT_DNS
       lb_policy: ROUND_ROBIN
       load_assignment:
@@ -51,7 +51,7 @@ static_resources:
                       address: host.docker.internal
                       port_value: 3010
     - name: notifications_gateway
-      connect_timeout: 2s
+      connect_timeout: "2s"
       type: STRICT_DNS
       lb_policy: ROUND_ROBIN
       load_assignment:
