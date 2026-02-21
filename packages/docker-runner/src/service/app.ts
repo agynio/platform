@@ -10,10 +10,10 @@ import {
   verifyAuthHeaders,
   type ContainerOpts,
   type ExecOptions,
-} from '../index.js';
-import { createDockerEventsParser } from './dockerEvents.parser.js';
-import type { RunnerConfig } from './config.js';
-import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util.js';
+} from '..';
+import { createDockerEventsParser } from './dockerEvents.parser';
+import type { RunnerConfig } from './config';
+import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util';
 
 const ensureImageSchema = z.object({
   image: z.string().min(1),
