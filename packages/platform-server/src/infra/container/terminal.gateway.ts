@@ -9,6 +9,7 @@ import { WorkspaceProvider } from '../../workspace/providers/workspace.provider'
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
 import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
 import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerStatusService } from './dockerRunnerStatus.service';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -142,6 +143,7 @@ export class ContainerTerminalGateway {
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
     @Inject(WorkspaceProvider) private readonly workspaceProvider: WorkspaceProvider,
+    @Inject(DockerRunnerStatusService) private readonly dockerRunnerStatus: DockerRunnerStatusService,
   ) {}
 
   private wss: WebSocketServer | null = null;
@@ -173,6 +175,31 @@ export class ContainerTerminalGateway {
           error: err instanceof Error ? err.message : String(err),
         });
       });
+
+      const runnerSnapshot = this.dockerRunnerStatus.getSnapshot();
+      if (runnerSnapshot.status !== 'up') {
+        this.logger.warn('Terminal WS denied because docker runner is not ready', {
+          path: parsedUrl.pathname,
+          workspaceId,
+          status: runnerSnapshot.status,
+        });
+        try {
+          const payload = JSON.stringify({
+            error: { code: 'docker_runner_not_ready', message: 'docker-runner not ready' },
+          });
+          const headers = [
+            'HTTP/1.1 503 Service Unavailable',
+            'Content-Type: application/json; charset=utf-8',
+            `Content-Length: ${Buffer.byteLength(payload)}`,
+            'Connection: close',
+          ].join('\r\n');
+          socket.end(`${headers}\r\n\r\n${payload}`);
+        } catch {
+          // ignore
+        }
+        socket.destroy();
+        return;
+      }
 
       wss.handleUpgrade(req, socket, head, (ws) => {
         const stream: SocketStream = { socket: ws };

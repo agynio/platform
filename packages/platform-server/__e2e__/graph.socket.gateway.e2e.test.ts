@@ -16,6 +16,7 @@ import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -309,6 +310,9 @@ describe('Socket gateway real server handshakes', () => {
   let graphGateway: GraphSocketGateway;
   let eventsBusService: EventsBusService;
   let prismaStub: PrismaServiceStub;
+  const runnerStatusStub = {
+    getSnapshot: () => ({ status: 'up', optional: false, consecutiveFailures: 0 }),
+  } satisfies Pick<DockerRunnerStatusService, 'getSnapshot'>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -320,6 +324,7 @@ describe('Socket gateway real server handshakes', () => {
         ContainerTerminalGateway,
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
         { provide: WorkspaceProvider, useClass: WorkspaceProviderStub },
+        { provide: DockerRunnerStatusService, useValue: runnerStatusStub },
         EventsBusService,
         RunEventsService,
       ],

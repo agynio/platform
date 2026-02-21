@@ -2,4 +2,6 @@ import type { DockerClientPort } from '@agyn/docker-runner';
 
 export const DOCKER_CLIENT = Symbol('DOCKER_CLIENT');
 
-export type DockerClient = DockerClientPort;
+export interface DockerClient extends DockerClientPort {
+  checkConnectivity(): Promise<{ status: string }>;
+}

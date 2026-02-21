@@ -28,6 +28,8 @@ import { ContainerThreadTerminationService } from '../src/infra/container/contai
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 
 // Vitest compiles controllers without emitDecoratorMetadata, so manually register constructor param metadata.
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
@@ -359,6 +361,17 @@ describe('ContainersController wiring via InfraModule', () => {
   } as Partial<PrismaClient>;
   const prismaServiceStub = { getClient: () => prismaClientStub } as PrismaService;
   const adminMock = { deleteContainer: vi.fn().mockResolvedValue(undefined) } as unknown as ContainerAdminService;
+  const dockerRunnerStatusStub = {
+    getSnapshot: vi.fn(() => ({ status: 'up', optional: false })),
+    setBaseUrl: vi.fn(),
+    setOptional: vi.fn(),
+    markUp: vi.fn(),
+    markDown: vi.fn(),
+  } as unknown as DockerRunnerStatusService;
+  const connectivityMonitorStub = {
+    onModuleInit: vi.fn(),
+    onModuleDestroy: vi.fn(),
+  } as unknown as DockerRunnerConnectivityMonitor;
 
   beforeAll(async () => {
     registerTestConfig({
@@ -400,6 +413,10 @@ describe('ContainersController wiring via InfraModule', () => {
       .useValue(createDockerClientStub())
       .overrideProvider(ContainerAdminService)
       .useValue(adminMock)
+      .overrideProvider(DockerRunnerStatusService)
+      .useValue(dockerRunnerStatusStub)
+      .overrideProvider(DockerRunnerConnectivityMonitor)
+      .useValue(connectivityMonitorStub)
       .compile();
 
     app = moduleRef.createNestApplication(new FastifyAdapter());

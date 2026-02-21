@@ -28,6 +28,7 @@ Graph persistence
   - `VOLUME_GC_MAX_PER_SWEEP` (default `100`)
   - `VOLUME_GC_CONCURRENCY` (default `3`)
   - `VOLUME_GC_COOLDOWN_MS` (default `600000`)
+  - `VOLUME_GC_SWEEP_TIMEOUT_MS` (default `15000`)
 -
 ## MCP environment configuration
 

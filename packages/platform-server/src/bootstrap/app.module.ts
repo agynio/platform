@@ -72,6 +72,9 @@ export class AppModule implements OnModuleInit {
   constructor(@Inject(LLMProvisioner) private readonly llmProvisioner: LLMProvisioner) {}
 
   async onModuleInit(): Promise<void> {
+    if (process.env.SKIP_LLM_PROVISIONER === '1') {
+      return;
+    }
     await this.llmProvisioner.init();
   }
 }

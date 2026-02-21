@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 import type { AddressInfo } from 'net';
 import WebSocket from 'ws';
 import { ContainerTerminalController } from '../../src/infra/container/containerTerminal.controller';
 import { ContainerTerminalGateway } from '../../src/infra/container/terminal.gateway';
 import { TerminalSessionsService } from '../../src/infra/container/terminal.sessions.service';
+import { DockerRunnerStatusService, type DockerRunnerStatusSnapshot } from '../../src/infra/container/dockerRunnerStatus.service';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -132,6 +133,16 @@ describe('ContainerTerminalGateway E2E', () => {
   let app: NestFastifyApplication;
   let workspaceProvider: TestWorkspaceProvider;
   let baseUrl: string;
+  const runnerStatusStub = {
+    snapshot: { status: 'up', optional: false, consecutiveFailures: 0 } as DockerRunnerStatusSnapshot,
+    getSnapshot() {
+      return this.snapshot;
+    },
+  } satisfies Pick<DockerRunnerStatusService, 'getSnapshot'> & { snapshot: DockerRunnerStatusSnapshot };
+
+  beforeEach(() => {
+    runnerStatusStub.snapshot = { status: 'up', optional: false, consecutiveFailures: 0 };
+  });
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -140,6 +151,7 @@ describe('ContainerTerminalGateway E2E', () => {
         ContainerTerminalGateway,
         TerminalSessionsService,
         { provide: WorkspaceProvider, useClass: TestWorkspaceProvider },
+        { provide: DockerRunnerStatusService, useValue: runnerStatusStub },
       ],
     }).compile();
 
@@ -232,5 +244,61 @@ describe('ContainerTerminalGateway E2E', () => {
     expect(messages.some((msg) => msg.type === 'status' && msg.phase === 'exited')).toBe(true);
     expect(messages.some((msg) => msg.type === 'error')).toBe(false);
     expect(workspaceProvider.closeCalls).toBeGreaterThan(0);
+  });
+
+  it('denies websocket upgrades when docker runner is down', async () => {
+    runnerStatusStub.snapshot = { ...runnerStatusStub.snapshot, status: 'down' };
+    const workspaceId = 'f'.repeat(64);
+    const wsUrl = new URL(baseUrl);
+    wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl.pathname = `/api/containers/${workspaceId}/terminal/ws`;
+    wsUrl.search = new URLSearchParams({
+      sessionId: '00000000-0000-4000-8000-000000000000',
+      token: 'stub-token',
+    }).toString();
+
+    await new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(wsUrl.toString());
+      let settled = false;
+      const complete = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      };
+
+      ws.on('open', () => complete(new Error('websocket unexpectedly opened while runner is down')));
+      ws.on('unexpected-response', (_req, res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            expect(res.statusCode).toBe(503);
+            const parsed = JSON.parse(body || '{}');
+            expect(parsed).toEqual({
+              error: { code: 'docker_runner_not_ready', message: 'docker-runner not ready' },
+            });
+          } catch (assertErr) {
+            complete(assertErr as Error);
+            return;
+          }
+          complete();
+        });
+      });
+      ws.on('error', (err) => {
+        if (settled) return;
+        if (err instanceof Error && err.message.includes('unexpected server response: 503')) {
+          complete();
+          return;
+        }
+        complete(err as Error);
+      });
+    });
   });
 });

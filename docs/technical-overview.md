@@ -71,11 +71,15 @@ Remote Docker runner
 - The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
 - Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default http://docker-runner:7071).
 - Container events are forwarded via SSE so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
+- Connectivity is tracked by a background `DockerRunnerConnectivityMonitor` that polls `/v1/ready` with exponential backoff (base-delay, max-delay, jitter, probe interval, and optional retry cap are configurable via DOCKER_RUNNER_CONNECT_* env vars).
+- When `DOCKER_RUNNER_OPTIONAL=true` (default) the server continues booting even if the runner is unreachable; when set to `false` the first failed probe aborts bootstrap (legacy fail-fast mode).
+- The monitor streams status into `DockerRunnerStatusService`, which feeds `/health`, Volume GC, REST guards, and terminal/websocket gating. Terminals and container APIs short-circuit with `docker_runner_not_ready` until status returns `up`.
 
 Defaults and toggles
 - LiveGraphRuntime serializes apply operations by default.
 - PRTrigger intervalMs default 60000; includeAuthored default false.
 - MCP restart defaults: maxAttempts 5; backoffMs 2000.
+- Docker runner monitor defaults: optional=true, retry base delay 500ms, max delay 30s, jitter 250ms, probe interval 30s when healthy, max retries 0 (infinite).
 
 How to Develop & Test
 - Prereqs: Node.js 20+, pnpm 9+, Docker, Postgres
