@@ -63,6 +63,7 @@ async function main() {
 }
 
 async function runFlow() {
+  await wipeZitiState();
   await ensureWorkspaceAvailableOnDockerHost();
   const composeRunner = await createComposeRunner();
   registerSignalHandlers(composeRunner);
@@ -78,6 +79,7 @@ async function runFlow() {
       services: SERVICES_TO_WAIT,
       timeoutMs: 180_000,
     });
+    await verifyControllerSan();
     await ensureWorkspaceNetwork(composeRunner.run);
     await waitForHttpReady('http://127.0.0.1:3010/api/containers?limit=1');
     await runWorkspaceLifecycle();
@@ -166,6 +168,13 @@ async function prepareLocalZitiDirectories() {
     await fs.mkdir(target, { recursive: true });
     await fs.chmod(target, 0o777);
   }
+}
+
+async function wipeZitiState() {
+  console.log('[ziti-e2e] wiping persisted ziti state');
+  await fs.mkdir(STATE_PATHS.root, { recursive: true });
+  await fs.rm(STATE_PATHS.controller, { recursive: true, force: true });
+  await fs.rm(STATE_PATHS.identities, { recursive: true, force: true });
 }
 
 async function verifyZitiDirectories() {
@@ -290,6 +299,18 @@ async function ensureWorkspaceNetwork(compose) {
   }
 }
 
+async function verifyControllerSan() {
+  console.log('[ziti-e2e] verifying controller SAN');
+  const { stdout } = await runCommand('sh', [
+    '-c',
+    'openssl s_client -connect 127.0.0.1:1280 -servername ziti-controller -showcerts </dev/null 2>/dev/null | openssl x509 -noout -ext subjectAltName',
+  ], { quiet: true });
+  if (!stdout.includes('DNS:ziti-controller')) {
+    throw new Error(`Controller SAN missing DNS:ziti-controller\n${stdout.trim()}`);
+  }
+  console.log(`[ziti-e2e] controller SANs:\n${stdout.trim()}`);
+}
+
 async function waitForHttpReady(url) {
   await waitUntil(async () => {
     try {
@@ -385,7 +406,6 @@ async function dumpDiagnostics(compose) {
     console.warn('[ziti-e2e] failed to collect diagnostics', error);
   }
 }
-
 async function fetchWithTimeout(resource, init = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS).unref();
