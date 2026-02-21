@@ -23,7 +23,7 @@ Intended use cases:
 
 ## Repository Structure
 - docker-compose.yml — Third-party development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, OpenZiti, Prometheus, Grafana, etc.
-- docker-compose.dev.yml — Optional overlay that builds/runs the platform-server and docker-runner containers against the infra stack.
+- docker-compose.dev.yml — Overlay used for container image builds; dev mode runs platform-server and docker-runner on the host via pnpm.
 - .github/workflows/
   - ci.yml — Linting, tests (server/UI), Storybook build + smoke, type-check build steps.
   - docker-ghcr.yml — Build and publish platform-server and platform-ui images to GHCR.
@@ -122,10 +122,8 @@ docker compose up -d
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 
-# Optional: run platform-server and docker-runner inside Docker as well.
-mkdir -p .ziti/identities .ziti/tmp data/graph
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner
-# The overlay builds local images and reuses the infra services defined in docker-compose.yml.
+# Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
+# Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -147,9 +145,8 @@ pnpm --filter @agyn/platform-ui dev
 # docker-runner (Fastify dev server)
 pnpm --filter @agyn/docker-runner dev
 ```
-> Prefer containers? Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
-> after the infra stack is running. The overlay file builds the local images against the
-> same Postgres/LiteLLM/Vault/Ziti services.
+> Supported dev mode runs platform-server and docker-runner via `pnpm dev` on the host.
+> Docker Compose is reserved for shared dependencies (Postgres, LiteLLM, Vault, OpenZiti, etc.).
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
 
 The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
@@ -204,13 +201,10 @@ The init container wraps the OpenZiti CLI, mirrors identity JSON into `./.ziti/i
 whenever you need to regenerate enrollment material (no host `ziti` binary required). If the job reports that the
 router has not enrolled yet, keep the `ziti-edge-router` container running, wait for it to connect, then re-run the init job.
 
-6. Launch docker-runner and platform-server normally (either via `pnpm dev` or
-   `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
-   - Host `pnpm` dev keeps the ConfigService defaults, so the proxy binds to `127.0.0.1:17071` unless you override
-     `ZITI_RUNNER_PROXY_HOST`.
-   - The docker overlay sets `ZITI_RUNNER_PROXY_HOST=0.0.0.0` inside the container so port `17071` can be published to
-     the host.
-   In both cases traffic is accessible from the host via `127.0.0.1:17071` once the proxy reports ready.
+6. Launch docker-runner and platform-server via host `pnpm dev` (the only supported dev path).
+   - Terminal A: `pnpm --filter @agyn/docker-runner dev` (reads `packages/docker-runner/.env`).
+   - Terminal B: `DOCKER_RUNNER_BASE_URL=http://127.0.0.1:17071 pnpm --filter @agyn/platform-server dev`.
+   ConfigService binds the local Ziti proxy to 127.0.0.1:17071 by default so the same URL works out of the box.
 
 The platform-server now retries the connectivity probe (defaults: 30 attempts, 2s interval). Override via
 `DOCKER_RUNNER_PROBE_MAX_ATTEMPTS` / `DOCKER_RUNNER_PROBE_INTERVAL_MS` if you need a longer window before the runner
@@ -240,6 +234,7 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
+  - DOCKER_RUNNER_BASE_URL (default http://127.0.0.1:17071) — platform-server's local Ziti proxy endpoint
 - OpenZiti transport (required for runner connectivity):
   - ZITI_MANAGEMENT_URL / ZITI_USERNAME / ZITI_PASSWORD — controller credentials
   - ZITI_SERVICE_NAME / ZITI_ROUTER_NAME — service plus edge router handles
@@ -277,9 +272,9 @@ UI variables (packages/platform-ui/.env.example):
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
   - Optional monitoring overlay (docker-compose.monitoring.yml) adds prometheus (9090) and grafana (3000) without mounting the Docker socket; provide your own scrape targets via configuration.
-- In-repo services (platform-server, docker-runner) live in docker-compose.dev.yml and must be combined with the base file.
+- Platform services (platform-server, docker-runner) run via `pnpm dev` on the host. `docker-compose.dev.yml` remains for image builds but is not a supported dev path.
 
-To start services:
+To start shared dependencies (Postgres, LiteLLM, Vault, NCPS, OpenZiti, monitoring):
 ```bash
 docker compose up -d
 ```
