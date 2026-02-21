@@ -188,6 +188,12 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
+  - DOCKER_RUNNER_OPTIONAL (default true; set to false to keep fail-fast bootstrap)
+  - DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS (default 500)
+  - DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS (default 30000)
+  - DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS (default 250)
+  - DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS (default 30000 while runner is healthy)
+  - DOCKER_RUNNER_CONNECT_MAX_RETRIES (default 0 → unlimited background retries)
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)

@@ -10,6 +10,7 @@ export type DockerRunnerStatusSnapshot = {
   baseUrl?: string;
   lastCheckedAt?: string;
   lastSuccessAt?: string;
+  lastFailureAt?: string;
   lastDurationMs?: number;
   consecutiveFailures: number;
   nextRetryAt?: string;
@@ -69,6 +70,7 @@ export class DockerRunnerStatusService {
       ...this.snapshot,
       status: 'down',
       lastCheckedAt: this.toIso(details.checkedAt),
+      lastFailureAt: this.toIso(Date.now()),
       consecutiveFailures: this.snapshot.consecutiveFailures + 1,
       nextRetryAt: this.toIso(details.nextRetryAt),
       error: this.serializeError(details.error),

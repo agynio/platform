@@ -69,28 +69,42 @@ export const configSchema = z.object({
     }),
   dockerRunnerOptional: z
     .union([z.boolean(), z.string()])
-    .default('false')
+    .default('true')
     .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
-  dockerRunnerConnectivityIntervalMs: z
+  dockerRunnerConnectRetryBaseDelayMs: z
     .union([z.string(), z.number()])
-    .default('5000')
+    .default('500')
     .transform((v) => {
       const num = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(num) && num > 0 ? num : 5_000;
+      return Number.isFinite(num) && num > 0 ? num : 500;
     }),
-  dockerRunnerConnectivityMaxIntervalMs: z
+  dockerRunnerConnectRetryMaxDelayMs: z
     .union([z.string(), z.number()])
-    .default('60000')
+    .default('30000')
     .transform((v) => {
       const num = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(num) && num > 0 ? num : 60_000;
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
     }),
-  dockerRunnerConnectivityBackoffFactor: z
+  dockerRunnerConnectRetryJitterMs: z
     .union([z.string(), z.number()])
-    .default('2')
+    .default('250')
     .transform((v) => {
       const num = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(num) && num >= 1 ? num : 2;
+      return Number.isFinite(num) && num >= 0 ? num : 250;
+    }),
+  dockerRunnerConnectProbeIntervalMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
+    }),
+  dockerRunnerConnectMaxRetries: z
+    .union([z.string(), z.number()])
+    .default('0')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 0;
     }),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
@@ -361,16 +375,24 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerOptional;
   }
 
-  get dockerRunnerConnectivityIntervalMs(): number {
-    return this.params.dockerRunnerConnectivityIntervalMs;
+  get dockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryBaseDelayMs;
   }
 
-  get dockerRunnerConnectivityMaxIntervalMs(): number {
-    return this.params.dockerRunnerConnectivityMaxIntervalMs;
+  get dockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryMaxDelayMs;
   }
 
-  get dockerRunnerConnectivityBackoffFactor(): number {
-    return this.params.dockerRunnerConnectivityBackoffFactor;
+  get dockerRunnerConnectRetryJitterMs(): number {
+    return this.params.dockerRunnerConnectRetryJitterMs;
+  }
+
+  get dockerRunnerConnectProbeIntervalMs(): number {
+    return this.params.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  get dockerRunnerConnectMaxRetries(): number {
+    return this.params.dockerRunnerConnectMaxRetries;
   }
 
   get volumeGcSweepTimeoutMs(): number {
@@ -393,16 +415,24 @@ export class ConfigService implements Config {
     return this.dockerRunnerOptional;
   }
 
-  getDockerRunnerConnectivityIntervalMs(): number {
-    return this.dockerRunnerConnectivityIntervalMs;
+  getDockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.dockerRunnerConnectRetryBaseDelayMs;
   }
 
-  getDockerRunnerConnectivityMaxIntervalMs(): number {
-    return this.dockerRunnerConnectivityMaxIntervalMs;
+  getDockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.dockerRunnerConnectRetryMaxDelayMs;
   }
 
-  getDockerRunnerConnectivityBackoffFactor(): number {
-    return this.dockerRunnerConnectivityBackoffFactor;
+  getDockerRunnerConnectRetryJitterMs(): number {
+    return this.dockerRunnerConnectRetryJitterMs;
+  }
+
+  getDockerRunnerConnectProbeIntervalMs(): number {
+    return this.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  getDockerRunnerConnectMaxRetries(): number {
+    return this.dockerRunnerConnectMaxRetries;
   }
 
   getVolumeGcSweepTimeoutMs(): number {
@@ -519,9 +549,11 @@ export class ConfigService implements Config {
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
-      dockerRunnerConnectivityIntervalMs: process.env.DOCKER_RUNNER_CONNECTIVITY_INTERVAL_MS,
-      dockerRunnerConnectivityMaxIntervalMs: process.env.DOCKER_RUNNER_CONNECTIVITY_MAX_INTERVAL_MS,
-      dockerRunnerConnectivityBackoffFactor: process.env.DOCKER_RUNNER_CONNECTIVITY_BACKOFF_FACTOR,
+      dockerRunnerConnectRetryBaseDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS,
+      dockerRunnerConnectRetryMaxDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS,
+      dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
+      dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
+      dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

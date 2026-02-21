@@ -17,6 +17,7 @@ export class RequireDockerRunnerGuard implements CanActivate {
     throw new HttpException(
       {
         statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        message: 'docker-runner not ready',
         error: {
           code: 'docker_runner_not_ready',
           status: snapshot.status,
