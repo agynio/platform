@@ -3,21 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
+  "main": "src/index.ts",
   "scripts": {
     "dev": "tsx src/service/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/service/main.js",
     "lint": "eslint .",
-    "test": "vitest run",
-    "prepare": "pnpm run build"
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",

@@ -1,4 +1,4 @@
-import type { ContainerHandle } from './container.handle.js';
+import type { ContainerHandle } from './container.handle';
 import type {
   ContainerOpts,
   ExecOptions,
@@ -8,7 +8,7 @@ import type {
   LogsStreamOptions,
   LogsStreamSession,
   Platform,
-} from './types.js';
+} from './types';
 
 export type DockerEventFilters = Record<string, Array<string | number>>;
 

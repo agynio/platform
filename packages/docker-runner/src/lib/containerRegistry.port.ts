@@ -1,4 +1,4 @@
-import type { ContainerMount } from './container.mounts.js';
+import type { ContainerMount } from './container.mounts';
 
 export type RegisterContainerStartInput = {
   containerId: string;
