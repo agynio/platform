@@ -1,13 +1,13 @@
 import { createServer } from 'node:http';
 import process from 'node:process';
-import { loadConfig } from './config';
-import { createLogger } from './logger';
-import { createSocketServer } from './socket/server';
-import { NotificationsSubscriber } from './redis/notifications-subscriber';
-import { dispatchToRooms } from './dispatch';
-import { serializeError } from './errors';
+import { loadConfig } from './config.js';
+import { createLogger } from './logger.js';
+import { createSocketServer } from './socket/server.js';
+import { NotificationsSubscriber } from './redis/notifications-subscriber.js';
+import { dispatchToRooms } from './dispatch.js';
+import { serializeError } from './errors.js';
 import type { NotificationEnvelope } from '@agyn/shared';
-import type { Logger } from './logger';
+import type { Logger } from './logger.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 async function main(): Promise<void> {

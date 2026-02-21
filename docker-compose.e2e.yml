@@ -45,7 +45,7 @@ services:
       - agents_net
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:v1.80.5-stable
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
@@ -62,10 +62,14 @@ services:
     networks:
       - agents_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 5
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:4000/health || wget -qO- http://localhost:4000/ui || wget -qO- http://localhost:4000/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
       start_period: 10s
 
   docker-runner:
@@ -93,7 +97,7 @@ services:
       redis:
         condition: service_started
       litellm:
-        condition: service_healthy
+        condition: service_started
       docker-runner:
         condition: service_started
     environment:

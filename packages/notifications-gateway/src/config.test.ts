@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadConfig } from './config';
+import { loadConfig } from './config.js';
 
 const TRACKED_KEYS = ['PORT', 'HOST', 'SOCKET_IO_PATH', 'NOTIFICATIONS_REDIS_URL', 'NOTIFICATIONS_CHANNEL', 'LOG_LEVEL'] as const;
 const snapshots: Record<string, string | undefined> = {};

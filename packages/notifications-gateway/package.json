@@ -10,6 +10,9 @@
     "start": "node dist/index.js",
     "test": "vitest run"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@agyn/shared": "workspace:*",
     "dotenv": "17.2.2",

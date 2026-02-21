@@ -37,6 +37,8 @@ static_resources:
                             cluster: platform_server
                 http_filters:
                   - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
     - name: platform_server
       connect_timeout: 2s

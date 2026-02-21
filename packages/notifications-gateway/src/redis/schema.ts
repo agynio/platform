@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { NotificationEnvelope } from '@agyn/shared';
-import { RoomSchema } from '../rooms';
+import { RoomSchema } from '../rooms.js';
 
 export const NotificationEnvelopeSchema: z.ZodType<NotificationEnvelope> = z
   .object({

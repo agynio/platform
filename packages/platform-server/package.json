@@ -15,7 +15,7 @@
     "test:litellm": "vitest run __tests__/integration/litellm.integration.test.ts",
     "test:watch": "vitest",
     "lint": "pnpm run prisma:generate && eslint .",
-    "prepare": "prisma generate",
+    "prepare": "node ./scripts/run-prepare.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

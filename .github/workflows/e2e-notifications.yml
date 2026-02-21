@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           for attempt in {1..30}; do
-            if curl -fsS http://localhost:8080 >/dev/null; then
+            if pnpm exec node scripts/e2e/notifications/socket-ready.mjs; then
               echo "Envoy is ready"
               exit 0
             fi
@@ -72,6 +72,12 @@ jobs:
           NOTIFICATIONS_CHANNEL: notifications.v1
           NOTIFICATIONS_ROOM: thread:test
         run: pnpm exec node scripts/e2e/notifications/ws-check.mjs
+
+      - name: Capture success proof logs
+        run: |
+          docker compose -f docker-compose.e2e.yml logs envoy | tail -n 50
+          docker compose -f docker-compose.e2e.yml logs notifications-gateway | tail -n 50
+          docker compose -f docker-compose.e2e.yml logs platform-server | tail -n 50
 
       - name: Envoy and gateway logs (on failure)
         if: failure()

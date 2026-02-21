@@ -1,7 +1,7 @@
 import type { Server as HTTPServer } from 'node:http';
 import { Server as SocketIOServer, type ServerOptions } from 'socket.io';
-import type { Logger } from '../logger';
-import { attachSubscribeHandler } from './subscriptions';
+import type { Logger } from '../logger.js';
+import { attachSubscribeHandler } from './subscriptions.js';
 
 export const createSocketServer = (params: {
   server: HTTPServer;

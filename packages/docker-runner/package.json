@@ -11,6 +11,9 @@
     "lint": "eslint .",
     "test": "vitest run"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
     "@nestjs/common": "^11.1.7",

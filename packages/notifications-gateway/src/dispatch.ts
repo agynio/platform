@@ -1,7 +1,7 @@
 import type { NotificationEnvelope } from '@agyn/shared';
 import type { Server as SocketIOServer } from 'socket.io';
-import type { Logger } from './logger';
-import { serializeError } from './errors';
+import type { Logger } from './logger.js';
+import { serializeError } from './errors.js';
 
 export const dispatchToRooms = (
   io: SocketIOServer,

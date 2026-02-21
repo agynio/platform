@@ -1,7 +1,7 @@
 import type { Socket } from 'socket.io';
 import { z } from 'zod';
-import type { Logger } from '../logger';
-import { RoomSchema, type ValidRoom } from '../rooms';
+import type { Logger } from '../logger.js';
+import { RoomSchema, type ValidRoom } from '../rooms.js';
 
 const SubscribeSchema = z
   .object({

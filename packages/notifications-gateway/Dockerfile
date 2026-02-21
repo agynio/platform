@@ -23,11 +23,12 @@ FROM base AS build
 
 COPY . .
 
-RUN pnpm install --filter @agyn/notifications-gateway... --offline --frozen-lockfile
+RUN SKIP_PLATFORM_SERVER_PREPARE=1 pnpm install --filter @agyn/notifications-gateway... --offline --frozen-lockfile
 
 RUN pnpm --filter @agyn/notifications-gateway run build
 
-RUN pnpm deploy --filter @agyn/notifications-gateway --prod --legacy /opt/app
+RUN install -d /opt/app/packages/notifications-gateway \
+ && SKIP_PLATFORM_SERVER_PREPARE=1 pnpm deploy --filter @agyn/notifications-gateway --prod --legacy /opt/app/packages/notifications-gateway
 
 FROM node:20-slim AS runtime
 

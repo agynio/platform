@@ -23,11 +23,12 @@ FROM base AS build
 
 COPY . .
 
-RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile
+RUN SKIP_PLATFORM_SERVER_PREPARE=1 SKIP_SHARED_PREPARE=1 pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile
 
 RUN pnpm --filter @agyn/docker-runner run build
 
-RUN pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app
+RUN install -d /opt/app/packages/docker-runner \
+ && SKIP_PLATFORM_SERVER_PREPARE=1 SKIP_SHARED_PREPARE=1 pnpm deploy --filter @agyn/docker-runner --prod --legacy /opt/app/packages/docker-runner
 
 FROM node:20-slim AS runtime
 

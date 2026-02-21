@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepare": "pnpm run build"
+    "prepare": "node ./scripts/run-prepare.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

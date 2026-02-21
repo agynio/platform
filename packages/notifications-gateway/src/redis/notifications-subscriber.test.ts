@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NotificationsSubscriber } from './notifications-subscriber';
-import type { Logger } from '../logger';
+import { NotificationsSubscriber } from './notifications-subscriber.js';
+import type { Logger } from '../logger.js';
 
 class RedisStub extends EventEmitter {
   connect = vi.fn(async () => {});

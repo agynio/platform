@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events';
 import Redis from 'ioredis';
-import type { Logger } from '../logger';
+import type { Logger } from '../logger.js';
 import type { NotificationEnvelope } from '@agyn/shared';
-import { NotificationEnvelopeSchema } from './schema';
-import { serializeError } from '../errors';
+import { NotificationEnvelopeSchema } from './schema.js';
+import { serializeError } from '../errors.js';
 
 export class NotificationsSubscriber extends EventEmitter {
   private redis: Redis | null = null;

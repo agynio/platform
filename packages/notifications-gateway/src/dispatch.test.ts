@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NotificationEnvelope } from '@agyn/shared';
-import type { Logger } from './logger';
+import type { Logger } from './logger.js';
 import type { Server as SocketIOServer } from 'socket.io';
-import { dispatchToRooms } from './dispatch';
+import { dispatchToRooms } from './dispatch.js';
 
 const createLogger = (): Logger =>
   ({
