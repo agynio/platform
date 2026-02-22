@@ -37,9 +37,7 @@ import { HealthController } from './health/health.controller';
       provide: ContainerRegistry,
       useFactory: async (prismaSvc: PrismaService) => {
         const svc = new ContainerRegistry(prismaSvc.getClient());
-        if (process.env.SKIP_DB_BOOTSTRAP !== '1') {
-          await svc.ensureIndexes();
-        }
+        await svc.ensureIndexes();
         return svc;
       },
       inject: [PrismaService],
