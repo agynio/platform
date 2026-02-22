@@ -32,6 +32,7 @@ const DEFAULT_DOCKER_CONFIG =
   ?? (hasComposePlugin(WORKSPACE_DOCKER_CONFIG) ? WORKSPACE_DOCKER_CONFIG : undefined)
   ?? HOME_DOCKER_CONFIG;
 const MAIN_TIMEOUT_MS = Number(process.env.ZITI_E2E_TIMEOUT_MS ?? 300_000);
+const FAILURE_HOLD_MS = Number(process.env.ZITI_E2E_FAILURE_HOLD_MS ?? 120_000);
 const REQUEST_TIMEOUT_MS = 15_000;
 
 if (!process.env.DOCKER_CONFIG) {
@@ -67,6 +68,7 @@ async function runFlow() {
   const composeRunner = await createComposeRunner();
   registerSignalHandlers(composeRunner);
   await composeRunner.down({ quiet: true });
+  let encounteredError = false;
   try {
     await composeRunner.run(
       ['up', '-d', 'agents-db', 'litellm-db', 'litellm', 'ziti-controller', 'ziti-controller-init', 'ziti-edge-router', 'dind', 'docker-runner', 'platform-server'],
@@ -82,14 +84,11 @@ async function runFlow() {
     await waitForHttpReady('http://127.0.0.1:3010/api/containers?limit=1');
     await runWorkspaceLifecycle();
   } catch (error) {
+    encounteredError = true;
     await dumpDiagnostics(composeRunner.run);
     throw error;
   } finally {
-    if (process.env.ZITI_E2E_KEEP_STACK === '1') {
-      console.warn('[ziti-e2e] skipping docker compose down (ZITI_E2E_KEEP_STACK=1)');
-    } else {
-      await composeRunner.down();
-    }
+    await teardownStack(composeRunner, encounteredError);
   }
 }
 
@@ -367,7 +366,7 @@ async function findContainer(containerId, includeStopped) {
 async function dumpDiagnostics(compose) {
   console.warn('[ziti-e2e] collecting diagnostics');
   try {
-    await compose(['ps'], { streamOutput: true, quiet: true });
+    await compose(['ps', '--format', 'json'], { streamOutput: true, quiet: true });
     await compose(
       [
         'logs',
@@ -381,9 +380,37 @@ async function dumpDiagnostics(compose) {
       ],
       { streamOutput: true, quiet: true },
     );
+    await dumpServiceInspect(compose, 'docker-runner');
+    await dumpServiceInspect(compose, 'platform-server');
   } catch (error) {
     console.warn('[ziti-e2e] failed to collect diagnostics', error);
   }
+}
+
+async function dumpServiceInspect(compose, service) {
+  try {
+    const { stdout } = await compose(['ps', '-q', service], { quiet: true });
+    const containerId = stdout.trim();
+    if (!containerId) {
+      console.warn(`[ziti-e2e] no container ID found for ${service}`);
+      return;
+    }
+    await runCommand('docker', ['inspect', containerId], { streamOutput: true, quiet: true });
+  } catch (error) {
+    console.warn(`[ziti-e2e] failed to inspect ${service}`, error);
+  }
+}
+
+async function teardownStack(composeRunner, encounteredError) {
+  if (process.env.ZITI_E2E_KEEP_STACK === '1') {
+    console.warn('[ziti-e2e] skipping docker compose down (ZITI_E2E_KEEP_STACK=1)');
+    return;
+  }
+  if (encounteredError && FAILURE_HOLD_MS > 0) {
+    console.warn(`[ziti-e2e] failure detected; holding stack for ${FAILURE_HOLD_MS}ms before teardown`);
+    await delay(FAILURE_HOLD_MS, { ref: false });
+  }
+  await composeRunner.down();
 }
 
 async function fetchWithTimeout(resource, init = {}) {
