@@ -9,5 +9,5 @@ sources:
   - https://github.com/agynio/platform
 dependencies:
   - name: service-base
-    version: ">=0.1.0 <1.0.0"
-    repository: oci://ghcr.io/agynio/helm
+    version: ">=0.1.4 <1.0.0"
+    repository: oci://ghcr.io/agynio/charts

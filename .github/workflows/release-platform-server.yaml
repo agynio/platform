@@ -12,7 +12,7 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/agynio/platform-server
   CHART_DIR: charts/platform-server
-  HELM_REGISTRY: oci://ghcr.io/agynio/helm
+  HELM_REGISTRY: oci://ghcr.io/agynio/charts
 
 jobs:
   release:

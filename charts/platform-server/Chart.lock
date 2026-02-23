@@ -1,6 +1,6 @@
 dependencies:
 - name: service-base
-  repository: oci://ghcr.io/agynio/helm
-  version: 0.1.2
-digest: sha256:0af2f4fecbcd84d168cbf7248f8c8f1fec065a94b3582a9f7e56e2675a8917d3
-generated: "2026-02-23T17:07:58.842443778Z"
+  repository: oci://ghcr.io/agynio/charts
+  version: 0.1.4
+digest: sha256:570721ceec7cbe765e88c4719adea845a291a5ea697fecfb41ec63e47036694d
+generated: "2026-02-23T21:55:37.923131867Z"
