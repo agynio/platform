@@ -155,9 +155,6 @@ class AnsiSequenceCleaner {
   }
 }
 
-const DEFAULT_CHUNK_COALESCE_MS = 40;
-const DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024;
-const DEFAULT_CLIENT_BUFFER_BYTES = 10 * 1024 * 1024;
 
 type OutputSource = 'stdout' | 'stderr';
 
@@ -213,17 +210,16 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   // shared decode helpers located in src/common/ingress/ingressDecode.ts
 
   private getResolvedConfig() {
-    const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
+    const cfg = ShellToolStaticConfigSchema.parse(this.node.config ?? {});
     return {
-      workdir: cfg.workdir ?? undefined,
-      executionTimeoutMs: typeof cfg.executionTimeoutMs === 'number' ? cfg.executionTimeoutMs : 60 * 60 * 1000,
-      idleTimeoutMs: typeof cfg.idleTimeoutMs === 'number' ? cfg.idleTimeoutMs : 60 * 1000,
-      outputLimitChars: typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0,
-      chunkCoalesceMs: typeof cfg.chunkCoalesceMs === 'number' ? cfg.chunkCoalesceMs : DEFAULT_CHUNK_COALESCE_MS,
-      chunkSizeBytes: typeof cfg.chunkSizeBytes === 'number' ? cfg.chunkSizeBytes : DEFAULT_CHUNK_SIZE_BYTES,
-      clientBufferLimitBytes:
-        typeof cfg.clientBufferLimitBytes === 'number' ? cfg.clientBufferLimitBytes : DEFAULT_CLIENT_BUFFER_BYTES,
-      logToPid1: typeof cfg.logToPid1 === 'boolean' ? cfg.logToPid1 : true,
+      workdir: cfg.workdir,
+      executionTimeoutMs: cfg.executionTimeoutMs,
+      idleTimeoutMs: cfg.idleTimeoutMs,
+      outputLimitChars: cfg.outputLimitChars,
+      chunkCoalesceMs: cfg.chunkCoalesceMs,
+      chunkSizeBytes: cfg.chunkSizeBytes,
+      clientBufferLimitBytes: cfg.clientBufferLimitBytes,
+      logToPid1: cfg.logToPid1,
     };
   }
 
