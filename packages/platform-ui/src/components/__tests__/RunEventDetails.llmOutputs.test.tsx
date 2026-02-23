@@ -46,9 +46,9 @@ describe('RunEventDetails – LLM outputs', () => {
     const assistantPanel = screen.getByTestId('assistant-context-panel');
     expect(within(assistantPanel).getByText('Persisted assistant output')).toBeInTheDocument();
     expect(within(assistantPanel).getByText('Reasoning tokens: 88')).toBeInTheDocument();
-    expect(screen.getByText('No new context for this call.')).toBeInTheDocument();
+    expect(screen.getByText('No new context items are marked for this call.')).toBeInTheDocument();
 
-    const loadMoreButton = screen.getByRole('button', { name: 'Load more' });
+    const loadMoreButton = screen.getByRole('button', { name: 'View context history' });
     fireEvent.click(loadMoreButton);
 
     await waitFor(() => {

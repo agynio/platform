@@ -243,6 +243,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [contextOlderVisibleCount, setContextOlderVisibleCount] = useState(0);
   const [contextOlderLoading, setContextOlderLoading] = useState(false);
   const [contextOlderError, setContextOlderError] = useState<string | null>(null);
+  const [contextHistoryNotice, setContextHistoryNotice] = useState<string | null>(null);
   const loadMoreResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextScrollRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollAnchor = useRef<{ previousHeight: number; previousScrollTop: number } | null>(null);
@@ -291,6 +292,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     setContextOlderVisibleCount(0);
     setContextOlderLoading(false);
     setContextOlderError(null);
+    setContextHistoryNotice(null);
     if (loadMoreResetTimeout.current !== null) {
       clearTimeout(loadMoreResetTimeout.current);
       loadMoreResetTimeout.current = null;
@@ -312,10 +314,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
   const handleLoadMoreContext = useCallback(() => {
     if (contextOlderLoading) return;
-    if (olderContextEntries.length === 0) {
-      setContextOlderError('Failed to load older context.');
-      return;
-    }
     const container = contextScrollRef.current;
     if (container) {
       pendingScrollAnchor.current = {
@@ -379,6 +377,16 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     setContextOlderError(null);
     handleLoadMoreContext();
   }, [contextOlderLoading, handleLoadMoreContext]);
+
+  const handleViewContextHistory = useCallback(() => {
+    if (contextOlderLoading) return;
+    setContextHistoryNotice(null);
+    if (olderContextEntries.length === 0) {
+      setContextHistoryNotice('No context history available for this call.');
+      return;
+    }
+    handleLoadMoreContext();
+  }, [contextOlderLoading, olderContextEntries.length, handleLoadMoreContext]);
 
   const isShellToolEvent =
     event.type === 'tool' &&
@@ -525,7 +533,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
       ? event.data.toolCalls.filter(isRecord)
       : [];
     const showEmptyContext = context.length === 0;
-    const showLoadMoreButton = hasOlderContextRemaining && !contextOlderError;
+    const showHistoryButton = !contextOlderError && (contextOlderVisibleCount === 0 || hasOlderContextRemaining);
+    const historyButtonLabel = contextOlderVisibleCount > 0 ? 'Load more' : 'View context history';
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -588,22 +597,25 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 ref={contextScrollRef}
                 data-testid="context-scroll-container"
               >
-                {showLoadMoreButton && (
+                {showHistoryButton && (
                   <button
                     type="button"
-                    onClick={handleLoadMoreContext}
+                    onClick={handleViewContextHistory}
                     disabled={contextOlderLoading}
                     className="mb-4 w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {contextOlderLoading ? 'Loading…' : 'Load more'}
+                    {contextOlderLoading ? 'Loading…' : historyButtonLabel}
                   </button>
                 )}
                 {showEmptyContext ? (
-                  <div className="text-sm text-[var(--agyn-gray)]">No new context for this call.</div>
+                  <div className="text-sm text-[var(--agyn-gray)]">No new context items are marked for this call.</div>
                 ) : (
                   <div className="flex flex-col">
                     {renderContextMessages(context)}
                   </div>
+                )}
+                {contextHistoryNotice && (
+                  <div className="mt-3 text-sm text-[var(--agyn-gray)]">{contextHistoryNotice}</div>
                 )}
                 {contextOlderError && (
                   <div className="mt-4 border border-[var(--agyn-border-subtle)] rounded-[6px] p-3 bg-[var(--agyn-bg-light)]">
