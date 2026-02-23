@@ -59,9 +59,9 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
 
-      - name: Update chart dependencies
+      - name: Build chart dependencies
         working-directory: ${{ env.CHART_DIR }}
-        run: helm dependency update
+        run: helm dependency build
 
       - name: Lint chart
         run: helm lint ${{ env.CHART_DIR }}
