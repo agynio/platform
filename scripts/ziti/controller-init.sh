@@ -202,8 +202,11 @@ ensure_identity_entity() {
 enroll_identity() {
   local identity_name=$1
   local destination=$2
+  local raw_snapshot="${destination}.raw"
   if [[ -s "$destination" ]]; then
     log "identity file already present for ${identity_name}"
+    snapshot_identity_raw "$destination" "$raw_snapshot"
+    ensure_identity_ca "$identity_name" "$destination" "$raw_snapshot"
     return
   fi
   mkdir -p "$(dirname "$destination")"
@@ -226,6 +229,80 @@ enroll_identity() {
   log "enrolling identity material for ${identity_name}"
   "${ZITI_BIN}" edge enroll "$jwt_file" --out "$destination" --rm >/dev/null
   rm -f "$jwt_file"
+  snapshot_identity_raw "$destination" "$raw_snapshot"
+  ensure_identity_ca "$identity_name" "$destination" "$raw_snapshot"
+}
+
+snapshot_identity_raw() {
+  local source=$1
+  local target=$2
+  if [[ -z "$source" || -z "$target" ]]; then
+    return
+  fi
+  if [[ ! -s "$source" ]]; then
+    return
+  fi
+  cp "$source" "$target"
+  chmod 0640 "$target"
+}
+
+ensure_identity_ca() {
+  local identity_name=$1
+  local file=$2
+  local raw_snapshot=${3:-}
+  local ca_bundle
+  if ! ca_bundle=$(load_controller_ca_bundle); then
+    log "warning: could not load controller CA bundle for ${identity_name}"
+    return
+  fi
+  local original_id_ca=""
+  local has_original_id_ca="false"
+  if [[ -n "$raw_snapshot" && -s "$raw_snapshot" ]]; then
+    original_id_ca=$(jq -r '.id.ca // empty' "$raw_snapshot")
+    if [[ -n "$original_id_ca" ]]; then
+      has_original_id_ca="true"
+    fi
+  fi
+  local controller_url
+  controller_url=$(jq -r '.ztAPI // empty' "$file")
+  log "embedding controller CA bundle into ${identity_name} identity"
+  local tmp
+  tmp=$(mktemp)
+  jq \
+    --arg controller_ca "pem:${ca_bundle}" \
+    --arg original_id_ca "$original_id_ca" \
+    --arg has_original_id_ca "$has_original_id_ca" \
+    --arg controller_url "$controller_url" \
+    '
+    .controllerCa = $controller_ca
+    | .controller = (.controller // {})
+    | .controller.ca = $controller_ca
+    | .controller.url = (if ($controller_url | length) > 0 then $controller_url else (.controller.url // .ztAPI) end)
+    | .ca = $controller_ca
+    | .id = (.id // {})
+    | (if $has_original_id_ca == "true" and ($original_id_ca | length) > 0 then .id.ca = $original_id_ca else . end)
+    ' "$file" >"$tmp"
+  mv "$tmp" "$file"
+}
+
+load_controller_ca_bundle() {
+  local root_dir="${ZITI_HOME}/pki/${ZITI_NETWORK}-edge-controller-root-ca"
+  local intermediate_dir="${ZITI_HOME}/pki/${ZITI_NETWORK}-edge-controller-intermediate"
+  local root_cert="${root_dir}/certs/${ZITI_NETWORK}-edge-controller-root-ca.cert"
+  local intermediate_cert="${intermediate_dir}/certs/${ZITI_NETWORK}-edge-controller-intermediate.cert"
+  local bundle=""
+  local found=false
+  for cert in "$root_cert" "$intermediate_cert"; do
+    if [[ -s "$cert" ]]; then
+      bundle+=$(cat "$cert")
+      bundle+=$'\n'
+      found=true
+    fi
+  done
+  if [[ "$found" != true ]]; then
+    return 1
+  fi
+  printf '%s' "$bundle"
 }
 
 ensure_identities() {
