@@ -12,8 +12,8 @@ directly from the OCI registry:
 
 ```bash
 VERSION="0.1.0"
-helm pull oci://ghcr.io/agynio/helm/platform-server --version "$VERSION"
-helm install platform-server oci://ghcr.io/agynio/helm/platform-server \
+helm pull oci://ghcr.io/agynio/charts/platform-server --version "$VERSION"
+helm install platform-server oci://ghcr.io/agynio/charts/platform-server \
   --version "$VERSION" \
   --namespace platform --create-namespace
 ```
