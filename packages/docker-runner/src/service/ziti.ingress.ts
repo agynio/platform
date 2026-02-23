@@ -38,7 +38,6 @@ export async function startZitiIngress(config: RunnerConfig): Promise<ZitiIngres
     proxy.ws(req, socket, head, undefined, () => socket.destroy());
   });
 
-  // eslint-disable-next-line no-console -- CLI startup log
   console.info(`Ziti ingress ready for service ${config.ziti.serviceName}`);
 
   return {

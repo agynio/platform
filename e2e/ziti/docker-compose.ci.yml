@@ -211,27 +211,10 @@ services:
       - agents_net
 
   docker-runner:
-    image: public.ecr.aws/docker/library/node:20.18.0-bookworm
-    working_dir: /workspace/platform
-    command: >-
-      bash -lc "set -euo pipefail;
-      apt-get update >/tmp/apt.log && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 pkg-config git curl zip unzip autoconf automake libtool m4 perl >>/tmp/apt.log;
-      mkdir -p /workspace/platform/.cache;
-      if [ ! -d /workspace/platform/.cache/vcpkg/.git ]; then
-        rm -rf /workspace/platform/.cache/vcpkg;
-        git clone https://github.com/microsoft/vcpkg.git /workspace/platform/.cache/vcpkg >>/tmp/vcpkg-bootstrap.log;
-        cd /workspace/platform/.cache/vcpkg && git checkout 84bab45d415d22042bd0b9081aea57f362da3f35 >>/tmp/vcpkg-bootstrap.log;
-      fi;
-      if [ ! -x /workspace/platform/.cache/vcpkg/vcpkg ]; then
-        cd /workspace/platform/.cache/vcpkg && ./bootstrap-vcpkg.sh -disableMetrics >>/tmp/vcpkg-bootstrap.log;
-      fi;
-      export VCPKG_ROOT=/workspace/platform/.cache/vcpkg;
-      if ! command -v pnpm >/dev/null 2>&1 || [ \"$(pnpm --version 2>/dev/null)\" != \"10.5.0\" ]; then
-        npm install -g pnpm@10.5.0 > /tmp/install-pnpm.log;
-      fi;
-      pnpm install --config.allow-scripts=true --frozen-lockfile --prefer-offline;
-      pnpm rebuild @nestjs/core @openziti/ziti-sdk-nodejs @prisma/client @prisma/engines @swc/core @tailwindcss/oxide cpu-features esbuild msw prisma protobufjs ssh2 unrs-resolver;
-      pnpm --filter @agyn/docker-runner dev"
+    build:
+      context: ${ZITI_E2E_ROOT}
+      dockerfile: packages/docker-runner/Dockerfile
+    user: root
     environment:
       NODE_ENV: production
       DOCKER_RUNNER_HOST: 0.0.0.0
@@ -239,11 +222,10 @@ services:
       DOCKER_RUNNER_SHARED_SECRET: ci-ziti-runner
       DOCKER_RUNNER_LOG_LEVEL: warn
       DOCKER_SOCKET: /var/run/docker.sock
-      ZITI_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.docker-runner.json
+      ZITI_ENABLED: '1'
+      ZITI_IDENTITY_FILE: /opt/app/.ziti/identities/dev.agyn-platform.docker-runner.json
       ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
       ZITI_LOG_LEVEL: ${ZITI_LOG_LEVEL:-}
-      ZITI_SDK_DIR: /workspace/platform/packages/ziti-sdk-c
-      VCPKG_ROOT: /workspace/platform/.cache/vcpkg
     depends_on:
       dind:
         condition: service_healthy
@@ -259,14 +241,14 @@ services:
       start_period: 10s
     volumes:
       - type: bind
-        source: ${ZITI_E2E_ROOT}
-        target: /workspace/platform
+        source: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}
+        target: /opt/app/.ziti
       - docker_dind_run:/var/run
     networks:
       - agents_net
 
   platform-server:
-    image: public.ecr.aws/docker/library/node:20.18.0-bookworm
+    image: public.ecr.aws/docker/library/node:20.20.0-bookworm
     working_dir: /workspace/platform
     command: >-
       bash -lc "set -euo pipefail;
@@ -286,7 +268,10 @@ services:
         npm install -g pnpm@10.5.0 > /tmp/install-pnpm.log;
       fi;
       pnpm install --config.allow-scripts=true --frozen-lockfile --prefer-offline;
-      pnpm rebuild @nestjs/core @openziti/ziti-sdk-nodejs @prisma/client @prisma/engines @swc/core @tailwindcss/oxide cpu-features esbuild msw prisma protobufjs ssh2 unrs-resolver;
+      pnpm config set allow-scripts @openziti/ziti-sdk-nodejs;
+      pnpm rebuild @openziti/ziti-sdk-nodejs --config.ignore-scripts=false;
+      pnpm rebuild @nestjs/core @prisma/client @prisma/engines @swc/core @tailwindcss/oxide cpu-features esbuild msw prisma protobufjs ssh2 unrs-resolver;
+      node -e \"const path=require('path');const childProcess=require('child_process');const base=require.resolve('@openziti/ziti-sdk-nodejs/package.json',{paths:['/workspace/platform/packages/platform-server']});const dir=path.dirname(base);childProcess.execFileSync('/workspace/platform/node_modules/.pnpm/node_modules/.bin/node-pre-gyp',['install'],{cwd:dir,stdio:'inherit'});\";
       pnpm --filter @agyn/platform-server exec prisma migrate deploy;
       pnpm --filter @agyn/platform-server dev"
     environment:
@@ -299,14 +284,14 @@ services:
       GRAPH_REPO_PATH: ${ZITI_E2E_ROOT}/.tmp/graph-ziti-e2e
       WORKSPACE_NETWORK_NAME: agents_net
       DOCKER_RUNNER_SHARED_SECRET: ci-ziti-runner
-      DOCKER_RUNNER_BASE_URL: http://127.0.0.1:17071
+      DOCKER_RUNNER_BASE_URL: http://docker-runner:7071
       ZITI_MANAGEMENT_URL: https://ziti-controller:1280/edge/management/v1
       ZITI_USERNAME: admin
       ZITI_PASSWORD: admin
       ZITI_INSECURE_TLS: 'true'
       ZITI_SERVICE_NAME: dev.agyn-platform.platform-api
       ZITI_ROUTER_NAME: dev-edge-router
-      ZITI_RUNNER_PROXY_HOST: 0.0.0.0
+      ZITI_RUNNER_PROXY_HOST: 127.0.0.1
       ZITI_RUNNER_PROXY_PORT: '17071'
       ZITI_PLATFORM_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.platform-server.json
       ZITI_RUNNER_IDENTITY_FILE: ${ZITI_E2E_STATE_DIR:-${ZITI_E2E_ROOT}/.ziti}/identities/dev.agyn-platform.docker-runner.json

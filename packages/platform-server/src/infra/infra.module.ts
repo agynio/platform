@@ -25,10 +25,13 @@ import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.wo
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
 import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
 import { DockerRunnerConnectivityProbe } from './container/dockerRunnerConnectivity.probe';
+import { TestWorkspacesController } from './container/testWorkspaces.controller';
 import { ZitiIdentityManager } from './ziti/ziti.identity.manager';
 import { ZitiReconciler } from './ziti/ziti.reconciler';
 import { ZitiRunnerProxyService } from './ziti/ziti.runnerProxy.service';
 import { ZitiBootstrapService } from './ziti/ziti.bootstrap.service';
+
+const TEST_WORKSPACE_CONTROLLERS = process.env.ENABLE_TEST_WORKSPACE_API === '1' ? [TestWorkspacesController] : [];
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -116,7 +119,13 @@ import { ZitiBootstrapService } from './ziti/ziti.bootstrap.service';
     GithubService,
     PRService,
   ],
-  controllers: [NixController, NixRepoController, ContainersController, ContainerTerminalController],
+  controllers: [
+    NixController,
+    NixRepoController,
+    ContainersController,
+    ContainerTerminalController,
+    ...TEST_WORKSPACE_CONTROLLERS,
+  ],
   exports: [
     VaultModule,
     DOCKER_CLIENT,

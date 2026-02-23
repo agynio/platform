@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { config } from 'dotenv';
 
 const isProduction = () => process.env.NODE_ENV?.toLowerCase() === 'production';
 
 function resolveCandidatePaths(): string[] {
-  const moduleDir = __dirname;
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const repoEnv = path.resolve(process.cwd(), '.env');
   const packageEnv = path.resolve(moduleDir, '../../.env');
   return [repoEnv, packageEnv];

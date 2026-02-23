@@ -37,7 +37,7 @@ export async function waitForServices({ compose, inspect, services, timeoutMs })
 
 async function readServiceStatus(compose, inspect, serviceName) {
   try {
-    const { stdout: idStdout } = await compose(['ps', '-q', serviceName], { quiet: true });
+    const { stdout: idStdout } = await compose(['ps', '--all', '-q', serviceName], { quiet: true });
     const containerId = idStdout.trim();
     if (!containerId) {
       return undefined;

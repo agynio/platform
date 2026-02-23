@@ -24,7 +24,7 @@ export class ContainerAdminService {
 
   constructor(
     @Inject(DOCKER_CLIENT) private readonly dockerClient: DockerClient,
-    private readonly registry: ContainerRegistry,
+    @Inject(ContainerRegistry) private readonly registry: ContainerRegistry,
   ) {}
 
   async deleteContainer(containerId: string): Promise<void> {
