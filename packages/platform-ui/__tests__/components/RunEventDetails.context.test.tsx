@@ -10,7 +10,7 @@ type ContextRecord = Record<string, unknown> & {
   __agynIsNew?: boolean;
 };
 
-const buildEvent = (context: ContextRecord[]): RunEvent => ({
+const buildEvent = (context: ContextRecord[], contextDeltaStatus?: 'empty' | 'unknown'): RunEvent => ({
   id: 'event-1',
   type: 'llm',
   timestamp: '2024-01-01T00:00:00.000Z',
@@ -19,6 +19,7 @@ const buildEvent = (context: ContextRecord[]): RunEvent => ({
     assistantContext: [],
     response: '',
     toolCalls: [],
+    contextDeltaStatus,
   },
 });
 
@@ -69,17 +70,17 @@ describe('RunEventDetails context pagination', () => {
     const event = buildEvent([
       { id: 'ctx-old-1', role: 'user', content: 'Older message 1' },
       { id: 'ctx-old-2', role: 'user', content: 'Older message 2' },
-    ]);
+    ], 'empty');
 
     render(<RunEventDetails event={event} />);
 
-    expect(screen.getByText('No new context items are marked for this call.')).toBeInTheDocument();
+    expect(screen.getByText('No new context added for this call.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'View context history' }));
 
     await waitFor(() => expect(screen.getByText('Older message 1')).toBeInTheDocument());
     expect(screen.getByText('Older message 2')).toBeInTheDocument();
-    expect(screen.queryByText('No new context items are marked for this call.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No new context added for this call.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 

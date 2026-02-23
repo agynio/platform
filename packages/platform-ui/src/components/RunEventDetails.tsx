@@ -216,12 +216,17 @@ export interface RunEventData extends Record<string, unknown> {
   oldContext?: unknown;
   newContext?: unknown;
   summary?: string;
+  contextDelta?: {
+    status?: ContextDeltaStatus;
+  };
+  contextDeltaStatus?: ContextDeltaStatus;
 }
 
 export type EventType = 'message' | 'llm' | 'tool' | 'summarization';
 export type ToolSubtype = 'generic' | 'shell' | 'manage' | string;
 export type MessageSubtype = 'source' | 'intermediate' | 'result';
 export type OutputViewMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
+export type ContextDeltaStatus = 'available' | 'empty' | 'unavailable' | 'redacted' | 'first_call' | 'unknown';
 
 export interface RunEventDetailsProps {
   event: RunEvent;
@@ -532,6 +537,12 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     const toolCalls = Array.isArray(event.data.toolCalls)
       ? event.data.toolCalls.filter(isRecord)
       : [];
+    const contextDeltaStatus = event.data.contextDelta?.status ?? event.data.contextDeltaStatus ?? 'unknown';
+    const emptyContextMessage = contextDeltaStatus === 'empty'
+      ? 'No new context added for this call.'
+      : contextDeltaStatus === 'first_call'
+        ? 'This is the first call in the run.'
+        : 'Context delta is not available for this call.';
     const showEmptyContext = context.length === 0;
     const showHistoryButton = !contextOlderError && (contextOlderVisibleCount === 0 || hasOlderContextRemaining);
     const historyButtonLabel = contextOlderVisibleCount > 0 ? 'Load more' : 'View context history';
@@ -608,7 +619,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                   </button>
                 )}
                 {showEmptyContext ? (
-                  <div className="text-sm text-[var(--agyn-gray)]">No new context items are marked for this call.</div>
+                  <div className="text-sm text-[var(--agyn-gray)]">{emptyContextMessage}</div>
                 ) : (
                   <div className="flex flex-col">
                     {renderContextMessages(context)}
