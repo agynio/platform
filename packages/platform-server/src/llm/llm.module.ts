@@ -32,9 +32,6 @@ import { LiteLLMKeyStore } from './provisioners/litellm.key.store';
         if (cfg.llmProvider === 'openai') {
           return openaiProvisioner;
         }
-        if (process.env.SKIP_LLM_PROVISIONER === '1') {
-          return liteProvisioner;
-        }
         await liteProvisioner.init();
         return liteProvisioner;
       },
