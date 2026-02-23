@@ -1,0 +1,171 @@
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ""
+  repository: ghcr.io/agynio/platform-server
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 2
+revisionHistoryLimit: 10
+updateStrategy: {}
+
+deploymentAnnotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+automountServiceAccountToken: true
+
+rbac:
+  create: false
+  clusterWide: false
+  rules: []
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  enabled: false
+  fsGroup: null
+
+securityContext:
+  enabled: true
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+priorityClassName: ""
+terminationGracePeriodSeconds: null
+
+service:
+  enabled: true
+  type: ClusterIP
+  annotations: {}
+  labels: {}
+  ports:
+    - name: http
+      port: 3010
+      targetPort: http
+      protocol: TCP
+
+containerPorts:
+  - name: http
+    containerPort: 3010
+    protocol: TCP
+
+command: []
+args: []
+env:
+  - name: NODE_ENV
+    value: production
+  - name: PORT
+    value: "3010"
+envFrom: []
+extraEnvVars: []
+extraEnvVarsCM: ""
+extraEnvVarsSecret: ""
+
+configMounts: []
+extraVolumeMounts: []
+extraVolumes: []
+
+initContainers: []
+extraContainers: []
+
+lifecycle: {}
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 6
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 6
+
+startupProbe:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: ""
+  metrics: []
+  behavior: {}
+
+pdb:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null
+
+ingress:
+  enabled: false
+  ingressClassName: nginx
+  annotations: {}
+  hosts:
+    - host: platform.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePort: http
+  tls: []
+
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: ""
+    scrapeTimeout: ""
+    honorLabels: false
+    labels: {}
+    annotations: {}
+    relabelings: []
+    metricRelabelings: []
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: ""
+        scrapeTimeout: ""
