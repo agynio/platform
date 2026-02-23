@@ -159,6 +159,7 @@ class AnsiSequenceCleaner {
 const DEFAULT_CHUNK_COALESCE_MS = 40;
 const DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024;
 const DEFAULT_CLIENT_BUFFER_BYTES = 10 * 1024 * 1024;
+const DEFAULT_OUTPUT_LIMIT_CHARS = 50_000;
 
 type OutputSource = 'stdout' | 'stderr';
 
@@ -211,21 +212,48 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       .replace(NUL_CHAR_REGEX, '');
   }
 
+  private parseInteger(value: unknown, options: { allowZero?: boolean } = {}): number | null {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
+      if (value < 0) return null;
+      if (!options.allowZero && value === 0) return null;
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) return null;
+      if (parsed < 0) return null;
+      if (!options.allowZero && parsed === 0) return null;
+      return parsed;
+    }
+
+    return null;
+  }
+
   // shared decode helpers located in src/common/ingress/ingressDecode.ts
 
   private getResolvedConfig() {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
-    return {
+    const executionTimeoutMs = this.parseInteger(cfg.executionTimeoutMs, { allowZero: true });
+    const idleTimeoutMs = this.parseInteger(cfg.idleTimeoutMs, { allowZero: true });
+    const outputLimitChars = this.parseInteger(cfg.outputLimitChars, { allowZero: true });
+    const chunkCoalesceMs = this.parseInteger(cfg.chunkCoalesceMs);
+    const chunkSizeBytes = this.parseInteger(cfg.chunkSizeBytes);
+    const clientBufferLimitBytes = this.parseInteger(cfg.clientBufferLimitBytes);
+    const resolved = {
       workdir: cfg.workdir ?? undefined,
-      executionTimeoutMs: typeof cfg.executionTimeoutMs === 'number' ? cfg.executionTimeoutMs : 60 * 60 * 1000,
-      idleTimeoutMs: typeof cfg.idleTimeoutMs === 'number' ? cfg.idleTimeoutMs : 60 * 1000,
-      outputLimitChars: typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0,
-      chunkCoalesceMs: typeof cfg.chunkCoalesceMs === 'number' ? cfg.chunkCoalesceMs : DEFAULT_CHUNK_COALESCE_MS,
-      chunkSizeBytes: typeof cfg.chunkSizeBytes === 'number' ? cfg.chunkSizeBytes : DEFAULT_CHUNK_SIZE_BYTES,
-      clientBufferLimitBytes:
-        typeof cfg.clientBufferLimitBytes === 'number' ? cfg.clientBufferLimitBytes : DEFAULT_CLIENT_BUFFER_BYTES,
+      executionTimeoutMs: executionTimeoutMs ?? 60 * 60 * 1000,
+      idleTimeoutMs: idleTimeoutMs ?? 60 * 1000,
+      outputLimitChars: outputLimitChars ?? DEFAULT_OUTPUT_LIMIT_CHARS,
+      chunkCoalesceMs: chunkCoalesceMs ?? DEFAULT_CHUNK_COALESCE_MS,
+      chunkSizeBytes: chunkSizeBytes ?? DEFAULT_CHUNK_SIZE_BYTES,
+      clientBufferLimitBytes: clientBufferLimitBytes ?? DEFAULT_CLIENT_BUFFER_BYTES,
       logToPid1: typeof cfg.logToPid1 === 'boolean' ? cfg.logToPid1 : true,
     };
+    return resolved;
   }
 
   private async saveOversizedOutputInContainer(
