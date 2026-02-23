@@ -108,7 +108,7 @@ describe('ShellCommandTool numeric config spillover integration', () => {
       executionTimeoutMs: 300_000,
       idleTimeoutMs: 60_000,
       workdir: '/workspace',
-      outputLimitChars: 50_000,
+      outputLimitChars: '50000',
     } as any);
 
     const tool = node.getTool();
