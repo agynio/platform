@@ -2,6 +2,8 @@ import { http, asData } from '@/api/http';
 import type {
   RunMessageItem,
   RunMeta,
+  LlmContextPage,
+  LlmContextPageCursor,
   RunTimelineEventsResponse,
   RunTimelineSummary,
   RunTimelineTotalsResponse,
@@ -63,6 +65,23 @@ export const runs = {
             order: params?.order ?? 'asc',
             ...(params?.sinceSeq !== undefined ? { sinceSeq: params.sinceSeq } : {}),
             ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+          },
+        },
+      ),
+    ),
+  llmContext: (
+    runId: string,
+    eventId: string,
+    params?: { limit?: number; cursor?: LlmContextPageCursor | null },
+  ) =>
+    asData<LlmContextPage>(
+      http.get<LlmContextPage>(
+        `/api/agents/runs/${encodeURIComponent(runId)}/events/${encodeURIComponent(eventId)}/llm-context`,
+        {
+          params: {
+            ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+            ...(params?.cursor?.idx !== undefined ? { cursorIdx: params.cursor.idx } : {}),
+            ...(params?.cursor?.rowId !== undefined ? { cursorRowId: params.cursor.rowId } : {}),
           },
         },
       ),

@@ -193,6 +193,52 @@ if (!shouldRunDbTests) {
       await cleanup(thread.id, run.id, Array.from(new Set(ids)));
     });
 
+    it('paginates llm context items newest-first', async () => {
+      const { thread, run } = await createThreadAndRun();
+      const ids = await createContextItems([
+        { role: ContextItemRole.system, contentText: 'system prompt' },
+        { role: ContextItemRole.user, contentText: 'latest user input' },
+        { role: ContextItemRole.assistant, contentText: 'assistant reply' },
+      ]);
+
+      const [systemId, userId, assistantId] = ids;
+      const event = await runEvents.startLLMCall({
+        runId: run.id,
+        threadId: thread.id,
+        contextItemIds: [systemId, userId, assistantId],
+        newContextItemIds: [userId],
+      });
+
+      const firstPage = await runEvents.listLlmContextItems({
+        runId: run.id,
+        eventId: event.id,
+        limit: 2,
+      });
+
+      expect(firstPage).not.toBeNull();
+      expect(firstPage?.items).toHaveLength(2);
+      expect(firstPage?.items.map((item) => item.contextItem.id)).toEqual([assistantId, userId]);
+      expect(firstPage?.items[1]?.isNew).toBe(true);
+      expect(firstPage?.nextCursor).toBeTruthy();
+
+      const nextCursor = firstPage?.nextCursor;
+      if (!nextCursor) throw new Error('Missing cursor for second page');
+
+      const secondPage = await runEvents.listLlmContextItems({
+        runId: run.id,
+        eventId: event.id,
+        limit: 2,
+        cursor: nextCursor,
+      });
+
+      expect(secondPage).not.toBeNull();
+      expect(secondPage?.items).toHaveLength(1);
+      expect(secondPage?.items[0]?.contextItem.id).toBe(systemId);
+      expect(secondPage?.nextCursor).toBeNull();
+
+      await cleanup(thread.id, run.id, Array.from(new Set(ids)));
+    });
+
     it('promotes outputs from call N into call N+1 inputs', async () => {
       const { thread, run } = await createThreadAndRun();
       const createdIds = new Set<string>();

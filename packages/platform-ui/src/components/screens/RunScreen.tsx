@@ -16,7 +16,7 @@ import {
 import type { ReactNode } from 'react';
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
-import { RunEventDetails } from '../RunEventDetails';
+import { RunEventDetails, type ContextPaginationState } from '../RunEventDetails';
 import { type RunEvent, RunEventsList } from '../RunEventsList';
 import { type Status, StatusIndicator } from '../StatusIndicator';
 import {
@@ -53,6 +53,7 @@ interface RunScreenProps {
   };
   events: RunEvent[];
   selectedEventId: string | null;
+  contextPagination?: ContextPaginationState;
   isFollowing: boolean;
   eventFilters: EventFilter[];
   statusFilters: StatusFilter[];
@@ -70,6 +71,7 @@ interface RunScreenProps {
   onTokensPopoverOpenChange: (open: boolean) => void;
   onRunsPopoverOpenChange: (open: boolean) => void;
   onLoadMoreEvents?: () => void;
+  onLoadOlderContext?: (eventId: string) => Promise<{ addedCount: number; hasMore: boolean }>;
   onTerminate?: () => void;
   onBack?: () => void;
   className?: string;
@@ -84,6 +86,7 @@ export default function RunScreen({
   tokens,
   events,
   selectedEventId,
+  contextPagination,
   isFollowing,
   eventFilters,
   statusFilters,
@@ -101,6 +104,7 @@ export default function RunScreen({
   onTokensPopoverOpenChange,
   onRunsPopoverOpenChange,
   onLoadMoreEvents,
+  onLoadOlderContext,
   onTerminate,
   onBack,
   className = '',
@@ -240,7 +244,14 @@ export default function RunScreen({
       );
     }
 
-    return <RunEventDetails event={selectedEvent} runId={runId} />;
+    return (
+      <RunEventDetails
+        event={selectedEvent}
+        runId={runId}
+        contextPagination={contextPagination}
+        onLoadOlderContext={onLoadOlderContext}
+      />
+    );
   };
 
   return (

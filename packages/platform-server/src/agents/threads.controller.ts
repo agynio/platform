@@ -142,6 +142,25 @@ export class RunEventOutputQueryDto {
   order?: 'asc' | 'desc';
 }
 
+export class RunEventLlmContextQueryDto {
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(0)
+  cursorIdx?: number;
+
+  @IsOptional()
+  @IsString()
+  cursorRowId?: string;
+}
+
 export class ListThreadsQueryDto {
   @IsOptional()
   @IsBooleanString()
@@ -638,6 +657,35 @@ export class AgentsThreadsController {
         'Tool output persistence unavailable. Run `pnpm --filter @agyn/platform-server prisma migrate deploy` followed by `pnpm --filter @agyn/platform-server prisma generate` to install the latest schema.',
       );
     }
+  }
+
+  @Get('runs/:runId/events/:eventId/llm-context')
+  async listLlmContextItems(
+    @Param('runId') runId: string,
+    @Param('eventId') eventId: string,
+    @Query() query: RunEventLlmContextQueryDto,
+  ) {
+    if (
+      (query.cursorIdx !== undefined && !query.cursorRowId) ||
+      (query.cursorIdx === undefined && query.cursorRowId)
+    ) {
+      throw new BadRequestException({ error: 'cursor_mismatch' });
+    }
+
+    const result = await this.runEvents.listLlmContextItems({
+      runId,
+      eventId,
+      limit: query.limit,
+      cursor: query.cursorIdx !== undefined && query.cursorRowId
+        ? { idx: query.cursorIdx, rowId: query.cursorRowId }
+        : undefined,
+    });
+
+    if (!result) {
+      throw new NotFoundException({ error: 'event_not_found' });
+    }
+
+    return result;
   }
 
   @Patch('threads/:threadId')

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentsRunScreen } from '../AgentsRunScreen';
 import type {
   ContextItem,
+  LlmContextPage,
   RunEventStatus,
   RunEventType,
   RunTimelineEvent,
@@ -60,19 +61,13 @@ vi.mock('@/api/hooks/runs', () => ({
 const runsModuleMocks = vi.hoisted(() => ({
   terminate: vi.fn(),
   timelineEvents: vi.fn(),
+  llmContext: vi.fn<Promise<LlmContextPage>, [string, string, { cursor?: { idx: number; rowId: string } | null; limit?: number }]>(),
 }));
 
 vi.mock('@/api/modules/runs', () => ({
   runs: runsModuleMocks,
 }));
 
-const contextItemsMocks = vi.hoisted(() => ({
-  getMany: vi.fn(async () => [] as never[]),
-}));
-
-vi.mock('@/api/modules/contextItems', () => ({
-  contextItems: contextItemsMocks,
-}));
 
 const notifyMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -130,8 +125,8 @@ beforeEach(() => {
   runsHookMocks.events.mockReset();
   runsHookMocks.totals.mockReset();
   runsHookMocks.totals.mockReturnValue(buildTotalsResponse());
-  contextItemsMocks.getMany.mockReset();
-  contextItemsMocks.getMany.mockResolvedValue([]);
+  runsModuleMocks.llmContext.mockReset();
+  runsModuleMocks.llmContext.mockResolvedValue({ items: [], nextCursor: null });
 });
 
 afterEach(() => {
@@ -239,6 +234,25 @@ function buildContextItems(rows: ContextRowInput[], prefix = 'rel'): LlmCallCont
     order: row.order ?? idx,
     createdAt: row.createdAt,
   }));
+}
+
+type ContextPageRowInput = {
+  contextItem: ContextItem;
+  isNew?: boolean;
+  idx?: number;
+  rowId?: string;
+};
+
+function buildLlmContextPage(items: ContextPageRowInput[], nextCursor: LlmContextPage['nextCursor'] = null): LlmContextPage {
+  return {
+    items: items.map((item, index) => ({
+      rowId: item.rowId ?? `row-${index + 1}`,
+      idx: item.idx ?? index,
+      isNew: item.isNew ?? false,
+      contextItem: item.contextItem,
+    })),
+    nextCursor,
+  };
 }
 
 type AgentsRunScreenWithTesting = typeof AgentsRunScreen & {
@@ -608,7 +622,7 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockResolvedValue([anthropicAssistant]);
+    runsModuleMocks.llmContext.mockResolvedValue(buildLlmContextPage([{ contextItem: anthropicAssistant }]));
 
     const queryClient = new QueryClient();
 
@@ -622,7 +636,13 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([anthropicAssistant.id]));
+    await waitFor(() =>
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
+    );
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
 
     const capturedProps = runScreenMocks.props.mock.calls.at(-1)?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
@@ -774,7 +794,7 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockImplementation(async () => [userContext]);
+    runsModuleMocks.llmContext.mockResolvedValue(buildLlmContextPage([{ contextItem: userContext }]));
 
     const queryClient = new QueryClient();
 
@@ -788,7 +808,13 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([userContext.id]));
+    await waitFor(() =>
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
+    );
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
     const lastCall = runScreenMocks.props.mock.calls.at(-1);
@@ -884,7 +910,12 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockImplementation(async () => [assistantContext, userContext]);
+    runsModuleMocks.llmContext.mockResolvedValue(
+      buildLlmContextPage([
+        { contextItem: assistantContext, isNew: false },
+        { contextItem: userContext, isNew: true },
+      ]),
+    );
 
     const queryClient = new QueryClient();
 
@@ -898,8 +929,7 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalled());
-    expect(contextItemsMocks.getMany).toHaveBeenCalledWith(expect.arrayContaining([assistantContext.id, userContext.id]));
+    await waitFor(() => expect(runsModuleMocks.llmContext).toHaveBeenCalled());
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
     const lastCall = runScreenMocks.props.mock.calls.at(-1);
@@ -983,7 +1013,7 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockResolvedValue([userContext]);
+    runsModuleMocks.llmContext.mockResolvedValue(buildLlmContextPage([{ contextItem: userContext, isNew: true }]));
 
     const queryClient = new QueryClient();
 
@@ -997,7 +1027,13 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([userContext.id]));
+    await waitFor(() =>
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
+    );
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
     const lastCall = runScreenMocks.props.mock.calls.at(-1);
@@ -1086,7 +1122,12 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockImplementation(async () => [assistantInput, toolInput]);
+    runsModuleMocks.llmContext.mockResolvedValue(
+      buildLlmContextPage([
+        { contextItem: assistantInput, isNew: true },
+        { contextItem: toolInput, isNew: true },
+      ]),
+    );
 
     const queryClient = new QueryClient();
 
@@ -1100,7 +1141,13 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith(expect.arrayContaining([assistantInput.id, toolInput.id])));
+    await waitFor(() =>
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
+    );
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
     const lastCall = runScreenMocks.props.mock.calls.at(-1);
@@ -1189,7 +1236,7 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockImplementation(async () => [assistantContext]);
+    runsModuleMocks.llmContext.mockResolvedValue(buildLlmContextPage([{ contextItem: assistantContext }]));
 
     const queryClient = new QueryClient();
 
@@ -1203,7 +1250,13 @@ describe('AgentsRunScreen', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(contextItemsMocks.getMany).toHaveBeenCalledWith([assistantContext.id]));
+    await waitFor(() =>
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
+    );
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
     const lastCall = runScreenMocks.props.mock.calls.at(-1);
@@ -1307,7 +1360,12 @@ describe('AgentsRunScreen', () => {
       totalEvents: 1,
     });
     runsHookMocks.events.mockReturnValue({ items: [event], nextCursor: null });
-    contextItemsMocks.getMany.mockImplementation(async () => [assistantWithTool, assistantWithoutTool]);
+    runsModuleMocks.llmContext.mockResolvedValue(
+      buildLlmContextPage([
+        { contextItem: assistantWithTool },
+        { contextItem: assistantWithoutTool },
+      ]),
+    );
 
     const queryClient = new QueryClient();
 
@@ -1322,7 +1380,11 @@ describe('AgentsRunScreen', () => {
     );
 
     await waitFor(() =>
-      expect(contextItemsMocks.getMany).toHaveBeenCalledWith(expect.arrayContaining([assistantWithTool.id, assistantWithoutTool.id])),
+      expect(runsModuleMocks.llmContext).toHaveBeenCalledWith(
+        event.runId,
+        event.id,
+        expect.objectContaining({ limit: 100 }),
+      ),
     );
 
     await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());

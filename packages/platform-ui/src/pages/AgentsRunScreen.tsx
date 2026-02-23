@@ -4,10 +4,10 @@ import RunScreen, { type EventFilter, type StatusFilter } from '@/components/scr
 import type { RunEvent as UiRunEvent } from '@/components/RunEventsList';
 import type { Status } from '@/components/StatusIndicator';
 import { useRunTimelineEventTotals, useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
-import { contextItems } from '@/api/modules/contextItems';
 import { runs } from '@/api/modules/runs';
 import type {
-  ContextItem,
+  LlmContextPageCursor,
+  LlmContextPageItem,
   RunEventStatus,
   RunEventType,
   RunTimelineEvent,
@@ -15,6 +15,7 @@ import type {
   RunTimelineEventsResponse,
 } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
+import { coerceRecord, isNonEmptyString, parseMaybeJson, toContextRecord, toRecordArray } from '@/lib/llmContext';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 
@@ -22,6 +23,15 @@ const EVENT_FILTER_OPTIONS: EventFilter[] = ['message', 'llm', 'tool', 'summary'
 const STATUS_FILTER_OPTIONS: StatusFilter[] = ['running', 'finished', 'failed', 'terminated'];
 const API_EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const API_EVENT_STATUSES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
+const LLM_CONTEXT_PAGE_LIMIT = 100;
+
+type LlmContextState = {
+  items: LlmContextPageItem[];
+  nextCursor: LlmContextPageCursor | null;
+  isLoading: boolean;
+  error: string | null;
+  hasFetched: boolean;
+};
 
 const EVENT_FILTER_TO_TYPES: Record<EventFilter, RunEventType[]> = {
   message: ['invocation_message', 'injection'],
@@ -206,63 +216,6 @@ function inferToolSubtype(toolName: string | undefined, input: unknown): 'shell'
   return 'generic';
 }
 
-function coerceRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
-  return null;
-}
-
-function parseMaybeJson(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch (_error) {
-    return value;
-  }
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-type ContextSource = {
-  ids: string[];
-  highlightIds: string[];
-};
-
-const EMPTY_CONTEXT_SOURCE: ContextSource = {
-  ids: [],
-  highlightIds: [],
-};
-
-function buildContextSource(llmCall?: RunTimelineEvent['llmCall']): ContextSource {
-  if (!llmCall) return EMPTY_CONTEXT_SOURCE;
-  const rows = Array.isArray(llmCall.inputContextItems) ? llmCall.inputContextItems : [];
-  if (rows.length === 0) return EMPTY_CONTEXT_SOURCE;
-  const sorted = [...rows].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const highlightCandidates = new Set<string>();
-  for (const row of sorted) {
-    const id = row.contextItemId;
-    if (!isNonEmptyString(id)) continue;
-    if (row.isNew === true) {
-      highlightCandidates.add(id);
-    }
-  }
-  const ids: string[] = [];
-  const highlightIds: string[] = [];
-  const seen = new Set<string>();
-  for (const row of sorted) {
-    const id = row.contextItemId;
-    if (!isNonEmptyString(id)) continue;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-    if (highlightCandidates.has(id)) {
-      highlightIds.push(id);
-    }
-  }
-  return { ids, highlightIds };
-}
-
 type LinkTargets = {
   threadId?: string;
   subthreadId?: string;
@@ -384,143 +337,8 @@ function normalizeRecordWithTargets(record: Record<string, unknown> | null, targ
   return changed ? next : record;
 }
 
-function parseContextItemContent(item: ContextItem): {
-  parsed: unknown;
-  record: Record<string, unknown> | null;
-  text: string | null;
-} {
-  const parsedContent = item.contentJson ?? (isNonEmptyString(item.contentText) ? parseMaybeJson(item.contentText) : undefined);
-  const record = coerceRecord(parsedContent);
 
-  const stringCandidates: Array<string | null> = [];
-  if (record && typeof record.content === 'string' && record.content.length > 0) stringCandidates.push(record.content);
-  if (record && typeof record.response === 'string' && record.response.length > 0) stringCandidates.push(record.response);
-  if (typeof parsedContent === 'string' && parsedContent.length > 0) stringCandidates.push(parsedContent);
-  if (isNonEmptyString(item.contentText)) stringCandidates.push(item.contentText);
 
-  const text = stringCandidates.find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0) ?? null;
-
-  return { parsed: parsedContent, record, text };
-}
-
-function normalizeMetadata(value: unknown): Record<string, unknown> | null {
-  const parsed = parseMaybeJson(value);
-  return coerceRecord(parsed);
-}
-
-function collectToolCalls(
-  primary: Record<string, unknown> | null,
-  primaryAdditionalKwargs: Record<string, unknown> | null,
-  metadata: Record<string, unknown> | null,
-  metadataAdditionalKwargs: Record<string, unknown> | null,
-): Record<string, unknown>[] {
-  const seen = new Set<string>();
-  const result: Record<string, unknown>[] = [];
-
-  const addRecords = (value: unknown) => {
-    if (value === undefined || value === null) return;
-    const normalized = typeof value === 'string' ? parseMaybeJson(value) : value;
-    for (const record of toRecordArray(normalized)) {
-      const key = (() => {
-        try {
-          return JSON.stringify(record);
-        } catch (_err) {
-          return undefined;
-        }
-      })();
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      result.push(record);
-    }
-  };
-
-  if (primary) {
-    addRecords(primary.tool_calls);
-    addRecords(primary.toolCalls);
-  }
-  if (primaryAdditionalKwargs) {
-    addRecords(primaryAdditionalKwargs.tool_calls);
-    addRecords(primaryAdditionalKwargs.toolCalls);
-  }
-  if (metadata) {
-    addRecords(metadata.tool_calls);
-    addRecords(metadata.toolCalls);
-  }
-  if (metadataAdditionalKwargs) {
-    addRecords(metadataAdditionalKwargs.tool_calls);
-    addRecords(metadataAdditionalKwargs.toolCalls);
-  }
-
-  const synthesizeFromOutput = (container?: Record<string, unknown> | null) => {
-    if (!container) return;
-    const outputEntries = Array.isArray(container.output) ? (container.output as unknown[]) : [];
-    for (const entry of outputEntries) {
-      const rec = coerceRecord(entry);
-      if (!rec) continue;
-      if (rec.type !== 'function_call') continue;
-
-      const funcRec = coerceRecord(rec.function);
-      const rawArgs = rec.arguments ?? funcRec?.arguments;
-      const normArgs = typeof rawArgs === 'string' ? parseMaybeJson(rawArgs) : rawArgs;
-
-      const synthesized: Record<string, unknown> = {
-        callId: isNonEmptyString(rec.call_id)
-          ? rec.call_id
-          : isNonEmptyString(rec.id)
-            ? rec.id
-            : undefined,
-        name: isNonEmptyString(rec.name)
-          ? rec.name
-          : isNonEmptyString(funcRec?.name)
-            ? funcRec.name
-            : undefined,
-        arguments: normArgs,
-      };
-
-      const key = (() => {
-        try {
-          return JSON.stringify(synthesized);
-        } catch (_err) {
-          return undefined;
-        }
-      })();
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      result.push(synthesized);
-    }
-  };
-
-  synthesizeFromOutput(primary);
-  synthesizeFromOutput(primaryAdditionalKwargs);
-  synthesizeFromOutput(metadata);
-  synthesizeFromOutput(metadataAdditionalKwargs);
-
-  return result;
-}
-
-function extractReasoning(
-  primary: Record<string, unknown> | null,
-  primaryAdditionalKwargs: Record<string, unknown> | null,
-  metadata: Record<string, unknown> | null,
-  metadataAdditionalKwargs: Record<string, unknown> | null,
-): unknown {
-  const candidates: unknown[] = [];
-  if (primary) candidates.push(primary.reasoning);
-  if (primaryAdditionalKwargs) candidates.push(primaryAdditionalKwargs.reasoning);
-  if (metadata) candidates.push(metadata.reasoning);
-  if (metadataAdditionalKwargs) candidates.push(metadataAdditionalKwargs.reasoning);
-
-  for (const candidate of candidates) {
-    if (candidate === undefined) continue;
-    if (candidate === null) return null;
-    if (typeof candidate === 'string') {
-      const parsed = parseMaybeJson(candidate);
-      return parsed;
-    }
-    return candidate;
-  }
-  return undefined;
-}
 
 function extractTextFromRawResponse(raw: unknown): string | null {
   const visited = new WeakSet<object>();
@@ -642,82 +460,6 @@ function extractLlmResponse(event: RunTimelineEvent): string {
   return '';
 }
 
-function toContextRecord(item: ContextItem): Record<string, unknown> {
-  const metadataRecord = normalizeMetadata(item.metadata);
-  const metadataAdditionalKwargs = metadataRecord ? coerceRecord(metadataRecord.additional_kwargs) : null;
-  const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
-  const contentAdditionalKwargs = parsedRecord ? coerceRecord(parsedRecord.additional_kwargs) : null;
-
-  const result: Record<string, unknown> = parsedRecord ? { ...parsedRecord } : {};
-
-  if (!isNonEmptyString(result.id)) {
-    result.id = item.id;
-  }
-  result.role = typeof result.role === 'string' && result.role.length > 0 ? result.role : item.role;
-  result.timestamp = result.timestamp ?? item.createdAt;
-  result.sizeBytes = item.sizeBytes;
-  result.contentJson = parsedContent;
-  result.metadata = metadataRecord ?? item.metadata;
-
-  const normalizedText = typeof textContent === 'string' && textContent.length > 0
-    ? textContent
-    : isNonEmptyString(item.contentText)
-      ? item.contentText
-      : null;
-
-  if (normalizedText !== null) {
-    result.contentText = normalizedText;
-  } else if ('contentText' in result && typeof result.contentText !== 'string') {
-    delete result.contentText;
-  }
-
-  const hasStringContent = typeof normalizedText === 'string' && normalizedText.length > 0;
-
-  if (result.role === 'assistant') {
-    if (hasStringContent) {
-      result.content = normalizedText;
-      if (typeof result.response !== 'string' || result.response.length === 0) {
-        result.response = normalizedText;
-      }
-    } else {
-      if (typeof result.content !== 'string') delete result.content;
-      if (typeof result.response !== 'string') delete result.response;
-    }
-  } else if (hasStringContent) {
-    if (typeof result.content !== 'string' || result.content.length === 0) {
-      result.content = normalizedText;
-    }
-  }
-
-  const mergedAdditionalKwargs = contentAdditionalKwargs ?? metadataAdditionalKwargs;
-  if (mergedAdditionalKwargs) {
-    result.additional_kwargs = mergedAdditionalKwargs;
-  }
-
-  const toolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
-
-  if (toolCalls.length > 0) {
-    result.tool_calls = toolCalls;
-    result.toolCalls = toolCalls;
-  }
-
-  const reasoning = extractReasoning(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
-  if (reasoning !== undefined) {
-    result.reasoning = reasoning;
-  }
-
-  return result;
-}
-
-function toRecordArray(value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) return [];
-  const result: Record<string, unknown>[] = [];
-  for (const item of value) {
-    const record = coerceRecord(item);
-    if (record) result.push(record);
-  }
-  return result;
-}
 
 function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   const execution = event.toolExecution;
@@ -760,43 +502,15 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   };
 }
 
-type ResolveContextRecordsOptions = {
-  highlightIds?: readonly string[];
-  includeAssistant?: boolean;
-};
-
-function resolveContextRecords(
-  ids: readonly string[],
-  lookup: Map<string, ContextItem>,
-  options?: ResolveContextRecordsOptions,
-): Record<string, unknown>[] {
-  if (!Array.isArray(ids) || ids.length === 0) return [];
-  const includeAssistant = options?.includeAssistant ?? false;
-  const highlightIds = Array.isArray(options?.highlightIds) ? options?.highlightIds.filter(isNonEmptyString) : [];
-  const highlightSet = highlightIds.length > 0 ? new Set(highlightIds) : null;
-  const records: Record<string, unknown>[] = [];
-  const seen = new Set<string>();
-  for (const id of ids) {
-    if (!isNonEmptyString(id)) continue;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const item = lookup.get(id);
-    if (!item) continue;
-    const record = toContextRecord(item);
-    const role = typeof record.role === 'string' ? record.role : item.role;
-    if (!includeAssistant && role === 'assistant') {
-      continue;
+function buildContextRecords(items: LlmContextPageItem[]): Record<string, unknown>[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  return items.map((item) => {
+    const record = toContextRecord(item.contextItem);
+    if (item.isNew) {
+      (record as Record<string, unknown> & { __agynIsNew?: boolean }).__agynIsNew = true;
     }
-    const recordId = typeof record.id === 'string' && record.id.length > 0 ? record.id : item.id;
-    if (isNonEmptyString(recordId)) {
-      record.id = recordId;
-      if (highlightSet?.has(recordId)) {
-        (record as Record<string, unknown> & { __agynIsNew?: boolean }).__agynIsNew = true;
-      }
-    }
-    records.push(record);
-  }
-  return records;
+    return record;
+  });
 }
 
 type CreateUiEventOptions = {
@@ -1011,9 +725,8 @@ export function AgentsRunScreen() {
   const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadOlderError, setLoadOlderError] = useState<string | null>(null);
-  const contextItemsRef = useRef<Map<string, ContextItem>>(new Map());
-  const pendingContextIdsRef = useRef<Set<string>>(new Set());
-  const [contextItemsVersion, setContextItemsVersion] = useState(0);
+  const contextStateRef = useRef<Map<string, LlmContextState>>(new Map());
+  const [contextStateVersion, setContextStateVersion] = useState(0);
 
   const followDefault = useMemo(() => {
     const paramValue = parseFollowValue(searchParams.get('follow'));
@@ -1199,63 +912,90 @@ export function AgentsRunScreen() {
     [],
   );
 
-  const fetchContextItems = useCallback(async (ids: readonly string[]) => {
-    if (!Array.isArray(ids) || ids.length === 0) return;
-    const lookup = contextItemsRef.current;
-    const pending = pendingContextIdsRef.current;
-    const candidates: string[] = [];
-
-    for (const id of ids) {
-      if (!isNonEmptyString(id)) continue;
-      if (lookup.has(id) || pending.has(id)) continue;
-      pending.add(id);
-      candidates.push(id);
-    }
-
-    if (candidates.length === 0) return;
-
-    let fetched: ContextItem[] | null = null;
-    try {
-      fetched = await contextItems.getMany(candidates);
-    } catch (error) {
-      console.error('Failed to load context items', error);
-    } finally {
-      for (const id of candidates) {
-        pending.delete(id);
+  const updateContextState = useCallback(
+    (eventId: string, updater: (state: LlmContextState) => LlmContextState) => {
+      const map = contextStateRef.current;
+      const current: LlmContextState = map.get(eventId) ?? {
+        items: [],
+        nextCursor: null,
+        isLoading: false,
+        error: null,
+        hasFetched: false,
+      };
+      const next = updater(current);
+      if (next !== current) {
+        map.set(eventId, next);
+        setContextStateVersion((version) => version + 1);
       }
-    }
+      return next;
+    },
+    [],
+  );
 
-    if (!fetched || fetched.length === 0) return;
+  const loadContextPage = useCallback(
+    async (eventId: string, cursor: LlmContextPageCursor | null): Promise<{ addedCount: number; hasMore: boolean }> => {
+      if (!runId) return { addedCount: 0, hasMore: false };
+      const current = contextStateRef.current.get(eventId);
+      if (current?.isLoading) return { addedCount: 0, hasMore: current.nextCursor !== null };
 
-    let updated = false;
-    for (const item of fetched) {
-      if (isNonEmptyString(item.id) && !lookup.has(item.id)) {
-        lookup.set(item.id, item);
-        updated = true;
+      updateContextState(eventId, (state) => ({
+        ...state,
+        isLoading: true,
+        error: null,
+      }));
+
+      try {
+        const page = await runs.llmContext(runId, eventId, {
+          limit: LLM_CONTEXT_PAGE_LIMIT,
+          cursor,
+        });
+        const newestFirstItems = Array.isArray(page.items) ? page.items : [];
+        const reversedItems = [...newestFirstItems].reverse();
+        let addedCount = 0;
+
+        updateContextState(eventId, (state) => {
+          const existing = state.items ?? [];
+          const existingIds = new Set(existing.map((item) => item.rowId));
+          const deduped: LlmContextPageItem[] = [];
+          for (const item of reversedItems) {
+            if (existingIds.has(item.rowId)) continue;
+            existingIds.add(item.rowId);
+            deduped.push(item);
+          }
+          addedCount = deduped.length;
+          const merged = cursor ? [...deduped, ...existing] : deduped;
+          return {
+            items: merged,
+            nextCursor: page.nextCursor ?? null,
+            isLoading: false,
+            error: null,
+            hasFetched: true,
+          };
+        });
+
+        return { addedCount, hasMore: page.nextCursor !== null };
+      } catch (error) {
+        updateContextState(eventId, (state) => ({
+          ...state,
+          isLoading: false,
+          error: 'Failed to load context.',
+        }));
+        throw error;
       }
-    }
-
-    if (updated) {
-      setContextItemsVersion((version) => version + 1);
-    }
-  }, []);
+    },
+    [runId, updateContextState],
+  );
 
   useEffect(() => {
+    if (!runId) return;
     if (allEvents.length === 0) return;
-    const lookup = contextItemsRef.current;
-    const ids = new Set<string>();
     for (const event of allEvents) {
       if (event.type !== 'llm_call') continue;
-      const { ids: inputIds } = buildContextSource(event.llmCall);
-      for (const id of inputIds) {
-        if (!isNonEmptyString(id)) continue;
-        if (lookup.has(id)) continue;
-        ids.add(id);
-      }
+      const state = contextStateRef.current.get(event.id);
+      if (state?.hasFetched || state?.isLoading) continue;
+      void loadContextPage(event.id, null);
     }
-    if (ids.size === 0) return;
-    void fetchContextItems(Array.from(ids));
-  }, [allEvents, fetchContextItems]);
+  }, [allEvents, runId, loadContextPage]);
 
   useEffect(() => {
     setEvents((prev) => {
@@ -1290,6 +1030,8 @@ export function AgentsRunScreen() {
       catchUpRef.current = null;
       setAllEvents([]);
       setEvents([]);
+      contextStateRef.current.clear();
+      setContextStateVersion((version) => version + 1);
       cursorRef.current = null;
       updateOlderCursor(null);
       updateCursor(null, { force: true });
@@ -1696,6 +1438,19 @@ export function AgentsRunScreen() {
     }
   }, [runId, isTerminating, summaryQuery]);
 
+  const handleLoadOlderContext = useCallback(
+    async (eventId: string) => {
+      const state = contextStateRef.current.get(eventId);
+      if (state?.isLoading) return { addedCount: 0, hasMore: state.nextCursor !== null };
+      if (!state || !state.hasFetched) {
+        return await loadContextPage(eventId, null);
+      }
+      if (!state.nextCursor) return { addedCount: 0, hasMore: false };
+      return await loadContextPage(eventId, state.nextCursor);
+    },
+    [loadContextPage],
+  );
+
   const runSummary = summaryQuery.data;
   const runStatus = mapRunStatus(runSummary?.status);
   const runDuration = useRunDuration(runSummary?.createdAt, runSummary?.status, runSummary?.lastEventAt ?? runSummary?.updatedAt);
@@ -1724,26 +1479,29 @@ export function AgentsRunScreen() {
     };
   }, [filteredEventCount, runSummary]);
 
+  const selectedContextState = useMemo(() => {
+    const currentVersion = contextStateVersion;
+    if (currentVersion < 0) return undefined;
+    if (!selectedEventId) return undefined;
+    const state = contextStateRef.current.get(selectedEventId);
+    if (!state) return undefined;
+    return {
+      hasMore: state.nextCursor !== null,
+      isLoading: state.isLoading,
+      error: state.error,
+    };
+  }, [selectedEventId, contextStateVersion]);
+
   const uiEvents = useMemo<UiRunEvent[]>(() => {
-    const lookup = contextItemsRef.current;
-    void contextItemsVersion;
-    return events.map((event) => {
-      const contextSource = event.type === 'llm_call' ? buildContextSource(event.llmCall) : EMPTY_CONTEXT_SOURCE;
-      const inputRecords =
-        event.type === 'llm_call'
-          ? resolveContextRecords(contextSource.ids, lookup, {
-              highlightIds: contextSource.highlightIds,
-              includeAssistant: true,
-            })
-          : [];
-      const contextRecords =
-        event.type === 'llm_call'
-          ? inputRecords
-          : [];
+    const contextStates = contextStateRef.current;
+    const resolvedEvents = contextStateVersion >= 0 ? events : [];
+    return resolvedEvents.map((event) => {
+      const contextState = event.type === 'llm_call' ? contextStates.get(event.id) : undefined;
+      const contextRecords = contextState?.hasFetched ? buildContextRecords(contextState.items) : undefined;
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
       return createUiEvent(event, { context: contextRecords, assistant: [], tool: toolLinks });
     });
-  }, [events, contextItemsVersion]);
+  }, [events, contextStateVersion]);
 
   const isLoading = eventsQuery.isLoading || summaryQuery.isLoading;
   const hasMoreEvents = Boolean(nextCursor);
@@ -1771,6 +1529,8 @@ export function AgentsRunScreen() {
         tokens={tokens}
         events={uiEvents}
         selectedEventId={selectedEventId ?? null}
+        contextPagination={selectedContextState}
+        onLoadOlderContext={handleLoadOlderContext}
         isFollowing={isFollowing}
         eventFilters={eventFilters}
         statusFilters={statusFilters}
