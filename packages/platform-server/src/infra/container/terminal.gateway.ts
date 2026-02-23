@@ -193,11 +193,23 @@ export class ContainerTerminalGateway {
             `Content-Length: ${Buffer.byteLength(payload)}`,
             'Connection: close',
           ].join('\r\n');
-          socket.end(`${headers}\r\n\r\n${payload}`);
+          socket.end(`${headers}\r\n\r\n${payload}`, () => {
+            if (!socket.destroyed) {
+              try {
+                socket.destroy();
+              } catch {
+                // ignore
+              }
+            }
+          });
         } catch {
           // ignore
+          try {
+            socket.destroy();
+          } catch {
+            // ignore
+          }
         }
-        socket.destroy();
         return;
       }
 
