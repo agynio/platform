@@ -13,6 +13,14 @@ import { PrismaService } from '../../../core/services/prisma.service';
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
 // Static config schema for ShellTool: per-node env overlay (supports Vault refs) and optional workdir
+const coerceNumericString = <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
+  z.preprocess((value) => {
+    if (typeof value === 'string' && /^\d+$/.test(value)) {
+      return Number(value);
+    }
+    return value;
+  }, schema);
+
 const EnvItemSchema = z
   .object({
     name: z.string().min(1),
@@ -33,39 +41,46 @@ export const ShellToolStaticConfigSchema = z
       .describe('Environment variables as resolved {name, value} pairs.')
       .meta({ 'ui:field': 'ReferenceEnvField' }),
     workdir: z.string().optional().describe('Working directory to use for each exec.'),
-    executionTimeoutMs: z
-      .union([z.literal(0), z.number().int().min(1000).max(86_400_000)])
+    executionTimeoutMs: coerceNumericString(
+      z.union([z.literal(0), z.number().int().min(1000).max(86_400_000)]),
+    )
       .default(60 * 60 * 1000)
       .describe('Maximum wall time for the command in milliseconds. 0 disables. Range: 1000-86400000 when enabled.'),
-    idleTimeoutMs: z
-      .union([z.literal(0), z.number().int().min(1000).max(86_400_000)])
+    idleTimeoutMs: coerceNumericString(
+      z.union([z.literal(0), z.number().int().min(1000).max(86_400_000)]),
+    )
       .default(60 * 1000)
       .describe('Maximum idle time (no output) in milliseconds. 0 disables. Range: 1000-86400000 when enabled.'),
-    outputLimitChars: z
-      .union([z.literal(0), z.number().int().positive()])
+    outputLimitChars: coerceNumericString(z.union([z.literal(0), z.number().int().positive()]))
       .default(50000)
       .describe(
         'Maximum combined cleaned stdout+stderr length. If >0 and exceeded, output is saved to /tmp/<uuid>.txt and a short error message is returned.',
       ),
-    chunkCoalesceMs: z
-      .number()
-      .int()
-      .min(5)
-      .max(1000)
+    chunkCoalesceMs: coerceNumericString(
+      z
+        .number()
+        .int()
+        .min(5)
+        .max(1000),
+    )
       .default(40)
       .describe('Milliseconds to buffer stdout/stderr before emitting a chunk.'),
-    chunkSizeBytes: z
-      .number()
-      .int()
-      .min(256)
-      .max(16384)
+    chunkSizeBytes: coerceNumericString(
+      z
+        .number()
+        .int()
+        .min(256)
+        .max(16384),
+    )
       .default(4096)
       .describe('Maximum UTF-8 bytes per chunk before forcing an emit.'),
-    clientBufferLimitBytes: z
-      .number()
-      .int()
-      .min(1024)
-      .max(50 * 1024 * 1024)
+    clientBufferLimitBytes: coerceNumericString(
+      z
+        .number()
+        .int()
+        .min(1024)
+        .max(50 * 1024 * 1024),
+    )
       .default(10 * 1024 * 1024)
       .describe('Maximum streamed bytes delivered to clients before truncation.'),
     logToPid1: z
