@@ -133,4 +133,32 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
   get provider(): WorkspaceNode | undefined {
     return this.containerProvider;
   }
+
+  override async setConfig(cfg: z.infer<typeof ShellToolStaticConfigSchema>): Promise<void> {
+    await super.setConfig(cfg);
+    this.logger.log('ShellCommandNode setConfig', {
+      nodeId: this._nodeId ?? 'uninitialized',
+      config: this.maskConfig(this.config),
+    });
+  }
+
+  protected override async doProvision(): Promise<void> {
+    await super.doProvision();
+    this.logger.log('ShellCommandNode provisioned config', {
+      nodeId: this._nodeId ?? 'uninitialized',
+      config: this.maskConfig(this.config),
+    });
+  }
+
+  private maskConfig(config: z.infer<typeof ShellToolStaticConfigSchema> | undefined) {
+    if (!config) return undefined;
+    const { env, ...rest } = config;
+    const maskedEnv = Array.isArray(env)
+      ? env.map(({ name }) => ({ name, value: '***' as const }))
+      : undefined;
+    return {
+      ...rest,
+      ...(maskedEnv ? { env: maskedEnv } : {}),
+    };
+  }
 }
