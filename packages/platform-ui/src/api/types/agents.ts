@@ -74,6 +74,8 @@ export type LlmContextPage = {
   nextCursor: LlmContextPageCursor | null;
 };
 
+export type LlmContextDeltaStatus = 'available' | 'empty' | 'unavailable' | 'redacted' | 'first_call' | 'unknown';
+
 export type RunEventType = 'invocation_message' | 'injection' | 'llm_call' | 'tool_execution' | 'summarization';
 export type RunEventStatus = 'pending' | 'running' | 'success' | 'error' | 'cancelled';
 export type EventSourceKind = 'internal' | 'tracing';
@@ -123,6 +125,7 @@ export type RunTimelineEvent = {
       createdAt: string;
       isNew?: boolean;
     }>;
+    contextDeltaStatus: LlmContextDeltaStatus;
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;

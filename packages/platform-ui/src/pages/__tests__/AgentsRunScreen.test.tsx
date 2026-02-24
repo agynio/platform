@@ -366,7 +366,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -402,7 +402,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -441,7 +441,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -480,7 +480,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -520,7 +520,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -594,6 +594,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-anthropic-tool-call',
         ),
+        contextDeltaStatus: 'empty',
         responseText: 'Done with delegate message.',
         rawResponse: null,
         toolCalls: [],
@@ -628,7 +629,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -643,10 +644,15 @@ describe('AgentsRunScreen', () => {
         expect.objectContaining({ limit: 100 }),
       ),
     );
-    await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
-
-    const capturedProps = runScreenMocks.props.mock.calls.at(-1)?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
-    if (!capturedProps) throw new Error('RunScreen props were not captured.');
+    const capturedProps = await waitFor(() => {
+      const lastCall = runScreenMocks.props.mock.calls.at(-1)?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
+      if (!lastCall) throw new Error('RunScreen props were not captured.');
+      const [capturedEvent] = lastCall.events;
+      const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+      const assistantRecord = context.find((entry) => entry.role === 'assistant');
+      if (!assistantRecord) throw new Error('Context not loaded yet.');
+      return lastCall;
+    });
 
     const [capturedEvent] = capturedProps.events;
     const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
@@ -761,6 +767,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-llm-separated',
         ),
+        contextDeltaStatus: 'empty',
         responseText: 'I am fine, thanks!',
         rawResponse: null,
         toolCalls: [
@@ -800,7 +807,7 @@ describe('AgentsRunScreen', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}`]}>
+        <MemoryRouter initialEntries={[`/threads/${event.threadId}/runs/${event.runId}?eventId=${event.id}`]}>
           <Routes>
             <Route path="/threads/:threadId/runs/:runId" element={<AgentsRunScreen />} />
           </Routes>
@@ -816,10 +823,15 @@ describe('AgentsRunScreen', () => {
       ),
     );
 
-    await waitFor(() => expect(runScreenMocks.props).toHaveBeenCalled());
-    const lastCall = runScreenMocks.props.mock.calls.at(-1);
-    const capturedProps = lastCall?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
-    if (!capturedProps) throw new Error('RunScreen props were not captured.');
+    const capturedProps = await waitFor(() => {
+      const lastCall = runScreenMocks.props.mock.calls.at(-1);
+      const props = lastCall?.[0] as { events: Array<{ data: Record<string, unknown> }> } | undefined;
+      if (!props) throw new Error('RunScreen props were not captured.');
+      const [capturedEvent] = props.events;
+      const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
+      if (context.length === 0) throw new Error('Context not loaded yet.');
+      return props;
+    });
 
     const [capturedEvent] = capturedProps.events;
     const context = (capturedEvent.data.context as Record<string, unknown>[] | undefined) ?? [];
@@ -883,6 +895,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-highlight',
         ),
+        contextDeltaStatus: 'available',
         responseText: 'Working on it.',
         rawResponse: null,
         toolCalls: [],
@@ -986,6 +999,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-llm-duplicate-new',
         ),
+        contextDeltaStatus: 'available',
         responseText: 'Report acknowledged.',
         rawResponse: null,
         toolCalls: [],
@@ -1095,6 +1109,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-assistant-tool',
         ),
+        contextDeltaStatus: 'available',
         responseText: null,
         rawResponse: null,
         toolCalls: [],
@@ -1208,6 +1223,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-structured',
         ),
+        contextDeltaStatus: 'empty',
         responseText: null,
         rawResponse: null,
         toolCalls: [],
@@ -1327,6 +1343,7 @@ describe('AgentsRunScreen', () => {
           ],
           'ctx-per-item-tool-calls',
         ),
+        contextDeltaStatus: 'empty',
         responseText: 'All set.',
         rawResponse: null,
         toolCalls: [
@@ -1454,6 +1471,7 @@ describe('extractLlmResponse', () => {
         topP: null,
         stopReason: null,
         inputContextItems: [],
+        contextDeltaStatus: 'unavailable',
         responseText: null,
         rawResponse: null,
         toolCalls: [],

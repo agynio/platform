@@ -152,6 +152,14 @@ const RUN_EVENT_STATUSES: ReadonlyArray<RunEventStatus> = [
   RunEventStatus.cancelled,
 ] as const;
 
+export type LlmContextDeltaStatus =
+  | 'available'
+  | 'empty'
+  | 'unavailable'
+  | 'redacted'
+  | 'first_call'
+  | 'unknown';
+
 export type RunTimelineEvent = {
   id: string;
   runId: string;
@@ -175,6 +183,7 @@ export type RunTimelineEvent = {
     topP: number | null;
     stopReason: string | null;
     inputContextItems: LLMInputContextItem[];
+    contextDeltaStatus: LlmContextDeltaStatus;
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
@@ -742,6 +751,11 @@ export class RunEventsService {
         isNew: Boolean(row.isNew),
       }));
     const linkedToolExecutionIds = event.llmCall?.toolExecutions?.map((exec) => exec.eventId) ?? [];
+    const contextDeltaStatus: LlmContextDeltaStatus = inputContextItems.length === 0
+      ? 'unavailable'
+      : inputContextItems.some((row) => row.isNew)
+        ? 'available'
+        : 'empty';
     const llmCall = event.llmCall
       ? {
           provider: event.llmCall.provider ?? null,
@@ -750,6 +764,7 @@ export class RunEventsService {
           topP: event.llmCall.topP ?? null,
           stopReason: event.llmCall.stopReason ?? null,
           inputContextItems,
+          contextDeltaStatus,
           responseText: event.llmCall.responseText ?? null,
           rawResponse: this.toPlainJson(event.llmCall.rawResponse ?? null),
           toolCalls: event.llmCall.toolCalls.map((tc) => ({

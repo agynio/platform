@@ -575,6 +575,7 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
         response,
         assistantContext,
         model: event.llmCall?.model ?? undefined,
+        contextDeltaStatus: event.llmCall?.contextDeltaStatus,
         tokens: usage
           ? {
               input: usage.inputTokens ?? undefined,
@@ -712,6 +713,7 @@ export function AgentsRunScreen() {
     },
     [setSearchParams],
   );
+  const selectedEventId = searchParams.get('eventId');
 
   const isMdUp = useMediaQuery('(min-width: 768px)');
   const [liveMessage, setLiveMessage] = useState('');
@@ -987,17 +989,6 @@ export function AgentsRunScreen() {
   );
 
   useEffect(() => {
-    if (!runId) return;
-    if (allEvents.length === 0) return;
-    for (const event of allEvents) {
-      if (event.type !== 'llm_call') continue;
-      const state = contextStateRef.current.get(event.id);
-      if (state?.hasFetched || state?.isLoading) continue;
-      void loadContextPage(event.id, null);
-    }
-  }, [allEvents, runId, loadContextPage]);
-
-  useEffect(() => {
     setEvents((prev) => {
       const next = allEvents.filter((event) => matchesFilters(event, selectedTypes, selectedStatuses));
       if (areEventListsEqual(prev, next)) return prev;
@@ -1080,6 +1071,18 @@ export function AgentsRunScreen() {
       });
     }
   }, [eventsQuery.data, updateEventsState, updateCursor, updateOlderCursor]);
+
+  useEffect(() => {
+    if (!runId) return;
+    if (!selectedEventId) return;
+    const selectedEvent =
+      allEvents.find((event) => event.id === selectedEventId) ??
+      eventsQuery.data?.items?.find((event) => event.id === selectedEventId);
+    if (!selectedEvent || selectedEvent.type !== 'llm_call') return;
+    const state = contextStateRef.current.get(selectedEvent.id);
+    if (state?.hasFetched || state?.isLoading) return;
+    void loadContextPage(selectedEvent.id, null);
+  }, [allEvents, runId, selectedEventId, loadContextPage, eventsQuery.data]);
 
   const fetchSinceCursor = useCallback(() => {
     if (!runId) return Promise.resolve();
@@ -1259,13 +1262,18 @@ export function AgentsRunScreen() {
     };
   }, [runId, summaryQuery, updateEventsState, updateCursor, fetchSinceCursor, scheduleTotalsRefetch]);
 
-  const selectedEventId = searchParams.get('eventId');
-
   useEffect(() => {
     if (!events.length) return;
-    if (!followRef.current) return;
     const latest = events[events.length - 1];
-    if (latest && latest.id !== selectedEventId) {
+    if (!latest) return;
+    if (!selectedEventId) {
+      updateSearchParams((params) => {
+        params.set('eventId', latest.id);
+      });
+      return;
+    }
+    if (!followRef.current) return;
+    if (latest.id !== selectedEventId) {
       updateSearchParams((params) => {
         params.set('eventId', latest.id);
       });
@@ -1275,13 +1283,17 @@ export function AgentsRunScreen() {
 
   useEffect(() => {
     if (!selectedEventId) return;
+    if (!eventsQuery.data) return;
+    if (events.length === 0) {
+      if ((eventsQuery.data.items ?? []).length > 0) return;
+    }
     const exists = events.some((event) => event.id === selectedEventId);
     if (!exists) {
       updateSearchParams((params) => {
         params.delete('eventId');
       });
     }
-  }, [events, selectedEventId, updateSearchParams]);
+  }, [events, selectedEventId, updateSearchParams, eventsQuery.data]);
 
   const selectEvent = useCallback(
     (eventId: string) => {
