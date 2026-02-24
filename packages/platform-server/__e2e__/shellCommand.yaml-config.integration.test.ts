@@ -134,7 +134,7 @@ describe('ShellCommandTool YAML config spillover (FsGraphRepository E2E)', () =>
     agentsDatabaseUrl: 'postgresql://postgres:postgres@localhost:5432/agents_test',
   };
 
-  const graphNodeId = 'cc8d56fb-8262-40c9-88b7-27377c6f50ab';
+  const graphNodeId = 'cc8d56d8-ee2d-4303-8341-ace54c4f3fd7';
   let tempGraphRoot: string;
 
   const prismaStub = {
@@ -279,18 +279,14 @@ describe('ShellCommandTool YAML config spillover (FsGraphRepository E2E)', () =>
     const nodeYaml = `id: ${graphNodeId}
 template: shellTool
 config:
+  env: []
   executionTimeoutMs: 300000
   idleTimeoutMs: 60000
   workdir: /workspace
-  outputLimitChars: 2048
-state:
-  provider:
-    raw: {}
-  config:
-    executionTimeoutMs: 300000
-    idleTimeoutMs: 60000
-    workdir: /workspace
-    outputLimitChars: 2048
+  outputLimitChars: 50000
+position:
+  x: 1151.3304377147065
+  y: -718.0877350439077
 `;
 
     await writeFile(path.join(tempGraphRoot, 'nodes', `${graphNodeId}.yaml`), nodeYaml, 'utf8');
@@ -311,6 +307,13 @@ state:
     shellNode.setContainerProvider(fakeProvider as unknown as WorkspaceNode);
 
     const tool = shellNode.getTool();
+    console.log(
+      'FsGraph runtime node.config outputLimitChars',
+      typeof (shellNode as unknown as { config?: { outputLimitChars?: unknown } }).config?.outputLimitChars,
+      (shellNode as unknown as { config?: { outputLimitChars?: unknown } }).config?.outputLimitChars,
+    );
+    const resolvedConfig = (tool as unknown as { getResolvedConfig: () => { outputLimitChars: number } }).getResolvedConfig();
+    console.log('ShellCommandTool resolved outputLimitChars', typeof resolvedConfig.outputLimitChars, resolvedConfig.outputLimitChars);
 
     const reducer = new CallToolsLLMReducer(runEventsStub, eventsBusStub).init({ tools: [tool] });
 
@@ -347,7 +350,7 @@ state:
     const message = result.messages.at(-1) as ToolCallOutputMessage;
     expect(message).toBeInstanceOf(ToolCallOutputMessage);
     expect(message.text).toContain('Full output saved to /tmp/');
-    expect(message.text).toContain('Output truncated after 2048 characters.');
+    expect(message.text).toContain('Output truncated after 50000 characters.');
     expect(message.text.length).toBeLessThan(5_000);
 
     expect(finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
