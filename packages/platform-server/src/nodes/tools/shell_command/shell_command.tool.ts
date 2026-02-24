@@ -268,21 +268,19 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   }
 
   private logResolvedConfigSnapshot(context: Record<string, unknown>, cfg: ResolvedShellCommandConfig): void {
-    const payload: Record<string, unknown> = {
+    const payload = {
       nodeId: this.node.nodeId,
       ...context,
-      config: {
-        workdir: cfg.workdir ?? null,
-        executionTimeoutMs: cfg.executionTimeoutMs,
-        idleTimeoutMs: cfg.idleTimeoutMs,
-        outputLimitChars: cfg.outputLimitChars,
-        chunkCoalesceMs: cfg.chunkCoalesceMs,
-        chunkSizeBytes: cfg.chunkSizeBytes,
-        clientBufferLimitBytes: cfg.clientBufferLimitBytes,
-        logToPid1: cfg.logToPid1,
-      },
+      workdir: cfg.workdir ?? null,
+      executionTimeoutMs: cfg.executionTimeoutMs,
+      idleTimeoutMs: cfg.idleTimeoutMs,
+      outputLimitChars: cfg.outputLimitChars,
+      chunkCoalesceMs: cfg.chunkCoalesceMs,
+      chunkSizeBytes: cfg.chunkSizeBytes,
+      clientBufferLimitBytes: cfg.clientBufferLimitBytes,
+      logToPid1: cfg.logToPid1,
     };
-    this.logger.log('ShellCommandTool resolved config', payload);
+    this.logger.log(`ShellCommandTool resolved config ${JSON.stringify(payload)}`);
   }
 
   private async saveOversizedOutputInContainer(
@@ -562,7 +560,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const id = randomUUID();
       const file = `${id}.txt`;
       const path = await this.saveOversizedOutputInContainer(container, file, combined);
-      const spillDecisionLog: Record<string, unknown> = {
+      const spillDecisionLog = {
         nodeId: this.node.nodeId,
         threadId,
         combinedLength: combined.length,
@@ -570,11 +568,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         decision: 'spill_to_tmp',
         savedPath: path,
       };
-      this.logger.log('ShellCommandTool execute decision', spillDecisionLog);
+      this.logger.log(`ShellCommandTool execute decision ${JSON.stringify(spillDecisionLog)}`);
       return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
     }
 
-    const returnDecisionLog: Record<string, unknown> = {
+    const returnDecisionLog = {
       nodeId: this.node.nodeId,
       threadId,
       combinedLength: combined.length,
@@ -582,7 +580,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       decision: 'return_raw',
       savedPath: null,
     };
-    this.logger.log('ShellCommandTool execute decision', returnDecisionLog);
+    this.logger.log(`ShellCommandTool execute decision ${JSON.stringify(returnDecisionLog)}`);
 
     return combined;
   }
@@ -1041,7 +1039,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
     }
 
-    const streamingDecisionLog: Record<string, unknown> = {
+    const streamingDecisionLog = {
       nodeId: this.node.nodeId,
       eventId: options.eventId,
       runId: options.runId,
@@ -1049,11 +1047,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       finalCombinedLength: finalCombinedOutput.length,
       outputLimit,
       truncated,
-      truncationReason: truncatedReason,
-      savedPath,
+      truncatedReason: truncatedReason ?? null,
+      savedPath: savedPath ?? null,
     };
 
-    this.logger.log('ShellCommandTool streaming decision', streamingDecisionLog);
+    this.logger.log(`ShellCommandTool streaming decision ${JSON.stringify(streamingDecisionLog)}`);
 
     if (formattedExecErrorMessage) {
       return formattedExecErrorMessage;

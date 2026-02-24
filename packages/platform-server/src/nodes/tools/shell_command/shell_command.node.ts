@@ -136,18 +136,14 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
 
   override async setConfig(cfg: z.infer<typeof ShellToolStaticConfigSchema>): Promise<void> {
     await super.setConfig(cfg);
-    this.logger.log('ShellCommandNode setConfig', {
-      nodeId: this._nodeId ?? 'uninitialized',
-      config: this.maskConfig(this.config),
-    });
+    const payload = this.createConfigLogFields(this.config);
+    this.logger.log(`ShellCommandNode setConfig ${JSON.stringify(payload)}`);
   }
 
   protected override async doProvision(): Promise<void> {
     await super.doProvision();
-    this.logger.log('ShellCommandNode provisioned config', {
-      nodeId: this._nodeId ?? 'uninitialized',
-      config: this.maskConfig(this.config),
-    });
+    const payload = this.createConfigLogFields(this.config);
+    this.logger.log(`ShellCommandNode provisioned config ${JSON.stringify(payload)}`);
   }
 
   private maskConfig(config: z.infer<typeof ShellToolStaticConfigSchema> | undefined) {
@@ -159,6 +155,21 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     return {
       ...rest,
       ...(maskedEnv ? { env: maskedEnv } : {}),
+    };
+  }
+
+  private createConfigLogFields(config: z.infer<typeof ShellToolStaticConfigSchema> | undefined) {
+    const masked = this.maskConfig(config);
+    const envNames = Array.isArray(masked?.env)
+      ? masked.env.map(({ name }) => ({ name, value: '***' as const }))
+      : [];
+    return {
+      nodeId: this._nodeId ?? 'uninitialized',
+      workdir: masked?.workdir ?? null,
+      executionTimeoutMs: masked?.executionTimeoutMs ?? null,
+      idleTimeoutMs: masked?.idleTimeoutMs ?? null,
+      outputLimitChars: masked?.outputLimitChars ?? null,
+      envNames,
     };
   }
 }
