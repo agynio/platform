@@ -10,6 +10,7 @@ const TEST_TIMEOUT_MS = 5000;
 describe('graphSocket real socket handshake', () => {
   it('connects and receives run events via websocket transport', async () => {
     const originalApiBase = process.env.VITE_API_BASE_URL;
+    const originalSocketBase = process.env.VITE_SOCKET_BASE_URL;
     const httpServer = createServer((_req, res) => {
       res.statusCode = 404;
       res.end('not-found');
@@ -101,7 +102,11 @@ describe('graphSocket real socket handshake', () => {
     });
 
     vi.stubEnv('VITE_API_BASE_URL', baseUrl);
-    if (process?.env) process.env.VITE_API_BASE_URL = baseUrl;
+    vi.stubEnv('VITE_SOCKET_BASE_URL', baseUrl);
+    if (process?.env) {
+      process.env.VITE_API_BASE_URL = baseUrl;
+      process.env.VITE_SOCKET_BASE_URL = baseUrl;
+    }
     await vi.resetModules();
 
     const { graphSocket } = await import('@/lib/graph/socket');
@@ -159,8 +164,13 @@ describe('graphSocket real socket handshake', () => {
 
       const workerId = Number.parseInt(process.env.VITEST_WORKER_ID ?? '0', 10);
       const defaultBase = originalApiBase ?? `http://127.0.0.1:${3010 + (Number.isFinite(workerId) ? workerId : 0)}`;
+      const defaultSocketBase = originalSocketBase ?? defaultBase;
       vi.stubEnv('VITE_API_BASE_URL', defaultBase);
-      if (process?.env) process.env.VITE_API_BASE_URL = defaultBase;
+      vi.stubEnv('VITE_SOCKET_BASE_URL', defaultSocketBase);
+      if (process?.env) {
+        process.env.VITE_API_BASE_URL = defaultBase;
+        process.env.VITE_SOCKET_BASE_URL = defaultSocketBase;
+      }
       await vi.resetModules();
     }
   }, TEST_TIMEOUT_MS * 2);

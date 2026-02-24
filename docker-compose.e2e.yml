@@ -26,6 +26,8 @@ services:
     extends:
       file: ./docker-compose.yml
       service: redis
+    ports:
+      - "6379:6379"
 
   litellm-db:
     image: postgres:16-alpine
@@ -62,7 +64,9 @@ services:
     networks:
       - agents_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      test:
+        ["CMD-SHELL",
+         "python3 -c \"import socket; s=socket.create_connection(('localhost', 4000), 2); s.close()\""]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -87,6 +91,7 @@ services:
     build:
       context: .
       dockerfile: packages/platform-server/Dockerfile
+    user: root
     depends_on:
       agents-db:
         condition: service_healthy
@@ -110,10 +115,13 @@ services:
       WORKSPACE_NETWORK_NAME: agents_net
       NCPS_ENABLED: "false"
       GRAPH_REPO_PATH: /data/graph
+      CORS_ORIGINS: http://localhost:4173
     volumes:
       - ./data/graph:/data/graph
     networks:
       - agents_net
+    ports:
+      - "3010:3010"
 
   notifications-gateway:
     build:
@@ -123,29 +131,16 @@ services:
       redis:
         condition: service_started
     environment:
-      PORT: 3011
+      PORT: 4000
       HOST: 0.0.0.0
       NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
       NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
       SOCKET_IO_PATH: /socket.io
+      CORS_ORIGIN: http://localhost:4173
     networks:
       - agents_net
-
-  envoy:
-    image: envoyproxy/envoy:v1.31.2
-    depends_on:
-      platform-server:
-        condition: service_started
-      notifications-gateway:
-        condition: service_started
     ports:
-      - "8080:8080"
-      - "9901:9901"
-    volumes:
-      - ./ops/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
-    command: ["envoy", "-c", "/etc/envoy/envoy.yaml"]
-    networks:
-      - agents_net
+      - "4000:4000"
 
 volumes:
   agents_pgdata:

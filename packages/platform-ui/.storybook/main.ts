@@ -23,14 +23,18 @@ const config: StorybookConfig = {
   env: (existing) => ({
     ...existing,
     VITE_API_BASE_URL: process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api',
+    VITE_SOCKET_BASE_URL:
+      process.env.VITE_SOCKET_BASE_URL ?? process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api',
   }),
   async viteFinal(config) {
     const apiBase = process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api';
+    const socketBase = process.env.VITE_SOCKET_BASE_URL ?? apiBase;
     return {
       ...config,
       define: {
         ...(config.define ?? {}),
         'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBase),
+        'import.meta.env.VITE_SOCKET_BASE_URL': JSON.stringify(socketBase),
       },
       envPrefix: Array.from(new Set(['VITE_', 'STORYBOOK_', ...(config.envPrefix ?? [])])),
       resolve: {

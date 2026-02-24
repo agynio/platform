@@ -27,7 +27,10 @@ RUN pnpm install --filter @agyn/notifications-gateway... --offline --frozen-lock
 
 RUN pnpm --filter @agyn/notifications-gateway run build
 
-RUN pnpm deploy --filter @agyn/notifications-gateway --prod --legacy /opt/app
+RUN pnpm deploy --filter @agyn/notifications-gateway --prod --legacy /opt/app \
+ && rm -rf /opt/app/packages/notifications-gateway \
+ && mkdir -p /opt/app/packages/notifications-gateway \
+ && cp -R packages/notifications-gateway/. /opt/app/packages/notifications-gateway/
 
 FROM node:20-slim AS runtime
 
@@ -40,6 +43,7 @@ RUN corepack enable \
  && corepack prepare pnpm@10.5.0 --activate \
  && apt-get update \
  && apt-get install -y --no-install-recommends git openssl \
+ && npm install --global tsx@^4.20.5 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /opt/app /opt/app
@@ -48,4 +52,4 @@ EXPOSE 3011
 
 USER node
 
-CMD ["node", "dist/index.js"]
+CMD ["tsx", "src/index.ts"]

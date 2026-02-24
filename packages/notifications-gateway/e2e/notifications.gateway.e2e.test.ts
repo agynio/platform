@@ -15,6 +15,9 @@ vi.mock('ioredis', () => import('./in-memory-redis.mock'));
 const TEST_CHANNEL = 'notifications.v1';
 const TEST_ROOM = 'thread:e2e-room';
 const TEST_EVENT = 'thread.message';
+const SOCKET_PATH = '/socket.io';
+const SOCKET_PING_INTERVAL_MS = 25_000;
+const SOCKET_PING_TIMEOUT_MS = 20_000;
 
 type SubscribeAck = { ok: boolean; rooms?: string[]; error?: string };
 
@@ -54,7 +57,14 @@ describe('notifications gateway e2e', () => {
   test('delivers envelopes published to redis to subscribed clients', async () => {
     const httpServer = createServer();
     const logger = createLogger('fatal');
-    const io = createSocketServer({ server: httpServer, path: '/socket.io', logger });
+    const io = createSocketServer({
+      server: httpServer,
+      path: SOCKET_PATH,
+      logger,
+      corsOrigin: '*',
+      pingIntervalMs: SOCKET_PING_INTERVAL_MS,
+      pingTimeoutMs: SOCKET_PING_TIMEOUT_MS,
+    });
     const port = await listen(httpServer);
 
     const subscriber = new NotificationsSubscriber(
@@ -65,7 +75,7 @@ describe('notifications gateway e2e', () => {
     await subscriber.start();
 
     const client = createClient(`http://127.0.0.1:${port}`, {
-      path: '/socket.io',
+      path: SOCKET_PATH,
       transports: ['websocket'],
       forceNew: true,
       reconnection: false,

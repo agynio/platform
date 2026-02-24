@@ -3,6 +3,7 @@
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
+  VITE_SOCKET_BASE_URL?: string;
   STORYBOOK?: string;
 };
 
@@ -21,6 +22,12 @@ function requireEnv(name: keyof ViteEnv): string {
   if (fallback) return fallback;
 
   throw new Error(`platform-ui config: required env ${String(name)} is missing`);
+}
+
+function optionalEnv(name: keyof ViteEnv): string | null {
+  const val = import.meta.env?.[name];
+  if (typeof val === 'string' && val.trim()) return val;
+  return null;
 }
 
 function stripTrailingSlash(pathname: string): string {
@@ -50,9 +57,10 @@ function deriveBase(raw: string, options: { stripApi: boolean }): string {
 }
 
 const rawApiBase = requireEnv('VITE_API_BASE_URL');
+const rawSocketBase = optionalEnv('VITE_SOCKET_BASE_URL') ?? rawApiBase;
 
 const apiBaseUrl = deriveBase(rawApiBase, { stripApi: true });
-const socketBaseUrl = deriveBase(rawApiBase, { stripApi: true });
+const socketBaseUrl = deriveBase(rawSocketBase, { stripApi: true });
 export const config = {
   apiBaseUrl,
   socketBaseUrl,

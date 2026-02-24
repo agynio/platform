@@ -10,12 +10,22 @@ import type { NotificationEnvelope } from '@agyn/shared';
 import type { Logger } from './logger';
 import type { Server as SocketIOServer } from 'socket.io';
 
+const SOCKET_PING_INTERVAL_MS = 25_000;
+const SOCKET_PING_TIMEOUT_MS = 20_000;
+
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
 
   const httpServer = createServer();
-  const io = createSocketServer({ server: httpServer, path: config.socketPath, logger });
+  const io = createSocketServer({
+    server: httpServer,
+    path: config.socketPath,
+    logger,
+    corsOrigin: config.corsOrigin,
+    pingIntervalMs: SOCKET_PING_INTERVAL_MS,
+    pingTimeoutMs: SOCKET_PING_TIMEOUT_MS,
+  });
   const subscriber = new NotificationsSubscriber(
     { url: config.notificationsRedisUrl, channel: config.redisChannel },
     logger,

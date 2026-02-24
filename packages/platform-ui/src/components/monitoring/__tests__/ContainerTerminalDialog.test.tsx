@@ -261,7 +261,16 @@ describe('toWsUrl', () => {
     vi.unstubAllEnvs();
   });
 
-  it('uses API base env for relative paths', () => {
+  it('uses socket base env for relative paths', () => {
+    vi.stubEnv('VITE_SOCKET_BASE_URL', 'http://localhost:4000');
+    const url = toWsUrl('/api/containers/terminal/session');
+    const expectedBase = new URL('http://localhost:4000');
+    expectedBase.protocol = expectedBase.protocol === 'https:' ? 'wss:' : 'ws:';
+    const expected = new URL('/api/containers/terminal/session', expectedBase).toString();
+    expect(url).toBe(expected);
+  });
+
+  it('falls back to API base when socket env missing', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3010');
     const url = toWsUrl('/api/containers/terminal/session');
     const expectedBase = new URL('http://localhost:3010');
@@ -271,7 +280,7 @@ describe('toWsUrl', () => {
   });
 
   it('falls back to window origin when env is relative', () => {
-    vi.stubEnv('VITE_API_BASE_URL', '/');
+    vi.stubEnv('VITE_SOCKET_BASE_URL', '/');
     const url = toWsUrl('/api/containers/terminal/session');
     const expectedBase = new URL(window.location.origin);
     expectedBase.protocol = expectedBase.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -280,7 +289,7 @@ describe('toWsUrl', () => {
   });
 
   it('returns absolute websocket URLs unchanged', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:9999');
+    vi.stubEnv('VITE_SOCKET_BASE_URL', 'http://localhost:9999');
     const url = toWsUrl('wss://external.example.com/ws');
     expect(url).toBe('wss://external.example.com/ws');
   });

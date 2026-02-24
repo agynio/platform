@@ -14,6 +14,8 @@ const READY_TIMEOUT_MS = 60_000;
 const env = {
   ...process.env,
   VITE_API_BASE_URL: process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api',
+  VITE_SOCKET_BASE_URL:
+    process.env.VITE_SOCKET_BASE_URL ?? process.env.VITE_API_BASE_URL ?? 'http://localhost:4173/api',
 };
 
 const BIN_DIRECTORY = path.resolve(

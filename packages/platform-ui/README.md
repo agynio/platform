@@ -8,11 +8,13 @@ Quickstart
 - Dev: pnpm -w -F @agyn/platform-ui dev
 
 Env configuration (required)
-- VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically and websockets connect to `/socket.io` on the same origin.
+- VITE_API_BASE_URL: base URL for the Agents API used by the UI. Point this to the REST hostname (`http://localhost:3010` in local dev). **Do not include `/api`;** REST requests add it automatically.
+- VITE_SOCKET_BASE_URL: websocket notifications host (defaults to `VITE_API_BASE_URL` when unset). For dual-endpoint setups, point this to the notifications gateway (`http://localhost:4000` locally). Connections always use the `/socket.io` path with websocket-only transport.
 - VITE_UI_MOCK_SIDEBAR (optional, default `false`): enable mock sidebar templates only for local prototyping. Requires a dev build (`import.meta.env.DEV`). Never enable in production builds.
 
 API base URL
 - The UI requires `VITE_API_BASE_URL` for all API interactions. No fallback is provided.
+- `VITE_SOCKET_BASE_URL` must resolve to the websocket origin (no `/socket.io` suffix); the client appends `/socket.io` automatically.
 
 Notes
 - Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.

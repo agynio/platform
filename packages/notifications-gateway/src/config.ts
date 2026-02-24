@@ -29,6 +29,18 @@ const configSchema = z.object({
     }),
   redisChannel: z.string().min(1).default(DEFAULT_NOTIFICATIONS_CHANNEL),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  corsOrigin: z
+    .string()
+    .default('*')
+    .transform((value) => {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === '*') return '*';
+      const origins = trimmed
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+      return origins.length ? origins : '*';
+    }),
 });
 
 export type GatewayConfig = z.infer<typeof configSchema>;
@@ -41,5 +53,6 @@ export function loadConfig(): GatewayConfig {
     notificationsRedisUrl: process.env.NOTIFICATIONS_REDIS_URL,
     redisChannel: process.env.NOTIFICATIONS_CHANNEL ?? DEFAULT_NOTIFICATIONS_CHANNEL,
     logLevel: process.env.LOG_LEVEL,
+    corsOrigin: process.env.CORS_ORIGIN,
   });
 }
