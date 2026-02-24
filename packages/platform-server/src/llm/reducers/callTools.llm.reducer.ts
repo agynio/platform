@@ -302,11 +302,11 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         }
 
         if (typeof raw === 'string') {
-          const payload = {
-            toolName: toolCall.name,
-            rawLength: raw.length,
-          };
-          this.logger.log(`CallToolsLLMReducer raw length ${JSON.stringify(payload)}`);
+          this.logger.log('CallToolsLLMReducer raw length', {
+            tool: toolCall.name,
+            runId: ctx.runId,
+            length: raw.length,
+          });
         }
 
         if (typeof raw === 'string' && raw.length > 50000) {
