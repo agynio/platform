@@ -301,14 +301,6 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           raw = await tool.execute(input as Parameters<FunctionTool['execute']>[0], ctx);
         }
 
-        if (typeof raw === 'string') {
-          this.logger.log('CallToolsLLMReducer raw length', {
-            tool: toolCall.name,
-            runId: ctx.runId,
-            length: raw.length,
-          });
-        }
-
         if (typeof raw === 'string' && raw.length > 50000) {
           response = createErrorResponse({
             code: 'TOOL_OUTPUT_TOO_LARGE',

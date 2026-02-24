@@ -267,24 +267,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     return resolved;
   }
 
-  private logResolvedConfigSnapshot(context: Record<string, unknown>, cfg: ResolvedShellCommandConfig): void {
-    const payload: Record<string, unknown> = {
-      nodeId: this.node.nodeId,
-      ...context,
-      config: {
-        workdir: cfg.workdir ?? null,
-        executionTimeoutMs: cfg.executionTimeoutMs,
-        idleTimeoutMs: cfg.idleTimeoutMs,
-        outputLimitChars: cfg.outputLimitChars,
-        chunkCoalesceMs: cfg.chunkCoalesceMs,
-        chunkSizeBytes: cfg.chunkSizeBytes,
-        clientBufferLimitBytes: cfg.clientBufferLimitBytes,
-        logToPid1: cfg.logToPid1,
-      },
-    };
-    this.logger.log('ShellCommandTool resolved config', payload);
-  }
-
   private async saveOversizedOutputInContainer(
     container: WorkspaceHandle,
     filename: string,
@@ -375,16 +357,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(threadId);
-    this.logger.log(`shell_command invoked command=${command}`);
 
     // Base env pulled from container; overlay from node config
     const baseEnv = undefined; // WorkspaceHandle does not expose getEnv; resolution handled via EnvService
     const envOverlay = await this.node.resolveEnv(baseEnv);
     const cfg = this.getResolvedConfig();
-    this.logResolvedConfigSnapshot(
-      { runId: ctx.runId, threadId, mode: 'non_streaming' },
-      cfg,
-    );
     const timeoutMs = cfg.executionTimeoutMs;
     const idleTimeoutMs = cfg.idleTimeoutMs;
 
@@ -562,27 +539,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const id = randomUUID();
       const file = `${id}.txt`;
       const path = await this.saveOversizedOutputInContainer(container, file, combined);
-      const spillDecisionLog: Record<string, unknown> = {
-        nodeId: this.node.nodeId,
-        threadId,
-        combinedLength: combined.length,
-        limit,
-        decision: 'spill_to_tmp',
-        savedPath: path,
-      };
-      this.logger.log('ShellCommandTool execute decision', spillDecisionLog);
       return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
     }
-
-    const returnDecisionLog: Record<string, unknown> = {
-      nodeId: this.node.nodeId,
-      threadId,
-      combinedLength: combined.length,
-      limit,
-      decision: 'return_raw',
-      savedPath: null,
-    };
-    this.logger.log('ShellCommandTool execute decision', returnDecisionLog);
 
     return combined;
   }
@@ -596,14 +554,9 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(options.threadId);
-    this.logger.log(`shell_command streaming start command=${command} eventId=${options.eventId}`);
 
     const envOverlay = await this.node.resolveEnv(undefined);
     const cfg = this.getResolvedConfig();
-    this.logResolvedConfigSnapshot(
-      { runId: options.runId, threadId: options.threadId, eventId: options.eventId, mode: 'streaming' },
-      cfg,
-    );
     const coalesceMs = Math.max(5, Math.trunc(cfg.chunkCoalesceMs));
     const chunkSizeBytes = Math.max(512, Math.trunc(cfg.chunkSizeBytes));
     const clientBufferLimitBytes = Math.max(0, Math.trunc(cfg.clientBufferLimitBytes));
@@ -1060,20 +1013,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         this.logger.warn(`ShellCommandTool failed to record terminal summary; continuing eventId=${options.eventId} error=${errMessage}`);
       }
     }
-
-    const streamingDecisionLog: Record<string, unknown> = {
-      nodeId: this.node.nodeId,
-      eventId: options.eventId,
-      runId: options.runId,
-      threadId: options.threadId,
-      finalCombinedLength: finalCombinedOutput.length,
-      outputLimit,
-      truncated,
-      truncationReason: truncatedReason,
-      savedPath,
-    };
-
-    this.logger.log('ShellCommandTool streaming decision', streamingDecisionLog);
 
     if (formattedExecErrorMessage) {
       return formattedExecErrorMessage;
