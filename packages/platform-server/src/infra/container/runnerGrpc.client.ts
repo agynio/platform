@@ -614,7 +614,7 @@ export class RunnerGrpcClient implements DockerClient {
   private resolveExecRequestTimeout(options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>): number | undefined {
     const candidates = [options?.timeoutMs, options?.idleTimeoutMs]
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
-    if (!candidates.length) return this.requestTimeoutMs;
+    if (!candidates.length) return undefined;
     const max = Math.max(...candidates);
     return max + EXEC_REQUEST_TIMEOUT_SLACK_MS;
   }
@@ -678,7 +678,7 @@ export class RunnerGrpcExecClient {
 
   async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
-    const deadlineMs = this.resolveTimeout?.(options) ?? this.defaultDeadlineMs;
+    const deadlineMs = this.resolveTimeout?.(options);
     const callOptions: CallOptions | undefined =
       typeof deadlineMs === 'number' && deadlineMs > 0
         ? { deadline: new Date(Date.now() + deadlineMs) }
