@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Agent, fetch } from 'undici';
+import { Agent, fetch, type Response } from 'undici';
 
 import type {
   ZitiEdgeRouter,
