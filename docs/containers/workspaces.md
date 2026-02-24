@@ -56,7 +56,7 @@ Terminal WebSocket
 ## Test-only provisioning endpoint
 
 - The docker-backed full-stack integration test (`packages/platform-server/__tests__/containers.fullstack.docker.integration.test.ts`)
-  boots a real docker-runner + platform server pair and exercises the HTTP lifecycle.
+  boots a real docker-runner + platform server pair and exercises the gRPC lifecycle end-to-end.
 - Because there is no public "create workspace" REST endpoint, the test registers a private controller at
   `POST /test/workspaces`. This controller uses the production `WorkspaceProvider.ensureWorkspace` flow and
   stores the resulting container/thread IDs so that `/api/containers/:id` deletion can be exercised end-to-end.

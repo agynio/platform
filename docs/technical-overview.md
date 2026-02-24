@@ -68,10 +68,10 @@ Per-workspace Docker-in-Docker and registry mirror
 
 Remote Docker runner
 - The platform-server always routes container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
-- The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
-- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default http://docker-runner:7071).
-- Container events are forwarded via SSE so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
-- Connectivity is tracked by a background `DockerRunnerConnectivityMonitor` that polls `/v1/ready` with exponential backoff (base-delay, max-delay, jitter, probe interval, and optional retry cap are configurable via DOCKER_RUNNER_CONNECT_* env vars).
+- The runner exposes authenticated gRPC endpoints; every request includes HMAC metadata derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
+- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default docker-runner:7171).
+- Container events, logs, and exec streams flow over long-lived gRPC streams so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
+- Connectivity is tracked by a background `DockerRunnerConnectivityMonitor` that probes the gRPC `Ready` method with exponential backoff (base-delay, max-delay, jitter, probe interval, and optional retry cap are configurable via DOCKER_RUNNER_CONNECT_* env vars).
 - When `DOCKER_RUNNER_OPTIONAL=true` (default) the server continues booting even if the runner is unreachable; when set to `false` the first failed probe aborts bootstrap (legacy fail-fast mode).
 - The monitor streams status into `DockerRunnerStatusService`, which feeds `/health`, Volume GC, REST guards, and terminal/websocket gating. Terminals and container APIs short-circuit with `docker_runner_not_ready` until status returns `up`.
 

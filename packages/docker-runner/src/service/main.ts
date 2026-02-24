@@ -3,20 +3,18 @@ import './env';
 import { ServerCredentials } from '@grpc/grpc-js';
 import { ContainerService, NonceCache } from '..';
 import { loadRunnerConfig } from './config';
-import { createRunnerApp } from './app';
 import { createRunnerGrpcServer } from './grpc/server';
 
 async function bootstrap(): Promise<void> {
   try {
     const config = loadRunnerConfig();
     process.env.DOCKER_SOCKET = config.dockerSocket;
+    if (!process.env.LOG_LEVEL && config.logLevel) {
+      process.env.LOG_LEVEL = config.logLevel;
+    }
+
     const containers = new ContainerService();
     const nonceCache = new NonceCache({ ttlMs: config.signatureTtlMs });
-
-    const app = createRunnerApp(config, { containers, nonceCache });
-    await app.listen({ port: config.port, host: config.host });
-    app.log.info({ port: config.port, host: config.host }, 'docker-runner HTTP server listening');
-
     const grpcServer = createRunnerGrpcServer({ config, containers, nonceCache });
     const grpcAddress = `${config.grpcHost}:${config.grpcPort}`;
     await new Promise<void>((resolve, reject) => {
@@ -25,23 +23,17 @@ async function bootstrap(): Promise<void> {
         resolve();
       });
     });
-    grpcServer.start();
-    app.log.info({ address: grpcAddress }, 'docker-runner gRPC server listening');
+    console.info(`[docker-runner] gRPC server listening on ${grpcAddress}`);
 
     let shuttingDown = false;
     const shutdown = async (signal: NodeJS.Signals | 'unknown') => {
       if (shuttingDown) return;
       shuttingDown = true;
-      app.log.info({ signal }, 'docker-runner shutting down');
-      try {
-        await app.close();
-      } catch (httpErr) {
-        app.log.error({ err: httpErr }, 'failed to close HTTP server');
-      }
+      console.info(`[docker-runner] shutting down (${signal ?? 'unknown'})`);
       await new Promise<void>((resolve) => {
         grpcServer.tryShutdown((err) => {
           if (err) {
-            app.log.error({ err }, 'failed to shutdown gRPC server');
+            console.error('[docker-runner] failed to shutdown gRPC server', err);
           }
           resolve();
         });
