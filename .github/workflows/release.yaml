@@ -86,7 +86,7 @@ jobs:
       contents: read
       packages: write
     env:
-      CHARTS: "charts/platform-server charts/platform-ui"
+      CHARTS: "charts/platform-server charts/docker-runner charts/platform-ui"
 
     steps:
       - name: Checkout
