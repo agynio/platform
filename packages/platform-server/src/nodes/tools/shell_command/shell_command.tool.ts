@@ -649,6 +649,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       stdout: [],
       stderr: [],
     };
+    const dropLoggedForSource: Record<OutputSource, boolean> = { stdout: false, stderr: false };
     const orderedOutput: Array<{ order: number; text: string }> = [];
 
     let seqGlobal = 0;
@@ -691,6 +692,21 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             allowNextChunkAfterTruncate = false;
           } else {
             droppedChunks += 1;
+            if (!dropLoggedForSource[source]) {
+              const payload = {
+                eventId: options.eventId,
+                nodeId: this.node.nodeId,
+                runId: options.runId,
+                threadId: options.threadId,
+                source,
+                seqGlobal,
+                seqStream: seqPerSource[source],
+                dropped: true,
+                reason: truncatedReason ?? null,
+              };
+              this.logger.warn(JSON.stringify(payload));
+              dropLoggedForSource[source] = true;
+            }
             return;
           }
         }
@@ -776,6 +792,19 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       if (!truncated && outputLimit > 0) {
         const totalLength = cleanedStdout.length + cleanedStderr.length;
         if (totalLength > outputLimit) {
+          const payload = {
+            eventId: options.eventId,
+            nodeId: this.node.nodeId,
+            runId: options.runId,
+            threadId: options.threadId,
+            source,
+            totalLength,
+            outputLimit,
+            seqGlobal,
+            seqStream: seqPerSource[source],
+            message: 'threshold_crossed',
+          };
+          this.logger.warn(JSON.stringify(payload));
           truncated = true;
           truncatedReason = 'output_limit';
           truncatedSource = source;
@@ -794,15 +823,25 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     };
 
     const getCombinedOutput = (): string => {
+      const usingOrdered = orderedOutput.length > 0;
       const joined =
-        orderedOutput.length > 0
+        usingOrdered
           ? orderedOutput
               .slice()
               .sort((a, b) => a.order - b.order)
               .map((entry) => entry.text)
               .join('')
           : `${cleanedStdout}${cleanedStderr}`;
-      return sanitizePlainText(joined);
+      const sanitized = sanitizePlainText(joined);
+      const payload = {
+        eventId: options.eventId,
+        nodeId: this.node.nodeId,
+        runId: options.runId,
+        path: usingOrdered ? 'ordered' : 'cleaned',
+        length: sanitized.length,
+      };
+      this.logger.debug(JSON.stringify(payload));
+      return sanitized;
     };
 
     let execError: unknown = null;
@@ -897,6 +936,15 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           terminalStatus = nonZeroExit ? 'error' : 'success';
         }
       }
+
+      const sizePayload = {
+        eventId: options.eventId,
+        bytesStdout: bytesBySource.stdout,
+        bytesStderr: bytesBySource.stderr,
+        cleanedStdoutLen: cleanedStdout.length,
+        cleanedStderrLen: cleanedStderr.length,
+      };
+      this.logger.debug(JSON.stringify(sizePayload));
 
       finalCombinedOutput = getCombinedOutput();
       this.logger.debug('ShellCommandTool finalCombinedOutput NUL scan', {
