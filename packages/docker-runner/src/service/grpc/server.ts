@@ -54,6 +54,8 @@ type ExecutionContext = {
   stderrSeq: bigint;
   exitTailBytes: number;
   killOnTimeout: boolean;
+  timeoutMs?: number;
+  idleTimeoutMs?: number;
   finished: boolean;
   timers: {
     timeout?: NodeJS.Timeout;
@@ -69,8 +71,17 @@ const activeExecutions = new Map<string, ExecutionContext>();
 const utf8Encoder = new TextEncoder();
 const DEFAULT_EXIT_TAIL_BYTES = 64 * 1024;
 const MAX_EXIT_TAIL_BYTES = 256 * 1024;
+const CONTAINER_STOP_TIMEOUT_SEC = 10;
 
 // TODO: Implement remaining RPCs (start, stop, logs, etc.) in subsequent steps.
+
+function coerceDuration(value?: bigint): number | undefined {
+  if (typeof value !== 'bigint') return undefined;
+  if (value <= 0n) return undefined;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return undefined;
+  return num;
+}
 
 function metadataToHeaders(metadata: Metadata): Record<string, string> {
   const raw = metadata.getMap();
@@ -265,6 +276,8 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               tty: start.options?.tty ?? false,
               demuxStderr: start.options?.separateStderr ?? true,
             });
+            const timeoutMs = coerceDuration(start.options?.timeoutMs);
+            const idleTimeoutMs = coerceDuration(start.options?.idleTimeoutMs);
             const now = new Date();
             const context: ExecutionContext = {
               executionId: session.execId,
@@ -277,6 +290,8 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               stderrSeq: 0n,
               exitTailBytes,
               killOnTimeout: start.options?.killOnTimeout ?? false,
+              timeoutMs,
+              idleTimeoutMs,
               finished: false,
               timers: {},
               reason: ExecExitReason.COMPLETED,
@@ -286,11 +301,56 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             context.finish = (reason, killed) => finish(context, reason, killed);
             activeExecutions.set(context.executionId, context);
 
+            const handleTimeout = async (target: ExecutionContext, reason: ExecExitReason) => {
+              if (target.finished) return;
+              target.reason = reason;
+              target.killed = target.killOnTimeout;
+              if (target.killOnTimeout) {
+                try {
+                  await opts.containers.stopContainer(target.targetId, CONTAINER_STOP_TIMEOUT_SEC);
+                } catch (stopErr) {
+                  console.warn('Failed to stop container on exec timeout', {
+                    containerId: target.targetId,
+                    error: stopErr instanceof Error ? stopErr.message : stopErr,
+                    reason,
+                  });
+                }
+              }
+              try {
+                await target.finish?.(reason, target.killOnTimeout);
+              } catch {
+                // finish already emits structured error; swallow here
+              }
+            };
+
+            const armIdleTimer = () => {
+              if (!context.idleTimeoutMs || context.idleTimeoutMs <= 0) return;
+              if (context.finished) return;
+              if (context.timers.idle) {
+                clearTimeout(context.timers.idle);
+              }
+              context.timers.idle = setTimeout(() => {
+                if (context.finished) return;
+                void handleTimeout(context, ExecExitReason.IDLE_TIMEOUT);
+              }, context.idleTimeoutMs);
+            };
+
+            if (context.timeoutMs && context.timeoutMs > 0) {
+              context.timers.timeout = setTimeout(() => {
+                if (context.finished) return;
+                void handleTimeout(context, ExecExitReason.TIMEOUT);
+              }, context.timeoutMs);
+            }
+
             const started = create(ExecStartedSchema, {
               executionId: context.executionId,
               startedAt: timestampFromDate(now),
             });
             writeResponse(call, create(ExecResponseSchema, { event: { case: 'started', value: started } }));
+
+            if (context.idleTimeoutMs && context.idleTimeoutMs > 0) {
+              armIdleTimer();
+            }
 
             session.stdout.on('data', (chunk: Buffer) => {
               if (!ctx || ctx.finished) return;
@@ -301,6 +361,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
                 ts: timestampFromDate(new Date()),
               });
               writeResponse(call, create(ExecResponseSchema, { event: { case: 'stdout', value: output } }));
+              armIdleTimer();
             });
             session.stderr?.on('data', (chunk: Buffer) => {
               if (!ctx || ctx.finished) return;
@@ -311,6 +372,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
                 ts: timestampFromDate(new Date()),
               });
               writeResponse(call, create(ExecResponseSchema, { event: { case: 'stderr', value: output } }));
+              armIdleTimer();
             });
 
             const finalize = () => {

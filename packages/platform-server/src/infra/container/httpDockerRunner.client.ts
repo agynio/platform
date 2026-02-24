@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'http';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
 import { fetch as undiciFetch, type Response } from 'undici';
-import { credentials, Metadata, type ClientDuplexStream, type ServiceError, status } from '@grpc/grpc-js';
+import { credentials, Metadata, type CallOptions, type ClientDuplexStream, type ServiceError, status } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
 import {
   ContainerHandle,
@@ -132,7 +132,8 @@ export class HttpDockerRunnerClient implements DockerClient {
         this.grpcExec = new RunnerGrpcExecClient({
           address: config.grpc.address,
           sharedSecret: this.sharedSecret,
-          requestTimeoutMs: this.requestTimeoutMs,
+          defaultDeadlineMs: this.requestTimeoutMs,
+          resolveTimeout: (opts) => this.resolveExecRequestTimeout(opts),
         });
       }
     }
@@ -826,28 +827,32 @@ export class HttpDockerRunnerClient implements DockerClient {
   }
 }
 
-type GrpcStartParams = {
-  containerId: string;
-  command: string[] | string;
-  execOptions?: ExecOptions;
-  interactiveOptions?: InteractiveExecOptions;
-};
-
 class RunnerGrpcExecClient {
   private readonly client: RunnerServiceGrpcClientInstance;
   private readonly sharedSecret: string;
-  private readonly requestTimeoutMs: number;
+  private readonly defaultDeadlineMs?: number;
+  private readonly resolveTimeout?: (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>) => number | undefined;
 
-  constructor(options: { address: string; sharedSecret: string; requestTimeoutMs: number }) {
+  constructor(options: {
+    address: string;
+    sharedSecret: string;
+    defaultDeadlineMs?: number;
+    resolveTimeout?: (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>) => number | undefined;
+  }) {
     this.client = new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
     this.sharedSecret = options.sharedSecret;
-    this.requestTimeoutMs = options.requestTimeoutMs;
+    this.defaultDeadlineMs = options.defaultDeadlineMs;
+    this.resolveTimeout = options.resolveTimeout;
   }
 
   async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
-    const deadline = new Date(Date.now() + this.requestTimeoutMs);
-    const call = this.client.exec(metadata, { deadline }) as ClientDuplexStream<ExecRequest, ExecResponse>;
+    const deadlineMs = this.resolveTimeout?.(options);
+    const callOptions: CallOptions | undefined =
+      typeof deadlineMs === 'number' && deadlineMs > 0
+        ? { deadline: new Date(Date.now() + deadlineMs) }
+        : undefined;
+    const call = (callOptions ? this.client.exec(metadata, callOptions) : this.client.exec(metadata)) as ClientDuplexStream<ExecRequest, ExecResponse>;
     const execIdRef: { current?: string } = {};
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -1068,16 +1073,25 @@ class RunnerGrpcExecClient {
 
   async cancelExecution(executionId: string, force = false): Promise<boolean> {
     const metadata = this.createMetadata(RUNNER_SERVICE_CANCEL_EXEC_PATH);
-    const deadline = new Date(Date.now() + this.requestTimeoutMs);
+    const deadlineMs = this.defaultDeadlineMs;
+    const callOptions: CallOptions | undefined =
+      typeof deadlineMs === 'number' && deadlineMs > 0
+        ? { deadline: new Date(Date.now() + deadlineMs) }
+        : undefined;
     const request = create(CancelExecutionRequestSchema, { executionId, force });
     return new Promise<boolean>((resolve, reject) => {
-      this.client.cancelExecution(request, metadata, { deadline }, (err: ServiceError | null, response?: CancelExecutionResponse) => {
+      const callback = (err: ServiceError | null, response?: CancelExecutionResponse) => {
         if (err) {
           reject(this.translateServiceError(err));
           return;
         }
         resolve(response?.cancelled ?? false);
-      });
+      };
+      if (callOptions) {
+        this.client.cancelExecution(request, metadata, callOptions, callback);
+      } else {
+        this.client.cancelExecution(request, metadata, callback);
+      }
     });
   }
 
@@ -1090,7 +1104,12 @@ class RunnerGrpcExecClient {
     return metadata;
   }
 
-  private createStartRequest(params: GrpcStartParams) {
+  private createStartRequest(params: {
+    containerId: string;
+    command: string[] | string;
+    execOptions?: ExecOptions;
+    interactiveOptions?: InteractiveExecOptions;
+  }) {
     const commandArgv = Array.isArray(params.command) ? params.command : [];
     const commandShell = Array.isArray(params.command) ? '' : params.command;
     const execOpts = params.execOptions ?? {};
