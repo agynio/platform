@@ -1,0 +1,197 @@
+nameOverride: ""
+fullnameOverride: ""
+
+commonAnnotations: {}
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ""
+  repository: ghcr.io/agynio/docker-runner
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 1
+revisionHistoryLimit: 10
+updateStrategy: {}
+
+deploymentAnnotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+automountServiceAccountToken: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  enabled: false
+  fsGroup: null
+
+securityContext:
+  enabled: true
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+priorityClassName: ""
+terminationGracePeriodSeconds: null
+
+service:
+  enabled: true
+  type: ClusterIP
+  annotations: {}
+  labels: {}
+  ports:
+    - name: http
+      port: 7071
+      targetPort: http
+      protocol: TCP
+
+containerPorts:
+  - name: http
+    containerPort: 7071
+    protocol: TCP
+
+command: []
+args: []
+env:
+  - name: DOCKER_RUNNER_HOST
+    value: 0.0.0.0
+  - name: DOCKER_RUNNER_PORT
+    value: "7071"
+  - name: DOCKER_RUNNER_SIGNATURE_TTL_MS
+    value: "60000"
+  - name: DOCKER_RUNNER_LOG_LEVEL
+    value: info
+envFrom: []
+extraEnvVars: []
+extraEnvVarsCM: ""
+extraEnvVarsSecret: ""
+
+configMounts: []
+extraVolumeMounts: []
+extraVolumes: []
+
+initContainers: []
+extraContainers: []
+
+lifecycle: {}
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /v1/health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 6
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /v1/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 6
+
+startupProbe:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: ""
+  metrics: []
+  behavior: {}
+
+pdb:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null
+
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: ""
+    scrapeTimeout: ""
+    honorLabels: false
+    labels: {}
+    annotations: {}
+    relabelings: []
+    metricRelabelings: []
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: ""
+        scrapeTimeout: ""
+
+runtime:
+  mode: dind
+  dind:
+    name: docker-daemon
+    image:
+      registry: ""
+      repository: docker
+      tag: 27-dind
+      pullPolicy: IfNotPresent
+    command: []
+    args: []
+    env:
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
+    resources: {}
+    securityContext:
+      privileged: true
+      allowPrivilegeEscalation: true
+    extraVolumeMounts: []
+    sharedRunVolume:
+      name: docker-runner-run
+      mountPath: /var/run/docker
+      emptyDir: {}
+      readOnly: false
+    storageVolume:
+      name: docker-runner-lib
+      mountPath: /var/lib/docker
+      emptyDir: {}
+      readOnly: false
+  hostSocket:
+    name: docker-runner-host
+    path: /var/run/docker.sock
+    mountPath: /var/run/docker.sock
+    hostPathType: Socket
+    readOnly: false
+    mountPropagation: null

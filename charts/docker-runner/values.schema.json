@@ -1,0 +1,1229 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "nameOverride": {
+      "type": "string",
+      "default": ""
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "default": ""
+    },
+    "commonAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imageRegistry": {
+          "type": "string",
+          "default": ""
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "default": {
+        "imageRegistry": "",
+        "imagePullSecrets": []
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "registry": {
+          "type": "string",
+          "default": ""
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "default": "ghcr.io/agynio/docker-runner"
+        },
+        "tag": {
+          "type": "string",
+          "default": ""
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent"
+        },
+        "pullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "default": {
+        "registry": "",
+        "repository": "ghcr.io/agynio/docker-runner",
+        "tag": "",
+        "pullPolicy": "IfNotPresent",
+        "pullSecrets": []
+      }
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 10
+    },
+    "updateStrategy": {
+      "type": "object",
+      "default": {}
+    },
+    "deploymentAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "fsGroup": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "default": null
+        }
+      },
+      "default": {
+        "enabled": false,
+        "fsGroup": null
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "default": true
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "default": true
+        },
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "default": false
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": ["ALL"]
+            }
+          },
+          "default": {
+            "drop": ["ALL"]
+          }
+        },
+        "seccompProfile": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["RuntimeDefault"],
+              "default": "RuntimeDefault"
+            }
+          },
+          "default": {
+            "type": "RuntimeDefault"
+          }
+        }
+      },
+      "default": {
+        "enabled": true,
+        "runAsNonRoot": true,
+        "readOnlyRootFilesystem": true,
+        "allowPrivilegeEscalation": false,
+        "capabilities": {
+          "drop": ["ALL"]
+        },
+        "seccompProfile": {
+          "type": "RuntimeDefault"
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "default": {
+        "create": true,
+        "name": "",
+        "annotations": {}
+      }
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean",
+      "default": true
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": false
+        },
+        "clusterWide": {
+          "type": "boolean",
+          "default": false
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "apiGroups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resourceNames": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "verbs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "nonResourceURLs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["verbs"]
+          },
+          "default": []
+        }
+      },
+      "default": {
+        "create": false,
+        "clusterWide": false,
+        "rules": []
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "type": {
+          "type": "string",
+          "default": "ClusterIP"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "targetPort": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                ]
+              },
+              "protocol": {
+                "type": "string",
+                "default": "TCP"
+              }
+            },
+            "required": ["name", "port", "targetPort"]
+          },
+          "default": [
+            {
+              "name": "http",
+              "port": 7071,
+              "targetPort": "http",
+              "protocol": "TCP"
+            }
+          ]
+        }
+      },
+      "default": {
+        "enabled": true,
+        "type": "ClusterIP",
+        "annotations": {},
+        "labels": {},
+        "ports": [
+          {
+            "name": "http",
+            "port": 7071,
+            "targetPort": "http",
+            "protocol": "TCP"
+          }
+        ]
+      }
+    },
+    "containerPorts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "containerPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "protocol": {
+            "type": "string",
+            "default": "TCP"
+          }
+        },
+        "required": ["name", "containerPort"]
+      },
+      "default": [
+        {
+          "name": "http",
+          "containerPort": 7071,
+          "protocol": "TCP"
+        }
+      ]
+    },
+    "resources": {
+      "type": "object",
+      "default": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "tolerations": {
+      "type": "array",
+      "default": []
+    },
+    "affinity": {
+      "type": "object",
+      "default": {}
+    },
+    "priorityClassName": {
+      "type": "string",
+      "default": ""
+    },
+    "terminationGracePeriodSeconds": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "default": null
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "initContainers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "extraContainers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "lifecycle": {
+      "type": "object",
+      "default": {}
+    },
+    "livenessProbe": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "default": {
+        "enabled": true
+      }
+    },
+    "readinessProbe": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "default": {
+        "enabled": true
+      }
+    },
+    "startupProbe": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "default": {
+        "enabled": false
+      }
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": [
+        {
+          "name": "DOCKER_RUNNER_HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "DOCKER_RUNNER_PORT",
+          "value": "7071"
+        },
+        {
+          "name": "DOCKER_RUNNER_SIGNATURE_TTL_MS",
+          "value": "60000"
+        },
+        {
+          "name": "DOCKER_RUNNER_LOG_LEVEL",
+          "value": "info"
+        }
+      ]
+    },
+    "envFrom": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "extraEnvVars": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "extraEnvVarsCM": {
+      "type": "string",
+      "default": ""
+    },
+    "extraEnvVarsSecret": {
+      "type": "string",
+      "default": ""
+    },
+    "configMounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": ["configMap", "secret"],
+            "default": "configMap"
+          },
+          "mountPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subPath": {
+            "type": "string"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "default": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": ["key", "path"]
+            }
+          }
+        },
+        "required": ["name", "sourceName", "mountPath"]
+      },
+      "default": []
+    },
+    "extraVolumeMounts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "extraVolumes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 100,
+          "default": 70
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": ["integer", "null", "string"],
+          "minimum": 1,
+          "maximum": 100,
+          "default": ""
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "default": []
+        },
+        "behavior": {
+          "type": "object",
+          "default": {}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": ["enabled"]
+          },
+          "then": {
+            "required": ["minReplicas", "maxReplicas"],
+            "anyOf": [
+              {
+                "required": ["targetCPUUtilizationPercentage"]
+              },
+              {
+                "required": ["targetMemoryUtilizationPercentage"]
+              },
+              {
+                "properties": {
+                  "metrics": {
+                    "minItems": 1
+                  }
+                },
+                "required": ["metrics"]
+              }
+            ]
+          }
+        }
+      ],
+      "default": {
+        "enabled": false,
+        "minReplicas": 1,
+        "maxReplicas": 3,
+        "targetCPUUtilizationPercentage": 70,
+        "targetMemoryUtilizationPercentage": "",
+        "metrics": [],
+        "behavior": {}
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "minAvailable": {
+          "type": ["integer", "string", "null"],
+          "default": 1
+        },
+        "maxUnavailable": {
+          "type": ["integer", "string", "null"],
+          "default": null
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": ["enabled"]
+          },
+          "then": {
+            "oneOf": [
+              {
+                "required": ["minAvailable"],
+                "properties": {
+                  "maxUnavailable": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "required": ["maxUnavailable"],
+                "properties": {
+                  "minAvailable": {
+                    "type": "null"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "default": {
+        "enabled": false,
+        "minAvailable": 1,
+        "maxUnavailable": null
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "namespace": {
+              "type": "string",
+              "default": ""
+            },
+            "interval": {
+              "type": "string",
+              "default": ""
+            },
+            "scrapeTimeout": {
+              "type": "string",
+              "default": ""
+            },
+            "honorLabels": {
+              "type": "boolean",
+              "default": false
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "relabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "default": []
+            },
+            "metricRelabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "default": []
+            },
+            "endpoints": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "port": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "default": "/metrics"
+                  },
+                  "interval": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "scrapeTimeout": {
+                    "type": "string",
+                    "default": ""
+                  }
+                },
+                "required": ["port"]
+              },
+              "default": [
+                {
+                  "port": "http",
+                  "path": "/metrics",
+                  "interval": "",
+                  "scrapeTimeout": ""
+                }
+              ]
+            }
+          },
+          "default": {
+            "enabled": false,
+            "namespace": "",
+            "interval": "",
+            "scrapeTimeout": "",
+            "honorLabels": false,
+            "labels": {},
+            "annotations": {},
+            "relabelings": [],
+            "metricRelabelings": [],
+            "endpoints": [
+              {
+                "port": "http",
+                "path": "/metrics",
+                "interval": "",
+                "scrapeTimeout": ""
+              }
+            ]
+          }
+        }
+      },
+      "default": {
+        "enabled": false,
+        "serviceMonitor": {
+          "enabled": false,
+          "namespace": "",
+          "interval": "",
+          "scrapeTimeout": "",
+          "honorLabels": false,
+          "labels": {},
+          "annotations": {},
+          "relabelings": [],
+          "metricRelabelings": [],
+          "endpoints": [
+            {
+              "port": "http",
+              "path": "/metrics",
+              "interval": "",
+              "scrapeTimeout": ""
+            }
+          ]
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["dind", "hostSocket"],
+          "default": "dind"
+        },
+        "dind": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "default": "docker-daemon"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["repository"],
+              "properties": {
+                "registry": {
+                  "type": "string",
+                  "default": ""
+                },
+                "repository": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "docker"
+                },
+                "tag": {
+                  "type": "string",
+                  "default": "27-dind"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": ["Always", "IfNotPresent", "Never"],
+                  "default": "IfNotPresent"
+                }
+              },
+              "default": {
+                "registry": "",
+                "repository": "docker",
+                "tag": "27-dind",
+                "pullPolicy": "IfNotPresent"
+              }
+            },
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "env": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "default": [
+                {
+                  "name": "DOCKER_TLS_CERTDIR",
+                  "value": ""
+                }
+              ]
+            },
+            "resources": {
+              "type": "object",
+              "default": {}
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "privileged": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "allowPrivilegeEscalation": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "default": {
+                "privileged": true,
+                "allowPrivilegeEscalation": true
+              }
+            },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "default": []
+            },
+            "sharedRunVolume": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "docker-runner-run"
+                },
+                "mountPath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "/var/run/docker"
+                },
+                "emptyDir": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {}
+                },
+                "persistentVolumeClaim": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "hostPath": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "subPath": {
+                  "type": "string"
+                },
+                "readOnly": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "default": {
+                "name": "docker-runner-run",
+                "mountPath": "/var/run/docker",
+                "emptyDir": {},
+                "readOnly": false
+              }
+            },
+            "storageVolume": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "docker-runner-lib"
+                },
+                "mountPath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "/var/lib/docker"
+                },
+                "emptyDir": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {}
+                },
+                "persistentVolumeClaim": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "hostPath": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "subPath": {
+                  "type": "string"
+                },
+                "readOnly": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "default": {
+                "name": "docker-runner-lib",
+                "mountPath": "/var/lib/docker",
+                "emptyDir": {},
+                "readOnly": false
+              }
+            }
+          },
+          "default": {
+            "name": "docker-daemon",
+            "image": {
+              "registry": "",
+              "repository": "docker",
+              "tag": "27-dind",
+              "pullPolicy": "IfNotPresent"
+            },
+            "command": [],
+            "args": [],
+            "env": [
+              {
+                "name": "DOCKER_TLS_CERTDIR",
+                "value": ""
+              }
+            ],
+            "resources": {},
+            "securityContext": {
+              "privileged": true,
+              "allowPrivilegeEscalation": true
+            },
+            "extraVolumeMounts": [],
+            "sharedRunVolume": {
+              "name": "docker-runner-run",
+              "mountPath": "/var/run/docker",
+              "emptyDir": {},
+              "readOnly": false
+            },
+            "storageVolume": {
+              "name": "docker-runner-lib",
+              "mountPath": "/var/lib/docker",
+              "emptyDir": {},
+              "readOnly": false
+            }
+          }
+        },
+        "hostSocket": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "default": "docker-runner-host"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "default": "/var/run/docker.sock"
+            },
+            "mountPath": {
+              "type": "string",
+              "minLength": 1,
+              "default": "/var/run/docker.sock"
+            },
+            "hostPathType": {
+              "type": "string",
+              "enum": ["", "Directory", "DirectoryOrCreate", "File", "FileOrCreate", "Socket", "CharDevice", "BlockDevice"],
+              "default": "Socket"
+            },
+            "readOnly": {
+              "type": "boolean",
+              "default": false
+            },
+            "mountPropagation": {
+              "type": ["string", "null"],
+              "enum": [null, "None", "HostToContainer", "Bidirectional"],
+              "default": null
+            }
+          },
+          "default": {
+            "name": "docker-runner-host",
+            "path": "/var/run/docker.sock",
+            "mountPath": "/var/run/docker.sock",
+            "hostPathType": "Socket",
+            "readOnly": false,
+            "mountPropagation": null
+          }
+        }
+      },
+      "default": {
+        "mode": "dind",
+        "dind": {
+          "name": "docker-daemon",
+          "image": {
+            "registry": "",
+            "repository": "docker",
+            "tag": "27-dind",
+            "pullPolicy": "IfNotPresent"
+          },
+          "command": [],
+          "args": [],
+          "env": [
+            {
+              "name": "DOCKER_TLS_CERTDIR",
+              "value": ""
+            }
+          ],
+          "resources": {},
+          "securityContext": {
+            "privileged": true,
+            "allowPrivilegeEscalation": true
+          },
+          "extraVolumeMounts": [],
+          "sharedRunVolume": {
+            "name": "docker-runner-run",
+            "mountPath": "/var/run/docker",
+            "emptyDir": {},
+            "readOnly": false
+          },
+          "storageVolume": {
+            "name": "docker-runner-lib",
+            "mountPath": "/var/lib/docker",
+            "emptyDir": {},
+            "readOnly": false
+          }
+        },
+      "hostSocket": {
+          "name": "docker-runner-host",
+          "path": "/var/run/docker.sock",
+          "mountPath": "/var/run/docker.sock",
+          "hostPathType": "Socket",
+          "readOnly": false,
+          "mountPropagation": null
+        }
+      }
+    },
+    "service-base": {
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    }
+  }
+}
