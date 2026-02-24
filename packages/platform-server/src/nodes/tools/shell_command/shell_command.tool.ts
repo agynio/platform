@@ -947,6 +947,26 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       this.logger.log(`stream_buffer_sizes ${JSON.stringify(sizePayload)}`);
 
       finalCombinedOutput = getCombinedOutput();
+
+      if (!truncated && outputLimit > 0 && finalCombinedOutput.length > outputLimit) {
+        truncated = true;
+        truncatedReason = 'output_limit';
+        try {
+          if (!savedPath) {
+            const file = `${randomUUID()}.txt`;
+            savedPath = await this.saveOversizedOutputInContainer(container, file, finalCombinedOutput);
+          }
+        } catch (saveErr) {
+          const errMessage = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          this.logger.warn(`ShellCommandTool failed to persist oversized final output eventId=${options.eventId} error=${errMessage}`);
+        }
+        truncationMessage = `Output truncated after ${outputLimit} characters.`;
+        if (savedPath) {
+          truncationMessage = `${truncationMessage} Full output saved to ${savedPath}.`;
+        }
+        terminalStatus = 'truncated';
+      }
+
       this.logger.debug('ShellCommandTool finalCombinedOutput NUL scan', {
         eventId: options.eventId,
         runId: options.runId,
