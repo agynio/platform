@@ -133,4 +133,5 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
   get provider(): WorkspaceNode | undefined {
     return this.containerProvider;
   }
+
 }

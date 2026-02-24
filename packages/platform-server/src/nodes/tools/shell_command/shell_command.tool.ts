@@ -155,9 +155,11 @@ class AnsiSequenceCleaner {
   }
 }
 
+
 const DEFAULT_CHUNK_COALESCE_MS = 40;
 const DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024;
 const DEFAULT_CLIENT_BUFFER_BYTES = 10 * 1024 * 1024;
+const DEFAULT_OUTPUT_LIMIT_CHARS = 50_000;
 
 type OutputSource = 'stdout' | 'stderr';
 
@@ -165,6 +167,17 @@ type StreamingOptions = {
   runId: string;
   threadId: string;
   eventId: string;
+};
+
+type ResolvedShellCommandConfig = {
+  workdir?: string;
+  executionTimeoutMs: number;
+  idleTimeoutMs: number;
+  outputLimitChars: number;
+  chunkCoalesceMs: number;
+  chunkSizeBytes: number;
+  clientBufferLimitBytes: number;
+  logToPid1: boolean;
 };
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -210,21 +223,48 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       .replace(NUL_CHAR_REGEX, '');
   }
 
+  private parseInteger(value: unknown, options: { allowZero?: boolean } = {}): number | null {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
+      if (value < 0) return null;
+      if (!options.allowZero && value === 0) return null;
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) return null;
+      if (parsed < 0) return null;
+      if (!options.allowZero && parsed === 0) return null;
+      return parsed;
+    }
+
+    return null;
+  }
+
   // shared decode helpers located in src/common/ingress/ingressDecode.ts
 
-  private getResolvedConfig() {
+  private getResolvedConfig(): ResolvedShellCommandConfig {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
-    return {
+    const executionTimeoutMs = this.parseInteger(cfg.executionTimeoutMs, { allowZero: true });
+    const idleTimeoutMs = this.parseInteger(cfg.idleTimeoutMs, { allowZero: true });
+    const outputLimitChars = this.parseInteger(cfg.outputLimitChars, { allowZero: true });
+    const chunkCoalesceMs = this.parseInteger(cfg.chunkCoalesceMs);
+    const chunkSizeBytes = this.parseInteger(cfg.chunkSizeBytes);
+    const clientBufferLimitBytes = this.parseInteger(cfg.clientBufferLimitBytes);
+    const resolved = {
       workdir: cfg.workdir ?? undefined,
-      executionTimeoutMs: typeof cfg.executionTimeoutMs === 'number' ? cfg.executionTimeoutMs : 60 * 60 * 1000,
-      idleTimeoutMs: typeof cfg.idleTimeoutMs === 'number' ? cfg.idleTimeoutMs : 60 * 1000,
-      outputLimitChars: typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0,
-      chunkCoalesceMs: typeof cfg.chunkCoalesceMs === 'number' ? cfg.chunkCoalesceMs : DEFAULT_CHUNK_COALESCE_MS,
-      chunkSizeBytes: typeof cfg.chunkSizeBytes === 'number' ? cfg.chunkSizeBytes : DEFAULT_CHUNK_SIZE_BYTES,
-      clientBufferLimitBytes:
-        typeof cfg.clientBufferLimitBytes === 'number' ? cfg.clientBufferLimitBytes : DEFAULT_CLIENT_BUFFER_BYTES,
+      executionTimeoutMs: executionTimeoutMs ?? 60 * 60 * 1000,
+      idleTimeoutMs: idleTimeoutMs ?? 60 * 1000,
+      outputLimitChars: outputLimitChars ?? DEFAULT_OUTPUT_LIMIT_CHARS,
+      chunkCoalesceMs: chunkCoalesceMs ?? DEFAULT_CHUNK_COALESCE_MS,
+      chunkSizeBytes: chunkSizeBytes ?? DEFAULT_CHUNK_SIZE_BYTES,
+      clientBufferLimitBytes: clientBufferLimitBytes ?? DEFAULT_CLIENT_BUFFER_BYTES,
       logToPid1: typeof cfg.logToPid1 === 'boolean' ? cfg.logToPid1 : true,
     };
+    return resolved;
   }
 
   private async saveOversizedOutputInContainer(
@@ -317,7 +357,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(threadId);
-    this.logger.log(`shell_command invoked command=${command}`);
 
     // Base env pulled from container; overlay from node config
     const baseEnv = undefined; // WorkspaceHandle does not expose getEnv; resolution handled via EnvService
@@ -515,7 +554,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(options.threadId);
-    this.logger.log(`shell_command streaming start command=${command} eventId=${options.eventId}`);
 
     const envOverlay = await this.node.resolveEnv(undefined);
     const cfg = this.getResolvedConfig();
@@ -816,6 +854,26 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       finalCombinedOutput = getCombinedOutput();
+
+      if (!truncated && outputLimit > 0 && finalCombinedOutput.length > outputLimit) {
+        truncated = true;
+        truncatedReason = 'output_limit';
+        try {
+          if (!savedPath) {
+            const file = `${randomUUID()}.txt`;
+            savedPath = await this.saveOversizedOutputInContainer(container, file, finalCombinedOutput);
+          }
+        } catch (saveErr) {
+          const errMessage = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          this.logger.warn(`ShellCommandTool failed to persist oversized final output eventId=${options.eventId} error=${errMessage}`);
+        }
+        truncationMessage = `Output truncated after ${outputLimit} characters.`;
+        if (savedPath) {
+          truncationMessage = `${truncationMessage} Full output saved to ${savedPath}.`;
+        }
+        terminalStatus = 'truncated';
+      }
+
       this.logger.debug('ShellCommandTool finalCombinedOutput NUL scan', {
         eventId: options.eventId,
         runId: options.runId,
@@ -834,6 +892,20 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       };
 
       if (truncated) {
+        const buildTruncationMessage = (
+          reason: 'output_limit' | 'client_buffer' | null,
+          limit: number,
+          clientLimitBytes: number,
+        ): string => {
+          if (reason === 'output_limit' && limit > 0) {
+            return `Output truncated after ${limit} characters.`;
+          }
+          if (reason === 'client_buffer' && clientLimitBytes > 0) {
+            const mb = (clientLimitBytes / (1024 * 1024)).toFixed(2);
+            return `Output truncated after streaming ${mb} MB.`;
+          }
+          return 'Output truncated.';
+        };
         if (finalCombinedOutput.length > 0 && !savedPath) {
           try {
             const file = `${randomUUID()}.txt`;
@@ -844,14 +916,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           }
         }
         if (!truncationMessage) {
-          if (truncatedReason === 'output_limit' && outputLimit > 0) {
-            truncationMessage = `Output truncated after ${outputLimit} characters.`;
-          } else if (truncatedReason === 'client_buffer' && clientBufferLimitBytes > 0) {
-            const mb = (clientBufferLimitBytes / (1024 * 1024)).toFixed(2);
-            truncationMessage = `Output truncated after streaming ${mb} MB.`;
-          } else {
-            truncationMessage = 'Output truncated.';
-          }
+          truncationMessage = buildTruncationMessage(truncatedReason, outputLimit, clientBufferLimitBytes);
         }
         if (savedPath) {
           ensureTruncationMessageIncludesPath(savedPath);
