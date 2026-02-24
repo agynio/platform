@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ToolCallMessage, ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
+import type { Response, ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import type { LLMContext, LLMState } from '../src/llm/types';
 import { Signal } from '../src/signal';
@@ -35,14 +36,16 @@ async function runStreamingScenario(label: string, command: string, simulatedOut
   try {
     const reducer = new CallToolsLLMReducer(runEvents, eventsBus).init({ tools: [tool] });
 
-    const callMessage = new ToolCallMessage({
+    const toolCallSource: ResponseFunctionToolCall = {
       type: 'function_call',
       call_id: `${label}-call`,
+      id: `${label}-call`,
       name: tool.name,
       arguments: JSON.stringify({ command }),
-    } as any);
+    };
+    const callMessage = new ToolCallMessage(toolCallSource);
 
-    const response = new ResponseMessage({ output: [callMessage.toPlain() as any] } as any);
+    const response = new ResponseMessage({ output: [callMessage.toPlain()] as Response['output'] });
     const state: LLMState = {
       messages: [response],
       context: { messageIds: [], memory: [] },

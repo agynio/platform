@@ -17,9 +17,10 @@ import { FsGraphRepository } from '../src/graph/fsGraph.repository';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
-import { RunEventsService } from '../src/events/run-events.service';
+import { RunEventsService, type ToolOutputChunkPayload, type ToolOutputTerminalPayload } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
+import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';
 import type { WorkspaceHandle } from '../src/workspace/workspace.handle';
 import type { ArchiveService } from '../src/infra/archive/archive.service';
 import type { EnvService } from '../src/env/env.service';
@@ -231,8 +232,8 @@ export async function createShellCommandTestHarness(options: {
   const dockerClientStub = {} as DockerClient;
 
   const baseRunEvents = createRunEventsStub();
-  const finalizeToolOutputTerminal = vi.fn(async (payload: any) => payload);
-  const appendToolOutputChunk = vi.fn(async (payload: any) => payload);
+  const finalizeToolOutputTerminal = vi.fn(async (payload: ToolOutputTerminalPayload) => payload);
+  const appendToolOutputChunk = vi.fn(async (payload: ToolOutputChunkPayload) => payload);
   const runEvents = {
     ...baseRunEvents,
     appendToolOutputChunk,
@@ -320,7 +321,7 @@ export async function createShellCommandTestHarness(options: {
     provide: vi.fn(async () => fakeHandle as unknown as WorkspaceHandle),
   };
 
-  shellNode.setContainerProvider(fakeProvider as unknown as any);
+  shellNode.setContainerProvider(fakeProvider as unknown as WorkspaceNode);
 
   const tool = shellNode.getTool();
 
@@ -348,4 +349,3 @@ export async function createShellCommandTestHarness(options: {
     tempGraphRoot,
   };
 }
-
