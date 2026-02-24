@@ -18,6 +18,8 @@ describe('LiteLLMProvisioner bootstrap (DI smoke)', () => {
     LITELLM_BASE_URL: 'http://127.0.0.1:4000',
     LITELLM_MASTER_KEY: 'sk-test',
     AGENTS_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/agents_test',
+    DOCKER_RUNNER_BASE_URL: 'http://127.0.0.1:7071',
+    DOCKER_RUNNER_SHARED_SECRET: 'test-shared-secret',
   };
 
   beforeEach(() => {

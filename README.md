@@ -22,7 +22,8 @@ Intended use cases:
 - Operating a local development environment with supporting infra.
 
 ## Repository Structure
-- docker-compose.yml — Development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, cAdvisor, Prometheus, Grafana.
+- docker-compose.yml — Third-party development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, OpenZiti, Prometheus, Grafana, etc.
+- docker-compose.dev.yml — Optional overlay that builds/runs the platform-server and docker-runner containers against the infra stack.
 - .github/workflows/
   - ci.yml — Linting, tests (server/UI), Storybook build + smoke, type-check build steps.
   - docker-ghcr.yml — Build and publish platform-server and platform-ui images to GHCR.
@@ -117,9 +118,14 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), registry-mirror, and the OpenZiti controller stack
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# Optional: run platform-server and docker-runner inside Docker as well.
+mkdir -p .ziti/identities .ziti/tmp data/graph
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner
+# The overlay builds local images and reuses the infra services defined in docker-compose.yml.
 ```
 
 4) Apply server migrations and generate Prisma client:
@@ -141,6 +147,9 @@ pnpm --filter @agyn/platform-ui dev
 # docker-runner (Fastify dev server)
 pnpm --filter @agyn/docker-runner dev
 ```
+> Prefer containers? Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`
+> after the infra stack is running. The overlay file builds the local images against the
+> same Postgres/LiteLLM/Vault/Ziti services.
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
 
 The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
@@ -165,6 +174,50 @@ docker run --rm -p 8080:80 \
   ghcr.io/agynio/platform-ui:latest
 ```
 
+### Secure docker-runner connectivity (OpenZiti)
+
+The dev stack now ships an OpenZiti controller, initializer, and edge router. To route docker-runner traffic through the
+overlay instead of the Docker bridge network:
+
+1. Prepare the shared volumes once per checkout (`pnpm ziti:prepare`). This keeps `.ziti/controller`,
+   `.ziti/identities`, and `.ziti/tmp` writable even on SELinux hosts.
+2. Approve the OpenZiti SDK build step (`pnpm approve-builds` → select `@openziti/ziti-sdk-nodejs`).
+3. Enable `ZITI_ENABLED=true` plus the related settings in `packages/platform-server/.env` and
+   `packages/docker-runner/.env` (paths default to `./.ziti/identities/...`).
+4. Start the controller stack: `docker compose up -d ziti-controller ziti-edge-router`.
+   - Watch `docker compose logs -f ziti-edge-router` until you see the router enroll and connect to `ziti-controller`.
+   - For a clean bootstrap, stop the stack and wipe any stale state first:
+
+```bash
+docker compose down -v ziti-controller ziti-edge-router
+rm -rf ./.ziti/controller ./.ziti/identities ./.ziti/tmp
+```
+
+5. Bootstrap the controller state (service, policies, identities) via the bundled init job. Passing your UID/GID keeps
+   the emitted identity files readable without a manual `chmod`:
+
+```bash
+docker compose run --rm --user "$(id -u):$(id -g)" ziti-controller-init
+```
+
+The init container wraps the OpenZiti CLI, mirrors identity JSON into `./.ziti/identities`, and can be re-run
+whenever you need to regenerate enrollment material (no host `ziti` binary required). If the job reports that the
+router has not enrolled yet, keep the `ziti-edge-router` container running, wait for it to connect, then re-run the init job.
+
+6. Launch docker-runner and platform-server normally (either via `pnpm dev` or
+   `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d platform-server docker-runner`).
+   - Host `pnpm` dev keeps the ConfigService defaults, so the proxy binds to `127.0.0.1:17071` unless you override
+     `ZITI_RUNNER_PROXY_HOST`.
+   - The docker overlay sets `ZITI_RUNNER_PROXY_HOST=0.0.0.0` inside the container so port `17071` can be published to
+     the host.
+   In both cases traffic is accessible from the host via `127.0.0.1:17071` once the proxy reports ready.
+
+The platform-server now retries the connectivity probe (defaults: 30 attempts, 2s interval). Override via
+`DOCKER_RUNNER_PROBE_MAX_ATTEMPTS` / `DOCKER_RUNNER_PROBE_INTERVAL_MS` if you need a longer window before the runner
+comes online.
+
+See [docs/containers/ziti.md](docs/containers/ziti.md) for the step-by-step host-mode workflow and smoke test commands.
+
 ## Configuration
 
 Key environment variables (server) from packages/platform-server/.env.example and src/core/services/config.service.ts:
@@ -188,6 +241,12 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
+- OpenZiti (optional secure docker-runner tunnel):
+  - ZITI_ENABLED (default false) — enable controller reconciliation + proxy
+  - ZITI_MANAGEMENT_URL / ZITI_USERNAME / ZITI_PASSWORD — controller credentials
+  - ZITI_SERVICE_NAME / ZITI_ROUTER_NAME — service plus edge router handles
+  - ZITI_PLATFORM_IDENTITY_FILE / ZITI_RUNNER_IDENTITY_FILE — identity output paths under `./.ziti/`
+  - ZITI_RUNNER_PROXY_PORT (default 17071) — local HTTP proxy for docker-runner calls
 - Nix/NCPS:
   - NCPS_ENABLED (default false)
   - NCPS_URL_SERVER, NCPS_URL_CONTAINER (default http://ncps:8501)
@@ -219,8 +278,8 @@ UI variables (packages/platform-ui/.env.example):
   - vault — HashiCorp Vault (8200), auto-init helper vault-auto-init
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
-  - docker-runner — authenticated Docker API proxy (7071, mounts /var/run/docker.sock)
   - Optional monitoring overlay (docker-compose.monitoring.yml) adds prometheus (9090) and grafana (3000) without mounting the Docker socket; provide your own scrape targets via configuration.
+- In-repo services (platform-server, docker-runner) live in docker-compose.dev.yml and must be combined with the base file.
 
 To start services:
 ```bash

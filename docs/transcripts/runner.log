@@ -1,0 +1,19 @@
+(node:176198) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @agyn/docker-runner@1.0.0 dev /workspace/platform/packages/docker-runner
+> tsx src/service/main.ts
+
+(node:176211) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:176228) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+[dotenv@17.2.2] injecting env (2) from .env -- tip: 📡 auto-backup env with Radar: https://dotenvx.com/radar
+{"level":30,"time":1771639562928,"pid":176228,"hostname":"40699d59d0cc","msg":"Server listening at http://127.0.0.1:17071"}
+docker-runner listening on http://127.0.0.1:17071
+Initializing OpenZiti ingress (identity=/workspace/platform/.ziti/identities/dev.agyn-platform.docker-runner.json, service=dev.agyn-platform.platform-api)
+OpenZiti SDK initialized for service dev.agyn-platform.platform-api
+Ziti ingress ready for service dev.agyn-platform.platform-api (target=http://127.0.0.1:17071)

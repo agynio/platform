@@ -1,0 +1,49 @@
+(node:176618) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @agyn/platform-server@1.0.0 dev /workspace/platform/packages/platform-server
+> tsx src/index.ts
+
+(node:176631) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:176648) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("/workspace/platform/packages/docker-runner/__tests__/mocks/mock-openziti-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+[dotenv@17.2.2] injecting env (15) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+(node:176648) [FSTDEP022] FastifyWarning: The router options for constraints property access is deprecated. Please use "options.routerOptions" instead for accessing router options. The router options will be removed in `fastify@6`.
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[NcpsKeyService] [39m[32mNcpsKeyService disabled by config[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[GithubService] [39m[32mGithubService: integration disabled (no credentials)[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCoreModule dependencies initialized[39m[38;5;3m +6ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEnvModule dependencies initialized[39m[38;5;3m +34ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLoggerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mVaultModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLLMSettingsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEventsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mUserProfileModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOnboardingModule dependencies initialized[39m[38;5;3m +0ms[39m
+[31m[Nest] 176648  - [39m02/21/2026, 2:07:24 AM [31m  ERROR[39m [38;5;3m[ExceptionHandler] [39mTypeError: fetch failed
+    at fetch (/workspace/platform/node_modules/[4m.pnpm[24m/undici@6.19.8/node_modules/[4mundici[24m/index.js:112:13)
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)[39m
+    at async ZitiManagementClient.request [90m(/workspace/platform/packages/platform-server/[39msrc/infra/ziti/ziti.management.client.ts:231:22[90m)[39m
+    at async ZitiManagementClient.authenticate [90m(/workspace/platform/packages/platform-server/[39msrc/infra/ziti/ziti.management.client.ts:63:22[90m)[39m
+    at async ZitiReconciler.reconcile [90m(/workspace/platform/packages/platform-server/[39msrc/infra/ziti/ziti.reconciler.ts:48:7[90m)[39m
+    at async ZitiBootstrapService.initialize [90m(/workspace/platform/packages/platform-server/[39msrc/infra/ziti/ziti.bootstrap.service.ts:31:5[90m)[39m
+    at async InstanceWrapper.useFactory [90m(/workspace/platform/packages/platform-server/[39msrc/infra/infra.module.ts:53:9[90m)[39m
+    at async Injector.instantiateClass (/workspace/platform/node_modules/[4m.pnpm[24m/@nestjs+core@11.1.7_@nestjs+common@11.1.7_class-transformer@0.5.1_class-validator@0.14._9d219511c448380fbbdf426f21bb3061/node_modules/[4m@nestjs[24m/core/injector/injector.js:424:37)
+    at async callback (/workspace/platform/node_modules/[4m.pnpm[24m/@nestjs+core@11.1.7_@nestjs+common@11.1.7_class-transformer@0.5.1_class-validator@0.14._9d219511c448380fbbdf426f21bb3061/node_modules/[4m@nestjs[24m/core/injector/injector.js:70:34)
+    at async Injector.resolveConstructorParams (/workspace/platform/node_modules/[4m.pnpm[24m/@nestjs+core@11.1.7_@nestjs+common@11.1.7_class-transformer@0.5.1_class-validator@0.14._9d219511c448380fbbdf426f21bb3061/node_modules/[4m@nestjs[24m/core/injector/injector.js:170:24) {
+  [cause]: Error: connect ECONNREFUSED 127.0.0.1:1280
+  [90m    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1607:16)[39m {
+    errno: [33m-111[39m,
+    code: [32m'ECONNREFUSED'[39m,
+    syscall: [32m'connect'[39m,
+    address: [32m'127.0.0.1'[39m,
+    port: [33m1280[39m
+  }
+}
+/workspace/platform/packages/platform-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @agyn/platform-server@1.0.0 dev: `tsx src/index.ts`
+Exit status 1

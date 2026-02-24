@@ -280,7 +280,7 @@ describe('ContainersController routes', () => {
   let prismaSvc: PrismaStub;
   let controller: ContainersController;
   let containerAdmin: Pick<ContainerAdminService, 'deleteContainer'>;
-  let configService: Pick<ConfigService, 'dockerRunnerBaseUrl'>;
+  let configService: Pick<ConfigService, 'getDockerRunnerBaseUrl'>;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
@@ -288,7 +288,6 @@ describe('ContainersController routes', () => {
       deleteContainer: vi.fn().mockResolvedValue(undefined),
     } as Pick<ContainerAdminService, 'deleteContainer'>;
     configService = {
-      dockerRunnerBaseUrl: 'http://runner.local',
       getDockerRunnerBaseUrl: () => 'http://runner.local',
     } as ConfigService;
     controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
