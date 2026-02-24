@@ -49,7 +49,7 @@ priorityClassName: ""
 terminationGracePeriodSeconds: null
 
 service:
-  enabled: true
+  enabled: false
   type: ClusterIP
   annotations: {}
   labels: {}
@@ -90,7 +90,7 @@ extraContainers: []
 lifecycle: {}
 
 livenessProbe:
-  enabled: true
+  enabled: false
   httpGet:
     path: /v1/health
     port: http
@@ -101,7 +101,7 @@ livenessProbe:
   failureThreshold: 6
 
 readinessProbe:
-  enabled: true
+  enabled: false
   httpGet:
     path: /v1/ready
     port: http
@@ -166,7 +166,7 @@ runtime:
     image:
       registry: ""
       repository: docker
-      tag: 27-dind
+      tag: 24-dind
       pullPolicy: IfNotPresent
     command: []
     args: []

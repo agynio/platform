@@ -291,7 +291,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true
+          "default": false
         },
         "type": {
           "type": "string",
@@ -358,7 +358,7 @@
         }
       },
       "default": {
-        "enabled": true,
+        "enabled": false,
         "type": "ClusterIP",
         "annotations": {},
         "labels": {},
@@ -469,11 +469,11 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true
+          "default": false
         }
       },
       "default": {
-        "enabled": true
+        "enabled": false
       }
     },
     "readinessProbe": {
@@ -482,11 +482,11 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true
+          "default": false
         }
       },
       "default": {
-        "enabled": true
+        "enabled": false
       }
     },
     "startupProbe": {
@@ -938,7 +938,7 @@
                 },
                 "tag": {
                   "type": "string",
-                  "default": "27-dind"
+                  "default": "24-dind"
                 },
                 "pullPolicy": {
                   "type": "string",
@@ -949,7 +949,7 @@
               "default": {
                 "registry": "",
                 "repository": "docker",
-                "tag": "27-dind",
+                "tag": "24-dind",
                 "pullPolicy": "IfNotPresent"
               }
             },
@@ -1098,7 +1098,7 @@
             "image": {
               "registry": "",
               "repository": "docker",
-              "tag": "27-dind",
+              "tag": "24-dind",
               "pullPolicy": "IfNotPresent"
             },
             "command": [],
@@ -1180,7 +1180,7 @@
           "image": {
             "registry": "",
             "repository": "docker",
-            "tag": "27-dind",
+            "tag": "24-dind",
             "pullPolicy": "IfNotPresent"
           },
           "command": [],

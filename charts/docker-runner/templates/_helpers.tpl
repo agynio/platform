@@ -13,7 +13,7 @@
 {{- end -}}
 {{- $registry = trimSuffix "/" $registry -}}
 {{- $repository := default "docker" $image.repository -}}
-{{- $tag := default "27-dind" $image.tag -}}
+{{- $tag := default "24-dind" $image.tag -}}
 {{- if $registry -}}
 {{ printf "%s/%s:%s" $registry $repository $tag }}
 {{- else -}}
