@@ -1,0 +1,13 @@
+apiVersion: v2
+name: docker-runner
+description: Helm chart for deploying the agyn docker runner service.
+type: application
+version: 0.1.0
+appVersion: 1.0.0
+home: https://github.com/agynio/platform
+sources:
+  - https://github.com/agynio/platform
+dependencies:
+  - name: service-base
+    version: ">=0.1.4 <1.0.0"
+    repository: oci://ghcr.io/agynio/charts

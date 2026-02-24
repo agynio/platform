@@ -1,0 +1,6 @@
+{{- $svcEnabled := (default false .Values.service.enabled) -}}
+{{- $metrics := default (dict) .Values.metrics -}}
+{{- $smEnabled := default false ((default (dict) $metrics.serviceMonitor).enabled) -}}
+{{- if or $svcEnabled $smEnabled -}}
+{{- include "service-base.service" . -}}
+{{- end -}}

@@ -1,0 +1,6 @@
+dependencies:
+- name: service-base
+  repository: oci://ghcr.io/agynio/charts
+  version: 0.1.4
+digest: sha256:570721ceec7cbe765e88c4719adea845a291a5ea697fecfb41ec63e47036694d
+generated: "2026-02-23T23:52:51.648118921Z"
