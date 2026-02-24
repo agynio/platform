@@ -704,7 +704,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
                 dropped: true,
                 reason: truncatedReason ?? null,
               };
-              this.logger.log(`chunks_dropped ${JSON.stringify(payload)}`);
+              this.logger.warn(JSON.stringify(payload));
               dropLoggedForSource[source] = true;
             }
             return;
@@ -804,7 +804,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             seqStream: seqPerSource[source],
             message: 'threshold_crossed',
           };
-          this.logger.log(`threshold_crossed ${JSON.stringify(payload)}`);
+          this.logger.warn(JSON.stringify(payload));
           truncated = true;
           truncatedReason = 'output_limit';
           truncatedSource = source;
@@ -840,7 +840,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         path: usingOrdered ? 'ordered' : 'cleaned',
         length: sanitized.length,
       };
-      this.logger.log(`combined_output_path ${JSON.stringify(payload)}`);
+      this.logger.debug(JSON.stringify(payload));
       return sanitized;
     };
 
@@ -944,7 +944,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         cleanedStdoutLen: cleanedStdout.length,
         cleanedStderrLen: cleanedStderr.length,
       };
-      this.logger.log(`stream_buffer_sizes ${JSON.stringify(sizePayload)}`);
+      this.logger.debug(JSON.stringify(sizePayload));
 
       finalCombinedOutput = getCombinedOutput();
 
@@ -1120,19 +1120,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     };
 
     this.logger.log(`ShellCommandTool streaming decision ${JSON.stringify(streamingDecisionLog)}`);
-
-    const finalLogPayload = {
-      eventId: options.eventId,
-      nodeId: this.node.nodeId,
-      runId: options.runId,
-      threadId: options.threadId,
-      finalCombinedLength: finalCombinedOutput.length,
-      outputLimit,
-      truncated,
-      truncatedReason: truncatedReason ?? null,
-      savedPath: savedPath ?? null,
-    };
-    this.logger.log(`streaming_final_summary ${JSON.stringify(finalLogPayload)}`);
 
     if (formattedExecErrorMessage) {
       return formattedExecErrorMessage;
