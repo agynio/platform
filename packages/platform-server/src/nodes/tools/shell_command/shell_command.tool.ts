@@ -892,6 +892,20 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       };
 
       if (truncated) {
+        const buildTruncationMessage = (
+          reason: 'output_limit' | 'client_buffer' | null,
+          limit: number,
+          clientLimitBytes: number,
+        ): string => {
+          if (reason === 'output_limit' && limit > 0) {
+            return `Output truncated after ${limit} characters.`;
+          }
+          if (reason === 'client_buffer' && clientLimitBytes > 0) {
+            const mb = (clientLimitBytes / (1024 * 1024)).toFixed(2);
+            return `Output truncated after streaming ${mb} MB.`;
+          }
+          return 'Output truncated.';
+        };
         if (finalCombinedOutput.length > 0 && !savedPath) {
           try {
             const file = `${randomUUID()}.txt`;
@@ -902,14 +916,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           }
         }
         if (!truncationMessage) {
-          if (truncatedReason === 'output_limit' && outputLimit > 0) {
-            truncationMessage = `Output truncated after ${outputLimit} characters.`;
-          } else if (truncatedReason === 'client_buffer' && clientBufferLimitBytes > 0) {
-            const mb = (clientBufferLimitBytes / (1024 * 1024)).toFixed(2);
-            truncationMessage = `Output truncated after streaming ${mb} MB.`;
-          } else {
-            truncationMessage = 'Output truncated.';
-          }
+          truncationMessage = buildTruncationMessage(truncatedReason, outputLimit, clientBufferLimitBytes);
         }
         if (savedPath) {
           ensureTruncationMessageIncludesPath(savedPath);
