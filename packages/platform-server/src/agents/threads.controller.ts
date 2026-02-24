@@ -20,7 +20,7 @@ import {
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { RemindersService } from './reminders.service';
-import { Transform, Expose } from 'class-transformer';
+import { Transform, Expose, Type } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
 import { ThreadCleanupCoordinator } from './threadCleanup.coordinator';
 import type { ThreadMetrics } from './threads.metrics.service';
@@ -50,6 +50,15 @@ const isRunEventType = (value: string): value is RunEventType => (RunEventTypeVa
 const isRunEventStatus = (value: string): value is RunEventStatus => (RunEventStatusValues as ReadonlyArray<string>).includes(value);
 
 const THREAD_MESSAGE_MAX_LENGTH = 100000;
+
+const parseLlmContextLimit = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
+    throw new BadRequestException({ error: 'bad_limit' });
+  }
+  return parsed;
+};
 
 const collectFilterTokens = (input?: string | string[]): string[] => {
   if (!input) return [];
@@ -144,14 +153,14 @@ export class RunEventOutputQueryDto {
 
 export class RunEventLlmContextQueryDto {
   @IsOptional()
-  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)
   limit?: number;
 
   @IsOptional()
-  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   cursorIdx?: number;
@@ -665,6 +674,7 @@ export class AgentsThreadsController {
     @Param('eventId') eventId: string,
     @Query() query: RunEventLlmContextQueryDto,
   ) {
+    const limit = parseLlmContextLimit(query.limit as unknown);
     if (
       (query.cursorIdx !== undefined && !query.cursorRowId) ||
       (query.cursorIdx === undefined && query.cursorRowId)
@@ -675,7 +685,7 @@ export class AgentsThreadsController {
     const result = await this.runEvents.listLlmContextItems({
       runId,
       eventId,
-      limit: query.limit,
+      limit,
       cursor: query.cursorIdx !== undefined && query.cursorRowId
         ? { idx: query.cursorIdx, rowId: query.cursorRowId }
         : undefined,
