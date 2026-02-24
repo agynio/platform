@@ -368,6 +368,7 @@ describe('App bootstrap smoke test', () => {
       const stubs = createBootstrapStubs();
       const previousEnv = {
         DOCKER_RUNNER_GRPC_HOST: process.env.DOCKER_RUNNER_GRPC_HOST,
+        DOCKER_RUNNER_PORT: process.env.DOCKER_RUNNER_PORT,
         DOCKER_RUNNER_GRPC_PORT: process.env.DOCKER_RUNNER_GRPC_PORT,
         DOCKER_RUNNER_SHARED_SECRET: process.env.DOCKER_RUNNER_SHARED_SECRET,
         DOCKER_RUNNER_OPTIONAL: process.env.DOCKER_RUNNER_OPTIONAL,
@@ -377,7 +378,8 @@ describe('App bootstrap smoke test', () => {
       } as const;
 
       process.env.DOCKER_RUNNER_GRPC_HOST = '127.0.0.1';
-      process.env.DOCKER_RUNNER_GRPC_PORT = '59999';
+      process.env.DOCKER_RUNNER_PORT = '59999';
+      delete process.env.DOCKER_RUNNER_GRPC_PORT;
       process.env.DOCKER_RUNNER_SHARED_SECRET = 'shared-secret';
       process.env.DOCKER_RUNNER_OPTIONAL = 'true';
       process.env.VOLUME_GC_ENABLED = 'true';
@@ -399,7 +401,7 @@ describe('App bootstrap smoke test', () => {
             dockerRunnerConnectRetryJitterMs: 0,
             ...runnerConfigDefaults,
             dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
-            dockerRunnerGrpcPort: Number(process.env.DOCKER_RUNNER_GRPC_PORT),
+            dockerRunnerGrpcPort: Number(process.env.DOCKER_RUNNER_PORT),
           }),
         ),
       );
@@ -410,7 +412,7 @@ describe('App bootstrap smoke test', () => {
           new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline'),
         );
       stubs.dockerClientStub.getBaseUrl = vi.fn(
-        () => `${process.env.DOCKER_RUNNER_GRPC_HOST}:${process.env.DOCKER_RUNNER_GRPC_PORT}`,
+        () => `${process.env.DOCKER_RUNNER_GRPC_HOST}:${process.env.DOCKER_RUNNER_PORT}`,
       );
       const volumeGcStarted: string[] = [];
       stubs.volumeGcStub.start = vi.fn((intervalMs?: number) => {

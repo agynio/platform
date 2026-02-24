@@ -301,7 +301,6 @@ describe('ContainersController wiring via InfraModule', () => {
       dockerRunnerSharedSecret: 'runner-secret',
       dockerRunnerGrpcHost: 'runner-grpc.test',
       dockerRunnerGrpcPort: 9091,
-      dockerRunnerGrpcEnabled: true,
       agentsDatabaseUrl: 'postgresql://postgres:postgres@localhost:5432/agents_test',
     });
 

@@ -83,10 +83,11 @@ export async function startDockerRunnerProcess(socketPath: string): Promise<Runn
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
-    DOCKER_RUNNER_GRPC_PORT: String(grpcPort),
+    DOCKER_RUNNER_PORT: String(grpcPort),
     DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
     DOCKER_RUNNER_LOG_LEVEL: 'error',
   };
+  delete env.DOCKER_RUNNER_GRPC_PORT;
   if (socketPath) {
     env.DOCKER_SOCKET = socketPath;
   } else {

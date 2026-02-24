@@ -24,8 +24,9 @@ const runnerConfigSchema = z.object({
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 
 export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
+  const grpcPortEnv = env.DOCKER_RUNNER_PORT ?? env.DOCKER_RUNNER_GRPC_PORT;
   const parsed = runnerConfigSchema.safeParse({
-    grpcPort: env.DOCKER_RUNNER_GRPC_PORT,
+    grpcPort: grpcPortEnv,
     grpcHost: env.DOCKER_RUNNER_GRPC_HOST,
     sharedSecret: env.DOCKER_RUNNER_SHARED_SECRET,
     signatureTtlMs: env.DOCKER_RUNNER_SIGNATURE_TTL_MS,

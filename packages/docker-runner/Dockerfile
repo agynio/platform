@@ -37,7 +37,7 @@ FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
     DOCKER_RUNNER_GRPC_HOST=0.0.0.0 \
-    DOCKER_RUNNER_GRPC_PORT=7171
+    DOCKER_RUNNER_PORT=7171
 
 WORKDIR /opt/app/packages/docker-runner
 

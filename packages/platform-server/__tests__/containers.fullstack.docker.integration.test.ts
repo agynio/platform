@@ -94,7 +94,6 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
       dockerRunnerSharedSecret: RUNNER_SECRET,
       dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
       dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
-      dockerRunnerGrpcEnabled: true,
       agentsDatabaseUrl: dbHandle.connectionString,
       workspaceNetworkName: NETWORK_NAME,
     });

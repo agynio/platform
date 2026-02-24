@@ -62,10 +62,6 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
     }),
-  dockerRunnerGrpcEnabled: z
-    .union([z.string(), z.boolean()])
-    .default('false')
-    .transform((v) => (typeof v === 'string' ? ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()) : !!v)),
   dockerRunnerGrpcHost: z.string().default('127.0.0.1'),
   dockerRunnerGrpcPort: z
     .union([z.string(), z.number()])
@@ -374,10 +370,6 @@ export class ConfigService implements Config {
     return this.params.dockerRunnerTimeoutMs;
   }
 
-  get dockerRunnerGrpcEnabled(): boolean {
-    return this.params.dockerRunnerGrpcEnabled;
-  }
-
   get dockerRunnerGrpcHost(): string {
     return this.params.dockerRunnerGrpcHost;
   }
@@ -542,6 +534,7 @@ export class ConfigService implements Config {
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
     const graphRepoPathEnv = process.env.GRAPH_REPO_PATH;
     const graphBranchEnv = process.env.GRAPH_BRANCH;
+    const dockerRunnerPortEnv = process.env.DOCKER_RUNNER_PORT ?? process.env.DOCKER_RUNNER_GRPC_PORT;
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -562,9 +555,8 @@ export class ConfigService implements Config {
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
-      dockerRunnerGrpcEnabled: process.env.DOCKER_RUNNER_GRPC_ENABLED,
       dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
-      dockerRunnerGrpcPort: process.env.DOCKER_RUNNER_GRPC_PORT,
+      dockerRunnerGrpcPort: dockerRunnerPortEnv,
       dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
       dockerRunnerConnectRetryBaseDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS,
       dockerRunnerConnectRetryMaxDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS,
