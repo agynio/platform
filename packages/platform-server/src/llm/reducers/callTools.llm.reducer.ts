@@ -287,34 +287,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
 
       try {
         let raw: unknown;
-        const isShellTool = tool instanceof ShellCommandTool;
-        const hasEventId = typeof startedEventId === 'string' && startedEventId.length > 0;
-        const pathContext = {
-          tool: tool.name,
-          callId: toolCall.callId,
-          shellTool: isShellTool,
-          startedEventIdPresent: hasEventId,
-          startedEventId: startedEventId ?? null,
-          threadId: ctx.threadId,
-          runId: ctx.runId,
-        } as const;
-        if (isShellTool) {
-          if (hasEventId) {
-            this.logger.debug(`ShellCommandTool streaming path selected${this.format(pathContext)}`);
-          } else {
-            this.logger.warn(`ShellCommandTool streaming fallback without persisted event${this.format(pathContext)}`);
-          }
+        if (tool instanceof ShellCommandTool && startedEventId) {
           raw = await tool.executeStreaming(
             input as Parameters<ShellCommandTool['executeStreaming']>[0],
             ctx,
             {
               runId: ctx.runId,
               threadId: ctx.threadId,
-              eventId: startedEventId ?? undefined,
+              eventId: startedEventId,
             },
           );
         } else {
-          this.logger.warn(`Executing tool via non-streaming path${this.format(pathContext)}`);
           raw = await tool.execute(input as Parameters<FunctionTool['execute']>[0], ctx);
         }
 

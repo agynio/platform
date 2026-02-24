@@ -159,14 +159,13 @@ class AnsiSequenceCleaner {
 const DEFAULT_CHUNK_COALESCE_MS = 40;
 const DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024;
 const DEFAULT_CLIENT_BUFFER_BYTES = 10 * 1024 * 1024;
-const DEFAULT_OUTPUT_LIMIT_CHARS = 50_000;
 
 type OutputSource = 'stdout' | 'stderr';
 
 type StreamingOptions = {
   runId: string;
   threadId: string;
-  eventId?: string;
+  eventId: string;
 };
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -214,45 +213,17 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
   // shared decode helpers located in src/common/ingress/ingressDecode.ts
 
-  private parseInteger(value: unknown, options: { allowZero?: boolean } = {}): number | null {
-    if (typeof value === 'number') {
-      if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
-      if (value < 0) return null;
-      if (!options.allowZero && value === 0) return null;
-      return value;
-    }
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) return null;
-      if (!/^[-+]?\d+$/.test(trimmed)) return null;
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) return null;
-      if (parsed < 0) return null;
-      if (!options.allowZero && parsed === 0) return null;
-      return parsed;
-    }
-
-    return null;
-  }
-
   private getResolvedConfig() {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
-    const executionTimeoutMs = this.parseInteger(cfg.executionTimeoutMs, { allowZero: true });
-    const idleTimeoutMs = this.parseInteger(cfg.idleTimeoutMs, { allowZero: true });
-    const outputLimitChars = this.parseInteger(cfg.outputLimitChars, { allowZero: true });
-    const chunkCoalesceMs = this.parseInteger(cfg.chunkCoalesceMs);
-    const chunkSizeBytes = this.parseInteger(cfg.chunkSizeBytes);
-    const clientBufferLimitBytes = this.parseInteger(cfg.clientBufferLimitBytes);
-
     return {
       workdir: cfg.workdir ?? undefined,
-      executionTimeoutMs: executionTimeoutMs ?? 60 * 60 * 1000,
-      idleTimeoutMs: idleTimeoutMs ?? 60 * 1000,
-      outputLimitChars: outputLimitChars ?? DEFAULT_OUTPUT_LIMIT_CHARS,
-      chunkCoalesceMs: chunkCoalesceMs ?? DEFAULT_CHUNK_COALESCE_MS,
-      chunkSizeBytes: chunkSizeBytes ?? DEFAULT_CHUNK_SIZE_BYTES,
-      clientBufferLimitBytes: clientBufferLimitBytes ?? DEFAULT_CLIENT_BUFFER_BYTES,
+      executionTimeoutMs: typeof cfg.executionTimeoutMs === 'number' ? cfg.executionTimeoutMs : 60 * 60 * 1000,
+      idleTimeoutMs: typeof cfg.idleTimeoutMs === 'number' ? cfg.idleTimeoutMs : 60 * 1000,
+      outputLimitChars: typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0,
+      chunkCoalesceMs: typeof cfg.chunkCoalesceMs === 'number' ? cfg.chunkCoalesceMs : DEFAULT_CHUNK_COALESCE_MS,
+      chunkSizeBytes: typeof cfg.chunkSizeBytes === 'number' ? cfg.chunkSizeBytes : DEFAULT_CHUNK_SIZE_BYTES,
+      clientBufferLimitBytes:
+        typeof cfg.clientBufferLimitBytes === 'number' ? cfg.clientBufferLimitBytes : DEFAULT_CLIENT_BUFFER_BYTES,
       logToPid1: typeof cfg.logToPid1 === 'boolean' ? cfg.logToPid1 : true,
     };
   }
@@ -545,9 +516,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(options.threadId);
-    const eventId = options.eventId ?? null;
-    const eventIdLabel = eventId ?? 'none';
-    this.logger.log(`shell_command streaming start command=${command} eventId=${eventIdLabel}`);
+    this.logger.log(`shell_command streaming start command=${command} eventId=${options.eventId}`);
 
     const envOverlay = await this.node.resolveEnv(undefined);
     const cfg = this.getResolvedConfig();
@@ -566,7 +535,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           if (encoding === 'utf-8') return;
           this.logger.debug('ShellCommandTool detected UTF-16 output', {
             runId: options.runId,
-            eventId,
+            eventId: options.eventId,
             source,
             encoding,
             command,
@@ -662,21 +631,18 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         }
         const chunkContainsNull = text.includes('\u0000');
         this.logger.debug('ShellCommandTool chunk NUL scan before appendToolOutputChunk', {
-          eventId,
+          eventId: options.eventId,
           runId: options.runId,
           source,
           seqGlobal,
           seqStream: seqPerSource[source],
           containsNull: chunkContainsNull,
         });
-        if (!eventId) {
-          return;
-        }
         try {
           const payload = await this.runEvents.appendToolOutputChunk({
             runId: options.runId,
             threadId: options.threadId,
-            eventId,
+            eventId: options.eventId,
             seqGlobal,
             seqStream: seqPerSource[source],
             source,
@@ -689,7 +655,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           droppedChunks += 1;
           const errMessage = err instanceof Error ? err.message : String(err);
           this.logger.warn(
-            `ShellCommandTool chunk persistence failed; continuing without storing chunk eventId=${eventIdLabel} seqGlobal=${seqGlobal} source=${source} error=${errMessage}`,
+            `ShellCommandTool chunk persistence failed; continuing without storing chunk eventId=${options.eventId} seqGlobal=${seqGlobal} source=${source} error=${errMessage}`,
           );
         }
       });
@@ -733,8 +699,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           truncatedSource = source;
           allowNextChunkAfterTruncate = true;
         }
-      }
-    };
+  }
+};
 
     const handleChunk = (source: OutputSource, chunk: Buffer) => {
       if (!chunk || chunk.length === 0) return;
@@ -830,7 +796,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         await flushChain;
       } catch (flushErr) {
         const errMessage = flushErr instanceof Error ? flushErr.message : String(flushErr);
-        this.logger.warn(`ShellCommandTool flushChain error eventId=${eventIdLabel} error=${errMessage}`);
+        this.logger.warn(`ShellCommandTool flushChain error eventId=${options.eventId} error=${errMessage}`);
       }
 
       if (response) {
@@ -852,7 +818,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
       finalCombinedOutput = getCombinedOutput();
       this.logger.debug('ShellCommandTool finalCombinedOutput NUL scan', {
-        eventId,
+        eventId: options.eventId,
         runId: options.runId,
         containsNull: finalCombinedOutput.includes('\u0000'),
         length: finalCombinedOutput.length,
@@ -875,7 +841,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             savedPath = await this.saveOversizedOutputInContainer(container, file, finalCombinedOutput);
           } catch (saveErr) {
             const errMessage = saveErr instanceof Error ? saveErr.message : String(saveErr);
-            this.logger.warn(`ShellCommandTool failed to persist truncated output eventId=${eventIdLabel} error=${errMessage}`);
+            this.logger.warn(`ShellCommandTool failed to persist truncated output eventId=${options.eventId} error=${errMessage}`);
           }
         }
         if (!truncationMessage) {
@@ -931,7 +897,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           }
         } catch (formatErr) {
           const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
-          this.logger.warn(`ShellCommandTool failed to format streaming exec error eventId=${eventIdLabel} error=${errMessage}`);
+          this.logger.warn(`ShellCommandTool failed to format streaming exec error eventId=${options.eventId} error=${errMessage}`);
           formattedExecErrorMessage = sanitizePlainText(`[exit code ${exitCodeForExecError}] ${headline}`);
         }
 
@@ -965,31 +931,29 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           }
         } catch (formatErr) {
           const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
-          this.logger.warn(`ShellCommandTool failed to format exit code error eventId=${eventIdLabel} error=${errMessage}`);
+          this.logger.warn(`ShellCommandTool failed to format exit code error eventId=${options.eventId} error=${errMessage}`);
           formattedExitCodeMessage = sanitizePlainText(`[exit code ${exitCode}]`);
         }
       }
 
-      if (eventId) {
-        try {
-          const payload = await this.runEvents.finalizeToolOutputTerminal({
-            runId: options.runId,
-            threadId: options.threadId,
-            eventId,
-            exitCode,
-            status: terminalStatus,
-            bytesStdout: bytesBySource.stdout,
-            bytesStderr: bytesBySource.stderr,
-            totalChunks,
-            droppedChunks,
-            savedPath,
-            message: truncationMessage,
-          });
-          this.eventsBus.emitToolOutputTerminal(payload);
-        } catch (eventErr) {
-          const errMessage = eventErr instanceof Error ? eventErr.message : String(eventErr);
-          this.logger.warn(`ShellCommandTool failed to record terminal summary; continuing eventId=${eventIdLabel} error=${errMessage}`);
-        }
+      try {
+        const payload = await this.runEvents.finalizeToolOutputTerminal({
+          runId: options.runId,
+          threadId: options.threadId,
+          eventId: options.eventId,
+          exitCode,
+          status: terminalStatus,
+          bytesStdout: bytesBySource.stdout,
+          bytesStderr: bytesBySource.stderr,
+          totalChunks,
+          droppedChunks,
+          savedPath,
+          message: truncationMessage,
+        });
+        this.eventsBus.emitToolOutputTerminal(payload);
+      } catch (eventErr) {
+        const errMessage = eventErr instanceof Error ? eventErr.message : String(eventErr);
+        this.logger.warn(`ShellCommandTool failed to record terminal summary; continuing eventId=${options.eventId} error=${errMessage}`);
       }
     }
 
