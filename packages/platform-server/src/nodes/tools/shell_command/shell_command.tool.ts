@@ -1021,7 +1021,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       finalCombinedLength: finalCombinedOutput.length,
       outputLimit,
       truncated,
-      truncationReason,
+      truncationReason: truncatedReason,
       savedPath,
     };
 
