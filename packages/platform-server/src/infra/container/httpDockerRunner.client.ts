@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'http';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
 import { fetch as undiciFetch, type Response } from 'undici';
-import { credentials, Metadata, type CallOptions, type ClientDuplexStream, type ServiceError, status } from '@grpc/grpc-js';
+import { credentials, Metadata, type ClientDuplexStream, type ServiceError, status } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
 import {
   ContainerHandle,
@@ -45,7 +45,6 @@ import {
   ExecResponse,
   ExecStdinSchema,
   ExecStartRequestSchema,
-  ExecExitReason,
 } from '@agyn/runner-proto';
 import {
   RunnerServiceGrpcClient,
@@ -53,7 +52,6 @@ import {
   RUNNER_SERVICE_CANCEL_EXEC_PATH,
   RUNNER_SERVICE_EXEC_PATH,
 } from '@agyn/runner-proto/grpc.js';
-import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 
 type RunnerClientConfig = {
@@ -134,8 +132,7 @@ export class HttpDockerRunnerClient implements DockerClient {
         this.grpcExec = new RunnerGrpcExecClient({
           address: config.grpc.address,
           sharedSecret: this.sharedSecret,
-          defaultDeadlineMs: this.requestTimeoutMs,
-          resolveTimeout: (opts) => this.resolveExecRequestTimeout(opts),
+          requestTimeoutMs: this.requestTimeoutMs,
         });
       }
     }
@@ -829,38 +826,32 @@ export class HttpDockerRunnerClient implements DockerClient {
   }
 }
 
+type GrpcStartParams = {
+  containerId: string;
+  command: string[] | string;
+  execOptions?: ExecOptions;
+  interactiveOptions?: InteractiveExecOptions;
+};
+
 class RunnerGrpcExecClient {
   private readonly client: RunnerServiceGrpcClientInstance;
   private readonly sharedSecret: string;
-  private readonly defaultDeadlineMs?: number;
-  private readonly resolveTimeout?: (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>) => number | undefined;
+  private readonly requestTimeoutMs: number;
 
-  constructor(options: {
-    address: string;
-    sharedSecret: string;
-    defaultDeadlineMs?: number;
-    resolveTimeout?: (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>) => number | undefined;
-  }) {
+  constructor(options: { address: string; sharedSecret: string; requestTimeoutMs: number }) {
     this.client = new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
     this.sharedSecret = options.sharedSecret;
-    this.defaultDeadlineMs = options.defaultDeadlineMs;
-    this.resolveTimeout = options.resolveTimeout;
+    this.requestTimeoutMs = options.requestTimeoutMs;
   }
 
   async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
     const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
-    const deadlineMs = this.resolveTimeout?.(options);
-    const callOptions: CallOptions | undefined =
-      typeof deadlineMs === 'number' && deadlineMs > 0
-        ? { deadline: new Date(Date.now() + deadlineMs) }
-        : undefined;
-    const call = (callOptions ? this.client.exec(metadata, callOptions) : this.client.exec(metadata)) as ClientDuplexStream<ExecRequest, ExecResponse>;
+    const deadline = new Date(Date.now() + this.requestTimeoutMs);
+    const call = this.client.exec(metadata, { deadline }) as ClientDuplexStream<ExecRequest, ExecResponse>;
     const execIdRef: { current?: string } = {};
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     let finished = false;
-    let requestedTimeoutMs: number | undefined;
-    let requestedIdleTimeoutMs: number | undefined;
     const isAborted = this.attachAbortSignal(call, options?.signal, () => execIdRef.current);
 
     return new Promise<ExecResult>((resolve, reject) => {
@@ -901,16 +892,6 @@ class RunnerGrpcExecClient {
         if (event.case === 'exit') {
           const stdout = this.composeOutput(stdoutChunks, event.value.stdoutTail);
           const stderr = this.composeOutput(stderrChunks, event.value.stderrTail);
-          const timeoutError = this.mapExitReasonToError(event.value.reason, {
-            stdout,
-            stderr,
-            timeoutMs: requestedTimeoutMs,
-            idleTimeoutMs: requestedIdleTimeoutMs,
-          });
-          if (timeoutError) {
-            fail(timeoutError);
-            return;
-          }
           finalize({ exitCode: event.value.exitCode, stdout, stderr });
           return;
         }
@@ -935,9 +916,6 @@ class RunnerGrpcExecClient {
       });
 
       const start = this.createStartRequest({ containerId, command, execOptions: options });
-      const extractedTimeouts = this.extractRequestedTimeouts(start);
-      requestedTimeoutMs = extractedTimeouts.timeoutMs;
-      requestedIdleTimeoutMs = extractedTimeouts.idleTimeoutMs;
       call.write(start);
       call.end();
     });
@@ -955,8 +933,6 @@ class RunnerGrpcExecClient {
     let execId: string | undefined;
     let finished = false;
     let finalResult: ExecResult | undefined;
-    const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
-    const { timeoutMs: requestedTimeoutMs, idleTimeoutMs: requestedIdleTimeoutMs } = this.extractRequestedTimeouts(start);
     let readyResolve: (() => void) | undefined;
     let readyReject: ((error: Error) => void) | undefined;
     let closeResolve: ((value: ExecResult) => void) | undefined;
@@ -1012,19 +988,11 @@ class RunnerGrpcExecClient {
         return;
       }
       if (event.case === 'exit') {
-        const stdoutTail = Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8');
-        const stderrTail = Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8');
-        const timeoutError = this.mapExitReasonToError(event.value.reason, {
-          stdout: stdoutTail,
-          stderr: stderrTail,
-          timeoutMs: requestedTimeoutMs,
-          idleTimeoutMs: requestedIdleTimeoutMs,
+        finalize({
+          exitCode: event.value.exitCode,
+          stdout: Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8'),
+          stderr: Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8'),
         });
-        if (timeoutError) {
-          fail(timeoutError);
-          return;
-        }
-        finalize({ exitCode: event.value.exitCode, stdout: stdoutTail, stderr: stderrTail });
         return;
       }
       if (event.case === 'error') {
@@ -1079,6 +1047,7 @@ class RunnerGrpcExecClient {
       },
     });
 
+    const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
     call.write(start);
 
     await readyPromise;
@@ -1099,25 +1068,16 @@ class RunnerGrpcExecClient {
 
   async cancelExecution(executionId: string, force = false): Promise<boolean> {
     const metadata = this.createMetadata(RUNNER_SERVICE_CANCEL_EXEC_PATH);
-    const deadlineMs = this.defaultDeadlineMs;
-    const callOptions: CallOptions | undefined =
-      typeof deadlineMs === 'number' && deadlineMs > 0
-        ? { deadline: new Date(Date.now() + deadlineMs) }
-        : undefined;
+    const deadline = new Date(Date.now() + this.requestTimeoutMs);
     const request = create(CancelExecutionRequestSchema, { executionId, force });
     return new Promise<boolean>((resolve, reject) => {
-      const callback = (err: ServiceError | null, response?: CancelExecutionResponse) => {
+      this.client.cancelExecution(request, metadata, { deadline }, (err: ServiceError | null, response?: CancelExecutionResponse) => {
         if (err) {
           reject(this.translateServiceError(err));
           return;
         }
         resolve(response?.cancelled ?? false);
-      };
-      if (callOptions) {
-        this.client.cancelExecution(request, metadata, callOptions, callback);
-      } else {
-        this.client.cancelExecution(request, metadata, callback);
-      }
+      });
     });
   }
 
@@ -1130,12 +1090,7 @@ class RunnerGrpcExecClient {
     return metadata;
   }
 
-  private createStartRequest(params: {
-    containerId: string;
-    command: string[] | string;
-    execOptions?: ExecOptions;
-    interactiveOptions?: InteractiveExecOptions;
-  }) {
+  private createStartRequest(params: GrpcStartParams) {
     const commandArgv = Array.isArray(params.command) ? params.command : [];
     const commandShell = Array.isArray(params.command) ? '' : params.command;
     const execOpts = params.execOptions ?? {};
@@ -1162,20 +1117,6 @@ class RunnerGrpcExecClient {
     return create(ExecRequestSchema, { msg: { case: 'start', value: start } });
   }
 
-  private extractRequestedTimeouts(start: ExecRequest): { timeoutMs?: number; idleTimeoutMs?: number } {
-    if (start.msg?.case !== 'start') {
-      return {};
-    }
-    const options = start.msg.value.options;
-    if (!options) {
-      return {};
-    }
-    return {
-      timeoutMs: this.fromBigInt(options.timeoutMs),
-      idleTimeoutMs: this.fromBigInt(options.idleTimeoutMs),
-    };
-  }
-
   private normalizeEnv(env?: Record<string, string> | string[]): Array<{ name: string; value: string }> {
     if (!env) return [];
     if (Array.isArray(env)) {
@@ -1194,13 +1135,6 @@ class RunnerGrpcExecClient {
     return BigInt(Math.floor(value));
   }
 
-  private fromBigInt(value?: bigint): number | undefined {
-    if (typeof value !== 'bigint') return undefined;
-    const result = Number(value);
-    if (!Number.isFinite(result) || result <= 0) return undefined;
-    return result;
-  }
-
   private composeOutput(chunks: Buffer[], tail?: Uint8Array): string {
     if (chunks.length > 0) {
       return Buffer.concat(chunks).toString('utf8');
@@ -1215,27 +1149,6 @@ class RunnerGrpcExecClient {
     const code = error.code || 'runner_exec_error';
     const message = error.message || 'runner exec error';
     return new DockerRunnerRequestError(500, code, error.retryable ?? false, message);
-  }
-
-  private mapExitReasonToError(
-    reason: ExecExitReason,
-    context: { stdout: string; stderr: string; timeoutMs?: number; idleTimeoutMs?: number },
-  ): Error | undefined {
-    if (reason === ExecExitReason.TIMEOUT) {
-      const timeoutMs = this.resolveTimeoutValue(context.timeoutMs, context.idleTimeoutMs);
-      return new ExecTimeoutError(timeoutMs, context.stdout, context.stderr);
-    }
-    if (reason === ExecExitReason.IDLE_TIMEOUT) {
-      const timeoutMs = this.resolveTimeoutValue(context.idleTimeoutMs, context.timeoutMs);
-      return new ExecIdleTimeoutError(timeoutMs, context.stdout, context.stderr);
-    }
-    return undefined;
-  }
-
-  private resolveTimeoutValue(primary?: number, fallback?: number): number {
-    if (typeof primary === 'number' && primary > 0) return primary;
-    if (typeof fallback === 'number' && fallback > 0) return fallback;
-    return 0;
   }
 
   private translateServiceError(error: ServiceError): DockerRunnerRequestError {

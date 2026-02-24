@@ -79,6 +79,45 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 7171;
     }),
+  dockerRunnerOptional: z
+    .union([z.boolean(), z.string()])
+    .default('true')
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  dockerRunnerConnectRetryBaseDelayMs: z
+    .union([z.string(), z.number()])
+    .default('500')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 500;
+    }),
+  dockerRunnerConnectRetryMaxDelayMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
+    }),
+  dockerRunnerConnectRetryJitterMs: z
+    .union([z.string(), z.number()])
+    .default('250')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 250;
+    }),
+  dockerRunnerConnectProbeIntervalMs: z
+    .union([z.string(), z.number()])
+    .default('30000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num > 0 ? num : 30_000;
+    }),
+  dockerRunnerConnectMaxRetries: z
+    .union([z.string(), z.number()])
+    .default('0')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 0;
+    }),
   // Workspace container network name
   workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
@@ -200,6 +239,13 @@ export const configSchema = z.object({
         .map((x) => x.trim())
         .filter((x) => !!x),
     ),
+  volumeGcSweepTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('15000')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) && num >= 0 ? num : 15_000;
+    }),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -353,6 +399,50 @@ export class ConfigService implements Config {
     return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
   }
 
+  get dockerRunnerOptional(): boolean {
+    return this.params.dockerRunnerOptional;
+  }
+
+  get dockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryBaseDelayMs;
+  }
+
+  get dockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.params.dockerRunnerConnectRetryMaxDelayMs;
+  }
+
+  get dockerRunnerConnectRetryJitterMs(): number {
+    return this.params.dockerRunnerConnectRetryJitterMs;
+  }
+
+  get dockerRunnerConnectProbeIntervalMs(): number {
+    return this.params.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  get dockerRunnerConnectMaxRetries(): number {
+    return this.params.dockerRunnerConnectMaxRetries;
+  }
+
+  get volumeGcSweepTimeoutMs(): number {
+    return this.params.volumeGcSweepTimeoutMs;
+  }
+
+  get dockerRunnerGrpcEnabled(): boolean {
+    return this.params.dockerRunnerGrpcEnabled;
+  }
+
+  get dockerRunnerGrpcHost(): string {
+    return this.params.dockerRunnerGrpcHost;
+  }
+
+  get dockerRunnerGrpcPort(): number {
+    return this.params.dockerRunnerGrpcPort;
+  }
+
+  getDockerRunnerGrpcAddress(): string {
+    return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
+  }
+
   getDockerRunnerBaseUrl(): string {
     return this.dockerRunnerBaseUrl;
   }
@@ -363,6 +453,34 @@ export class ConfigService implements Config {
 
   getDockerRunnerTimeoutMs(): number {
     return this.dockerRunnerTimeoutMs;
+  }
+
+  getDockerRunnerOptional(): boolean {
+    return this.dockerRunnerOptional;
+  }
+
+  getDockerRunnerConnectRetryBaseDelayMs(): number {
+    return this.dockerRunnerConnectRetryBaseDelayMs;
+  }
+
+  getDockerRunnerConnectRetryMaxDelayMs(): number {
+    return this.dockerRunnerConnectRetryMaxDelayMs;
+  }
+
+  getDockerRunnerConnectRetryJitterMs(): number {
+    return this.dockerRunnerConnectRetryJitterMs;
+  }
+
+  getDockerRunnerConnectProbeIntervalMs(): number {
+    return this.dockerRunnerConnectProbeIntervalMs;
+  }
+
+  getDockerRunnerConnectMaxRetries(): number {
+    return this.dockerRunnerConnectMaxRetries;
+  }
+
+  getVolumeGcSweepTimeoutMs(): number {
+    return this.volumeGcSweepTimeoutMs;
   }
 
   get workspaceNetworkName(): string {
@@ -477,6 +595,12 @@ export class ConfigService implements Config {
       dockerRunnerGrpcEnabled: process.env.DOCKER_RUNNER_GRPC_ENABLED,
       dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
       dockerRunnerGrpcPort: process.env.DOCKER_RUNNER_GRPC_PORT,
+      dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
+      dockerRunnerConnectRetryBaseDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS,
+      dockerRunnerConnectRetryMaxDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS,
+      dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
+      dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
+      dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
@@ -502,6 +626,7 @@ export class ConfigService implements Config {
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
+      volumeGcSweepTimeoutMs: process.env.VOLUME_GC_SWEEP_TIMEOUT_MS,
     });
     const config = new ConfigService().init(parsed);
     ConfigService.register(config);

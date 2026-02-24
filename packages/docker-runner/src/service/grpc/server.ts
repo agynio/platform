@@ -341,7 +341,6 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
                 void handleTimeout(context, ExecExitReason.TIMEOUT);
               }, context.timeoutMs);
             }
-
             const started = create(ExecStartedSchema, {
               executionId: context.executionId,
               startedAt: timestampFromDate(now),
@@ -351,7 +350,6 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             if (context.idleTimeoutMs && context.idleTimeoutMs > 0) {
               armIdleTimer();
             }
-
             session.stdout.on('data', (chunk: Buffer) => {
               if (!ctx || ctx.finished) return;
               ctx.stdoutSeq += 1n;
