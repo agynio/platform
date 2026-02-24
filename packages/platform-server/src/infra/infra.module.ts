@@ -23,7 +23,7 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
 import { WorkspaceProvider } from '../workspace/providers/workspace.provider';
 import { DockerWorkspaceRuntimeProvider } from '../workspace/providers/docker.workspace.provider';
 import { DOCKER_CLIENT, type DockerClient } from './container/dockerClient.token';
-import { HttpDockerRunnerClient } from './container/httpDockerRunner.client';
+import { RunnerGrpcClient } from './container/runnerGrpc.client';
 import { DockerRunnerConnectivityMonitor } from './container/dockerRunnerConnectivity.monitor';
 import { DockerRunnerStatusService } from './container/dockerRunnerStatus.service';
 import { RequireDockerRunnerGuard } from './container/requireDockerRunner.guard';
@@ -45,16 +45,10 @@ import { HealthController } from './health/health.controller';
     {
       provide: DOCKER_CLIENT,
       useFactory: (config: ConfigService) =>
-        new HttpDockerRunnerClient({
-          baseUrl: config.getDockerRunnerBaseUrl(),
+        new RunnerGrpcClient({
+          address: config.getDockerRunnerGrpcAddress(),
           sharedSecret: config.getDockerRunnerSharedSecret(),
           requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
-          grpc: config.dockerRunnerGrpcEnabled
-            ? {
-                address: config.getDockerRunnerGrpcAddress(),
-                enabled: true,
-              }
-            : undefined,
         }),
       inject: [ConfigService],
     },

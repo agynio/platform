@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GraphApiModule } from '../src/graph/graph-api.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
@@ -53,6 +53,10 @@ if (!shouldRunDbTests) {
   });
 } else {
   describe('GraphApiModule DI smoke test', () => {
+    afterEach(() => {
+      ConfigService.clearInstanceForTest();
+    });
+
     it('resolves LLMProvisioner and creates AgentNode instances', async () => {
       const transactionClientStub = {
         $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
@@ -172,9 +176,12 @@ if (!shouldRunDbTests) {
         configSchema.parse({
           llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
+          litellmBaseUrl: 'http://127.0.0.1:4000',
+          litellmMasterKey: 'test-master-key',
           ...runnerConfigDefaults,
         }),
       );
+      ConfigService.register(configServiceStub);
 
       const templateRegistryStub = {
         register: vi.fn().mockReturnThis(),

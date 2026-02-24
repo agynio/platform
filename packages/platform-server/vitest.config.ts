@@ -7,9 +7,11 @@ export default defineConfig({
     include: ["__tests__/**/*.{test,spec}.ts", "__e2e__/**/*.test.ts"],
     setupFiles: ["./__tests__/vitest.setup.ts"],
     env: {
-      DOCKER_RUNNER_BASE_URL: "http://docker-runner:7071",
+      DOCKER_RUNNER_GRPC_HOST: "docker-runner",
+      DOCKER_RUNNER_GRPC_PORT: "7171",
       DOCKER_RUNNER_SHARED_SECRET: "test-shared-secret",
     },
+    fileParallelism: false,
     coverage: {
       enabled: false,
     },

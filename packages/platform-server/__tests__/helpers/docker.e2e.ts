@@ -4,10 +4,13 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { ServerCredentials } from '@grpc/grpc-js';
 
 import { fetch } from 'undici';
 
 import { createRunnerApp } from '../../../docker-runner/src/service/app';
+import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/server';
+import { ContainerService, NonceCache } from '../../../docker-runner/src';
 
 export const RUNNER_SECRET = 'docker-e2e-secret';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
@@ -16,6 +19,7 @@ export const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
 
 export type RunnerHandle = {
   baseUrl: string;
+  grpcAddress: string;
   close: () => Promise<void>;
 };
 
@@ -25,24 +29,55 @@ export type PostgresHandle = {
 };
 
 export async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
-  const port = await getAvailablePort();
+  const httpPort = await getAvailablePort();
+  const grpcPort = await getAvailablePort();
+  const containers = new ContainerService();
+  const nonceCache = new NonceCache({ ttlMs: 60_000 });
   const app = createRunnerApp({
-    port,
+    port: httpPort,
     host: '127.0.0.1',
     sharedSecret: RUNNER_SECRET,
     dockerSocket: socketPath,
     signatureTtlMs: 60_000,
     logLevel: 'error',
+  }, { containers, nonceCache });
+  await app.listen({ port: httpPort, host: '127.0.0.1' });
+
+  const grpcServer = createRunnerGrpcServer({
+    config: {
+      grpcHost: '127.0.0.1',
+      grpcPort,
+      sharedSecret: RUNNER_SECRET,
+      signatureTtlMs: 60_000,
+      dockerSocket: socketPath,
+    },
+    containers,
+    nonceCache,
   });
-  await app.listen({ port, host: '127.0.0.1' });
+  const grpcAddress = `127.0.0.1:${grpcPort}`;
+  await new Promise<void>((resolve, reject) => {
+    grpcServer.bindAsync(grpcAddress, ServerCredentials.createInsecure(), (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+  grpcServer.start();
+
   return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    close: () => app.close(),
+    baseUrl: `http://127.0.0.1:${httpPort}`,
+    grpcAddress,
+    close: async () => {
+      await app.close();
+      await new Promise<void>((resolve) => {
+        grpcServer.tryShutdown(() => resolve());
+      });
+    },
   };
 }
 
 export async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
   const port = await getAvailablePort();
+  const grpcPort = await getAvailablePort();
   const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
   const runnerEntry = path.resolve(repoRoot, 'packages', 'docker-runner', 'src', 'service', 'main.ts');
   const tsxBin = path.resolve(repoRoot, 'node_modules', '.bin', 'tsx');
@@ -53,6 +88,8 @@ export async function startDockerRunnerProcess(socketPath: string): Promise<Runn
     ...process.env,
     DOCKER_RUNNER_HOST: '127.0.0.1',
     DOCKER_RUNNER_PORT: String(port),
+    DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
+    DOCKER_RUNNER_GRPC_PORT: String(grpcPort),
     DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
     DOCKER_RUNNER_LOG_LEVEL: 'error',
   };
@@ -108,6 +145,7 @@ export async function startDockerRunnerProcess(socketPath: string): Promise<Runn
 
   return {
     baseUrl: `http://127.0.0.1:${port}`,
+    grpcAddress: `127.0.0.1:${grpcPort}`,
     close: async () => {
       if (child.exitCode !== null || child.signalCode) return;
       await new Promise<void>((resolve) => {

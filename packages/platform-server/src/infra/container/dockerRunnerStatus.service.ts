@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '../../core/services/config.service';
-import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerRequestError } from './runnerGrpc.client';
 
 export type DockerRunnerStatusState = 'unknown' | 'up' | 'down';
 
@@ -32,7 +32,7 @@ export class DockerRunnerStatusService {
     this.snapshot = {
       status: 'unknown',
       optional: this.configService.getDockerRunnerOptional(),
-      baseUrl: this.configService.getDockerRunnerBaseUrl(),
+      baseUrl: this.configService.getDockerRunnerGrpcAddress(),
       consecutiveFailures: 0,
     };
   }

@@ -15,7 +15,7 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
 import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
-import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { RunnerGrpcClient, DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 
 import {
   DEFAULT_SOCKET,
@@ -75,7 +75,7 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
   let prismaClient: ReturnType<PrismaService['getClient']>;
   let runner: RunnerHandle;
   let dbHandle: PostgresHandle;
-  let dockerClient: HttpDockerRunnerClient;
+  let dockerClient: RunnerGrpcClient;
   let configService: ConfigService;
   const createdThreads = new Set<string>();
   const createdContainers = new Set<string>();
@@ -86,12 +86,15 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
 
     const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
     runner = await startDockerRunnerProcess(socketPath);
-    dockerClient = new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     clearTestConfig();
+    const [grpcHost, grpcPort] = runner.grpcAddress.split(':');
     configService = registerTestConfig({
-      dockerRunnerBaseUrl: runner.baseUrl,
       dockerRunnerSharedSecret: RUNNER_SECRET,
+      dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
+      dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
+      dockerRunnerGrpcEnabled: true,
       agentsDatabaseUrl: dbHandle.connectionString,
       workspaceNetworkName: NETWORK_NAME,
     });

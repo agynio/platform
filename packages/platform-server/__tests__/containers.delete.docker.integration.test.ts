@@ -10,7 +10,7 @@ import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
-import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { RunnerGrpcClient, DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaClient as Prisma } from '@prisma/client';
@@ -41,7 +41,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
   let prisma: PrismaClient;
   let registry: ContainerRegistry;
   let runner: RunnerHandle;
-  let dockerClient: HttpDockerRunnerClient;
+  let dockerClient: RunnerGrpcClient;
   let dbHandle: PostgresHandle;
   const orphanContainers = new Set<string>();
   const startRegisteredContainer = async (prefix: string): Promise<{ containerId: string }> => {
@@ -80,7 +80,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
 
     const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
     runner = await startDockerRunner(socketPath);
-    dockerClient = new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
@@ -91,8 +91,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
         {
           provide: ConfigService,
           useValue: {
-            dockerRunnerBaseUrl: runner.baseUrl,
-            getDockerRunnerBaseUrl: () => runner.baseUrl,
+            getDockerRunnerGrpcAddress: () => runner.grpcAddress,
           } as ConfigService,
         },
         ContainerAdminService,
@@ -252,7 +251,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
   let prisma: PrismaClient;
   let registry: ContainerRegistry;
   let runner: RunnerHandle;
-  let dockerClient: HttpDockerRunnerClient;
+  let dockerClient: RunnerGrpcClient;
   let dbHandle: PostgresHandle;
   const orphanContainers = new Set<string>();
 
@@ -292,7 +291,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
 
     const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
     runner = await startDockerRunnerProcess(socketPath);
-    dockerClient = new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
@@ -303,8 +302,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
         {
           provide: ConfigService,
           useValue: {
-            dockerRunnerBaseUrl: runner.baseUrl,
-            getDockerRunnerBaseUrl: () => runner.baseUrl,
+            getDockerRunnerGrpcAddress: () => runner.grpcAddress,
           } as ConfigService,
         },
         ContainerAdminService,

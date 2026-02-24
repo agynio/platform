@@ -1,8 +1,10 @@
 import { ConfigService, configSchema } from '../../src/core/services/config.service';
 
 export const runnerConfigDefaults = {
-  dockerRunnerBaseUrl: 'http://docker-runner:7071',
   dockerRunnerSharedSecret: 'test-shared-secret',
+  dockerRunnerGrpcHost: '127.0.0.1',
+  dockerRunnerGrpcPort: 7171,
+  dockerRunnerGrpcEnabled: true,
 } as const;
 
 const defaultConfigInput = {

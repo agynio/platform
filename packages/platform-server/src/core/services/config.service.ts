@@ -51,11 +51,6 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
-  dockerRunnerBaseUrl: z
-    .string()
-    .min(1, 'DOCKER_RUNNER_BASE_URL is required')
-    .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
-    .transform((value) => value.trim().replace(/\/+$/, '')),
   dockerRunnerSharedSecret: z
     .string()
     .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
@@ -371,10 +366,6 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  get dockerRunnerBaseUrl(): string {
-    return this.params.dockerRunnerBaseUrl;
-  }
-
   get dockerRunnerSharedSecret(): string {
     return this.params.dockerRunnerSharedSecret;
   }
@@ -393,10 +384,6 @@ export class ConfigService implements Config {
 
   get dockerRunnerGrpcPort(): number {
     return this.params.dockerRunnerGrpcPort;
-  }
-
-  getDockerRunnerGrpcAddress(): string {
-    return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
   }
 
   get dockerRunnerOptional(): boolean {
@@ -427,24 +414,8 @@ export class ConfigService implements Config {
     return this.params.volumeGcSweepTimeoutMs;
   }
 
-  get dockerRunnerGrpcEnabled(): boolean {
-    return this.params.dockerRunnerGrpcEnabled;
-  }
-
-  get dockerRunnerGrpcHost(): string {
-    return this.params.dockerRunnerGrpcHost;
-  }
-
-  get dockerRunnerGrpcPort(): number {
-    return this.params.dockerRunnerGrpcPort;
-  }
-
   getDockerRunnerGrpcAddress(): string {
     return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
-  }
-
-  getDockerRunnerBaseUrl(): string {
-    return this.dockerRunnerBaseUrl;
   }
 
   getDockerRunnerSharedSecret(): string {
@@ -589,7 +560,6 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
-      dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       dockerRunnerGrpcEnabled: process.env.DOCKER_RUNNER_GRPC_ENABLED,

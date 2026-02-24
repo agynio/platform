@@ -3,14 +3,14 @@ import {
   Server,
   ServerDuplexStream,
   ServerUnaryCall,
+  ServerWritableStream,
   ServiceError,
   status,
 } from '@grpc/grpc-js';
 import {
   CancelExecutionRequest,
-  CancelExecutionResponseSchema,
   CancelExecutionResponse,
-  EnvVar,
+  CancelExecutionResponseSchema,
   ExecErrorSchema,
   ExecExitReason,
   ExecExitSchema,
@@ -19,14 +19,70 @@ import {
   ExecResponse,
   ExecResponseSchema,
   ExecStartedSchema,
+  FindWorkloadsByLabelsRequest,
+  FindWorkloadsByLabelsResponse,
+  FindWorkloadsByLabelsResponseSchema,
+  GetWorkloadLabelsRequest,
+  GetWorkloadLabelsResponse,
+  GetWorkloadLabelsResponseSchema,
+  InspectWorkloadRequest,
+  InspectWorkloadResponse,
+  InspectWorkloadResponseSchema,
+  ListWorkloadsByVolumeRequest,
+  ListWorkloadsByVolumeResponse,
+  ListWorkloadsByVolumeResponseSchema,
+  LogChunkSchema,
+  LogEndSchema,
+  PutArchiveRequest,
+  PutArchiveResponse,
+  PutArchiveResponseSchema,
   ReadyRequest,
   ReadyResponse,
   ReadyResponseSchema,
+  RemoveVolumeRequest,
+  RemoveVolumeResponse,
+  RemoveVolumeResponseSchema,
+  RemoveWorkloadRequest,
+  RemoveWorkloadResponse,
+  RemoveWorkloadResponseSchema,
+  RunnerError,
+  RunnerErrorSchema,
+  RunnerEventDataSchema,
+  StartWorkloadRequest,
+  StartWorkloadResponse,
+  StartWorkloadResponseSchema,
+  StopWorkloadRequest,
+  StopWorkloadResponse,
+  StopWorkloadResponseSchema,
+  StreamEventsRequest,
+  StreamEventsResponse,
+  StreamEventsResponseSchema,
+  StreamWorkloadLogsRequest,
+  StreamWorkloadLogsResponse,
+  StreamWorkloadLogsResponseSchema,
+  TargetMountSchema,
+  TouchWorkloadRequest,
+  TouchWorkloadResponse,
+  TouchWorkloadResponseSchema,
+  WorkloadContainersSchema,
+  WorkloadStatus,
 } from '@agyn/runner-proto';
 import {
   RUNNER_SERVICE_CANCEL_EXEC_PATH,
   RUNNER_SERVICE_EXEC_PATH,
+  RUNNER_SERVICE_FIND_WORKLOADS_BY_LABELS_PATH,
+  RUNNER_SERVICE_GET_WORKLOAD_LABELS_PATH,
+  RUNNER_SERVICE_INSPECT_WORKLOAD_PATH,
+  RUNNER_SERVICE_LIST_WORKLOADS_BY_VOLUME_PATH,
+  RUNNER_SERVICE_PUT_ARCHIVE_PATH,
   RUNNER_SERVICE_READY_PATH,
+  RUNNER_SERVICE_REMOVE_VOLUME_PATH,
+  RUNNER_SERVICE_REMOVE_WORKLOAD_PATH,
+  RUNNER_SERVICE_START_WORKLOAD_PATH,
+  RUNNER_SERVICE_STOP_WORKLOAD_PATH,
+  RUNNER_SERVICE_STREAM_EVENTS_PATH,
+  RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
+  RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
   runnerServiceGrpcDefinition,
 } from '@agyn/runner-proto/grpc.js';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
@@ -34,6 +90,8 @@ import { create } from '@bufbuild/protobuf';
 import type { ContainerService, InteractiveExecSession, NonceCache } from '../..';
 import { verifyAuthHeaders } from '../..';
 import type { RunnerConfig } from '../config';
+import { createDockerEventsParser } from '../dockerEvents.parser';
+import { startWorkloadRequestToContainerOpts } from '../../contracts/workload.grpc';
 
 type ExecStream = ServerDuplexStream<ExecRequest, ExecResponse>;
 
@@ -73,7 +131,137 @@ const DEFAULT_EXIT_TAIL_BYTES = 64 * 1024;
 const MAX_EXIT_TAIL_BYTES = 256 * 1024;
 const CONTAINER_STOP_TIMEOUT_SEC = 10;
 
-// TODO: Implement remaining RPCs (start, stop, logs, etc.) in subsequent steps.
+type DockerErrorDetails = {
+  statusCode?: number;
+  status?: number;
+  reason?: string;
+  statusMessage?: string;
+  code?: string;
+  message?: string;
+  json?: { message?: string };
+};
+
+type ExtractedDockerError = {
+  statusCode: number;
+  code?: string;
+  message?: string;
+};
+
+const normalizeCode = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  const normalized = trimmed.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized || undefined;
+};
+
+const extractDockerError = (error: unknown): ExtractedDockerError | null => {
+  if (!error || typeof error !== 'object') return null;
+  const candidate = error as DockerErrorDetails;
+  const statusCode = candidate.statusCode ?? candidate.status;
+  if (typeof statusCode !== 'number') return null;
+  const message = candidate.json?.message?.trim() ?? candidate.message?.trim() ?? candidate.reason?.trim() ?? candidate.statusMessage?.trim();
+  const code = candidate.code ?? normalizeCode(candidate.reason ?? candidate.statusMessage);
+  return { statusCode, code: code ?? undefined, message: message ?? undefined };
+};
+
+const mapStatusCodeToGrpc = (statusCode: number | undefined, fallback: status): status => {
+  if (typeof statusCode !== 'number' || statusCode <= 0) return fallback;
+  switch (statusCode) {
+    case 400:
+    case 422:
+      return status.INVALID_ARGUMENT;
+    case 401:
+      return status.UNAUTHENTICATED;
+    case 403:
+      return status.PERMISSION_DENIED;
+    case 404:
+      return status.NOT_FOUND;
+    case 409:
+      return status.ABORTED;
+    case 412:
+      return status.FAILED_PRECONDITION;
+    case 429:
+      return status.RESOURCE_EXHAUSTED;
+    case 499:
+      return status.CANCELLED;
+    case 500:
+      return status.INTERNAL;
+    case 502:
+    case 503:
+    case 504:
+      return status.UNAVAILABLE;
+    default:
+      if (statusCode >= 500) return status.UNAVAILABLE;
+      return fallback;
+  }
+};
+
+const errorMessageFromUnknown = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return fallback;
+};
+
+const toDockerServiceError = (
+  error: unknown,
+  fallbackStatus: status,
+  fallbackMessage = 'runner_error',
+): ServiceError => {
+  const extracted = extractDockerError(error);
+  const message = extracted?.message ?? errorMessageFromUnknown(error, fallbackMessage);
+  const serviceError = new Error(message) as ServiceError;
+  serviceError.code = mapStatusCodeToGrpc(extracted?.statusCode, fallbackStatus);
+  serviceError.details = message;
+  serviceError.metadata = new Metadata();
+  return serviceError;
+};
+
+const toRunnerStreamError = (
+  error: unknown,
+  defaultCode: string,
+  fallbackMessage: string,
+  fallbackRetryable = false,
+): RunnerError => {
+  const extracted = extractDockerError(error);
+  const message = extracted?.message ?? errorMessageFromUnknown(error, fallbackMessage);
+  const retryable = extracted ? extracted.statusCode >= 500 : fallbackRetryable;
+  const code = extracted?.code ?? defaultCode;
+  return create(RunnerErrorSchema, {
+    code,
+    message,
+    details: {},
+    retryable,
+  });
+};
+
+const bigintToNumber = (value?: bigint): number | undefined => {
+  if (typeof value !== 'bigint') return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+};
+
+const buildEventFilters = (filters: StreamEventsRequest['filters']): Record<string, string[]> => {
+  const result: Record<string, string[]> = {};
+  for (const filter of filters ?? []) {
+    const key = filter?.key?.trim();
+    if (!key) continue;
+    const values = (filter.values ?? [])
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value): value is string => value.length > 0);
+    if (!values.length) continue;
+    result[key] = result[key] ? [...result[key], ...values] : values;
+  }
+  return result;
+};
+
+const safeStreamWrite = <T>(call: { write: (message: T) => void }, message: T): void => {
+  try {
+    call.write(message);
+  } catch {
+    // ignore downstream cancellation errors
+  }
+};
 
 function coerceDuration(value?: bigint): number | undefined {
   if (typeof value !== 'bigint') return undefined;
@@ -168,6 +356,528 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         );
       }
       callback(null, create(ReadyResponseSchema, { status: 'ready' }));
+    },
+    startWorkload: async (
+      call: ServerUnaryCall<StartWorkloadRequest, StartWorkloadResponse>,
+      callback: (error: ServiceError | null, value?: StartWorkloadResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_START_WORKLOAD_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      if (!call.request?.main) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'main_container_required'));
+      }
+      if ((call.request.sidecars?.length ?? 0) > 0) {
+        return callback(toServiceError(status.UNIMPLEMENTED, 'sidecars_not_supported'));
+      }
+      try {
+        const containerOpts = startWorkloadRequestToContainerOpts(call.request);
+        const handle = await opts.containers.start(containerOpts);
+        callback(
+          null,
+          create(StartWorkloadResponseSchema, {
+            id: handle.id,
+            containers: create(WorkloadContainersSchema, { main: handle.id, sidecars: [] }),
+            status: WorkloadStatus.RUNNING,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === 'main_container_spec_required') {
+          return callback(toServiceError(status.INVALID_ARGUMENT, error.message));
+        }
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    stopWorkload: async (
+      call: ServerUnaryCall<StopWorkloadRequest, StopWorkloadResponse>,
+      callback: (error: ServiceError | null, value?: StopWorkloadResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_STOP_WORKLOAD_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+      }
+      const timeoutSec =
+        typeof call.request.timeoutSec === 'number' && call.request.timeoutSec > 0
+          ? call.request.timeoutSec
+          : CONTAINER_STOP_TIMEOUT_SEC;
+      try {
+        await opts.containers.stopContainer(workloadId, timeoutSec);
+        callback(null, create(StopWorkloadResponseSchema, {}));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    removeWorkload: async (
+      call: ServerUnaryCall<RemoveWorkloadRequest, RemoveWorkloadResponse>,
+      callback: (error: ServiceError | null, value?: RemoveWorkloadResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_REMOVE_WORKLOAD_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+      }
+      try {
+        await opts.containers.removeContainer(workloadId, {
+          force: call.request.force ?? false,
+          removeVolumes: call.request.removeVolumes ?? false,
+        });
+        callback(null, create(RemoveWorkloadResponseSchema, {}));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    inspectWorkload: async (
+      call: ServerUnaryCall<InspectWorkloadRequest, InspectWorkloadResponse>,
+      callback: (error: ServiceError | null, value?: InspectWorkloadResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_INSPECT_WORKLOAD_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+      }
+      try {
+        const details = await opts.containers.inspectContainer(workloadId);
+        const mounts = (details.Mounts ?? []).map((mount) =>
+          create(TargetMountSchema, {
+            type: mount.Type ?? '',
+            source: mount.Source ?? '',
+            destination: mount.Destination ?? '',
+            readOnly: mount.ReadOnly === true || mount.RW === false,
+          }),
+        );
+        callback(
+          null,
+          create(InspectWorkloadResponseSchema, {
+            id: details.Id ?? '',
+            name: details.Name ?? '',
+            image: details.Image ?? '',
+            configImage: details.Config?.Image ?? '',
+            configLabels: details.Config?.Labels ?? {},
+            mounts,
+            stateStatus: details.State?.Status ?? '',
+            stateRunning: details.State?.Running === true,
+          }),
+        );
+      } catch (error) {
+        callback(toDockerServiceError(error, status.NOT_FOUND));
+      }
+    },
+    getWorkloadLabels: async (
+      call: ServerUnaryCall<GetWorkloadLabelsRequest, GetWorkloadLabelsResponse>,
+      callback: (error: ServiceError | null, value?: GetWorkloadLabelsResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_GET_WORKLOAD_LABELS_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+      }
+      try {
+        const labels = await opts.containers.getContainerLabels(workloadId);
+        callback(null, create(GetWorkloadLabelsResponseSchema, { labels: labels ?? {} }));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.NOT_FOUND));
+      }
+    },
+    findWorkloadsByLabels: async (
+      call: ServerUnaryCall<FindWorkloadsByLabelsRequest, FindWorkloadsByLabelsResponse>,
+      callback: (error: ServiceError | null, value?: FindWorkloadsByLabelsResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_FIND_WORKLOADS_BY_LABELS_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const labels = call.request.labels ?? {};
+      if (!labels || Object.keys(labels).length === 0) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'labels_required'));
+      }
+      try {
+        const containers = await opts.containers.findContainersByLabels(labels, { all: call.request.all ?? false });
+        callback(
+          null,
+          create(FindWorkloadsByLabelsResponseSchema, { targetIds: containers.map((handle) => handle.id) }),
+        );
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    listWorkloadsByVolume: async (
+      call: ServerUnaryCall<ListWorkloadsByVolumeRequest, ListWorkloadsByVolumeResponse>,
+      callback: (error: ServiceError | null, value?: ListWorkloadsByVolumeResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_LIST_WORKLOADS_BY_VOLUME_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const volumeName = call.request.volumeName?.trim();
+      if (!volumeName) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'volume_name_required'));
+      }
+      try {
+        const ids = await opts.containers.listContainersByVolume(volumeName);
+        callback(null, create(ListWorkloadsByVolumeResponseSchema, { targetIds: ids }));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    removeVolume: async (
+      call: ServerUnaryCall<RemoveVolumeRequest, RemoveVolumeResponse>,
+      callback: (error: ServiceError | null, value?: RemoveVolumeResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_REMOVE_VOLUME_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const volumeName = call.request.volumeName?.trim();
+      if (!volumeName) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'volume_name_required'));
+      }
+      try {
+        await opts.containers.removeVolume(volumeName, { force: call.request.force ?? false });
+        callback(null, create(RemoveVolumeResponseSchema, {}));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    touchWorkload: async (
+      call: ServerUnaryCall<TouchWorkloadRequest, TouchWorkloadResponse>,
+      callback: (error: ServiceError | null, value?: TouchWorkloadResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+      }
+      try {
+        await opts.containers.touchLastUsed(workloadId);
+        callback(null, create(TouchWorkloadResponseSchema, {}));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    putArchive: async (
+      call: ServerUnaryCall<PutArchiveRequest, PutArchiveResponse>,
+      callback: (error: ServiceError | null, value?: PutArchiveResponse) => void,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_PUT_ARCHIVE_PATH,
+      });
+      if (!verification.ok) {
+        return callback(toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+      }
+      const workloadId = call.request.workloadId?.trim();
+      const targetPath = call.request.path?.trim();
+      if (!workloadId || !targetPath) {
+        return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_and_path_required'));
+      }
+      try {
+        await opts.containers.putArchive(workloadId, Buffer.from(call.request.tarPayload ?? new Uint8Array()), {
+          path: targetPath,
+        });
+        callback(null, create(PutArchiveResponseSchema, {}));
+      } catch (error) {
+        callback(toDockerServiceError(error, status.UNKNOWN));
+      }
+    },
+    streamWorkloadLogs: async (
+      call: ServerWritableStream<StreamWorkloadLogsRequest, StreamWorkloadLogsResponse>,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
+      });
+      if (!verification.ok) {
+        call.emit('error', toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+        return;
+      }
+      const workloadId = call.request.workloadId?.trim();
+      if (!workloadId) {
+        call.emit('error', toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
+        return;
+      }
+
+      const follow = call.request.follow !== false;
+      const since = bigintToNumber(call.request.since);
+      const tail = typeof call.request.tail === 'number' && call.request.tail > 0 ? call.request.tail : undefined;
+      const stdout = call.request.stdout;
+      const stderr = call.request.stderr;
+      const timestamps = call.request.timestamps;
+
+      let session;
+      try {
+        session = await opts.containers.streamContainerLogs(workloadId, {
+          follow,
+          since,
+          tail,
+          stdout,
+          stderr,
+          timestamps,
+        });
+      } catch (error) {
+        call.emit('error', toDockerServiceError(error, status.UNKNOWN));
+        return;
+      }
+
+      const { stream } = session;
+      let closed = false;
+
+      const normalizeChunk = (chunk: unknown): Buffer => {
+        if (Buffer.isBuffer(chunk)) return chunk;
+        if (chunk instanceof Uint8Array) return Buffer.from(chunk);
+        if (typeof chunk === 'string') return Buffer.from(chunk);
+        return Buffer.from([]);
+      };
+
+      const cleanup = async () => {
+        if (closed) return;
+        closed = true;
+        stream.removeListener('data', onData);
+        stream.removeListener('error', onError);
+        stream.removeListener('end', onEnd);
+        call.removeListener('cancelled', onCancelled);
+        call.removeListener('error', onCallError);
+        call.removeListener('close', onClosed);
+        try {
+          await session.close();
+        } catch {
+          // ignore cleanup errors
+        }
+      };
+
+      const onData = (chunk: unknown) => {
+        const buffer = normalizeChunk(chunk);
+        safeStreamWrite(
+          call,
+          create(StreamWorkloadLogsResponseSchema, {
+            event: { case: 'chunk', value: create(LogChunkSchema, { data: buffer }) },
+          }),
+        );
+      };
+
+      const onError = async (error: unknown) => {
+        safeStreamWrite(
+          call,
+          create(StreamWorkloadLogsResponseSchema, {
+            event: { case: 'error', value: toRunnerStreamError(error, 'logs_stream_error', 'log stream failed') },
+          }),
+        );
+        call.end();
+        await cleanup();
+      };
+
+      const onEnd = async () => {
+        safeStreamWrite(
+          call,
+          create(StreamWorkloadLogsResponseSchema, {
+            event: { case: 'end', value: create(LogEndSchema, {}) },
+          }),
+        );
+        call.end();
+        await cleanup();
+      };
+
+      const onCancelled = () => {
+        void cleanup();
+      };
+      const onCallError = () => {
+        void cleanup();
+      };
+      const onClosed = () => {
+        void cleanup();
+      };
+
+      stream.on('data', onData);
+      stream.on('error', (error) => {
+        void onError(error);
+      });
+      stream.on('end', () => {
+        void onEnd();
+      });
+
+      call.once('cancelled', onCancelled);
+      call.once('error', onCallError);
+      call.once('close', onClosed);
+    },
+    streamEvents: async (
+      call: ServerWritableStream<StreamEventsRequest, StreamEventsResponse>,
+    ) => {
+      const verification = verifyGrpcAuth({
+        metadata: call.metadata,
+        secret: opts.config.sharedSecret,
+        nonceCache: opts.nonceCache,
+        path: RUNNER_SERVICE_STREAM_EVENTS_PATH,
+      });
+      if (!verification.ok) {
+        call.emit('error', toServiceError(status.UNAUTHENTICATED, verification.message ?? 'unauthorized'));
+        return;
+      }
+
+      const since = bigintToNumber(call.request.since);
+      const filters = buildEventFilters(call.request.filters ?? []);
+
+      let eventsStream: NodeJS.ReadableStream;
+      try {
+        eventsStream = await opts.containers.getEventsStream({
+          since,
+          filters: Object.keys(filters).length > 0 ? filters : undefined,
+        });
+      } catch (error) {
+        call.emit('error', toDockerServiceError(error, status.UNKNOWN));
+        return;
+      }
+
+      let closed = false;
+
+      const parser = createDockerEventsParser(
+        (event) => {
+          safeStreamWrite(
+            call,
+            create(StreamEventsResponseSchema, {
+              event: {
+                case: 'data',
+                value: create(RunnerEventDataSchema, { json: JSON.stringify(event) }),
+              },
+            }),
+          );
+        },
+        {
+          onError: (payload, error) => {
+            safeStreamWrite(
+              call,
+              create(StreamEventsResponseSchema, {
+                event: {
+                  case: 'error',
+                  value: toRunnerStreamError(
+                    error ?? new Error('events_parse_error'),
+                    'events_parse_error',
+                    `failed to parse docker event: ${payload}`,
+                  ),
+                },
+              }),
+            );
+          },
+        },
+      );
+
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        eventsStream.removeListener('data', onData);
+        eventsStream.removeListener('error', onError);
+        eventsStream.removeListener('end', onEnd);
+        call.removeListener('cancelled', onCancelled);
+        call.removeListener('error', onCallError);
+        call.removeListener('close', onClosed);
+        const destroy = (eventsStream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void }).destroy;
+        if (typeof destroy === 'function') {
+          destroy.call(eventsStream);
+        }
+      };
+
+      const onData = (chunk: unknown) => {
+        parser.handleChunk(chunk as Buffer);
+      };
+
+      const onError = (error: unknown) => {
+        safeStreamWrite(
+          call,
+          create(StreamEventsResponseSchema, {
+            event: { case: 'error', value: toRunnerStreamError(error, 'events_stream_error', 'event stream failed') },
+          }),
+        );
+        call.end();
+        cleanup();
+      };
+
+      const onEnd = () => {
+        parser.flush();
+        call.end();
+        cleanup();
+      };
+
+      const onCancelled = () => {
+        cleanup();
+      };
+      const onCallError = () => {
+        cleanup();
+      };
+      const onClosed = () => {
+        cleanup();
+      };
+
+      eventsStream.on('data', onData);
+      eventsStream.on('error', onError);
+      eventsStream.on('end', onEnd);
+
+      call.once('cancelled', onCancelled);
+      call.once('error', onCallError);
+      call.once('close', onClosed);
     },
     exec: (call: ExecStream) => {
       const verification = verifyGrpcAuth({

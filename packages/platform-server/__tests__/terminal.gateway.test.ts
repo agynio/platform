@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
-import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { waitFor, waitForWsClose } from './helpers/ws';

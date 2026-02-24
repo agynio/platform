@@ -20,7 +20,7 @@ import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min 
 import { Transform, Type } from 'class-transformer';
 import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 import { ContainerAdminService } from './containerAdmin.service';
-import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerRequestError } from './runnerGrpc.client';
 import { ConfigService } from '../../core/services/config.service';
 import { RequireDockerRunnerGuard } from './requireDockerRunner.guard';
 
@@ -103,7 +103,7 @@ type DeleteFailureLog = {
   containerId: string;
   requestId: string | null;
   runnerCalled: boolean;
-  runnerBaseUrl: string;
+  runnerEndpoint: string;
   failureKind: DeleteFailureKind;
   runnerStatusCode?: number;
   runnerErrorCode?: string;
@@ -191,7 +191,7 @@ export class ListContainerEventsQueryDto {
 export class ContainersController {
   private prisma: PrismaClient;
   private readonly logger = new Logger(ContainersController.name);
-  private readonly runnerBaseUrl: string;
+  private readonly runnerEndpoint: string;
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
@@ -199,7 +199,7 @@ export class ContainersController {
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.prisma = prismaSvc.getClient();
-    this.runnerBaseUrl = this.configService.getDockerRunnerBaseUrl();
+    this.runnerEndpoint = this.configService.getDockerRunnerGrpcAddress();
   }
 
   @Get()
@@ -602,7 +602,7 @@ export class ContainersController {
       containerId: this.shortId(containerId),
       requestId: context.requestId ?? null,
       runnerCalled: context.runnerCalled,
-      runnerBaseUrl: this.runnerBaseUrl,
+      runnerEndpoint: this.runnerEndpoint,
       failureKind: this.resolveFailureKind(error, context),
     };
     if (error instanceof DockerRunnerRequestError) {
