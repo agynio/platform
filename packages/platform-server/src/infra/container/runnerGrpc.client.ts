@@ -11,6 +11,7 @@ import {
 } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
 import type { ContainerInspectInfo } from 'dockerode';
+import { Logger } from '@nestjs/common';
 import {
   ContainerHandle,
   type ContainerOpts,
@@ -123,6 +124,7 @@ export class RunnerGrpcClient implements DockerClient {
   private readonly sharedSecret: string;
   private readonly requestTimeoutMs: number;
   private readonly endpoint: string;
+  private readonly logger = new Logger(RunnerGrpcClient.name);
 
   constructor(config: RunnerClientConfig) {
     if (!config.address) throw new Error('RunnerGrpcClient requires address');
@@ -137,6 +139,7 @@ export class RunnerGrpcClient implements DockerClient {
       sharedSecret: config.sharedSecret,
       defaultDeadlineMs: this.requestTimeoutMs,
       resolveTimeout: (options) => this.resolveExecRequestTimeout(options),
+      logger: this.logger,
     });
   }
 
@@ -243,7 +246,7 @@ export class RunnerGrpcClient implements DockerClient {
     });
 
     call.on('error', (err: ServiceError) => {
-      stream.emit('error', this.translateServiceError(err));
+      stream.emit('error', this.translateServiceError(err, { path: RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH }));
     });
 
     call.on('end', () => {
@@ -432,7 +435,7 @@ export class RunnerGrpcClient implements DockerClient {
     });
 
     call.on('error', (err: ServiceError) => {
-      stream.emit('error', this.translateServiceError(err));
+      stream.emit('error', this.translateServiceError(err, { path: RUNNER_SERVICE_STREAM_EVENTS_PATH }));
     });
 
     call.on('end', () => {
@@ -499,7 +502,7 @@ export class RunnerGrpcClient implements DockerClient {
     return new Promise((resolve, reject) => {
       const callback = (err: ServiceError | null, response?: Response) => {
         if (err) {
-          reject(this.translateServiceError(err));
+          reject(this.translateServiceError(err, { path }));
           return;
         }
         resolve(response as Response);
@@ -523,14 +526,33 @@ export class RunnerGrpcClient implements DockerClient {
     return metadata;
   }
 
-  private translateServiceError(error: ServiceError): DockerRunnerRequestError {
+  private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
     const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
     const message = error.details || error.message || 'gRPC runner error';
     if (grpcCode === status.CANCELLED) {
-      return new DockerRunnerRequestError(499, 'runner_request_cancelled', false, message);
+      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, message);
     }
     const statusCode = this.grpcStatusToHttpStatus(grpcCode);
     const errorCode = this.grpcStatusToErrorCode(grpcCode);
+    const statusName = (status as unknown as Record<number, string>)[grpcCode] ?? 'UNKNOWN';
+    const path = context?.path ?? 'unknown';
+    if (grpcCode === status.UNIMPLEMENTED) {
+      this.logger.error(`Runner gRPC call returned UNIMPLEMENTED`, {
+        path,
+        grpcStatus: statusName,
+        grpcCode,
+        message,
+      });
+    } else {
+      this.logger.warn(`Runner gRPC call failed`, {
+        path,
+        grpcStatus: statusName,
+        grpcCode,
+        httpStatus: statusCode,
+        errorCode,
+        message,
+      });
+    }
     const retryable =
       grpcCode === status.UNAVAILABLE ||
       grpcCode === status.RESOURCE_EXHAUSTED ||
@@ -662,6 +684,7 @@ export class RunnerGrpcExecClient {
   private readonly defaultDeadlineMs?: number;
   private readonly resolveTimeout?: ExecTimeoutResolver;
   private readonly interactiveStreams = new Map<string, ClientDuplexStream<ExecRequest, ExecResponse>>();
+  private readonly logger?: Logger;
 
   constructor(options: {
     address: string;
@@ -669,11 +692,13 @@ export class RunnerGrpcExecClient {
     defaultDeadlineMs?: number;
     resolveTimeout?: ExecTimeoutResolver;
     client?: RunnerServiceGrpcClientInstance;
+    logger?: Logger;
   }) {
     this.client = options.client ?? new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
     this.sharedSecret = options.sharedSecret;
     this.defaultDeadlineMs = options.defaultDeadlineMs;
     this.resolveTimeout = options.resolveTimeout;
+    this.logger = options.logger;
   }
 
   async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
@@ -758,7 +783,7 @@ export class RunnerGrpcExecClient {
           fail(new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, 'Execution aborted'));
           return;
         }
-        fail(this.translateServiceError(err));
+        fail(this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH }));
       });
 
       call.on('end', () => {
@@ -784,6 +809,8 @@ export class RunnerGrpcExecClient {
     const call = this.client.exec(metadata) as ClientDuplexStream<ExecRequest, ExecResponse>;
     const stdout = new PassThrough();
     const stderr = options?.demuxStderr === false ? undefined : new PassThrough();
+    stdout.on('error', () => undefined);
+    stderr?.on('error', () => undefined);
     let execId: string | undefined;
     let finished = false;
     let finalResult: ExecResult | undefined;
@@ -819,6 +846,14 @@ export class RunnerGrpcExecClient {
 
     const fail = (error: Error) => {
       if (finished) return;
+      if (error instanceof DockerRunnerRequestError && error.errorCode === 'runner_exec_cancelled') {
+        readyResolve?.();
+        readyResolve = undefined;
+        readyReject = undefined;
+        closeReject = undefined;
+        finalize({ exitCode: 0, stdout: '', stderr: '' });
+        return;
+      }
       finished = true;
       cleanupStream();
       stdout.destroy(error);
@@ -873,9 +908,8 @@ export class RunnerGrpcExecClient {
 
     call.on('error', (err: ServiceError) => {
       if (finished) return;
-      cleanupStream();
-      if (err.code === status.CANCELLED && stdout.destroyed) return;
-      fail(this.translateServiceError(err));
+      const translated = this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH });
+      fail(translated);
     });
 
     call.on('end', () => {
@@ -973,7 +1007,7 @@ export class RunnerGrpcExecClient {
     return new Promise<boolean>((resolve, reject) => {
       const callback = (err: ServiceError | null, response?: CancelExecutionResponse) => {
         if (err) {
-          reject(this.translateServiceError(err));
+          reject(this.translateServiceError(err, { path: RUNNER_SERVICE_CANCEL_EXEC_PATH }));
           return;
         }
         resolve(response?.cancelled ?? false);
@@ -1103,11 +1137,28 @@ export class RunnerGrpcExecClient {
     return 0;
   }
 
-  private translateServiceError(error: ServiceError): DockerRunnerRequestError {
+  private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
     const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
     const message = error.details || error.message || 'gRPC runner error';
     if (grpcCode === status.CANCELLED) {
       return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, message);
+    }
+    const statusName = (status as unknown as Record<number, string>)[grpcCode] ?? 'UNKNOWN';
+    const path = context?.path ?? RUNNER_SERVICE_EXEC_PATH;
+    if (grpcCode === status.UNIMPLEMENTED) {
+      this.logger?.error(`Runner exec gRPC call returned UNIMPLEMENTED`, {
+        path,
+        grpcStatus: statusName,
+        grpcCode,
+        message,
+      });
+    } else {
+      this.logger?.warn(`Runner exec gRPC call failed`, {
+        path,
+        grpcStatus: statusName,
+        grpcCode,
+        message,
+      });
     }
     const retryable =
       grpcCode === status.UNAVAILABLE ||
