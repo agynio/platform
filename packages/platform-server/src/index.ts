@@ -19,6 +19,7 @@ import { AppModule } from './bootstrap/app.module';
 import { ConfigService } from './core/services/config.service';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
+import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { VolumeGcService } from './infra/container/volumeGc.job';
 
 const bootstrapLogger = new Logger('Bootstrap');
@@ -72,6 +73,9 @@ async function bootstrap() {
 
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
+
+  const graphGateway = app.get(GraphSocketGateway);
+  graphGateway.init({ server: fastifyInstance.server });
 
   // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;

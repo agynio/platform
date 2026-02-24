@@ -5,6 +5,7 @@ import { EventsModule } from '../events/events.module';
 import { GraphApiModule } from '../graph/graph-api.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { InfraModule } from '../infra/infra.module';
+import { GatewayModule } from '../gateway/gateway.module';
 import { StartupRecoveryService } from '../core/services/startupRecovery.service';
 import { NodesModule } from '../nodes/nodes.module';
 import { LLMSettingsModule } from '../settings/llm/llmSettings.module';
@@ -59,6 +60,7 @@ const createLoggerModule = (): DynamicModule => {
     InfraModule,
     GraphApiModule,
     NodesModule,
+    GatewayModule,
     NotificationsModule,
     UserProfileModule,
     OnboardingModule,

@@ -346,7 +346,7 @@ describe('App bootstrap smoke test', () => {
 
       const gateway = app.get(GraphSocketGateway);
       expect(gateway).toBeInstanceOf(GraphSocketGateway);
-      expect(subscriptionSpy).toHaveBeenCalledTimes(1);
+      expect(subscriptionSpy).toHaveBeenCalledTimes(2);
       const [listener] = subscriptionSpy.mock.calls[0] ?? [];
       expect(typeof listener).toBe('function');
 
