@@ -29,6 +29,10 @@ jobs:
             image: ghcr.io/agynio/platform-server
             dockerfile: packages/platform-server/Dockerfile
             context: .
+          - name: platform-ui
+            image: ghcr.io/agynio/platform-ui
+            dockerfile: packages/platform-ui/Dockerfile
+            context: .
           - name: docker-runner
             image: ghcr.io/agynio/docker-runner
             dockerfile: packages/docker-runner/Dockerfile
@@ -82,7 +86,7 @@ jobs:
       contents: read
       packages: write
     env:
-      CHARTS: "charts/platform-server charts/docker-runner"
+      CHARTS: "charts/platform-server charts/platform-ui"
 
     steps:
       - name: Checkout
