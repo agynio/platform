@@ -15,6 +15,11 @@ import { createDockerEventsParser } from './dockerEvents.parser';
 import type { RunnerConfig } from './config';
 import { closeWebsocket, getWebsocket, type SocketStream } from './websocket.util';
 
+export type RunnerAppDeps = {
+  containers?: ContainerService;
+  nonceCache?: NonceCache;
+};
+
 const ensureImageSchema = z.object({
   image: z.string().min(1),
   platform: z.enum(SUPPORTED_PLATFORMS).optional(),
@@ -268,12 +273,12 @@ const rawDataToString = (raw: RawData): string => {
   return Buffer.from(raw as ArrayBuffer).toString('utf8');
 };
 
-export function createRunnerApp(config: RunnerConfig): FastifyInstance {
+export function createRunnerApp(config: RunnerConfig, deps: RunnerAppDeps = {}): FastifyInstance {
   process.env.DOCKER_SOCKET = config.dockerSocket;
   const app = Fastify({ logger: { level: config.logLevel } });
   void app.register(websocket);
-  const containers = new ContainerService();
-  const nonceCache = new NonceCache({ ttlMs: config.signatureTtlMs });
+  const containers = deps.containers ?? new ContainerService();
+  const nonceCache = deps.nonceCache ?? new NonceCache({ ttlMs: config.signatureTtlMs });
 
   app.addHook('preHandler', async (request, reply) => {
     const path = (request.raw.url ?? request.url ?? '').split('?')[0];

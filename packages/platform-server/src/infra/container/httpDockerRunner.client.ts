@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PassThrough, Writable } from 'node:stream';
 import type { IncomingMessage } from 'http';
 import type { ReadableStream } from 'node:stream/web';
 import WebSocket from 'ws';
 import { fetch as undiciFetch, type Response } from 'undici';
+import { credentials, Metadata, type ClientDuplexStream, type ServiceError, status } from '@grpc/grpc-js';
+import { create } from '@bufbuild/protobuf';
 import {
   ContainerHandle,
   type ContainerOpts,
@@ -33,6 +36,22 @@ import {
   type Platform,
   type DockerEventFilters,
 } from '@agyn/docker-runner';
+import type { CancelExecutionResponse, ExecRequest } from '@agyn/runner-proto';
+import {
+  CancelExecutionRequestSchema,
+  ExecError,
+  ExecOptionsSchema,
+  ExecRequestSchema,
+  ExecResponse,
+  ExecStdinSchema,
+  ExecStartRequestSchema,
+} from '@agyn/runner-proto';
+import {
+  RunnerServiceGrpcClient,
+  type RunnerServiceGrpcClientInstance,
+  RUNNER_SERVICE_CANCEL_EXEC_PATH,
+  RUNNER_SERVICE_EXEC_PATH,
+} from '@agyn/runner-proto/grpc.js';
 import type { DockerClient } from './dockerClient.token';
 
 type RunnerClientConfig = {
@@ -41,6 +60,10 @@ type RunnerClientConfig = {
   requestTimeoutMs?: number;
   maxRetries?: number;
   fetchImpl?: typeof undiciFetch;
+  grpc?: {
+    address: string;
+    enabled?: boolean;
+  };
 };
 
 type RequestOptions = {
@@ -92,6 +115,7 @@ export class HttpDockerRunnerClient implements DockerClient {
   private readonly requestTimeoutMs: number;
   private readonly maxRetries: number;
   private readonly fetchImpl: typeof undiciFetch;
+  private readonly grpcExec?: RunnerGrpcExecClient;
 
   constructor(config: RunnerClientConfig) {
     this.baseUrl = new URL(config.baseUrl);
@@ -99,6 +123,19 @@ export class HttpDockerRunnerClient implements DockerClient {
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.maxRetries = config.maxRetries ?? 2;
     this.fetchImpl = config.fetchImpl ?? undiciFetch;
+    if (config.grpc) {
+      const enabled = config.grpc.enabled !== false;
+      if (enabled) {
+        if (!config.grpc.address) {
+          throw new Error('Runner gRPC address required when grpc configuration is enabled');
+        }
+        this.grpcExec = new RunnerGrpcExecClient({
+          address: config.grpc.address,
+          sharedSecret: this.sharedSecret,
+          requestTimeoutMs: this.requestTimeoutMs,
+        });
+      }
+    }
   }
 
   getBaseUrl(): string {
@@ -304,6 +341,9 @@ export class HttpDockerRunnerClient implements DockerClient {
   }
 
   async execContainer(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
+    if (this.grpcExec) {
+      return this.grpcExec.exec(containerId, command, options);
+    }
     const body: ExecRunRequest = { containerId, command, options };
     const timeoutMs = this.resolveExecRequestTimeout(options);
     return this.send<ExecRunResponse>({ method: 'POST', path: '/v1/exec/run', body, timeoutMs, maxRetries: 0 });
@@ -314,6 +354,9 @@ export class HttpDockerRunnerClient implements DockerClient {
     command: string[] | string,
     options?: InteractiveExecOptions,
   ): Promise<InteractiveExecSession> {
+    if (this.grpcExec) {
+      return this.grpcExec.openInteractiveExec(containerId, command, options);
+    }
     const query = new URLSearchParams({ containerId, command: Array.isArray(command) ? JSON.stringify(command) : command });
     if (options?.workdir) query.set('workdir', options.workdir);
     if (options?.tty) query.set('tty', String(options.tty));
@@ -780,5 +823,372 @@ export class HttpDockerRunnerClient implements DockerClient {
       }
     });
     return stream;
+  }
+}
+
+type GrpcStartParams = {
+  containerId: string;
+  command: string[] | string;
+  execOptions?: ExecOptions;
+  interactiveOptions?: InteractiveExecOptions;
+};
+
+class RunnerGrpcExecClient {
+  private readonly client: RunnerServiceGrpcClientInstance;
+  private readonly sharedSecret: string;
+  private readonly requestTimeoutMs: number;
+
+  constructor(options: { address: string; sharedSecret: string; requestTimeoutMs: number }) {
+    this.client = new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
+    this.sharedSecret = options.sharedSecret;
+    this.requestTimeoutMs = options.requestTimeoutMs;
+  }
+
+  async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
+    const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
+    const deadline = new Date(Date.now() + this.requestTimeoutMs);
+    const call = this.client.exec(metadata, { deadline }) as ClientDuplexStream<ExecRequest, ExecResponse>;
+    const execIdRef: { current?: string } = {};
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let finished = false;
+    const isAborted = this.attachAbortSignal(call, options?.signal, () => execIdRef.current);
+
+    return new Promise<ExecResult>((resolve, reject) => {
+      const finalize = (result: ExecResult) => {
+        if (finished) return;
+        finished = true;
+        resolve(result);
+      };
+      const fail = (error: Error) => {
+        if (finished) return;
+        finished = true;
+        reject(error);
+      };
+
+      call.on('data', (response: ExecResponse) => {
+        const event = response.event;
+        if (!event?.case) return;
+        if (event.case === 'started') {
+          execIdRef.current = event.value.executionId;
+          return;
+        }
+        if (event.case === 'stdout') {
+          const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+          if (chunk.length > 0) {
+            stdoutChunks.push(chunk);
+            options?.onOutput?.('stdout', chunk);
+          }
+          return;
+        }
+        if (event.case === 'stderr') {
+          const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+          if (chunk.length > 0) {
+            stderrChunks.push(chunk);
+            options?.onOutput?.('stderr', chunk);
+          }
+          return;
+        }
+        if (event.case === 'exit') {
+          const stdout = this.composeOutput(stdoutChunks, event.value.stdoutTail);
+          const stderr = this.composeOutput(stderrChunks, event.value.stderrTail);
+          finalize({ exitCode: event.value.exitCode, stdout, stderr });
+          return;
+        }
+        if (event.case === 'error') {
+          fail(this.translateExecError(event.value));
+        }
+      });
+
+      call.on('error', (err: ServiceError) => {
+        if (finished) return;
+        const error = err;
+        if (isAborted() && error.code === status.CANCELLED) {
+          fail(new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, 'Execution aborted'));
+          return;
+        }
+        fail(this.translateServiceError(error));
+      });
+
+      call.on('end', () => {
+        if (finished) return;
+        fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
+      });
+
+      const start = this.createStartRequest({ containerId, command, execOptions: options });
+      call.write(start);
+      call.end();
+    });
+  }
+
+  async openInteractiveExec(
+    containerId: string,
+    command: string[] | string,
+    options?: InteractiveExecOptions,
+  ): Promise<InteractiveExecSession> {
+    const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
+    const call = this.client.exec(metadata) as ClientDuplexStream<ExecRequest, ExecResponse>;
+    const stdout = new PassThrough();
+    const stderr = options?.demuxStderr === false ? undefined : new PassThrough();
+    let execId: string | undefined;
+    let finished = false;
+    let finalResult: ExecResult | undefined;
+    let readyResolve: (() => void) | undefined;
+    let readyReject: ((error: Error) => void) | undefined;
+    let closeResolve: ((value: ExecResult) => void) | undefined;
+    let closeReject: ((reason?: unknown) => void) | undefined;
+
+    const readyPromise = new Promise<void>((resolve, reject) => {
+      readyResolve = resolve;
+      readyReject = reject;
+    });
+    const closePromise = new Promise<ExecResult>((resolve, reject) => {
+      closeResolve = resolve;
+      closeReject = reject;
+    });
+
+    const finalize = (result: ExecResult) => {
+      if (finished) return;
+      finished = true;
+      finalResult = result;
+      stdout.end();
+      stderr?.end();
+      closeResolve?.(result);
+    };
+
+    const fail = (error: Error) => {
+      if (finished) return;
+      finished = true;
+      stdout.destroy(error);
+      stderr?.destroy(error);
+      readyReject?.(error);
+      closeReject?.(error);
+    };
+
+    call.on('data', (response: ExecResponse) => {
+      const event = response.event;
+      if (!event?.case) return;
+      if (event.case === 'started') {
+        execId = event.value.executionId;
+        readyResolve?.();
+        readyResolve = undefined;
+        readyReject = undefined;
+        return;
+      }
+      if (event.case === 'stdout') {
+        const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+        if (chunk.length > 0) stdout.write(chunk);
+        return;
+      }
+      if (event.case === 'stderr') {
+        const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+        if (!chunk.length) return;
+        if (stderr) stderr.write(chunk);
+        else stdout.write(chunk);
+        return;
+      }
+      if (event.case === 'exit') {
+        finalize({
+          exitCode: event.value.exitCode,
+          stdout: Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8'),
+          stderr: Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8'),
+        });
+        return;
+      }
+      if (event.case === 'error') {
+        fail(this.translateExecError(event.value));
+      }
+    });
+
+    call.on('error', (err: ServiceError) => {
+      const error = err;
+      if (finished) return;
+      if (error.code === status.CANCELLED && stdout.destroyed) return;
+      fail(this.translateServiceError(error));
+    });
+
+    call.on('end', () => {
+      if (finished) return;
+      fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
+    });
+
+    const stdin = new Writable({
+      write: (chunk, encoding, callback) => {
+        try {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding as BufferEncoding);
+          if (buffer.length > 0) {
+            call.write(
+              create(ExecRequestSchema, {
+                msg: { case: 'stdin', value: create(ExecStdinSchema, { data: buffer, eof: false }) },
+              }),
+            );
+          }
+          callback();
+        } catch (error) {
+          callback(error as Error);
+        }
+      },
+      final: (callback) => {
+        try {
+          call.write(create(ExecRequestSchema, { msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) } }));
+          call.end();
+          callback();
+        } catch (error) {
+          callback(error as Error);
+        }
+      },
+      destroy: (error, callback) => {
+        try {
+          call.cancel();
+        } catch {
+          // ignore cancellation errors
+        }
+        callback(error);
+      },
+    });
+
+    const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
+    call.write(start);
+
+    await readyPromise;
+    const resolvedExecId = execId ?? randomUUID();
+
+    const close = async (): Promise<ExecResult> => {
+      if (finalResult) return finalResult;
+      try {
+        stdin.end();
+      } catch {
+        // ignore
+      }
+      return closePromise;
+    };
+
+    return { stdin, stdout, stderr, close, execId: resolvedExecId };
+  }
+
+  async cancelExecution(executionId: string, force = false): Promise<boolean> {
+    const metadata = this.createMetadata(RUNNER_SERVICE_CANCEL_EXEC_PATH);
+    const deadline = new Date(Date.now() + this.requestTimeoutMs);
+    const request = create(CancelExecutionRequestSchema, { executionId, force });
+    return new Promise<boolean>((resolve, reject) => {
+      this.client.cancelExecution(request, metadata, { deadline }, (err: ServiceError | null, response?: CancelExecutionResponse) => {
+        if (err) {
+          reject(this.translateServiceError(err));
+          return;
+        }
+        resolve(response?.cancelled ?? false);
+      });
+    });
+  }
+
+  private createMetadata(path: string): Metadata {
+    const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret: this.sharedSecret });
+    const metadata = new Metadata();
+    for (const [key, value] of Object.entries(headers)) {
+      metadata.set(key, value);
+    }
+    return metadata;
+  }
+
+  private createStartRequest(params: GrpcStartParams) {
+    const commandArgv = Array.isArray(params.command) ? params.command : [];
+    const commandShell = Array.isArray(params.command) ? '' : params.command;
+    const execOpts = params.execOptions ?? {};
+    const interactiveOpts = params.interactiveOptions ?? {};
+    const env = this.normalizeEnv(execOpts.env ?? interactiveOpts.env);
+    const timeoutMs = this.toBigInt(execOpts.timeoutMs);
+    const idleTimeoutMs = this.toBigInt(execOpts.idleTimeoutMs);
+    const start = create(ExecStartRequestSchema, {
+      requestId: randomUUID(),
+      targetId: params.containerId,
+      commandArgv,
+      commandShell,
+      options: create(ExecOptionsSchema, {
+        workdir: execOpts.workdir ?? interactiveOpts.workdir ?? undefined,
+        env,
+        timeoutMs: timeoutMs && timeoutMs > 0n ? timeoutMs : undefined,
+        idleTimeoutMs: idleTimeoutMs && idleTimeoutMs > 0n ? idleTimeoutMs : undefined,
+        tty: execOpts.tty ?? interactiveOpts.tty ?? false,
+        killOnTimeout: execOpts.killOnTimeout ?? false,
+        logToPid1: execOpts.logToPid1 ?? false,
+        separateStderr: interactiveOpts.demuxStderr ?? true,
+      }),
+    });
+    return create(ExecRequestSchema, { msg: { case: 'start', value: start } });
+  }
+
+  private normalizeEnv(env?: Record<string, string> | string[]): Array<{ name: string; value: string }> {
+    if (!env) return [];
+    if (Array.isArray(env)) {
+      return env.map((entry) => {
+        const idx = entry.indexOf('=');
+        if (idx === -1) return { name: entry, value: '' };
+        return { name: entry.slice(0, idx), value: entry.slice(idx + 1) };
+      });
+    }
+    return Object.entries(env).map(([name, value]) => ({ name, value }));
+  }
+
+  private toBigInt(value?: number): bigint | undefined {
+    if (typeof value !== 'number') return undefined;
+    if (!Number.isFinite(value) || value <= 0) return undefined;
+    return BigInt(Math.floor(value));
+  }
+
+  private composeOutput(chunks: Buffer[], tail?: Uint8Array): string {
+    if (chunks.length > 0) {
+      return Buffer.concat(chunks).toString('utf8');
+    }
+    if (tail && tail.length > 0) {
+      return Buffer.from(tail).toString('utf8');
+    }
+    return '';
+  }
+
+  private translateExecError(error: ExecError): DockerRunnerRequestError {
+    const code = error.code || 'runner_exec_error';
+    const message = error.message || 'runner exec error';
+    return new DockerRunnerRequestError(500, code, error.retryable ?? false, message);
+  }
+
+  private translateServiceError(error: ServiceError): DockerRunnerRequestError {
+    const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
+    const message = error.details || error.message || 'gRPC runner error';
+    if (grpcCode === status.CANCELLED) {
+      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, message);
+    }
+    const retryable = grpcCode === status.UNAVAILABLE || grpcCode === status.RESOURCE_EXHAUSTED || grpcCode === status.DEADLINE_EXCEEDED;
+    return new DockerRunnerRequestError(0, 'runner_grpc_error', retryable, message);
+  }
+
+  private attachAbortSignal(
+    call: ClientDuplexStream<ExecRequest, ExecResponse>,
+    signal: AbortSignal | undefined,
+    execIdSupplier?: () => string | undefined,
+  ): (() => boolean) {
+    if (!signal) return () => false;
+    let aborted = false;
+    const abort = () => {
+      if (aborted) return;
+      aborted = true;
+      try {
+        call.cancel();
+      } catch {
+        // ignore cancel errors
+      }
+      const execId = execIdSupplier?.();
+      if (execId) {
+        void this.cancelExecution(execId, true).catch(() => undefined);
+      }
+    };
+    if (signal.aborted) {
+      abort();
+      return () => aborted;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+    call.on('close', () => {
+      signal.removeEventListener('abort', abort);
+    });
+    return () => aborted;
   }
 }

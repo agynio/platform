@@ -49,6 +49,12 @@ import { HealthController } from './health/health.controller';
           baseUrl: config.getDockerRunnerBaseUrl(),
           sharedSecret: config.getDockerRunnerSharedSecret(),
           requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
+          grpc: config.dockerRunnerGrpcEnabled
+            ? {
+                address: config.getDockerRunnerGrpcAddress(),
+                enabled: true,
+              }
+            : undefined,
         }),
       inject: [ConfigService],
     },
