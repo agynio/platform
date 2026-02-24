@@ -20,6 +20,7 @@ async function bootstrap(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       grpcServer.bindAsync(grpcAddress, ServerCredentials.createInsecure(), (err) => {
         if (err) return reject(err);
+        grpcServer.start();
         resolve();
       });
     });
