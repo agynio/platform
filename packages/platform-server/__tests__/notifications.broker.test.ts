@@ -81,6 +81,8 @@ describe('NotificationsClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(sleepMock).toHaveBeenCalledTimes(2);
+    expect(sleepMock).toHaveBeenNthCalledWith(1, 100);
+    expect(sleepMock).toHaveBeenNthCalledWith(2, 300);
     expect(warnSpy).toHaveBeenCalledTimes(2);
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });

@@ -21,9 +21,8 @@ type PublishPayload = {
 export class NotificationsClient {
   private readonly logger = new Logger(NotificationsClient.name);
   private readonly baseUrl: string;
-  private readonly maxRetries = 2;
   private readonly timeoutMs = 2000;
-  private readonly retryDelayMs = 100;
+  private readonly retryDelaysMs = [100, 300] as const;
 
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     ConfigService.assertInitialized(config);
@@ -44,7 +43,9 @@ export class NotificationsClient {
     }
 
     const endpoint = `${this.baseUrl}/internal/notifications/publish`;
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+    const maxAttempts = this.retryDelaysMs.length + 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         await this.postNotification(endpoint, body);
         return;
@@ -59,8 +60,9 @@ export class NotificationsClient {
         if (options?.traceId) {
           context.traceId = options.traceId;
         }
-        if (attempt < this.maxRetries) {
-          const delay = this.retryDelayMs * 2 ** attempt;
+        if (attempt < this.retryDelaysMs.length) {
+          const delays = this.retryDelaysMs;
+          const delay = delays[attempt] ?? delays[delays.length - 1];
           context.retryInMs = delay;
           this.logger.warn(`NotificationsClient publish attempt failed${this.formatContext(context)}`);
           await sleep(delay);
