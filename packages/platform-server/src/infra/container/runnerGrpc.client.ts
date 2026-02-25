@@ -826,6 +826,17 @@ export class RunnerGrpcExecClient {
     const stderr = options?.demuxStderr === false ? undefined : new PassThrough();
     stdout.on('error', () => undefined);
     stderr?.on('error', () => undefined);
+    let startedSignaled = false;
+    let syntheticReadyPending = false;
+    stdout.on('newListener', (event) => {
+      if (event !== 'data') return;
+      if (!startedSignaled) return;
+      process.nextTick(() => {
+        if (!startedSignaled || !syntheticReadyPending) return;
+        syntheticReadyPending = false;
+        stdout.emit('data', Buffer.alloc(0));
+      });
+    });
     let execId: string | undefined;
     let finished = false;
     let finalResult: ExecResult | undefined;
@@ -887,6 +898,12 @@ export class RunnerGrpcExecClient {
         readyResolve?.();
         readyResolve = undefined;
         readyReject = undefined;
+        startedSignaled = true;
+        if (stdout.listenerCount('data') > 0) {
+          stdout.emit('data', Buffer.alloc(0));
+        } else {
+          syntheticReadyPending = true;
+        }
         return;
       }
       if (event.case === 'stdout') {
@@ -999,6 +1016,13 @@ export class RunnerGrpcExecClient {
     const close = async (): Promise<ExecResult> => {
       if (finalResult) return finalResult;
       cancelledLocally = true;
+      if (execId) {
+        try {
+          await this.cancelExecution(execId);
+        } catch {
+          // ignore cancellation errors
+        }
+      }
       try {
         stdin.end();
       } catch {
@@ -1013,13 +1037,6 @@ export class RunnerGrpcExecClient {
         call.cancel();
       } catch {
         // ignore cancellation errors
-      }
-      if (execId) {
-        try {
-          await this.cancelExecution(execId);
-        } catch {
-          // ignore cancellation errors
-        }
       }
       if (!finished) {
         const result: ExecResult = { exitCode: 0, stdout: '', stderr: '' };
