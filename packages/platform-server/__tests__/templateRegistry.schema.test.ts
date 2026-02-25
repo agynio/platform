@@ -1,7 +1,7 @@
 import { ModuleRef } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import type { TemplateKind, TemplateNodeSchema } from '../src/shared/types/graph.types';
+import type { TemplateKind, TemplateNodeSchema } from '@agyn/shared';
 class DummyNode {
   getPortConfig() {
     return { sourcePorts: { out: { kind: 'instance' as const } }, targetPorts: { inp: { kind: 'instance' as const } } };

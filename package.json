@@ -8,7 +8,7 @@
     "lint": "pnpm -r run --if-present lint",
     "test": "pnpm -r --workspace-concurrency=1 run --if-present test",
     "convert-graphs": "pnpm --filter @agyn/graph-converter exec graph-converter",
-    "postinstall": "pnpm -r --if-present run prepare",
+    "postinstall": "node ./scripts/run-workspace-prepare.mjs",
     "deps:up:podman": "podman compose up -d"
   },
   "keywords": [],

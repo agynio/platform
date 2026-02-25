@@ -13,8 +13,7 @@ import { ModuleRef } from '@nestjs/core';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import type { GraphDefinition, PersistedGraph } from '../src/shared/types/graph.types';
+import type { GraphDefinition, PersistedGraph } from '@agyn/shared';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { EventsBusService } from '../src/events/events-bus.service';
@@ -110,6 +109,7 @@ class StubConfigService extends ConfigService {
       ncpsAuthToken: undefined,
       agentsDatabaseUrl: 'postgres://localhost:5432/agents',
       corsOrigins: [],
+      notificationsHttpUrl: 'http://localhost:4000',
     });
   }
 }
@@ -144,7 +144,6 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: WorkspaceProvider, useClass: WorkspaceProviderStub },
-        { provide: GraphSocketGateway, useValue: { emitNodeState: (_id: string, _state: Record<string, unknown>) => {} } },
         NodeStateService,
         TemplateRegistry,
         LiveGraphRuntime,

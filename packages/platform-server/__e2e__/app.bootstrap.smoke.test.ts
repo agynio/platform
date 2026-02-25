@@ -20,7 +20,7 @@ import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { VaultService } from '../src/vault/vault.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
@@ -344,13 +344,13 @@ describe('App bootstrap smoke test', () => {
       expect(agentProbe.agent).toBeInstanceOf(AgentNode);
       expect(Reflect.get(agentProbe.agent as object, 'llmProvisioner')).toBe(llmProvisioner);
 
-      const gateway = app.get(GraphSocketGateway);
-      expect(gateway).toBeInstanceOf(GraphSocketGateway);
+      const notificationsPublisher = app.get(NotificationsPublisher);
+      expect(notificationsPublisher).toBeInstanceOf(NotificationsPublisher);
       expect(subscriptionSpy).toHaveBeenCalledTimes(1);
       const [listener] = subscriptionSpy.mock.calls[0] ?? [];
       expect(typeof listener).toBe('function');
 
-      const cleanupRegistry = Reflect.get(gateway as object, 'cleanup') as unknown;
+      const cleanupRegistry = Reflect.get(notificationsPublisher as object, 'cleanup') as unknown;
       expect(Array.isArray(cleanupRegistry)).toBe(true);
       expect((cleanupRegistry as unknown[]).length).toBeGreaterThan(0);
     } finally {

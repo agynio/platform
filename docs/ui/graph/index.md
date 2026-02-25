@@ -9,7 +9,8 @@ Data flow
 
 Configuration
 - Required environment variables:
-  - VITE_API_BASE_URL: Agents API base URL (use the origin only; the UI appends `/api` for REST calls and `/socket.io` for websockets)
+  - VITE_API_BASE_URL: Agents API base URL (use the REST origin — `http://localhost:3010` locally; the UI appends `/api` for HTTP calls)
+  - VITE_SOCKET_BASE_URL: Socket.IO base URL (use the notifications service origin — `http://localhost:4000` locally; the client connects to `/socket.io` with websocket transport only)
 - Tracing configuration has been removed; span data is no longer rendered in the builder sidebar.
 
 Related docs

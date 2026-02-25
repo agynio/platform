@@ -2,7 +2,7 @@ import type {
   PersistedGraph,
   PersistedGraphUpsertRequest,
   PersistedGraphUpsertResponse,
-} from '../shared/types/graph.types';
+} from '@agyn/shared';
 
 export type GraphAuthor = { name?: string; email?: string };
 

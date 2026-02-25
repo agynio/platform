@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
-import type { GraphDefinition } from '../src/shared/types/graph.types';
+import type { GraphDefinition } from '@agyn/shared';
 import { buildTemplateRegistry } from '../src/templates';
 import { ContainerService } from '@agyn/docker-runner';
 import { ContainerRegistry } from '../src/infra/container/container.registry';

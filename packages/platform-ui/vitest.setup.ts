@@ -176,11 +176,14 @@ afterEach(() => {
 const workerId = Number.parseInt(process.env.VITEST_WORKER_ID ?? '0', 10);
 const basePort = 3010;
 const defaultApiBase = `http://127.0.0.1:${basePort + (Number.isFinite(workerId) ? workerId : 0)}`;
+const defaultSocketBase = process.env.VITE_SOCKET_BASE_URL ?? process.env.VITE_API_BASE_URL ?? defaultApiBase;
 
 vi.stubEnv('VITE_API_BASE_URL', process.env.VITE_API_BASE_URL ?? defaultApiBase);
+vi.stubEnv('VITE_SOCKET_BASE_URL', process.env.VITE_SOCKET_BASE_URL ?? defaultSocketBase);
 // Also ensure process.env is populated for test utils reading process.env
 if (typeof process !== 'undefined' && process.env) {
   process.env.VITE_API_BASE_URL = process.env.VITE_API_BASE_URL ?? defaultApiBase;
+  process.env.VITE_SOCKET_BASE_URL = process.env.VITE_SOCKET_BASE_URL ?? defaultSocketBase;
 }
 
 // Avoid mutating config.apiBaseUrl globally to not affect unit tests that

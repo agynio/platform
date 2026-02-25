@@ -3,7 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import type { Constructor } from 'type-fest';
 
 import type { TemplatePortConfig } from '../graph/ports.types';
-import type { TemplateKind, TemplateNodeSchema } from '../shared/types/graph.types';
+import type { TemplateKind, TemplateNodeSchema } from '@agyn/shared';
 import Node from '../nodes/base/Node';
 
 export interface TemplateMeta {

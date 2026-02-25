@@ -12,11 +12,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@agyn/shared": ["../shared/src/index.ts"],
-      "@agyn/shared/*": ["../shared/src/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src"],
   "exclude": ["node_modules"]

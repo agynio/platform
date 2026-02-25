@@ -30,6 +30,15 @@ Graph persistence
   - `VOLUME_GC_COOLDOWN_MS` (default `600000`)
   - `VOLUME_GC_SWEEP_TIMEOUT_MS` (default `15000`)
 -
+## Notifications client bridge
+
+- The platform server no longer hosts a socket.io server directly. It publishes
+  notifications via HTTP to the standalone `notifications` service, which then
+  rebroadcasts payloads to connected clients.
+- Configure the client via env:
+  - `NOTIFICATIONS_HTTP_URL` (required) — base URL for the notifications
+    service (e.g., `http://notifications:4000`).
+
 ## MCP environment configuration
 
 Local MCP server nodes accept an environment overlay via the `env` array in node config. Each entry includes a `name` and a `value`, where `value` may be a literal string or a reference resolved at runtime.

@@ -2,14 +2,14 @@ import { getSocketBaseUrl } from '@/config';
 
 function resolveSocketBase(): URL {
   const fallbackBase = getSocketBaseUrl();
-  const raw = import.meta.env?.VITE_API_BASE_URL;
+  const raw = import.meta.env?.VITE_SOCKET_BASE_URL ?? import.meta.env?.VITE_API_BASE_URL;
 
   if (typeof raw === 'string' && raw.trim()) {
     try {
       const resolved = new URL(raw.trim(), typeof window !== 'undefined' ? window.location.origin : fallbackBase);
       return resolved;
     } catch {
-      throw new Error('terminal: invalid VITE_API_BASE_URL value');
+      throw new Error('terminal: invalid socket base URL');
     }
   }
 

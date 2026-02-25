@@ -91,6 +91,7 @@ Required versions:
 Optional local services (provided in docker-compose.yml for dev):
 - Postgres databases (postgres at 5442, agents-db at 5443)
 - LiteLLM + Postgres (loopback port 4000)
+- Redis (6379) for notifications Pub/Sub
 - Vault (8200) with dev auto-init
 - NCPS (Nix cache proxy) on 8501
 - Prometheus (9090), Grafana (3000), cAdvisor (8080)
@@ -110,17 +111,28 @@ pnpm install
   - LITELLM_BASE_URL, LITELLM_MASTER_KEY (required for LiteLLM path)
   - Optional: CORS_ORIGINS, VAULT_* (see packages/platform-server/src/core/services/config.service.ts and .env.example)
 - UI: copy packages/platform-ui/.env.example to .env and set:
-  - VITE_API_BASE_URL — e.g. http://localhost:3010
+  - VITE_API_BASE_URL — e.g. http://localhost:3010 (platform-server REST origin; do not include /api)
+- VITE_SOCKET_BASE_URL — e.g. http://localhost:4000 (notifications service websocket origin; client uses /socket.io path)
   - Optional: VITE_UI_MOCK_SIDEBAR (shows mock templates locally)
 
 3) Start dev supporting services:
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), docker-runner (7071), redis (6379)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# To launch only Redis for notifications fan-out:
+docker compose up -d redis
 ```
+
+> [!TIP]
+> To mirror production routing locally, run the end-to-end stack via
+> `docker compose -f docker-compose.e2e.yml up --build platform-server notifications redis`
+> (see `docs/runbooks/notifications.md`).
+> Point the UI at `VITE_API_BASE_URL=http://localhost:3010` and
+> `VITE_SOCKET_BASE_URL=http://localhost:4000` to confirm REST + websocket flows without Envoy.
 
 4) Apply server migrations and generate Prisma client:
 ```bash
@@ -215,14 +227,18 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - PORT (default 3010; see packages/platform-server/Dockerfile and src/index.ts)
 
 UI variables (packages/platform-ui/.env.example):
-- VITE_API_BASE_URL — Base URL for API (no /api suffix)
+- VITE_API_BASE_URL — Base URL for REST API (no /api suffix). Default points to platform-server (`http://localhost:3010`).
+- VITE_SOCKET_BASE_URL — Base URL for websocket notifications (no `/socket.io` suffix). Default mirrors `VITE_API_BASE_URL`, but local dev should point to `http://localhost:4000` (notifications service).
 - VITE_UI_MOCK_SIDEBAR — true to show mock templates locally
 - Note: the UI derives tracing requests from `VITE_API_BASE_URL`; no separate tracing URL override is consumed at runtime.
 
 ## Services / Processes
-- @agyn/platform-server — NestJS Fastify API + Socket.IO gateway
+- @agyn/platform-server — NestJS Fastify API (publishes notifications via Redis)
   - Entrypoint: packages/platform-server/src/index.ts
   - Ports: 3010 (default)
+- @agyn/notifications — standalone Socket.IO fan-out service and HTTP publish endpoint
+  - Entrypoint: packages/notifications/src/index.ts
+  - Ports: configurable (4000 in docker-compose.e2e)
 - @agyn/platform-ui — React/Vite SPA
   - Dev port: Vite default (e.g., 5173)
   - Docker runtime: nginx on port 80; upstream set via API_UPSTREAM
@@ -288,6 +304,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 
 ## Deployment
 - Local compose: docker-compose.yml includes all supporting services required for dev workflows.
+- E2E ingress: docker-compose.e2e.yml builds the platform server, notifications service, Redis, and supporting services. See docs/runbooks/notifications.md for usage.
 - Server container:
   - Image: ghcr.io/agynio/platform-server
   - Required env: AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY, optional Vault and CORS
@@ -301,6 +318,41 @@ pnpm --filter @agyn/platform-server run prisma:generate
 Secrets handling:
 - Vault auto-init script under vault/auto-init.sh is dev-only; do not use in production.
 - Never commit secrets; use environment injection and secure secret managers.
+
+### Local dual-endpoint workflow
+
+To mirror production routing without Envoy:
+
+1. (Optional) Start Redis plus any supporting compose services you need:
+
+   ```
+   docker compose up -d redis
+   ```
+
+2. Run the notifications service (enable Redis by providing `NOTIFICATIONS_REDIS_URL` or set
+   `NOTIFICATIONS_REDIS_ENABLED=false` to skip it):
+
+   ```
+   NOTIFICATIONS_REDIS_URL=redis://localhost:6379 \
+   pnpm --filter @agyn/notifications dev
+   ```
+
+3. Run the platform server with the HTTP publish endpoint wired in:
+
+   ```
+   NOTIFICATIONS_HTTP_URL=http://localhost:4000 \
+   pnpm --filter @agyn/platform-server dev
+   ```
+
+4. Point the UI at both endpoints (Vite dev server or production build):
+
+   ```
+   VITE_API_BASE_URL=http://localhost:3010
+   VITE_SOCKET_BASE_URL=http://localhost:4000
+   ```
+
+REST calls go straight to platform-server on port 3010 while websocket traffic
+connects to the notifications service on port 4000.
 
 ## Observability / Logging / Metrics
 - Server logging: nestjs-pino with redaction of sensitive headers (packages/platform-server/src/bootstrap/app.module.ts)
@@ -330,6 +382,24 @@ Secrets handling:
 - UI API upstream:
   - Symptom: UI cannot reach backend in Docker.
   - Fix: set API_UPSTREAM=http://host.docker.internal:3010 when running UI container locally.
+
+### Docker / Compose setup issues
+- **Missing v2 plugin** – `docker compose up -d redis notifications` fails with `docker: 'compose' is not a docker command`. Install the v2 plugin (Docker Desktop or `apt install docker-compose-plugin`) and confirm `docker compose version` reports `v2.29.0` or newer. The stack relies on `tmpfs` and `host-gateway` features that only exist in Compose v2.
+- **Remote daemon bind-mounts** – CI/Codespaces contexts often export `DOCKER_HOST=tcp://localhost:2375`. That remote daemon cannot see files inside this workspace, so building local images (platform-server, notifications) fails because the Docker daemon cannot read the sources. Run the stack where the daemon shares the repo filesystem or publish images to a registry first.
+- **Port conflicts** – Platform-server binds `3010`, notifications service `4000`, Redis `6379`, and LiteLLM `4000` in e2e compose. Stop any other process on those ports before running `docker compose up`.
+
+### Node / pnpm alignment
+- **Node version drift** – The workspace targets Node 22. Install via Nix (`nix profile install nixpkgs#nodejs_22`), Volta, or asdf, then verify with `node -v`.
+- **pnpm via Corepack** – Enable Corepack (`corepack enable`) and pin pnpm 10.x (`corepack install pnpm@10.30.1`). Running arbitrary global pnpm versions will mutate the lockfile.
+- **Missing pnpm binary** – When Corepack is disabled, `pnpm` is not on `$PATH`. Either enable Corepack or install pnpm globally (`npm i -g pnpm`).
+- **File watcher EMFILE errors** – `pnpm --filter @agyn/notifications dev` can hit the default inotify/file-descriptor limit and fail with `EMFILE: too many open files, watch`. Raise the limit before launching dev servers:
+
+  ```
+  ulimit -n 4096
+  sudo sysctl fs.inotify.max_user_watches=524288
+  ```
+
+  If raising limits is not possible (e.g., inside constrained CI containers), build once (`pnpm --filter @agyn/notifications build`) and launch the service with `pnpm --filter @agyn/notifications exec tsx src/index.ts` instead of the watch-mode dev server.
 
 ## Contributing & License
 - Contributing: see docs/contributing/ and docs/adr/ for architectural decisions.
