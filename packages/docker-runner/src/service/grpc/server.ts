@@ -115,6 +115,7 @@ type ExecutionContext = {
   timeoutMs?: number;
   idleTimeoutMs?: number;
   finished: boolean;
+  cancelRequested: boolean;
   timers: {
     timeout?: NodeJS.Timeout;
     idle?: NodeJS.Timeout;
@@ -125,6 +126,18 @@ type ExecutionContext = {
 };
 
 const activeExecutions = new Map<string, ExecutionContext>();
+
+const clearExecutionTimers = (ctx?: ExecutionContext) => {
+  if (!ctx) return;
+  if (ctx.timers.timeout) {
+    clearTimeout(ctx.timers.timeout);
+    ctx.timers.timeout = undefined;
+  }
+  if (ctx.timers.idle) {
+    clearTimeout(ctx.timers.idle);
+    ctx.timers.idle = undefined;
+  }
+};
 
 const utf8Encoder = new TextEncoder();
 const DEFAULT_EXIT_TAIL_BYTES = 64 * 1024;
@@ -412,7 +425,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
       }
       const timeoutSec =
-        typeof call.request.timeoutSec === 'number' && call.request.timeoutSec > 0
+        typeof call.request.timeoutSec === 'number' && call.request.timeoutSec >= 0
           ? call.request.timeoutSec
           : CONTAINER_STOP_TIMEOUT_SEC;
       try {
@@ -893,17 +906,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
 
       let ctx: ExecutionContext | undefined;
 
-      const clearTimers = (target?: ExecutionContext) => {
-        if (!target) return;
-        if (target.timers.timeout) {
-          clearTimeout(target.timers.timeout);
-          target.timers.timeout = undefined;
-        }
-        if (target.timers.idle) {
-          clearTimeout(target.timers.idle);
-          target.timers.idle = undefined;
-        }
-      };
+      const clearTimers = clearExecutionTimers;
 
       const finish = async (target: ExecutionContext, reason: ExecExitReason, killed = false) => {
         if (!target || target.finished) return;
@@ -914,11 +917,15 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         activeExecutions.delete(target.executionId);
         try {
           const result = await target.session.close();
+          let computedExit = typeof result.exitCode === 'number' ? result.exitCode : -1;
+          if (reason === ExecExitReason.CANCELLED && (!Number.isFinite(computedExit) || computedExit < 0)) {
+            computedExit = 0;
+          }
           const stdoutTail = utf8Tail(result.stdout, target.exitTailBytes);
           const stderrTail = utf8Tail(result.stderr, target.exitTailBytes);
           const exitMessage = create(ExecExitSchema, {
             executionId: target.executionId,
-            exitCode: result.exitCode,
+            exitCode: computedExit,
             killed: target.killed,
             reason: target.reason,
             stdoutTail,
@@ -981,7 +988,12 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             const session = await opts.containers.openInteractiveExec(start.targetId, command, {
               workdir: start.options?.workdir || undefined,
               env: start.options?.env?.length
-                ? Object.fromEntries(start.options.env.map(({ name, value }: EnvVar) => [name, value]))
+                ? Object.fromEntries(
+                    start.options.env.map(({ name, value }: { name: string; value: string }) => [name, value] as [
+                      string,
+                      string,
+                    ]),
+                  )
                 : undefined,
               tty: start.options?.tty ?? false,
               demuxStderr: start.options?.separateStderr ?? true,
@@ -1003,6 +1015,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               timeoutMs,
               idleTimeoutMs,
               finished: false,
+              cancelRequested: false,
               timers: {},
               reason: ExecExitReason.COMPLETED,
               killed: false,
@@ -1012,7 +1025,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             activeExecutions.set(context.executionId, context);
 
             const handleTimeout = async (target: ExecutionContext, reason: ExecExitReason) => {
-              if (target.finished) return;
+              if (target.finished || target.cancelRequested) return;
               target.reason = reason;
               target.killed = target.killOnTimeout;
               if (target.killOnTimeout) {
@@ -1035,19 +1048,19 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
 
             const armIdleTimer = () => {
               if (!context.idleTimeoutMs || context.idleTimeoutMs <= 0) return;
-              if (context.finished) return;
+              if (context.finished || context.cancelRequested) return;
               if (context.timers.idle) {
                 clearTimeout(context.timers.idle);
               }
               context.timers.idle = setTimeout(() => {
-                if (context.finished) return;
+                if (context.finished || context.cancelRequested) return;
                 void handleTimeout(context, ExecExitReason.IDLE_TIMEOUT);
               }, context.idleTimeoutMs);
             };
 
             if (context.timeoutMs && context.timeoutMs > 0) {
               context.timers.timeout = setTimeout(() => {
-                if (context.finished) return;
+                if (context.finished || context.cancelRequested) return;
                 void handleTimeout(context, ExecExitReason.TIMEOUT);
               }, context.timeoutMs);
             }
@@ -1162,21 +1175,30 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       });
 
       call.on('end', () => {
-        if (ctx && !ctx.finished) {
-          try {
-            ctx.session.stdin.end();
-          } catch {
-            // ignore
-          }
-        }
+        if (!ctx || ctx.finished) return;
+        ctx.cancelRequested = true;
+        clearTimers(ctx);
+        void finish(ctx, ExecExitReason.CANCELLED, false);
       });
 
-      call.on('error', () => {
-        if (ctx) void finish(ctx, ExecExitReason.RUNNER_ERROR, ctx.killed);
+      call.once('cancelled', () => {
+        if (!ctx || ctx.finished) return;
+        ctx.cancelRequested = true;
+        clearTimers(ctx);
+        void finish(ctx, ExecExitReason.CANCELLED, ctx.killed);
       });
 
       call.on('close', () => {
-        if (ctx) void finish(ctx, ExecExitReason.CANCELLED, ctx.killed);
+        if (!ctx || ctx.finished) return;
+        ctx.cancelRequested = true;
+        clearTimers(ctx);
+        void finish(ctx, ExecExitReason.CANCELLED, ctx.killed);
+      });
+
+      call.on('error', () => {
+        if (!ctx || ctx.finished) return;
+        clearTimers(ctx);
+        void finish(ctx, ExecExitReason.RUNNER_ERROR, ctx.killed);
       });
     },
     cancelExecution: async (
@@ -1196,8 +1218,13 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       if (!ctx) {
         return callback(null, create(CancelExecutionResponseSchema, { cancelled: false }));
       }
+      ctx.cancelRequested = true;
+      clearExecutionTimers(ctx);
+      if (ctx.finished) {
+        return callback(null, create(CancelExecutionResponseSchema, { cancelled: true }));
+      }
       ctx.finish?.(ExecExitReason.CANCELLED, call.request.force).catch(() => {
-        // swallow cancellation finish errors; streaming response will carry failure if needed
+        // finish already emits structured error; swallow here
       });
       callback(null, create(CancelExecutionResponseSchema, { cancelled: true }));
     },

@@ -324,9 +324,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async getContainerNetworks(containerId: string): Promise<string[]> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- inspectContainer bridges proto to dockerode types
     const inspect: ContainerInspectInfo = await this.inspectContainer(containerId);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- dockerode network typing is lax
     const networks = inspect.NetworkSettings?.Networks;
     if (!this.isRecord(networks)) return [];
     return Object.keys(networks);
@@ -831,6 +829,7 @@ export class RunnerGrpcExecClient {
     let execId: string | undefined;
     let finished = false;
     let finalResult: ExecResult | undefined;
+    let cancelledLocally = false;
     const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
     const { timeoutMs: requestedTimeoutMs, idleTimeoutMs: requestedIdleTimeoutMs } = this.extractRequestedTimeouts(start);
     let readyResolve: (() => void) | undefined;
@@ -912,6 +911,10 @@ export class RunnerGrpcExecClient {
           idleTimeoutMs: requestedIdleTimeoutMs,
         });
         if (timeoutError) {
+          if (cancelledLocally && event.value.reason === ExecExitReason.IDLE_TIMEOUT) {
+            finalize({ exitCode: 0, stdout: stdoutTail, stderr: stderrTail });
+            return;
+          }
           fail(timeoutError);
           return;
         }
@@ -932,6 +935,10 @@ export class RunnerGrpcExecClient {
     call.on('end', () => {
       if (finished) return;
       cleanupStream();
+      if (cancelledLocally) {
+        finalize({ exitCode: 0, stdout: '', stderr: '' });
+        return;
+      }
       fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
     });
 
@@ -966,16 +973,22 @@ export class RunnerGrpcExecClient {
           callback(err);
         }
       },
-      destroy: (error: Error | null | undefined, callback: (error?: Error | null) => void) => {
-        try {
-          cleanupStream();
-          call.cancel();
-        } catch {
-          // ignore cancellation errors
-        }
-        callback(error ?? undefined);
-      },
     });
+
+    const originalDestroy = stdin.destroy.bind(stdin);
+    stdin.destroy = ((error?: Error | null, callback?: (error?: Error | null) => void) => {
+      if (execId) {
+        void this.cancelExecution(execId).catch(() => undefined);
+      }
+      try {
+        cancelledLocally = true;
+        cleanupStream();
+        call.cancel();
+      } catch {
+        // ignore cancellation errors
+      }
+      return originalDestroy(error ?? undefined, callback);
+    }) as typeof stdin.destroy;
 
     call.write(start);
 
@@ -985,10 +998,33 @@ export class RunnerGrpcExecClient {
 
     const close = async (): Promise<ExecResult> => {
       if (finalResult) return finalResult;
+      cancelledLocally = true;
       try {
         stdin.end();
       } catch {
         // ignore
+      }
+      try {
+        call.end();
+      } catch {
+        // ignore
+      }
+      try {
+        call.cancel();
+      } catch {
+        // ignore cancellation errors
+      }
+      if (execId) {
+        try {
+          await this.cancelExecution(execId);
+        } catch {
+          // ignore cancellation errors
+        }
+      }
+      if (!finished) {
+        const result: ExecResult = { exitCode: 0, stdout: '', stderr: '' };
+        finalize(result);
+        return result;
       }
       return closePromise;
     };
