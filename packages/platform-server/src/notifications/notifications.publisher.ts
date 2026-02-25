@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import type { NotificationEnvelope, NotificationRoom } from '@agyn/shared';
+import type { NotificationRoom } from '@agyn/shared';
 import { z } from 'zod';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
@@ -19,7 +18,7 @@ import {
 } from '../events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../events/run-events.service';
 import type { MessageKind, RunStatus, ThreadStatus } from '@prisma/client';
-import { NotificationsBroker } from './notifications.broker';
+import { NotificationsClient } from './notifications.client';
 import {
   NodeStateEventSchema,
   NodeStatusEventSchema,
@@ -47,11 +46,10 @@ export class NotificationsPublisher implements OnModuleInit, OnModuleDestroy {
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
-    @Inject(NotificationsBroker) private readonly broker: NotificationsBroker,
+    @Inject(NotificationsClient) private readonly client: NotificationsClient,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.broker.connect();
     this.cleanup.push(this.eventsBus.subscribeToRunEvents(this.handleRunEvent));
     this.cleanup.push(this.eventsBus.subscribeToToolOutputChunk(this.handleToolOutputChunk));
     this.cleanup.push(this.eventsBus.subscribeToToolOutputTerminal(this.handleToolOutputTerminal));
@@ -97,7 +95,6 @@ export class NotificationsPublisher implements OnModuleInit, OnModuleDestroy {
       clearTimeout(this.metricsTimer);
       this.metricsTimer = null;
     }
-    await this.broker.close();
   }
 
   private readonly handleRunEvent = (payload: RunEventBusPayload): void => {
@@ -550,16 +547,8 @@ export class NotificationsPublisher implements OnModuleInit, OnModuleDestroy {
 
   private async publishToRooms(rooms: NotificationRoom[], event: string, payload: unknown): Promise<void> {
     if (!rooms.length) return;
-    const envelope: NotificationEnvelope = {
-      id: randomUUID(),
-      ts: new Date().toISOString(),
-      source: 'platform-server',
-      rooms,
-      event,
-      payload,
-    };
     try {
-      await this.broker.publish(envelope);
+      await this.client.publish(event, rooms, payload, { source: 'platform-server' });
     } catch (error) {
       this.logger.error(
         `NotificationsPublisher failed to publish${this.formatContext({ event, rooms, error: this.toSafeError(error) })}`,

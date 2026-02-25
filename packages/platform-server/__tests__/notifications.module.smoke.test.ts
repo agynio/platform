@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CoreModule } from '../src/core/core.module';
 import { NotificationsModule } from '../src/notifications/notifications.module';
 import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
-import { NotificationsBroker } from '../src/notifications/notifications.broker';
+import { NotificationsClient } from '../src/notifications/notifications.client';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
@@ -27,18 +27,6 @@ vi.mock('../src/graph/graph-api.module', () => ({
 
 vi.mock('../src/events/events.module', () => ({
   EventsModule: createStubModule('EventsModuleStub'),
-}));
-
-class RedisStub {
-  connect = vi.fn(async () => {});
-  publish = vi.fn(async () => 1);
-  quit = vi.fn(async () => {});
-}
-
-const redisFactory = vi.fn(() => new RedisStub());
-
-vi.mock('ioredis', () => ({
-  default: vi.fn((...args: unknown[]) => redisFactory(...args)),
 }));
 
 const createEventsBusStub = (): EventsBusService => {
@@ -88,7 +76,6 @@ describe('NotificationsModule bootstrap', () => {
 
   beforeEach(() => {
     envSnapshot = initNotificationsConfig();
-    redisFactory.mockImplementation(() => new RedisStub());
   });
 
   afterEach(async () => {
@@ -100,7 +87,7 @@ describe('NotificationsModule bootstrap', () => {
     vi.clearAllMocks();
   });
 
-  it('initializes the module and connects the broker', async () => {
+  it('initializes the module and resolves the notifications client', async () => {
     const runtimeStub = { subscribe: vi.fn(() => () => {}) } as unknown as LiveGraphRuntime;
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) } as unknown as ThreadsMetricsService;
     const prismaStub = {
@@ -116,13 +103,10 @@ describe('NotificationsModule bootstrap', () => {
       imports: [CoreModule, NotificationsTestOverridesModule, NotificationsModule],
     }).compile();
 
-    const broker = testingModule.get(NotificationsBroker);
-    const connectSpy = vi.spyOn(broker, 'connect');
-
     await testingModule.init();
 
-    expect(connectSpy).toHaveBeenCalledTimes(1);
-    expect(redisFactory).toHaveBeenCalledWith('redis://localhost:6379/0', expect.objectContaining({ lazyConnect: true }));
+    const client = testingModule.get(NotificationsClient);
+    expect(client).toBeInstanceOf(NotificationsClient);
 
     const publisher = testingModule.get(NotificationsPublisher);
     expect(publisher).toBeInstanceOf(NotificationsPublisher);

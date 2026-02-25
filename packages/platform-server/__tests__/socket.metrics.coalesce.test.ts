@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { NotificationEnvelope } from '@agyn/shared';
 import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 
 describe('NotificationsPublisher metrics coalescing', () => {
@@ -20,7 +19,7 @@ describe('NotificationsPublisher metrics coalescing', () => {
   } as any;
 
   let metricsStub: { getThreadsMetrics: ReturnType<typeof vi.fn> };
-  let brokerStub: { connect: ReturnType<typeof vi.fn>; publish: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+  let clientStub: { publish: ReturnType<typeof vi.fn> };
   let publisher: NotificationsPublisher;
 
   beforeEach(() => {
@@ -29,12 +28,10 @@ describe('NotificationsPublisher metrics coalescing', () => {
         Object.fromEntries(ids.map((id) => [id, { remindersCount: 0, activity: 'idle' as const }])),
       ),
     };
-    brokerStub = {
-      connect: vi.fn().mockResolvedValue(undefined),
+    clientStub = {
       publish: vi.fn().mockResolvedValue(undefined),
-      close: vi.fn().mockResolvedValue(undefined),
     };
-    publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, brokerStub as any);
+    publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, clientStub as any);
   });
 
   it('coalesces multiple schedules into single batch computation', async () => {
@@ -47,11 +44,14 @@ describe('NotificationsPublisher metrics coalescing', () => {
 
     expect(metricsStub.getThreadsMetrics).toHaveBeenCalledTimes(1);
     expect(metricsStub.getThreadsMetrics).toHaveBeenCalledWith(['t1', 't2']);
-    const envelopes = brokerStub.publish.mock.calls.map(([envelope]) => envelope as NotificationEnvelope);
-    const activityPayloads = envelopes.filter((e) => e.event === 'thread_activity_changed');
-    const remindersPayloads = envelopes.filter((e) => e.event === 'thread_reminders_count');
-    expect(activityPayloads.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
-    expect(remindersPayloads.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    const activityPayloads = clientStub.publish.mock.calls
+      .filter(([event]: [string]) => event === 'thread_activity_changed')
+      .map(([, , payload]) => payload as { threadId: string });
+    const remindersPayloads = clientStub.publish.mock.calls
+      .filter(([event]: [string]) => event === 'thread_reminders_count')
+      .map(([, , payload]) => payload as { threadId: string });
+    expect(activityPayloads.map((p) => p.threadId).sort()).toEqual(['t1', 't2']);
+    expect(remindersPayloads.map((p) => p.threadId).sort()).toEqual(['t1', 't2']);
     vi.useRealTimers();
   });
 });

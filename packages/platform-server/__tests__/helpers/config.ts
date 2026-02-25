@@ -3,8 +3,7 @@ import { ConfigService, configSchema } from '../../src/core/services/config.serv
 export const runnerConfigDefaults = {
   dockerRunnerBaseUrl: 'http://docker-runner:7071',
   dockerRunnerSharedSecret: 'test-shared-secret',
-  notificationsRedisUrl: 'redis://localhost:6379/0',
-  notificationsChannel: 'notifications.v1',
+  notificationsHttpUrl: 'http://localhost:4000',
 } as const;
 
 const defaultConfigInput = {

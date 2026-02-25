@@ -30,12 +30,14 @@ Graph persistence
   - `VOLUME_GC_COOLDOWN_MS` (default `600000`)
   - `VOLUME_GC_SWEEP_TIMEOUT_MS` (default `15000`)
 -
-## Notifications gateway bridge
+## Notifications client bridge
 
-- The platform server no longer hosts a socket.io server directly. Instead it publishes every notification over Redis so the dedicated `notifications-gateway` service can rebroadcast the same payloads to clients.
-- Configure the bridge via env:
-  - `NOTIFICATIONS_REDIS_URL` (required) — Redis connection string used for Pub/Sub.
-  - `NOTIFICATIONS_CHANNEL` (optional, default `notifications.v1`) — channel consumed by both publisher and gateway.
+- The platform server no longer hosts a socket.io server directly. It publishes
+  notifications via HTTP to the standalone `notifications` service, which then
+  rebroadcasts payloads to connected clients.
+- Configure the client via env:
+  - `NOTIFICATIONS_HTTP_URL` (required) — base URL for the notifications
+    service (e.g., `http://notifications:4000`).
 
 ## MCP environment configuration
 

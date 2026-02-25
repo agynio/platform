@@ -9,6 +9,7 @@ import { serializeError } from './errors';
 import type { NotificationEnvelope } from '@agyn/shared';
 import type { Logger } from './logger';
 import type { Server as SocketIOServer } from 'socket.io';
+import { createPublishHandler } from './http/publish-handler';
 
 const SOCKET_PING_INTERVAL_MS = 25_000;
 const SOCKET_PING_TIMEOUT_MS = 20_000;
@@ -26,31 +27,45 @@ async function main(): Promise<void> {
     pingIntervalMs: SOCKET_PING_INTERVAL_MS,
     pingTimeoutMs: SOCKET_PING_TIMEOUT_MS,
   });
-  const subscriber = new NotificationsSubscriber(
-    { url: config.notificationsRedisUrl, channel: config.redisChannel },
+  const publishHandler = createPublishHandler({
     logger,
-  );
-
-  subscriber.on('notification', (envelope: NotificationEnvelope) => dispatchToRooms(io, envelope, logger));
-  subscriber.on('error', (error: Error) => {
-    logger.error({ error: serializeError(error) }, 'redis subscriber emitted error');
+    dispatch: (envelope: NotificationEnvelope) => dispatchToRooms(io, envelope, logger),
   });
 
-  await subscriber.start();
+  httpServer.on('request', (req, res) => {
+    const url = req.url ?? '';
+    if (!url.startsWith('/internal/notifications/publish')) return;
+    void publishHandler(req, res);
+  });
+
+  let subscriber: NotificationsSubscriber | null = null;
+  if (config.redis.enabled && config.redis.url) {
+    subscriber = new NotificationsSubscriber({ url: config.redis.url, channel: config.redis.channel }, logger);
+    subscriber.on('notification', (envelope: NotificationEnvelope) => dispatchToRooms(io, envelope, logger));
+    subscriber.on('error', (error: Error) => {
+      logger.error({ error: serializeError(error) }, 'redis subscriber emitted error');
+    });
+    await subscriber.start();
+  } else {
+    logger.info('redis subscription disabled');
+  }
 
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
     httpServer.listen({ port: config.port, host: config.host }, () => {
-      logger.info({ port: config.port, host: config.host, path: config.socketPath }, 'gateway listening');
+      logger.info({ port: config.port, host: config.host, path: config.socketPath }, 'notifications service listening');
       httpServer.off('error', reject);
       resolve();
     });
   });
 
   const shutdown = async (signal: NodeJS.Signals) => {
-    logger.info({ signal }, 'shutting down notifications gateway');
+    logger.info({ signal }, 'shutting down notifications service');
     httpServer.close();
-    await subscriber.stop();
+    if (subscriber) {
+      await subscriber.stop();
+      subscriber.removeAllListeners();
+    }
     process.exit(0);
   };
 
@@ -61,6 +76,6 @@ async function main(): Promise<void> {
 void main().catch((error) => {
   const serialized = serializeError(error);
   // eslint-disable-next-line no-console -- fallback for bootstrap errors
-  console.error('notifications-gateway failed to start', serialized);
+  console.error('notifications service failed to start', serialized);
   process.exit(1);
 });

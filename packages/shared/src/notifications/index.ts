@@ -1,6 +1,6 @@
 export const NOTIFICATIONS_CHANNEL = 'notifications.v1' as const;
 
-export type NotificationSource = 'platform-server';
+export type NotificationSource = 'platform-server' | (string & {});
 
 export type StaticNotificationRoom = 'graph' | 'threads';
 export type ThreadNotificationRoom = `thread:${string}`;

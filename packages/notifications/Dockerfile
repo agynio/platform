@@ -23,21 +23,21 @@ FROM base AS build
 
 COPY . .
 
-RUN pnpm install --filter @agyn/notifications-gateway... --offline --frozen-lockfile
+RUN pnpm install --filter @agyn/notifications... --offline --frozen-lockfile
 
-RUN pnpm --filter @agyn/notifications-gateway run build
+RUN pnpm --filter @agyn/notifications run build
 
-RUN pnpm deploy --filter @agyn/notifications-gateway --prod --legacy /opt/app \
- && rm -rf /opt/app/packages/notifications-gateway \
- && mkdir -p /opt/app/packages/notifications-gateway \
- && cp -R packages/notifications-gateway/. /opt/app/packages/notifications-gateway/
+RUN pnpm deploy --filter @agyn/notifications --prod --legacy /opt/app \
+ && rm -rf /opt/app/packages/notifications \
+ && mkdir -p /opt/app/packages/notifications \
+ && cp -R packages/notifications/. /opt/app/packages/notifications/
 
 FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
-    PORT=3011
+    PORT=4000
 
-WORKDIR /opt/app/packages/notifications-gateway
+WORKDIR /opt/app/packages/notifications
 
 RUN corepack enable \
  && corepack prepare pnpm@10.5.0 --activate \
@@ -48,7 +48,7 @@ RUN corepack enable \
 
 COPY --from=build --chown=node:node /opt/app /opt/app
 
-EXPOSE 3011
+EXPOSE 4000
 
 USER node
 

@@ -1,18 +1,20 @@
-# Notifications gateway runbook
+# Notifications service runbook
 
 This runbook explains how to boot the end-to-end stack that exposes the
-platform server (REST) and the standalone `notifications-gateway` (Socket.IO)
+platform server (REST) and the standalone `notifications` service (Socket.IO + HTTP)
 as separate endpoints for local parity with production.
 
 ## Components
 
-- **Redis** – transports notification envelopes from the platform server to the
-  Socket.IO gateway via the `notifications.v1` Pub/Sub channel.
-- **Platform server** – publishes notifications to Redis and serves the REST
-  API on port `3010`.
-- **Notifications gateway** – subscribes to Redis and re-broadcasts envelopes
-  to Socket.IO clients on port `4000`. CORS is controlled via the `CORS_ORIGIN`
-  environment variable to allow UI origins (e.g., Vite dev server at 4173).
+- **Redis** – optional Pub/Sub transport used when fan-out from Redis is
+  desired. The notifications service can run without Redis by disabling it via
+  environment flags.
+- **Platform server** – serves the REST API on port `3010` and publishes
+  notifications over HTTP to the notifications service.
+- **Notifications service** – exposes Socket.IO on port `4000`, accepts HTTP
+  publish requests at `/internal/notifications/publish`, and (optionally)
+  subscribes to Redis for legacy fan-out. CORS is controlled via the
+  `CORS_ORIGIN` environment variable.
 - Supporting services: Postgres (`agents-db`), LiteLLM (`litellm`/`litellm-db`),
   and `docker-runner` for tool execution parity.
 
@@ -24,7 +26,7 @@ as separate endpoints for local parity with production.
 
 ## Redis for local development
 
-If you run the platform server or notifications gateway outside the full
+If you run the platform server or notifications service outside the full
 e2e stack, start the shared Redis dependency first:
 
 ```
@@ -41,7 +43,7 @@ docker compose -f docker-compose.e2e.yml up --build
 ```
 
 The first build can take several minutes because both the platform server and
-notifications gateway images are constructed from the local workspace. Once the
+notifications service images are constructed from the local workspace. Once the
 containers are healthy you can hit the stack directly:
 
 ```
@@ -53,7 +55,7 @@ curl -s http://localhost:3010/api/health | jq
 - **Local development**: run `pnpm --filter @agyn/platform-ui dev` with
   `VITE_API_BASE_URL=http://localhost:3010` and
   `VITE_SOCKET_BASE_URL=http://localhost:4000`. REST traffic flows to
-  platform-server while websocket events flow to notifications-gateway.
+  platform-server while websocket events flow to the notifications service.
 - **Production example**: point `VITE_API_BASE_URL` at your gateway/API host
   (e.g., `https://api.agents.example.com`) and `VITE_SOCKET_BASE_URL` at the
   websocket origin (e.g., `https://notifications.agents.example.com`). Both
@@ -62,7 +64,7 @@ curl -s http://localhost:3010/api/health | jq
 ### Verify websocket fan-out
 
 1. Start the stack as shown above.
-2. Connect a socket client to the notifications gateway:
+2. Connect a socket client to the notifications service:
 
    ```bash
    node <<'EOF'
@@ -77,25 +79,28 @@ curl -s http://localhost:3010/api/health | jq
    EOF
    ```
 
-3. From another terminal publish a notification envelope via Redis:
+3. From another terminal publish a notification via the HTTP endpoint:
 
    ```bash
-   redis-cli -h 127.0.0.1 -p 6379 \
-     PUBLISH notifications.v1 "$(cat <<'EOF'
-   {"id":"evt-1","ts":"2024-01-01T00:00:00.000Z","source":"platform-server","rooms":["thread:demo"],"event":"run_status_changed","payload":{"threadId":"demo","run":{"id":"run-1","status":"running"}}}
-   EOF
-   )"
+   curl -s -X POST http://localhost:4000/internal/notifications/publish \
+     -H 'content-type: application/json' \
+     -d '{
+       "event": "run_status_changed",
+       "rooms": ["thread:demo"],
+       "payload": {"threadId": "demo", "run": {"id": "run-1", "status": "running"}},
+       "traceId": "local-demo"
+     }'
    ```
 
-4. The connected client should print the payload, proving that the Redis →
-   notifications-gateway → UI path is healthy.
+4. The connected client should print the payload, proving that the platform-server →
+   notifications service → UI path is healthy.
 
 Automated coverage for this flow ships with the repository via
-`packages/notifications-gateway/src/gateway.e2e.test.ts` and can be executed
+`packages/notifications/src/gateway.e2e.test.ts` and can be executed
 with:
 
 ```
-pnpm --filter @agyn/notifications-gateway test gateway.e2e.test.ts
+pnpm --filter @agyn/notifications test gateway.e2e.test.ts
 ```
 
 ## Troubleshooting & environment notes
@@ -107,7 +112,7 @@ pnpm --filter @agyn/notifications-gateway test gateway.e2e.test.ts
 - **pnpm/Node prerequisites** – Use Node 22 (`nix profile install
   nixpkgs#nodejs_22`) and enable Corepack so `pnpm@10.x` matches the lockfile
   (`corepack enable && corepack install pnpm@10.30.1`).
-- **EMFILE watch limits** – When `pnpm --filter @agyn/notifications-gateway
+- **EMFILE watch limits** – When `pnpm --filter @agyn/notifications
   dev` exits with `EMFILE`, raise the limits first:
 
   ```
@@ -115,9 +120,9 @@ pnpm --filter @agyn/notifications-gateway test gateway.e2e.test.ts
   sudo sysctl fs.inotify.max_user_watches=524288
   ```
 
-  Alternatively run the gateway via `pnpm --filter @agyn/notifications-gateway
+  Alternatively run the service via `pnpm --filter @agyn/notifications
   exec tsx src/index.ts` after a one-time `pnpm --filter
-  @agyn/notifications-gateway build`.
+  @agyn/notifications build`.
 
 ## Shutdown and cleanup
 

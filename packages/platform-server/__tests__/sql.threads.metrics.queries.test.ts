@@ -64,8 +64,8 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) };
     const runtimeStub = { subscribe: () => () => {} } as any;
     const eventsBusStub = {} as any;
-    const brokerStub = { connect: vi.fn(), publish: vi.fn(), close: vi.fn() };
-    const publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, brokerStub as any);
+    const clientStub = { publish: vi.fn() };
+    const publisher = new NotificationsPublisher(runtimeStub, metricsStub as any, prismaStub, eventsBusStub, clientStub as any);
 
     const scheduled: string[] = [];
     // Spy/override scheduleThreadMetrics to capture scheduled ids

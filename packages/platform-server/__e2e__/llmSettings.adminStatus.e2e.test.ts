@@ -15,8 +15,7 @@ describe('LLM settings controller (admin-status endpoint)', () => {
     agentsDbUrl: process.env.AGENTS_DATABASE_URL,
     litellmBaseUrl: process.env.LITELLM_BASE_URL,
     litellmMasterKey: process.env.LITELLM_MASTER_KEY,
-    notificationsRedisUrl: process.env.NOTIFICATIONS_REDIS_URL,
-    notificationsChannel: process.env.NOTIFICATIONS_CHANNEL,
+    notificationsHttpUrl: process.env.NOTIFICATIONS_HTTP_URL,
   };
 
   beforeAll(async () => {
@@ -24,8 +23,7 @@ describe('LLM settings controller (admin-status endpoint)', () => {
     process.env.AGENTS_DATABASE_URL = 'postgres://localhost:5432/test';
     process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
     process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234';
-    process.env.NOTIFICATIONS_REDIS_URL = process.env.NOTIFICATIONS_REDIS_URL || 'redis://localhost:6379/0';
-    process.env.NOTIFICATIONS_CHANNEL = process.env.NOTIFICATIONS_CHANNEL || 'notifications.v1';
+    process.env.NOTIFICATIONS_HTTP_URL = process.env.NOTIFICATIONS_HTTP_URL || 'http://localhost:4000';
 
     ConfigService.clearInstanceForTest();
     ConfigService.fromEnv();
@@ -46,8 +44,7 @@ describe('LLM settings controller (admin-status endpoint)', () => {
     process.env.AGENTS_DATABASE_URL = previousEnv.agentsDbUrl;
     process.env.LITELLM_BASE_URL = previousEnv.litellmBaseUrl;
     process.env.LITELLM_MASTER_KEY = previousEnv.litellmMasterKey;
-    process.env.NOTIFICATIONS_REDIS_URL = previousEnv.notificationsRedisUrl;
-    process.env.NOTIFICATIONS_CHANNEL = previousEnv.notificationsChannel;
+    process.env.NOTIFICATIONS_HTTP_URL = previousEnv.notificationsHttpUrl;
   });
 
   it('injects ConfigService and serves admin status when LiteLLM env is configured', async () => {

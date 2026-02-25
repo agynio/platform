@@ -6,8 +6,7 @@ export const NOTIFICATIONS_BASE_ENV: Record<string, string> = {
   LITELLM_MASTER_KEY: 'sk-test-master',
   DOCKER_RUNNER_BASE_URL: 'http://localhost:7071',
   DOCKER_RUNNER_SHARED_SECRET: 'test-shared-secret',
-  NOTIFICATIONS_REDIS_URL: 'redis://localhost:6379/0',
-  NOTIFICATIONS_CHANNEL: 'notifications.test',
+  NOTIFICATIONS_HTTP_URL: 'http://localhost:4000',
   AGENTS_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/postgres',
 };
 

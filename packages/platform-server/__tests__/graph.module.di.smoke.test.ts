@@ -172,8 +172,7 @@ if (!shouldRunDbTests) {
         configSchema.parse({
           llmProvider: 'openai',
           agentsDatabaseUrl: 'postgres://localhost:5432/test',
-          notificationsRedisUrl: 'redis://localhost:6379/0',
-          notificationsChannel: 'notifications.v1',
+          notificationsHttpUrl: 'http://localhost:4000',
           ...runnerConfigDefaults,
         }),
       );

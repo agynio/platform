@@ -27,6 +27,7 @@ const REQUIRED_ENV = {
   VOLUME_GC_ENABLED: 'false',
   NCPS_ENABLED: 'false',
   WORKSPACE_NETWORK_NAME: 'agents_net',
+  NOTIFICATIONS_HTTP_URL: 'http://127.0.0.1:4000',
 } as const;
 
 const TEST_TIMEOUT_MS = 20_000;

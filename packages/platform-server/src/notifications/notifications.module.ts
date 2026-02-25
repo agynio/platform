@@ -3,10 +3,10 @@ import { GraphApiModule } from '../graph/graph-api.module';
 import { EventsModule } from '../events/events.module';
 import { CoreModule } from '../core/core.module';
 import { NotificationsPublisher } from './notifications.publisher';
-import { NotificationsBroker } from './notifications.broker';
+import { NotificationsClient } from './notifications.client';
 
 @Module({
   imports: [CoreModule, GraphApiModule, EventsModule],
-  providers: [NotificationsPublisher, NotificationsBroker],
+  providers: [NotificationsPublisher, NotificationsClient],
 })
 export class NotificationsModule {}

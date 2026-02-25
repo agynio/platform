@@ -137,7 +137,7 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12
 
-  packages/notifications-gateway:
+  packages/notifications:
     dependencies:
       '@agyn/shared':
         specifier: workspace:*
@@ -260,9 +260,6 @@ importers:
       iconv-lite:
         specifier: ^0.6.3
         version: 0.6.3
-      ioredis:
-        specifier: ^5.4.1
-        version: 5.9.3
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21

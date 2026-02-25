@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NotificationEnvelope } from '@agyn/shared';
 import type {
   EventsBusService,
   ReminderCountEvent,
@@ -36,7 +35,7 @@ type PublisherTestContext = {
     threadMetrics: Handler<{ threadId: string }>;
     threadMetricsAncestors: Handler<{ threadId: string }>;
   };
-  broker: { publish: ReturnType<typeof vi.fn> };
+  client: { publish: ReturnType<typeof vi.fn> };
   logger: { warn: ReturnType<typeof vi.fn> };
 };
 
@@ -121,26 +120,28 @@ async function createPublisherTestContext(): Promise<PublisherTestContext> {
   const runtime = { subscribe: vi.fn().mockReturnValue(() => undefined) } as any;
   const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
   const prisma = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
-  const broker = {
-    connect: vi.fn().mockResolvedValue(undefined),
+  const client = {
     publish: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
   };
 
-  const publisher = new NotificationsPublisher(runtime, metrics, prisma, eventsBus as EventsBusService, broker as any);
+  const publisher = new NotificationsPublisher(runtime, metrics, prisma, eventsBus as EventsBusService, client as any);
   const internalLogger = (publisher as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
   const logger = {
     warn: vi.spyOn(internalLogger, 'warn').mockImplementation(() => undefined),
   };
   await publisher.onModuleInit();
 
-  return { publisher, handlers, broker, logger };
+  return { publisher, handlers, client, logger };
 }
 
-const findEnvelope = (ctx: PublisherTestContext, event: string): NotificationEnvelope | undefined => {
-  return ctx.broker.publish.mock.calls
-    .map(([envelope]) => envelope as NotificationEnvelope)
-    .find((payload) => payload.event === event);
+const findPublishCall = (
+  ctx: PublisherTestContext,
+  event: string,
+): { rooms: string[]; payload: unknown; options: unknown } | undefined => {
+  const call = ctx.client.publish.mock.calls.find(([evt]) => evt === event);
+  if (!call) return undefined;
+  const [, rooms, payload, options] = call as [string, string[], unknown, unknown];
+  return { rooms, payload, options };
 };
 
 describe('NotificationsPublisher event bus integration', () => {
@@ -178,12 +179,8 @@ describe('NotificationsPublisher event bus integration', () => {
       } as any,
     });
 
-    expect(ctx.broker.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'run_event_appended',
-        rooms: expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]),
-      }),
-    );
+    const publishCall = findPublishCall(ctx, 'run_event_appended');
+    expect(publishCall?.rooms).toEqual(expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]));
   });
 
   it('emits validated tool output chunk envelopes', () => {
@@ -198,10 +195,9 @@ describe('NotificationsPublisher event bus integration', () => {
       data: 'chunk',
     });
 
-    const envelope = findEnvelope(ctx, 'tool_output_chunk');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual(expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]));
-    expect(() => ToolOutputChunkEventSchema.parse(envelope?.payload)).not.toThrow();
+    const publishCall = findPublishCall(ctx, 'tool_output_chunk');
+    expect(publishCall?.rooms).toEqual(expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]));
+    expect(() => ToolOutputChunkEventSchema.parse(publishCall?.payload)).not.toThrow();
   });
 
   it('emits validated tool output terminal envelopes', () => {
@@ -220,10 +216,9 @@ describe('NotificationsPublisher event bus integration', () => {
       message: 'done',
     });
 
-    const envelope = findEnvelope(ctx, 'tool_output_terminal');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual(expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]));
-    expect(() => ToolOutputTerminalEventSchema.parse(envelope?.payload)).not.toThrow();
+    const publishCall = findPublishCall(ctx, 'tool_output_terminal');
+    expect(publishCall?.rooms).toEqual(expect.arrayContaining([`run:${RUN_ID}`, `thread:${THREAD_ID}`]));
+    expect(() => ToolOutputTerminalEventSchema.parse(publishCall?.payload)).not.toThrow();
   });
 
   it('logs and skips invalid chunk timestamps', () => {
@@ -245,17 +240,15 @@ describe('NotificationsPublisher event bus integration', () => {
 
   it('publishes reminder counts using validated payload', () => {
     ctx.handlers.reminder?.({ nodeId: 'node-1', count: 2, threadId: THREAD_ID, updatedAtMs: 10 } as ReminderCountEvent);
-    const envelope = findEnvelope(ctx, 'node_reminder_count');
-    expect(envelope).toBeDefined();
-    expect(() => ReminderCountSocketEventSchema.parse(envelope?.payload)).not.toThrow();
-    expect(envelope?.rooms).toEqual(expect.arrayContaining(['graph', 'node:node-1']));
+    const publishCall = findPublishCall(ctx, 'node_reminder_count');
+    expect(() => ReminderCountSocketEventSchema.parse(publishCall?.payload)).not.toThrow();
+    expect(publishCall?.rooms).toEqual(expect.arrayContaining(['graph', 'node:node-1']));
   });
 
   it('publishes node state updates via schema validation', () => {
     ctx.handlers.nodeState?.({ nodeId: 'node-1', state: { foo: 'bar' }, updatedAtMs: 5 });
-    const envelope = findEnvelope(ctx, 'node_state');
-    expect(envelope).toBeDefined();
-    expect(() => NodeStateEventSchema.parse(envelope?.payload)).not.toThrow();
+    const publishCall = findPublishCall(ctx, 'node_state');
+    expect(() => NodeStateEventSchema.parse(publishCall?.payload)).not.toThrow();
   });
 
   it('publishes thread created events to the threads room', () => {
@@ -266,9 +259,8 @@ describe('NotificationsPublisher event bus integration', () => {
       status: 'running',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
     } as any);
-    const envelope = findEnvelope(ctx, 'thread_created');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual(['threads']);
+    const publishCall = findPublishCall(ctx, 'thread_created');
+    expect(publishCall?.rooms).toEqual(['threads']);
   });
 
   it('publishes thread updated events to the threads room', () => {
@@ -279,9 +271,8 @@ describe('NotificationsPublisher event bus integration', () => {
       status: 'running',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
     } as any);
-    const envelope = findEnvelope(ctx, 'thread_updated');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual(['threads']);
+    const publishCall = findPublishCall(ctx, 'thread_updated');
+    expect(publishCall?.rooms).toEqual(['threads']);
   });
 
   it('publishes message created events to the originating thread', () => {
@@ -295,9 +286,8 @@ describe('NotificationsPublisher event bus integration', () => {
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
       } as any,
     });
-    const envelope = findEnvelope(ctx, 'message_created');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual([`thread:${THREAD_ID}`]);
+    const publishCall = findPublishCall(ctx, 'message_created');
+    expect(publishCall?.rooms).toEqual([`thread:${THREAD_ID}`]);
   });
 
   it('publishes run status updates', () => {
@@ -310,8 +300,7 @@ describe('NotificationsPublisher event bus integration', () => {
         updatedAt: new Date('2024-01-01T00:01:00.000Z'),
       },
     } as any);
-    const envelope = findEnvelope(ctx, 'run_status_changed');
-    expect(envelope).toBeDefined();
-    expect(envelope?.rooms).toEqual(expect.arrayContaining([`thread:${THREAD_ID}`, `run:${RUN_ID}`]));
+    const publishCall = findPublishCall(ctx, 'run_status_changed');
+    expect(publishCall?.rooms).toEqual(expect.arrayContaining([`thread:${THREAD_ID}`, `run:${RUN_ID}`]));
   });
 });

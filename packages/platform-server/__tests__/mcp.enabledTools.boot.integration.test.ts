@@ -109,8 +109,7 @@ class StubConfigService extends ConfigService {
       ncpsAuthToken: undefined,
       agentsDatabaseUrl: 'postgres://localhost:5432/agents',
       corsOrigins: [],
-      notificationsRedisUrl: 'redis://localhost:6379/0',
-      notificationsChannel: 'notifications.v1',
+      notificationsHttpUrl: 'http://localhost:4000',
     });
   }
 }

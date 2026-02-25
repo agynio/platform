@@ -95,7 +95,7 @@ services:
     depends_on:
       agents-db:
         condition: service_healthy
-      redis:
+      notifications:
         condition: service_started
       litellm:
         condition: service_healthy
@@ -110,8 +110,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
       DOCKER_RUNNER_BASE_URL: http://docker-runner:${DOCKER_RUNNER_PORT:-7071}
       DOCKER_RUNNER_SHARED_SECRET: ${DOCKER_RUNNER_SHARED_SECRET:-dev-shared-secret}
-      NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
-      NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
+      NOTIFICATIONS_HTTP_URL: http://notifications:4000
       WORKSPACE_NETWORK_NAME: agents_net
       NCPS_ENABLED: "false"
       GRAPH_REPO_PATH: /data/graph
@@ -123,10 +122,10 @@ services:
     ports:
       - "3010:3010"
 
-  notifications-gateway:
+  notifications:
     build:
       context: .
-      dockerfile: packages/notifications-gateway/Dockerfile
+      dockerfile: packages/notifications/Dockerfile
     depends_on:
       redis:
         condition: service_started
@@ -134,7 +133,6 @@ services:
       PORT: 4000
       HOST: 0.0.0.0
       NOTIFICATIONS_REDIS_URL: redis://redis:6379/0
-      NOTIFICATIONS_CHANNEL: ${NOTIFICATIONS_CHANNEL:-notifications.v1}
       SOCKET_IO_PATH: /socket.io
       CORS_ORIGIN: http://localhost:4173
     networks:
