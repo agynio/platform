@@ -10,11 +10,12 @@ import {
   type ServiceError,
 } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
-import type { ContainerInspectInfo } from 'dockerode';
 import { Logger } from '@nestjs/common';
 import {
   ContainerHandle,
+  type ContainerInspectInfo,
   type ContainerOpts,
+  type DockerEventFilters,
   type ExecOptions,
   type ExecResult,
   type InteractiveExecOptions,
@@ -23,7 +24,6 @@ import {
   type LogsStreamSession,
   buildAuthHeaders,
 } from '@agyn/docker-runner';
-import type { DockerEventFilters } from '@agyn/docker-runner';
 import {
   CancelExecutionRequestSchema,
   CancelExecutionResponse,
@@ -166,8 +166,11 @@ export class RunnerGrpcClient implements DockerClient {
       RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
       request,
       (req, metadata, options, callback) => {
-        if (options) this.client.touchWorkload(req, metadata, options, (err) => callback(err));
-        else this.client.touchWorkload(req, metadata, (err) => callback(err));
+        if (options) {
+          this.client.touchWorkload(req, metadata, options, (err: ServiceError | null) => callback(err));
+        } else {
+          this.client.touchWorkload(req, metadata, (err: ServiceError | null) => callback(err));
+        }
       },
     );
   }
@@ -188,10 +191,12 @@ export class RunnerGrpcClient implements DockerClient {
     );
     if (response.status === WorkloadStatus.FAILED) {
       const failure = response.failure;
+      const retryableFlag = failure?.details?.retryable;
+      const retryable = typeof retryableFlag === 'string' && (retryableFlag === 'true' || retryableFlag === '1');
       throw new DockerRunnerRequestError(
         500,
         failure?.code ?? 'runner_start_failed',
-        failure?.retryable ?? false,
+        retryable,
         failure?.message ?? 'Runner failed to start workload',
       );
     }
@@ -269,13 +274,16 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
-    const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSeconds: timeoutSec });
+    const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSec });
     await this.unary<StopWorkloadRequest, unknown>(
       RUNNER_SERVICE_STOP_WORKLOAD_PATH,
       request,
       (req, metadata, options, callback) => {
-        if (options) this.client.stopWorkload(req, metadata, options, (err) => callback(err));
-        else this.client.stopWorkload(req, metadata, (err) => callback(err));
+        if (options) {
+          this.client.stopWorkload(req, metadata, options, (err: ServiceError | null) => callback(err));
+        } else {
+          this.client.stopWorkload(req, metadata, (err: ServiceError | null) => callback(err));
+        }
       },
     );
   }
@@ -293,8 +301,11 @@ export class RunnerGrpcClient implements DockerClient {
       RUNNER_SERVICE_REMOVE_WORKLOAD_PATH,
       request,
       (req, metadata, callOptions, callback) => {
-        if (callOptions) this.client.removeWorkload(req, metadata, callOptions, (err) => callback(err));
-        else this.client.removeWorkload(req, metadata, (err) => callback(err));
+        if (callOptions) {
+          this.client.removeWorkload(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
+        } else {
+          this.client.removeWorkload(req, metadata, (err: ServiceError | null) => callback(err));
+        }
       },
     );
   }
@@ -363,8 +374,11 @@ export class RunnerGrpcClient implements DockerClient {
       RUNNER_SERVICE_REMOVE_VOLUME_PATH,
       request,
       (req, metadata, callOptions, callback) => {
-        if (callOptions) this.client.removeVolume(req, metadata, callOptions, (err) => callback(err));
-        else this.client.removeVolume(req, metadata, (err) => callback(err));
+        if (callOptions) {
+          this.client.removeVolume(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
+        } else {
+          this.client.removeVolume(req, metadata, (err: ServiceError | null) => callback(err));
+        }
       },
     );
   }
@@ -392,8 +406,11 @@ export class RunnerGrpcClient implements DockerClient {
       RUNNER_SERVICE_PUT_ARCHIVE_PATH,
       request,
       (req, metadata, callOptions, callback) => {
-        if (callOptions) this.client.putArchive(req, metadata, callOptions, (err) => callback(err));
-        else this.client.putArchive(req, metadata, (err) => callback(err));
+        if (callOptions) {
+          this.client.putArchive(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
+        } else {
+          this.client.putArchive(req, metadata, (err: ServiceError | null) => callback(err));
+        }
       },
       this.requestTimeoutMs,
     );
@@ -919,7 +936,7 @@ export class RunnerGrpcExecClient {
     });
 
     const stdin = new Writable({
-      write: (chunk, encoding, callback) => {
+      write: (chunk: Buffer | string, encoding: BufferEncoding, callback: (error?: Error | null) => void) => {
         try {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding as BufferEncoding);
           if (buffer.length > 0) {
@@ -931,10 +948,11 @@ export class RunnerGrpcExecClient {
           }
           callback();
         } catch (error) {
-          callback(error instanceof Error ? error : new Error(String(error)));
+          const err = error instanceof Error ? error : new Error(String(error));
+          callback(err);
         }
       },
-      final: (callback) => {
+      final: (callback: (error?: Error | null) => void) => {
         try {
           call.write(
             create(ExecRequestSchema, {
@@ -944,10 +962,11 @@ export class RunnerGrpcExecClient {
           call.end();
           callback();
         } catch (error) {
-          callback(error instanceof Error ? error : new Error(String(error)));
+          const err = error instanceof Error ? error : new Error(String(error));
+          callback(err);
         }
       },
-      destroy: (error, callback) => {
+      destroy: (error: Error | null | undefined, callback: (error?: Error | null) => void) => {
         try {
           cleanupStream();
           call.cancel();

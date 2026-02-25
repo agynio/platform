@@ -70,3 +70,34 @@ export type LogsStreamSession = {
   stream: NodeJS.ReadableStream;
   close: () => Promise<void>;
 };
+
+export type ContainerInspectMount = {
+  Type?: string;
+  Source?: string;
+  Destination?: string;
+  RW?: boolean;
+  ReadOnly?: boolean;
+  Name?: string;
+};
+
+export type ContainerInspectState = {
+  Status?: string;
+  Running?: boolean;
+};
+
+export type ContainerInspectNetworkSettings = {
+  Networks?: Record<string, Record<string, unknown>>;
+};
+
+export type ContainerInspectInfo = {
+  Id?: string;
+  Name?: string;
+  Image?: string;
+  Config?: {
+    Image?: string;
+    Labels?: Record<string, string>;
+  };
+  Mounts?: ContainerInspectMount[];
+  State?: ContainerInspectState;
+  NetworkSettings?: ContainerInspectNetworkSettings;
+};

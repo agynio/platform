@@ -160,7 +160,7 @@ describeOrSkip('docker-runner docker-backed container lifecycle', () => {
   }
 
   async function stopContainer(containerId: string) {
-    const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSeconds: 1 });
+    const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSec: 1 });
     await unary(RUNNER_SERVICE_STOP_WORKLOAD_PATH, request, (req, metadata, callback) => {
       client.stopWorkload(req, metadata, callback);
     });

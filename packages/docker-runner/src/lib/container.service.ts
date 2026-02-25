@@ -17,6 +17,7 @@ import {
   LogsStreamSession,
   Platform,
   PLATFORM_LABEL,
+  type ContainerInspectInfo,
 } from './types';
 
 const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
@@ -862,7 +863,7 @@ export class ContainerService implements DockerClientPort {
     return details.Config?.Labels ?? undefined;
   }
 
-  async inspectContainer(containerId: string): Promise<Docker.ContainerInspectInfo> {
+  async inspectContainer(containerId: string): Promise<ContainerInspectInfo> {
     const container = this.docker.getContainer(containerId);
     return container.inspect();
   }
