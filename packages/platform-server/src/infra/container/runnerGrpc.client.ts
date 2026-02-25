@@ -976,7 +976,7 @@ export class RunnerGrpcExecClient {
     });
 
     const originalDestroy = stdin.destroy.bind(stdin);
-    stdin.destroy = ((error?: Error | null, callback?: (error?: Error | null) => void) => {
+    stdin.destroy = ((error?: Error | null) => {
       if (execId) {
         void this.cancelExecution(execId).catch(() => undefined);
       }
@@ -987,7 +987,7 @@ export class RunnerGrpcExecClient {
       } catch {
         // ignore cancellation errors
       }
-      return originalDestroy(error ?? undefined, callback);
+      return originalDestroy(error ?? undefined);
     }) as typeof stdin.destroy;
 
     call.write(start);
