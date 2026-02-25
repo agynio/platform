@@ -218,7 +218,7 @@ export const configSchema = z.object({
   ncpsAuthToken: z.string().optional(),
   agentsDatabaseUrl: z.string().min(1, 'Agents database connection string is required'),
   notificationsHttpUrl: z
-    .string({ required_error: 'NOTIFICATIONS_HTTP_URL is required' })
+    .string()
     .min(1, 'NOTIFICATIONS_HTTP_URL is required')
     .url('NOTIFICATIONS_HTTP_URL must be a valid URL')
     .transform((value) => value.trim().replace(/\/+$/, '')),
