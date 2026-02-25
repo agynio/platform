@@ -286,7 +286,7 @@ describe('ContainersController wiring via InfraModule', () => {
   const adminMock = { deleteContainer: vi.fn().mockResolvedValue(undefined) } as unknown as ContainerAdminService;
   const dockerRunnerStatusStub = {
     getSnapshot: vi.fn(() => ({ status: 'up', optional: false })),
-    setBaseUrl: vi.fn(),
+    setEndpoint: vi.fn(),
     setOptional: vi.fn(),
     markUp: vi.fn(),
     markDown: vi.fn(),

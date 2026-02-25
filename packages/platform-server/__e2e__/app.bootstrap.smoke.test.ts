@@ -196,7 +196,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
 
   const dockerClientStub = {
     checkConnectivity: vi.fn().mockResolvedValue({ status: 200 }),
-    getBaseUrl: vi.fn(() => `${runnerConfigDefaults.dockerRunnerGrpcHost}:${runnerConfigDefaults.dockerRunnerGrpcPort}`),
+    getEndpoint: vi.fn(() => `${runnerConfigDefaults.dockerRunnerGrpcHost}:${runnerConfigDefaults.dockerRunnerGrpcPort}`),
     listContainersByVolume: vi.fn().mockResolvedValue([]),
     removeVolume: vi.fn().mockResolvedValue(undefined),
   } satisfies Partial<DockerClient>;
@@ -411,7 +411,7 @@ describe('App bootstrap smoke test', () => {
         .mockRejectedValue(
           new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline'),
         );
-      stubs.dockerClientStub.getBaseUrl = vi.fn(
+      stubs.dockerClientStub.getEndpoint = vi.fn(
         () => `${process.env.DOCKER_RUNNER_GRPC_HOST}:${process.env.DOCKER_RUNNER_PORT}`,
       );
       const volumeGcStarted: string[] = [];

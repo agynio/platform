@@ -22,7 +22,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
 
   async onModuleInit(): Promise<void> {
     const endpoint = this.configService.getDockerRunnerGrpcAddress();
-    this.statusService.setBaseUrl(endpoint);
+    this.statusService.setEndpoint(endpoint);
     const optional = this.configService.getDockerRunnerOptional();
     this.statusService.setOptional(optional);
     this.logger.log(

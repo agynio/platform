@@ -7,7 +7,7 @@ export type DockerRunnerStatusState = 'unknown' | 'up' | 'down';
 export type DockerRunnerStatusSnapshot = {
   status: DockerRunnerStatusState;
   optional: boolean;
-  baseUrl?: string;
+  endpoint?: string;
   lastCheckedAt?: string;
   lastSuccessAt?: string;
   lastFailureAt?: string;
@@ -32,13 +32,13 @@ export class DockerRunnerStatusService {
     this.snapshot = {
       status: 'unknown',
       optional: this.configService.getDockerRunnerOptional(),
-      baseUrl: this.configService.getDockerRunnerGrpcAddress(),
+      endpoint: this.configService.getDockerRunnerGrpcAddress(),
       consecutiveFailures: 0,
     };
   }
 
-  setBaseUrl(baseUrl: string): void {
-    this.snapshot = { ...this.snapshot, baseUrl };
+  setEndpoint(endpoint: string): void {
+    this.snapshot = { ...this.snapshot, endpoint };
   }
 
   setOptional(optional: boolean): void {

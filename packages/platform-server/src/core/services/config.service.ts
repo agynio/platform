@@ -406,29 +406,8 @@ export class ConfigService implements Config {
     return this.params.volumeGcSweepTimeoutMs;
   }
 
-<<<<<<< HEAD
   getDockerRunnerGrpcAddress(): string {
     return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
-=======
-  get dockerRunnerGrpcEnabled(): boolean {
-    return this.params.dockerRunnerGrpcEnabled;
-  }
-
-  get dockerRunnerGrpcHost(): string {
-    return this.params.dockerRunnerGrpcHost;
-  }
-
-  get dockerRunnerGrpcPort(): number {
-    return this.params.dockerRunnerGrpcPort;
-  }
-
-  getDockerRunnerGrpcAddress(): string {
-    return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
-  }
-
-  getDockerRunnerBaseUrl(): string {
-    return this.dockerRunnerBaseUrl;
->>>>>>> 1848ff84 (feat(platform): route exec via grpc runner)
   }
 
   getDockerRunnerSharedSecret(): string {
@@ -584,9 +563,6 @@ export class ConfigService implements Config {
       dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
       dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
       dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
-      dockerRunnerGrpcEnabled: process.env.DOCKER_RUNNER_GRPC_ENABLED,
-      dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
-      dockerRunnerGrpcPort: process.env.DOCKER_RUNNER_GRPC_PORT,
       workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,

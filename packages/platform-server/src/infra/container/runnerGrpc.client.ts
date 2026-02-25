@@ -143,7 +143,7 @@ export class RunnerGrpcClient implements DockerClient {
     });
   }
 
-  getBaseUrl(): string {
+  getEndpoint(): string {
     return this.endpoint;
   }
 
