@@ -85,35 +85,44 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     if (!handle) {
       handle = await this.createWorkspace(key, spec, workspaceLabels, networkName);
       created = true;
-      if (dinDRequested) {
-        await this.ensureDinD(handle, baseLabels, spec.dockerInDocker?.mirrorUrl);
-      }
-    } else if (dinDRequested) {
-      await this.ensureDinD(handle, baseLabels, spec.dockerInDocker?.mirrorUrl).catch((err) => {
-        this.logger.warn('DinD ensure failed during reuse', {
-          workspaceId: handle?.id.substring(0, 12),
-          error: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      });
-    } else {
-      await this.cleanupDinDSidecars(baseLabels, handle.id).catch(() => undefined);
     }
 
     if (!handle) {
       throw new Error('workspace_provision_failed');
     }
 
+    const workspaceHandle = handle;
+
+    await this.registerWorkspaceContainer(workspaceHandle.id, key, spec);
+
     try {
-      await this.containers.touchLastUsed(handle.id);
+      await this.containers.touchLastUsed(workspaceHandle.id);
     } catch {
       // ignore errors
     }
-    await this.registerWorkspaceContainer(handle.id, key, spec);
+
+    if (dinDRequested) {
+      const ensureDinD = async () => {
+        await this.ensureDinD(workspaceHandle, baseLabels, spec.dockerInDocker?.mirrorUrl);
+      };
+      if (created) {
+        await ensureDinD();
+      } else {
+        await ensureDinD().catch((err) => {
+          this.logger.warn('DinD ensure failed during reuse', {
+            workspaceId: workspaceHandle.id.substring(0, 12),
+            error: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        });
+      }
+    } else if (!created) {
+      await this.cleanupDinDSidecars(baseLabels, workspaceHandle.id).catch(() => undefined);
+    }
 
     const providerType: WorkspaceRuntimeProviderType = 'docker';
-    const status = await this.resolveWorkspaceStatus(handle.id);
-    return { workspaceId: handle.id, created, providerType, status };
+    const status = await this.resolveWorkspaceStatus(workspaceHandle.id);
+    return { workspaceId: workspaceHandle.id, created, providerType, status };
   }
 
   async exec(workspaceId: string, request: WorkspaceExecRequest): Promise<WorkspaceExecResult> {
@@ -350,16 +359,18 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   }
 
   private async registerWorkspaceContainer(containerId: string, key: WorkspaceKey, spec: WorkspaceSpec): Promise<void> {
+    let inspectId: string | undefined;
+    let resolvedName: string | undefined;
     try {
       const inspect = await this.containers.inspectContainer(containerId);
-      const inspectId = typeof inspect.Id === 'string' ? inspect.Id : containerId;
+      inspectId = typeof inspect.Id === 'string' ? inspect.Id : containerId;
       const labels = inspect.Config?.Labels ?? {};
       const nodeId = key.nodeId ?? labels[NODE_ID_LABEL] ?? 'unknown';
       const threadId = key.threadId ?? labels[THREAD_ID_LABEL] ?? '';
       const mounts = mapInspectMounts(inspect.Mounts);
       const inspectNameRaw = typeof inspect.Name === 'string' ? inspect.Name : null;
       const normalizedName = inspectNameRaw?.trim().replace(/^\/+/, '') ?? null;
-      const resolvedName = (normalizedName && normalizedName.length > 0 ? normalizedName : inspectId.substring(0, 63)).slice(0, 63);
+      resolvedName = (normalizedName && normalizedName.length > 0 ? normalizedName : inspectId.substring(0, 63)).slice(0, 63);
       const image = inspect.Config?.Image ?? spec.image ?? inspect.Image ?? 'unknown';
       await this.registry.registerStart({
         containerId: inspectId,
@@ -373,8 +384,10 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
         name: resolvedName,
       });
     } catch (err) {
-      this.logger.warn('Failed to register workspace container start', {
+      this.logger.error('Failed to register workspace container start', {
         containerId: containerId.substring(0, 12),
+        inspectId,
+        resolvedName,
         error: err instanceof Error ? err.message : String(err),
       });
     }

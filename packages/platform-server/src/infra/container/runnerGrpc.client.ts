@@ -200,6 +200,10 @@ export class RunnerGrpcClient implements DockerClient {
         failure?.message ?? 'Runner failed to start workload',
       );
     }
+    this.logger.debug('Runner start mapping', {
+      id: response.id,
+      main: response.containers?.main,
+    });
     const containerId = response.containers?.main || response.id;
     if (!containerId) {
       throw new DockerRunnerRequestError(500, 'runner_start_missing_container', false, 'Runner did not return container id');
