@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Metadata, status } from '@grpc/grpc-js';
 import { NonceCache, verifyAuthHeaders } from '@agyn/docker-runner';
-import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '@agyn/runner-proto/grpc.js';
+import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
 
 import {
   RunnerGrpcClient,

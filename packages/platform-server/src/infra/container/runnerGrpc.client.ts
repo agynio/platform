@@ -71,7 +71,7 @@ import {
   type TouchWorkloadRequest,
   type GetWorkloadLabelsRequest,
   type InspectWorkloadRequest,
-} from '@agyn/runner-proto';
+} from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import {
   RunnerServiceGrpcClient,
   type RunnerServiceGrpcClientInstance,
@@ -90,7 +90,7 @@ import {
   RUNNER_SERVICE_STREAM_EVENTS_PATH,
   RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
-} from '@agyn/runner-proto/grpc.js';
+} from '../../proto/grpc.js';
 import { containerOptsToStartWorkloadRequest } from '@agyn/docker-runner';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';

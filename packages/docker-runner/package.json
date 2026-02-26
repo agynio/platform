@@ -12,7 +12,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agyn/runner-proto": "workspace:*",
     "@nestjs/common": "^11.1.7",
     "@bufbuild/protobuf": "^2.11.0",
     "@grpc/grpc-js": "^1.12.2",

@@ -11,7 +11,7 @@ import {
   VolumeMountSchema,
   VolumeSpec,
   VolumeSpecSchema,
-} from '@agyn/runner-proto';
+} from '../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import type { ContainerOpts, Platform, SidecarOpts } from '../lib/types';
 
 const PROP_AUTO_REMOVE = 'auto_remove';

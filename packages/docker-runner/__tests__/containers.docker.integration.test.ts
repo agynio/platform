@@ -16,7 +16,7 @@ import {
   RUNNER_SERVICE_START_WORKLOAD_PATH,
   RUNNER_SERVICE_STOP_WORKLOAD_PATH,
   RunnerServiceGrpcClient,
-} from '@agyn/runner-proto/grpc.js';
+} from '../src/proto/grpc.js';
 import {
   InspectWorkloadRequestSchema,
   ReadyRequestSchema,
@@ -24,7 +24,7 @@ import {
   StopWorkloadRequestSchema,
   type InspectWorkloadResponse,
   type StartWorkloadResponse,
-} from '@agyn/runner-proto';
+} from '../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 import { containerOptsToStartWorkloadRequest } from '../src/contracts/workload.grpc';
 
 const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';

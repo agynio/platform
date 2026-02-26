@@ -10,8 +10,11 @@ RUN corepack enable \
  && corepack prepare pnpm@10.5.0 --activate
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git openssl \
+ && apt-get install -y --no-install-recommends ca-certificates curl git openssl \
  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v1.45.0/buf-Linux-x86_64" -o /usr/local/bin/buf \
+ && chmod +x /usr/local/bin/buf
 
 WORKDIR /workspace
 
@@ -22,6 +25,8 @@ RUN pnpm fetch
 FROM base AS build
 
 COPY . .
+
+RUN pnpm proto:generate
 
 RUN pnpm install --filter @agyn/platform-server... --offline --frozen-lockfile
 

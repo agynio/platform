@@ -66,9 +66,6 @@ importers:
 
   packages/docker-runner:
     dependencies:
-      '@agyn/runner-proto':
-        specifier: workspace:*
-        version: link:../runner-proto
       '@bufbuild/protobuf':
         specifier: ^2.11.0
         version: 2.11.0
@@ -142,9 +139,6 @@ importers:
       '@agyn/llm':
         specifier: workspace:*
         version: link:../llm
-      '@agyn/runner-proto':
-        specifier: workspace:*
-        version: link:../runner-proto
       '@agyn/shared':
         specifier: workspace:*
         version: link:../shared
@@ -708,19 +702,6 @@ importers:
       zod:
         specifier: ^4.1.12
         version: 4.1.12
-
-  packages/runner-proto:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: ^2.11.0
-        version: 2.11.0
-      '@grpc/grpc-js':
-        specifier: ^1.12.2
-        version: 1.14.0
-    devDependencies:
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
 
   packages/shared: {}
 

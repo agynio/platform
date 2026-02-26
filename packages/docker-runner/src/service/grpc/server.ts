@@ -68,7 +68,7 @@ import {
   SidecarInstanceSchema,
   WorkloadContainersSchema,
   WorkloadStatus,
-} from '@agyn/runner-proto';
+} from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import {
   RUNNER_SERVICE_CANCEL_EXEC_PATH,
   RUNNER_SERVICE_EXEC_PATH,
@@ -86,7 +86,7 @@ import {
   RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
   runnerServiceGrpcDefinition,
-} from '@agyn/runner-proto/grpc.js';
+} from '../../proto/grpc.js';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { create } from '@bufbuild/protobuf';
 import type { ContainerService, InteractiveExecSession, LogsStreamSession, NonceCache } from '../..';
