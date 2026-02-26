@@ -68,14 +68,46 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
       handle = await this.findFallbackContainer(baseLabels);
     }
 
-    if (handle && (await this.shouldRecreateForPlatform(handle, key))) {
-      await this.stopAndRemoveContainer(handle);
-      handle = undefined;
+    const logContext = {
+      threadId: key.threadId,
+      nodeId: key.nodeId ?? 'unknown',
+    } as const;
+    const previousContainerId = handle?.id;
+    let existingPlatformLabel: string | undefined;
+
+    if (handle) {
+      existingPlatformLabel = await this.getContainerPlatformLabel(handle.id);
     }
 
-    if (handle && !(await this.isAttachedToNetwork(handle.id, networkName))) {
+    let recreatedForPlatform = false;
+    if (handle && (await this.shouldRecreateForPlatform(handle, key, existingPlatformLabel))) {
+      this.logger.debug('Recreating workspace container', {
+        ...logContext,
+        containerId: handle.id.substring(0, 12),
+        reason: 'platform_mismatch',
+        expectedPlatform: key.platform ?? null,
+        existingPlatform: existingPlatformLabel ?? null,
+      });
       await this.stopAndRemoveContainer(handle);
       handle = undefined;
+      recreatedForPlatform = true;
+    }
+
+    let isAttached: boolean | undefined;
+    let recreatedForNetwork = false;
+    if (handle) {
+      isAttached = await this.isAttachedToNetwork(handle.id, networkName);
+      if (!isAttached) {
+        this.logger.debug('Recreating workspace container', {
+          ...logContext,
+          containerId: handle.id.substring(0, 12),
+          reason: 'network_detach',
+          expectedNetwork: networkName,
+        });
+        await this.stopAndRemoveContainer(handle);
+        handle = undefined;
+        recreatedForNetwork = true;
+      }
     }
 
     if (!handle) {
@@ -103,6 +135,17 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
     const providerType: WorkspaceRuntimeProviderType = 'docker';
     const status = await this.resolveWorkspaceStatus(workspaceHandle.id);
+    this.logger.debug('ensureWorkspace resolved container', {
+      ...logContext,
+      previousContainerId: previousContainerId ? previousContainerId.substring(0, 12) : null,
+      containerId: workspaceHandle.id.substring(0, 12),
+      keyPlatform: key.platform ?? null,
+      existingPlatformLabel: existingPlatformLabel ?? null,
+      isAttachedToNetwork: isAttached ?? null,
+      created,
+      recreatedForPlatform,
+      recreatedForNetwork,
+    });
     return { workspaceId: workspaceHandle.id, created, providerType, status };
   }
 
@@ -280,14 +323,34 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     return undefined;
   }
 
-  private async shouldRecreateForPlatform(handle: ContainerHandle, key: WorkspaceKey): Promise<boolean> {
+  private async shouldRecreateForPlatform(
+    handle: ContainerHandle,
+    key: WorkspaceKey,
+    existingPlatformLabel?: string,
+  ): Promise<boolean> {
     if (!key.platform) return false;
+    if (existingPlatformLabel !== undefined) {
+      return existingPlatformLabel !== key.platform;
+    }
     try {
       const labels = await this.containers.getContainerLabels(handle.id);
       const existing = labels?.[PLATFORM_LABEL];
       return existing !== key.platform;
     } catch {
       return true;
+    }
+  }
+
+  private async getContainerPlatformLabel(containerId: string): Promise<string | undefined> {
+    try {
+      const labels = await this.containers.getContainerLabels(containerId);
+      return labels?.[PLATFORM_LABEL];
+    } catch (err) {
+      this.logger.debug('Failed to read workspace platform label', {
+        containerId: containerId.substring(0, 12),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
     }
   }
 
