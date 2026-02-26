@@ -25,6 +25,8 @@ COPY . .
 
 RUN pnpm install --filter @agyn/docker-runner... --offline --frozen-lockfile --ignore-scripts
 
+RUN pnpm --filter @agyn/runner-proto run build
+
 RUN pnpm --filter @agyn/docker-runner run build
 
 RUN PNPM_SKIP_POSTINSTALL=1 PNPM_SKIP_PREPARE=1 npm_config_ignore_scripts=true \

@@ -89,7 +89,7 @@ import {
 } from '@agyn/runner-proto/grpc.js';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { create } from '@bufbuild/protobuf';
-import type { ContainerService, InteractiveExecSession, NonceCache } from '../..';
+import type { ContainerService, InteractiveExecSession, LogsStreamSession, NonceCache } from '../..';
 import type { ContainerHandle } from '../../lib/container.handle';
 import { verifyAuthHeaders } from '../..';
 import type { RunnerConfig } from '../config';
@@ -811,7 +811,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       const stderr = call.request.stderr;
       const timestamps = call.request.timestamps;
 
-      let session;
+      let session: LogsStreamSession;
       try {
         session = await opts.containers.streamContainerLogs(workloadId, {
           follow,
@@ -937,7 +937,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       let closed = false;
 
       const parser = createDockerEventsParser(
-        (event) => {
+        (event: Record<string, unknown>) => {
           safeStreamWrite(
             call,
             create(StreamEventsResponseSchema, {
@@ -949,7 +949,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
           );
         },
         {
-          onError: (payload, error) => {
+          onError: (payload: string, error: unknown) => {
             safeStreamWrite(
               call,
               create(StreamEventsResponseSchema, {
@@ -1081,7 +1081,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         }
       };
 
-      call.on('data', async (req) => {
+      call.on('data', async (req: ExecRequest) => {
         if (!req?.msg?.case) return;
         if (req.msg.case === 'start') {
           if (ctx) {
@@ -1150,7 +1150,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               killed: false,
             };
             ctx = context;
-            context.finish = (reason, killed) => finish(context, reason, killed);
+            context.finish = (reason: ExecExitReason, killed?: boolean) => finish(context, reason, killed);
             activeExecutions.set(context.executionId, context);
 
             const handleTimeout = async (target: ExecutionContext, reason: ExecExitReason) => {
