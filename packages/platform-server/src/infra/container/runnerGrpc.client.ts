@@ -734,23 +734,46 @@ export class RunnerGrpcExecClient {
       ExecResponse
     >;
     const execIdRef: { current?: string } = {};
+    const endStream = () => {
+      try {
+        call.end();
+      } catch {
+        // ignore end errors
+      }
+    };
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     let finished = false;
     let requestedTimeoutMs: number | undefined;
     let requestedIdleTimeoutMs: number | undefined;
     const isAborted = this.attachAbortSignal(call, options?.signal, () => execIdRef.current);
+    let stdinClosed = false;
+    const sendStdinEof = () => {
+      if (stdinClosed) return;
+      stdinClosed = true;
+      try {
+        call.write(
+          create(ExecRequestSchema, {
+            msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
+          }),
+        );
+      } catch {
+        // ignore eof errors
+      }
+    };
 
     return new Promise<ExecResult>((resolve, reject) => {
       const finalize = (result: ExecResult) => {
         if (finished) return;
         finished = true;
+        endStream();
         resolve(result);
       };
 
       const fail = (error: Error) => {
         if (finished) return;
         finished = true;
+        endStream();
         reject(error);
       };
 
@@ -759,6 +782,7 @@ export class RunnerGrpcExecClient {
         if (!event?.case) return;
         if (event.case === 'started') {
           execIdRef.current = event.value.executionId;
+          sendStdinEof();
           return;
         }
         if (event.case === 'stdout') {
@@ -817,7 +841,6 @@ export class RunnerGrpcExecClient {
       requestedTimeoutMs = extractedTimeouts.timeoutMs;
       requestedIdleTimeoutMs = extractedTimeouts.idleTimeoutMs;
       call.write(start);
-      call.end();
     });
   }
 

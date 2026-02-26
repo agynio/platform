@@ -400,6 +400,24 @@ export class ContainerService implements DockerClientPort {
       hijackStream.pipe(stdoutStream);
     }
 
+    const closeOutputs = () => {
+      try {
+        stdoutStream.end();
+      } catch {
+        // ignore close errors
+      }
+      if (demux) {
+        try {
+          stderrStream.end();
+        } catch {
+          // ignore close errors
+        }
+      }
+    };
+
+    hijackStream.once('end', closeOutputs);
+    hijackStream.once('close', closeOutputs);
+
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
 
