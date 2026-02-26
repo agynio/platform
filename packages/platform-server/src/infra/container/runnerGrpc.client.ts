@@ -200,9 +200,11 @@ export class RunnerGrpcClient implements DockerClient {
         failure?.message ?? 'Runner failed to start workload',
       );
     }
+    const sidecarsCount = response.containers?.sidecars?.length ?? 0;
     this.logger.debug('Runner start mapping', {
       id: response.id,
       main: response.containers?.main,
+      sidecars: sidecarsCount,
     });
     const containerId = response.containers?.main || response.id;
     if (!containerId) {

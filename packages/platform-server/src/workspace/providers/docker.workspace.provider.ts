@@ -81,6 +81,12 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     if (!handle) {
       handle = await this.createWorkspace(key, spec, baseLabels, workspaceLabels, networkName);
       created = true;
+      if (!handle) {
+        throw new Error('workspace_provision_failed');
+      }
+      await this.registerWorkspaceContainer(handle.id, key, spec);
+    } else {
+      await this.registerWorkspaceContainer(handle.id, key, spec);
     }
 
     if (!handle) {
@@ -88,8 +94,6 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     }
 
     const workspaceHandle = handle;
-
-    await this.registerWorkspaceContainer(workspaceHandle.id, key, spec);
 
     try {
       await this.containers.touchLastUsed(workspaceHandle.id);
@@ -344,6 +348,11 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
       const normalizedName = inspectNameRaw?.trim().replace(/^\/+/, '') ?? null;
       resolvedName = (normalizedName && normalizedName.length > 0 ? normalizedName : inspectId.substring(0, 63)).slice(0, 63);
       const image = inspect.Config?.Image ?? spec.image ?? inspect.Image ?? 'unknown';
+      this.logger.log('Registering workspace container', {
+        containerId: inspectId.substring(0, 12),
+        name: resolvedName,
+        image,
+      });
       await this.registry.registerStart({
         containerId: inspectId,
         nodeId,
