@@ -17,7 +17,7 @@ function mapStatus(status: ContainerItem['status']): ContainerStatus {
 }
 
 function assertRole(role: ContainerItem['role']): asserts role is ContainerRole {
-  if (role === 'workspace' || role === 'dind') {
+  if (role === 'workspace' || role === 'sidecar' || role === 'dind') {
     return;
   }
   throw new Error(`Unsupported container role: ${role}`);

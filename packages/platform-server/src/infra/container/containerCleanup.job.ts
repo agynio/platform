@@ -78,9 +78,6 @@ export class ContainerCleanupService {
             }
 
             try {
-              await this.cleanDinDSidecars(id, { graceSeconds: 5, removeVolumes: true }).catch((e: unknown) =>
-                this.logger.error('ContainerCleanup: error cleaning DinD sidecars', { id, error: e }),
-              );
               await this.stopAndRemoveContainer(id, { graceSeconds: 10, force: true });
               await this.registry.markStopped(id, 'ttl_expired');
             } catch (e: unknown) {
@@ -115,35 +112,6 @@ export class ContainerCleanupService {
       parentIds.push(record.containerId);
     }
 
-    const sidecarsByParent = new Map<string, string[]>();
-    for (const parent of parentIds) {
-      const handles = await this.containers.findContainersByLabels(
-        { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': parent },
-        { all: true },
-      );
-      if (!handles.length) continue;
-      sidecarsByParent.set(parent, handles.map((h) => h.id));
-    }
-
-    for (const [parentId, sidecars] of sidecarsByParent.entries()) {
-      for (const sidecarId of sidecars) {
-        try {
-          await this.stopAndRemoveContainer(sidecarId, {
-            graceSeconds: opts.graceSeconds,
-            force: true,
-            removeVolumes: opts.deleteEphemeral,
-          });
-        } catch (error) {
-          this.logger.error('ContainerCleanup: failed to clean DinD sidecar during selective sweep', {
-            threadId,
-            parentId,
-            sidecarId,
-            error,
-          });
-        }
-      }
-    }
-
     for (const record of records) {
       try {
         await this.stopAndRemoveContainer(record.containerId, {
@@ -164,32 +132,6 @@ export class ContainerCleanupService {
         });
       }
     }
-  }
-
-  /** Stop and remove any DinD sidecars associated with a workspace container. */
-  private async cleanDinDSidecars(
-    parentId: string,
-    options: { graceSeconds: number; removeVolumes: boolean },
-  ): Promise<void> {
-    const sidecars = await this.containers.findContainersByLabels(
-      { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': parentId },
-      { all: true },
-    );
-    if (!Array.isArray(sidecars) || sidecars.length === 0) return;
-    const results = await Promise.allSettled(
-      sidecars.map(async (sc) => {
-        await this.stopAndRemoveContainer(sc.id, {
-          graceSeconds: options.graceSeconds,
-          force: true,
-          removeVolumes: options.removeVolumes,
-        });
-        return true as const;
-      }),
-    );
-    const scCleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-    if (scCleaned > 0) this.logger.log(`ContainerCleanup: removed ${scCleaned} DinD sidecar(s) for ${parentId}`);
-    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-    if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more sidecar cleanup tasks failed');
   }
 
   private isRetentionEnabled(): boolean {

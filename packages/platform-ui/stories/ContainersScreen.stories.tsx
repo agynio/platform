@@ -23,7 +23,7 @@ const containers = [
     name: 'atlas-dind',
     containerId: 'sha256:def',
     image: 'docker:dind',
-    role: 'dind' as const,
+    role: 'sidecar' as const,
     status: 'running' as const,
     startedAt: '2024-11-05T08:05:00Z',
     lastUsedAt: '2024-11-05T10:05:00Z',

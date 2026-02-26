@@ -360,7 +360,7 @@ describe('ContainersController routes', () => {
         killAfterAt: null,
         updatedAt: new Date(now - 1500),
         name: 'dind_helper',
-        metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'cid-1' } },
+        metadata: { labels: { 'hautech.ai/role': 'sidecar', 'hautech.ai/parent_cid': 'cid-1' } },
       },
     ];
     prismaSvc.client.container.rows = rows;
@@ -401,9 +401,9 @@ describe('ContainersController routes', () => {
     expect(first.autoRemoved).toBe(false);
     expect(first.health).toBeNull();
     expect(first.lastEventAt).toBeNull();
-    // sidecars for cid-1 include a dind
+    // sidecars for cid-1 include a DinD helper
     expect(first.sidecars && first.sidecars.length).toBeGreaterThan(0);
-    expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'dind', image: 'dind:latest', status: 'running' });
+    expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'sidecar', image: 'dind:latest', status: 'running' });
   });
 
   it('supports sorting by lastUsedAt desc', async () => {
@@ -480,7 +480,7 @@ describe('ContainersController routes', () => {
     expect(items.length).toBe(1);
   });
 
-  it('skips $queryRaw when list has no non-dind parents', async () => {
+  it('skips $queryRaw when list has no non-sidecar parents', async () => {
     const now = new Date();
     const rows: Row[] = [
       {
@@ -493,7 +493,7 @@ describe('ContainersController routes', () => {
         lastUsedAt: now,
         killAfterAt: null,
         updatedAt: now,
-        metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'missing' } },
+        metadata: { labels: { 'hautech.ai/role': 'sidecar', 'hautech.ai/parent_cid': 'missing' } },
       },
     ];
     const prismaSvcWithRaw = new PrismaStubWithQueryRaw(rows);

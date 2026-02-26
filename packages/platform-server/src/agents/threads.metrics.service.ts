@@ -53,7 +53,7 @@ export class ThreadsMetricsService {
             select cont."threadId" as thread_id
             from "Container" cont
             where cont.status = 'running'
-              and coalesce(cont.metadata->'labels'->>'hautech.ai/role', 'workspace') != 'dind'
+              and coalesce(cont.metadata->'labels'->>'hautech.ai/role', 'workspace') not in ('dind', 'sidecar')
           ), agg as (
             select rec.root_id,
                    count(ar.thread_id) as reminders_count,

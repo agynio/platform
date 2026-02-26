@@ -12,7 +12,7 @@ import {
   VolumeSpec,
   VolumeSpecSchema,
 } from '@agyn/runner-proto';
-import type { ContainerOpts, Platform } from '../lib/types';
+import type { ContainerOpts, Platform, SidecarOpts } from '../lib/types';
 
 const PROP_AUTO_REMOVE = 'auto_remove';
 const PROP_NETWORK_MODE = 'network_mode';
@@ -127,15 +127,16 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
   if (opts.createExtras) additionalContainerProps[PROP_CREATE_EXTRAS_JSON] = JSON.stringify(opts.createExtras);
 
   const volumes: VolumeSpec[] = [];
-  const mounts: VolumeMount[] = [];
+  const mainMounts: VolumeMount[] = [];
   let volumeIndex = 0;
 
   const registerVolume = (
     spec: VolumeSpec,
     mount: VolumeMount,
+    target: VolumeMount[],
   ) => {
     volumes.push(spec);
-    mounts.push(mount);
+    target.push(mount);
   };
 
   if (Array.isArray(opts.binds)) {
@@ -156,7 +157,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
         mountPath: parsed.destination,
         readOnly: isReadOnly,
       });
-      registerVolume(spec, mount);
+      registerVolume(spec, mount, mainMounts);
     }
   }
 
@@ -175,7 +176,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
         mountPath: path,
         readOnly: false,
       });
-      registerVolume(spec, mount);
+      registerVolume(spec, mount, mainMounts);
     }
   }
 
@@ -186,10 +187,56 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
     entrypoint: opts.entrypoint ?? '',
     env: normalizeEnv(opts.env),
     workingDir: opts.workingDir ?? '',
-    mounts,
+    mounts: mainMounts,
     requiredCapabilities: opts.privileged ? ['privileged'] : [],
     additionalProperties: additionalContainerProps,
   });
+
+  const mapSidecar = (sidecar: SidecarOpts | undefined): ContainerSpec | undefined => {
+    if (!sidecar) return undefined;
+    const sidecarProps: Record<string, string> = {};
+    if (typeof sidecar.autoRemove === 'boolean') sidecarProps[PROP_AUTO_REMOVE] = String(sidecar.autoRemove);
+    if (typeof sidecar.networkMode === 'string') sidecarProps[PROP_NETWORK_MODE] = sidecar.networkMode;
+    if (typeof sidecar.privileged === 'boolean') sidecarProps[PROP_PRIVILEGED] = String(sidecar.privileged);
+    if (sidecar.labels) sidecarProps[PROP_LABELS_JSON] = JSON.stringify(sidecar.labels);
+    if (sidecar.createExtras) sidecarProps[PROP_CREATE_EXTRAS_JSON] = JSON.stringify(sidecar.createExtras);
+
+    const mounts: VolumeMount[] = [];
+    if (Array.isArray(sidecar.anonymousVolumes)) {
+      for (const path of sidecar.anonymousVolumes) {
+        if (!isNonEmptyString(path)) continue;
+        const name = ensureVolumeSpecName('ephemeral', ++volumeIndex);
+        const spec = create(VolumeSpecSchema, {
+          name,
+          kind: VolumeKind.EPHEMERAL,
+          persistentName: '',
+          additionalProperties: {},
+        });
+        const mount = create(VolumeMountSchema, {
+          volume: name,
+          mountPath: path,
+          readOnly: false,
+        });
+        registerVolume(spec, mount, mounts);
+      }
+    }
+
+    return create(ContainerSpecSchema, {
+      image: sidecar.image ?? '',
+      name: '',
+      cmd: sidecar.cmd ?? [],
+      entrypoint: '',
+      env: normalizeEnv(sidecar.env),
+      workingDir: '',
+      mounts,
+      requiredCapabilities: sidecar.privileged ? ['privileged'] : [],
+      additionalProperties: sidecarProps,
+    });
+  };
+
+  const sidecars = Array.isArray(opts.sidecars)
+    ? opts.sidecars.map((sidecar) => mapSidecar(sidecar)).filter((spec): spec is ContainerSpec => !!spec)
+    : [];
 
   const requestAdditional: Record<string, string> = {};
   if (typeof opts.ttlSeconds === 'number' && Number.isFinite(opts.ttlSeconds)) {
@@ -201,7 +248,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
 
   return create(StartWorkloadRequestSchema, {
     main,
-    sidecars: [],
+    sidecars,
     volumes,
     additionalProperties: requestAdditional,
   });
@@ -302,6 +349,63 @@ export const startWorkloadRequestToContainerOpts = (request: StartWorkloadReques
 
   if (isNonEmptyString(requestProps[PROP_PLATFORM])) {
     opts.platform = requestProps[PROP_PLATFORM] as Platform;
+  }
+
+  if (Array.isArray(request.sidecars) && request.sidecars.length > 0) {
+    const sidecars: SidecarOpts[] = [];
+    for (const spec of request.sidecars) {
+      if (!spec) continue;
+      const sidecarOpts: SidecarOpts = {
+        image: isNonEmptyString(spec.image) ? spec.image : '',
+      };
+      if (Array.isArray(spec.cmd) && spec.cmd.length > 0) sidecarOpts.cmd = [...spec.cmd];
+      const sidecarEnv = composeEnvRecord(spec.env ?? []);
+      if (sidecarEnv) sidecarOpts.env = sidecarEnv;
+
+      const props = cloneAdditionalProperties(spec.additionalProperties);
+      const autoRemoveSidecar = parseBool(props[PROP_AUTO_REMOVE]);
+      if (typeof autoRemoveSidecar === 'boolean') sidecarOpts.autoRemove = autoRemoveSidecar;
+
+      if (isNonEmptyString(props[PROP_NETWORK_MODE])) sidecarOpts.networkMode = props[PROP_NETWORK_MODE];
+
+      const privilegedSidecar = parseBool(props[PROP_PRIVILEGED]);
+      if (typeof privilegedSidecar === 'boolean') sidecarOpts.privileged = privilegedSidecar;
+      else if (Array.isArray(spec.requiredCapabilities) && spec.requiredCapabilities.includes('privileged')) {
+        sidecarOpts.privileged = true;
+      }
+
+      if (isNonEmptyString(props[PROP_LABELS_JSON])) {
+        try {
+          const parsed = JSON.parse(props[PROP_LABELS_JSON]) as Record<string, string>;
+          if (parsed && typeof parsed === 'object') sidecarOpts.labels = parsed;
+        } catch {
+          // ignore malformed labels payloads
+        }
+      }
+
+      if (isNonEmptyString(props[PROP_CREATE_EXTRAS_JSON])) {
+        try {
+          const parsed = JSON.parse(props[PROP_CREATE_EXTRAS_JSON]) as SidecarOpts['createExtras'];
+          if (parsed && typeof parsed === 'object') sidecarOpts.createExtras = parsed;
+        } catch {
+          // ignore malformed extras payloads
+        }
+      }
+
+      const anonymous: string[] = [];
+      for (const mount of spec.mounts ?? []) {
+        if (!mount?.volume) continue;
+        const volSpec = volumeMap.get(mount.volume);
+        if (!volSpec) continue;
+        if (volSpec.kind === VolumeKind.EPHEMERAL && isNonEmptyString(mount.mountPath)) {
+          anonymous.push(mount.mountPath);
+        }
+      }
+      if (anonymous.length > 0) sidecarOpts.anonymousVolumes = anonymous;
+
+      sidecars.push(sidecarOpts);
+    }
+    if (sidecars.length > 0) opts.sidecars = sidecars;
   }
 
   return opts;

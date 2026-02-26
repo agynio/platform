@@ -120,8 +120,6 @@ if (!shouldRunDbTests) {
         execContainer: vi.fn().mockResolvedValue({ exitCode: 0, stderr: '', stdout: '' }),
         putArchive: vi.fn().mockResolvedValue(undefined),
         touchLastUsed: vi.fn(),
-        ensureDinD: vi.fn().mockResolvedValue(undefined),
-        cleanupDinDSidecars: vi.fn().mockResolvedValue(undefined),
       } satisfies Partial<ContainerService>;
 
       const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;

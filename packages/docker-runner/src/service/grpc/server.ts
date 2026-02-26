@@ -64,6 +64,8 @@ import {
   TouchWorkloadRequest,
   TouchWorkloadResponse,
   TouchWorkloadResponseSchema,
+  SidecarInstance,
+  SidecarInstanceSchema,
   WorkloadContainersSchema,
   WorkloadStatus,
 } from '@agyn/runner-proto';
@@ -88,6 +90,7 @@ import {
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { create } from '@bufbuild/protobuf';
 import type { ContainerService, InteractiveExecSession, NonceCache } from '../..';
+import type { ContainerHandle } from '../../lib/container.handle';
 import { verifyAuthHeaders } from '../..';
 import type { RunnerConfig } from '../config';
 import { createDockerEventsParser } from '../dockerEvents.parser';
@@ -143,6 +146,49 @@ const utf8Encoder = new TextEncoder();
 const DEFAULT_EXIT_TAIL_BYTES = 64 * 1024;
 const MAX_EXIT_TAIL_BYTES = 256 * 1024;
 const CONTAINER_STOP_TIMEOUT_SEC = 10;
+const SIDECAR_ROLE_LABEL = 'hautech.ai/role';
+const SIDECAR_ROLE_VALUE = 'sidecar';
+const PARENT_CONTAINER_LABEL = 'hautech.ai/parent_cid';
+
+async function findSidecarHandles(containers: ContainerService, workloadId: string): Promise<ContainerHandle[]> {
+  try {
+    return await containers.findContainersByLabels(
+      {
+        [SIDECAR_ROLE_LABEL]: SIDECAR_ROLE_VALUE,
+        [PARENT_CONTAINER_LABEL]: workloadId,
+      },
+      { all: true },
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function stopSidecars(containers: ContainerService, workloadId: string, timeoutSec: number): Promise<void> {
+  const handles = await findSidecarHandles(containers, workloadId);
+  for (const handle of handles) {
+    try {
+      await containers.stopContainer(handle.id, timeoutSec);
+    } catch {
+      // ignore sidecar stop failures
+    }
+  }
+}
+
+async function removeSidecars(
+  containers: ContainerService,
+  workloadId: string,
+  options: { force?: boolean; removeVolumes?: boolean },
+): Promise<void> {
+  const handles = await findSidecarHandles(containers, workloadId);
+  for (const handle of handles) {
+    try {
+      await containers.removeContainer(handle.id, options);
+    } catch {
+      // ignore sidecar removal failures
+    }
+  }
+}
 
 type DockerErrorDetails = {
   statusCode?: number;
@@ -386,17 +432,95 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       if (!call.request?.main) {
         return callback(toServiceError(status.INVALID_ARGUMENT, 'main_container_required'));
       }
-      if ((call.request.sidecars?.length ?? 0) > 0) {
-        return callback(toServiceError(status.UNIMPLEMENTED, 'sidecars_not_supported'));
-      }
       try {
         const containerOpts = startWorkloadRequestToContainerOpts(call.request);
-        const handle = await opts.containers.start(containerOpts);
+        const sidecarOpts = Array.isArray(containerOpts.sidecars) ? containerOpts.sidecars : [];
+        const stopAndRemove = async (containerId: string) => {
+          try {
+            await opts.containers.stopContainer(containerId, CONTAINER_STOP_TIMEOUT_SEC);
+          } catch {
+            // ignore stop errors during rollback
+          }
+          try {
+            await opts.containers.removeContainer(containerId, { force: true, removeVolumes: true });
+          } catch {
+            // ignore removal errors during rollback
+          }
+        };
+
+        const mainHandle = await opts.containers.start(containerOpts);
+
+        const startedSidecars: ContainerHandle[] = [];
+        const sidecarInstances: SidecarInstance[] = [];
+
+        const describeSidecar = async (
+          containerId: string,
+          fallbackName: string,
+        ): Promise<{ name: string; status: string }> => {
+          try {
+            const inspect = await opts.containers.inspectContainer(containerId);
+            const rawName = typeof inspect.Name === 'string' ? inspect.Name.replace(/^\/+/, '') : '';
+            const name = rawName || fallbackName;
+            const statusLabel = inspect.State?.Status ? String(inspect.State.Status) : 'running';
+            return { name, status: statusLabel };
+          } catch {
+            return { name: fallbackName, status: 'running' };
+          }
+        };
+
+        try {
+          for (let index = 0; index < sidecarOpts.length; index += 1) {
+            const sidecar = sidecarOpts[index];
+            const labels = {
+              ...(sidecar.labels ?? {}),
+              [SIDECAR_ROLE_LABEL]: SIDECAR_ROLE_VALUE,
+              [PARENT_CONTAINER_LABEL]: mainHandle.id,
+            };
+            const networkMode =
+              sidecar.networkMode === 'container:main'
+                ? `container:${mainHandle.id}`
+                : sidecar.networkMode;
+
+            const sidecarHandle = await opts.containers.start({
+              image: sidecar.image,
+              cmd: sidecar.cmd,
+              env: sidecar.env,
+              autoRemove: sidecar.autoRemove,
+              anonymousVolumes: sidecar.anonymousVolumes,
+              privileged: sidecar.privileged,
+              createExtras: sidecar.createExtras,
+              networkMode,
+              labels,
+            });
+            startedSidecars.push(sidecarHandle);
+
+            const fallbackName = `sidecar-${index + 1}`;
+            const { name: reportedName, status: reportedStatus } = await describeSidecar(
+              sidecarHandle.id,
+              fallbackName,
+            );
+
+            sidecarInstances.push(
+              create(SidecarInstanceSchema, {
+                name: reportedName,
+                id: sidecarHandle.id,
+                status: reportedStatus,
+              }),
+            );
+          }
+        } catch (error) {
+          for (const sidecarHandle of startedSidecars.reverse()) {
+            await stopAndRemove(sidecarHandle.id);
+          }
+          await stopAndRemove(mainHandle.id);
+          throw error;
+        }
+
         callback(
           null,
           create(StartWorkloadResponseSchema, {
-            id: handle.id,
-            containers: create(WorkloadContainersSchema, { main: handle.id, sidecars: [] }),
+            id: mainHandle.id,
+            containers: create(WorkloadContainersSchema, { main: mainHandle.id, sidecars: sidecarInstances }),
             status: WorkloadStatus.RUNNING,
           }),
         );
@@ -429,6 +553,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
           ? call.request.timeoutSec
           : CONTAINER_STOP_TIMEOUT_SEC;
       try {
+        await stopSidecars(opts.containers, workloadId, timeoutSec);
         await opts.containers.stopContainer(workloadId, timeoutSec);
         callback(null, create(StopWorkloadResponseSchema, {}));
       } catch (error) {
@@ -453,6 +578,10 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         return callback(toServiceError(status.INVALID_ARGUMENT, 'workload_id_required'));
       }
       try {
+        await removeSidecars(opts.containers, workloadId, {
+          force: call.request.force ?? false,
+          removeVolumes: call.request.removeVolumes ?? false,
+        });
         await opts.containers.removeContainer(workloadId, {
           force: call.request.force ?? false,
           removeVolumes: call.request.removeVolumes ?? false,
