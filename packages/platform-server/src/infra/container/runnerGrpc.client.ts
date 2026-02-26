@@ -60,6 +60,7 @@ import {
   EventFilterSchema,
   WorkloadStatus,
   type EventFilter,
+  type TargetMount,
   type StartWorkloadRequest,
   type StopWorkloadRequest,
   type RemoveWorkloadRequest,
@@ -353,7 +354,7 @@ export class RunnerGrpcClient implements DockerClient {
       },
     );
     const ids = response?.targetIds ?? [];
-    return ids.map((id) => new ContainerHandle(this, id));
+    return ids.map((id: string) => new ContainerHandle(this, id));
   }
 
   async listContainersByVolume(volumeName: string): Promise<string[]> {
@@ -499,8 +500,8 @@ export class RunnerGrpcClient implements DockerClient {
     for (const [key, values] of Object.entries(filters)) {
       if (!Array.isArray(values)) continue;
       const normalized = values
-        .map((value) => String(value))
-        .filter((value) => value.length > 0);
+        .map((value: unknown) => String(value))
+        .filter((value: string) => value.length > 0);
       if (!normalized.length) continue;
       result.push(create(EventFilterSchema, { key, values: normalized }));
     }
@@ -663,7 +664,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   private toInspectInfo(response: InspectWorkloadResponse): ContainerInspectInfo {
-    const mounts = (response.mounts ?? []).map((mount) => ({
+    const mounts = (response.mounts ?? []).map((mount: TargetMount) => ({
       Type: mount.type ?? '',
       Source: mount.source ?? '',
       Destination: mount.destination ?? '',
@@ -1179,13 +1180,13 @@ export class RunnerGrpcExecClient {
   private normalizeEnv(env?: Record<string, string> | string[]): Array<{ name: string; value: string }> {
     if (!env) return [];
     if (Array.isArray(env)) {
-      return env.map((entry) => {
+      return env.map((entry: string) => {
         const idx = entry.indexOf('=');
         if (idx === -1) return { name: entry, value: '' };
         return { name: entry.slice(0, idx), value: entry.slice(idx + 1) };
       });
     }
-    return Object.entries(env).map(([name, value]) => ({ name, value }));
+    return Object.entries(env).map(([name, value]: [string, string]) => ({ name, value }));
   }
 
   private toBigInt(value?: number): bigint | undefined {

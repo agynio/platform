@@ -306,8 +306,8 @@ const buildEventFilters = (filters: StreamEventsRequest['filters']): Record<stri
     const key = filter?.key?.trim();
     if (!key) continue;
     const values = (filter.values ?? [])
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value): value is string => value.length > 0);
+      .map((value: string | undefined) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value: string): value is string => value.length > 0);
     if (!values.length) continue;
     result[key] = result[key] ? [...result[key], ...values] : values;
   }
@@ -610,7 +610,13 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       }
       try {
         const details = await opts.containers.inspectContainer(workloadId);
-        const mounts = (details.Mounts ?? []).map((mount) =>
+        const mounts = (details.Mounts ?? []).map((mount: {
+          Type?: string | null;
+          Source?: string | null;
+          Destination?: string | null;
+          ReadOnly?: boolean;
+          RW?: boolean;
+        }) =>
           create(TargetMountSchema, {
             type: mount.Type ?? '',
             source: mount.Source ?? '',
@@ -680,7 +686,9 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         const containers = await opts.containers.findContainersByLabels(labels, { all: call.request.all ?? false });
         callback(
           null,
-          create(FindWorkloadsByLabelsResponseSchema, { targetIds: containers.map((handle) => handle.id) }),
+          create(FindWorkloadsByLabelsResponseSchema, {
+            targetIds: containers.map((handle: ContainerHandle) => handle.id),
+          }),
         );
       } catch (error) {
         callback(toDockerServiceError(error, status.UNKNOWN));
