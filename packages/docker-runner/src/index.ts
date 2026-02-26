@@ -9,3 +9,4 @@ export * from './lib/types';
 export * from './contracts/auth';
 export * from './contracts/json';
 export * from './contracts/api';
+export * from './contracts/execStreaming';
