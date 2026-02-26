@@ -11,8 +11,5 @@
     "composite": true,
     "types": ["node"]
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../runner-proto" }
-  ]
+  "include": ["src"]
 }

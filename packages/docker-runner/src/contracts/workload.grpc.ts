@@ -11,7 +11,7 @@ import {
   VolumeMountSchema,
   VolumeSpec,
   VolumeSpecSchema,
-} from '@agyn/runner-proto';
+} from '../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import type { ContainerOpts, Platform, SidecarOpts } from '../lib/types';
 
 const PROP_AUTO_REMOVE = 'auto_remove';
@@ -47,7 +47,7 @@ const normalizeEnv = (env?: ContainerOpts['env']): EnvVar[] => {
   if (!env) return [];
   if (Array.isArray(env)) {
     return env
-      .map((entry) => {
+      .map((entry: string) => {
         const idx = entry.indexOf('=');
         if (idx === -1) return create(EnvVarSchema, { name: entry, value: '' });
         return create(EnvVarSchema, { name: entry.slice(0, idx), value: entry.slice(idx + 1) });
@@ -55,8 +55,8 @@ const normalizeEnv = (env?: ContainerOpts['env']): EnvVar[] => {
       .filter((item) => item.name.length > 0);
   }
   return Object.entries(env)
-    .map(([name, value]) => create(EnvVarSchema, { name, value: String(value) }))
-    .filter((item) => item.name.length > 0);
+    .map(([name, value]: [string, unknown]) => create(EnvVarSchema, { name, value: String(value) }))
+    .filter((item: EnvVar) => item.name.length > 0);
 };
 
 const composeEnvRecord = (env: EnvVar[]): Record<string, string> | undefined => {
@@ -81,8 +81,8 @@ const parseBind = (
   const options = optionsRaw
     ? optionsRaw
         .split(',')
-        .map((opt) => opt.trim())
-        .filter((opt) => opt.length > 0)
+        .map((opt: string) => opt.trim())
+        .filter((opt: string) => opt.length > 0)
     : [];
   if (!destination) return null;
   return { source, destination, options };
@@ -93,7 +93,9 @@ const composeBindString = (
   destination: string,
   options: string[],
 ): string => {
-  const normalizedOptions = options.filter((opt, index, arr) => opt.length > 0 && arr.indexOf(opt) === index);
+  const normalizedOptions = options.filter(
+    (opt: string, index: number, arr: string[]) => opt.length > 0 && arr.indexOf(opt) === index,
+  );
   if (normalizedOptions.length === 0) return `${source}:${destination}`;
   return `${source}:${destination}:${normalizedOptions.join(',')}`;
 };
@@ -235,7 +237,9 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
   };
 
   const sidecars = Array.isArray(opts.sidecars)
-    ? opts.sidecars.map((sidecar) => mapSidecar(sidecar)).filter((spec): spec is ContainerSpec => !!spec)
+    ? opts.sidecars
+        .map((sidecar: SidecarOpts) => mapSidecar(sidecar))
+        .filter((spec): spec is ContainerSpec => spec !== undefined)
     : [];
 
   const requestAdditional: Record<string, string> = {};
@@ -328,13 +332,13 @@ export const startWorkloadRequestToContainerOpts = (request: StartWorkloadReques
     let optionList = rawOptions
       ? rawOptions
           .split(',')
-          .map((opt) => opt.trim())
-          .filter((opt) => opt.length > 0)
+          .map((opt: string) => opt.trim())
+          .filter((opt: string) => opt.length > 0)
       : [];
     if (mount.readOnly) {
       if (!optionList.includes('ro')) optionList.push('ro');
     } else {
-      optionList = optionList.filter((opt) => opt !== 'ro');
+      optionList = optionList.filter((opt: string) => opt !== 'ro');
     }
     const bindString = composeBindString(source, mount.mountPath, optionList);
     binds.push(bindString);

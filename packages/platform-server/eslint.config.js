@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default [
   // Global ignores (apply to all files)
   {
-    ignores: ['dist/**', '**/dist/**', 'node_modules/**'],
+    ignores: ['dist/**', '**/dist/**', 'node_modules/**', 'src/proto/gen/**'],
   },
   // Type-aware rules for source files (tsconfig must include src and tests for typed rules)
   {

@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
   {
-    ignores: ['dist/**', '**/dist/**', 'node_modules/**'],
+    ignores: ['dist/**', '**/dist/**', 'node_modules/**', 'src/proto/gen/**'],
   },
   {
     files: ['src/**/*.ts'],

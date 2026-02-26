@@ -22,6 +22,12 @@ jobs:
           version: 10.5.0
           run_install: false
 
+      - name: Install Buf CLI
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Generate runner protobufs
+        run: pnpm proto:generate
+
       - name: Get pnpm store directory
         id: pnpm-store
         shell: bash
@@ -40,11 +46,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Type-check platform server
         run: pnpm --filter @agyn/platform-server run typecheck
@@ -80,6 +92,12 @@ jobs:
           version: 10.5.0
           run_install: false
 
+      - name: Install Buf CLI
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Generate runner protobufs
+        run: pnpm proto:generate
+
       - name: Get pnpm store directory
         id: pnpm-store
         shell: bash
@@ -98,11 +116,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Apply platform-server migrations
         env:
@@ -131,6 +155,12 @@ jobs:
           version: 10.5.0
           run_install: false
 
+      - name: Install Buf CLI
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Generate runner protobufs
+        run: pnpm proto:generate
+
       - name: Get pnpm store directory
         id: pnpm-store
         shell: bash
@@ -149,11 +179,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Start LiteLLM docker compose stack
         run: docker compose -f packages/platform-server/test/litellm/docker-compose.yml up -d
@@ -188,6 +224,12 @@ jobs:
           version: 10.5.0
           run_install: false
 
+      - name: Install Buf CLI
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Generate runner protobufs
+        run: pnpm proto:generate
+
       - name: Get pnpm store directory
         id: pnpm-store
         shell: bash
@@ -206,11 +248,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Run UI tests (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui test
@@ -255,11 +303,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Build Storybook (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui run build-storybook
@@ -302,8 +356,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client esbuild msw
@@ -350,8 +410,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate protobufs
+        run: pnpm proto:generate
 
       # Build all workspaces in topological order so library outputs exist
       - name: Build UI workspace (topo order)

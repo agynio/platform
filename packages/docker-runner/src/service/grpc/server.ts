@@ -68,7 +68,7 @@ import {
   SidecarInstanceSchema,
   WorkloadContainersSchema,
   WorkloadStatus,
-} from '@agyn/runner-proto';
+} from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import {
   RUNNER_SERVICE_CANCEL_EXEC_PATH,
   RUNNER_SERVICE_EXEC_PATH,
@@ -86,10 +86,10 @@ import {
   RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
   runnerServiceGrpcDefinition,
-} from '@agyn/runner-proto/grpc.js';
+} from '../../proto/grpc.js';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { create } from '@bufbuild/protobuf';
-import type { ContainerService, InteractiveExecSession, NonceCache } from '../..';
+import type { ContainerService, InteractiveExecSession, LogsStreamSession, NonceCache } from '../..';
 import type { ContainerHandle } from '../../lib/container.handle';
 import { verifyAuthHeaders } from '../..';
 import type { RunnerConfig } from '../config';
@@ -306,8 +306,8 @@ const buildEventFilters = (filters: StreamEventsRequest['filters']): Record<stri
     const key = filter?.key?.trim();
     if (!key) continue;
     const values = (filter.values ?? [])
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value): value is string => value.length > 0);
+      .map((value: string | undefined) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value: string): value is string => value.length > 0);
     if (!values.length) continue;
     result[key] = result[key] ? [...result[key], ...values] : values;
   }
@@ -610,7 +610,13 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       }
       try {
         const details = await opts.containers.inspectContainer(workloadId);
-        const mounts = (details.Mounts ?? []).map((mount) =>
+        const mounts = (details.Mounts ?? []).map((mount: {
+          Type?: string | null;
+          Source?: string | null;
+          Destination?: string | null;
+          ReadOnly?: boolean;
+          RW?: boolean;
+        }) =>
           create(TargetMountSchema, {
             type: mount.Type ?? '',
             source: mount.Source ?? '',
@@ -680,7 +686,9 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         const containers = await opts.containers.findContainersByLabels(labels, { all: call.request.all ?? false });
         callback(
           null,
-          create(FindWorkloadsByLabelsResponseSchema, { targetIds: containers.map((handle) => handle.id) }),
+          create(FindWorkloadsByLabelsResponseSchema, {
+            targetIds: containers.map((handle: ContainerHandle) => handle.id),
+          }),
         );
       } catch (error) {
         callback(toDockerServiceError(error, status.UNKNOWN));
@@ -811,7 +819,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       const stderr = call.request.stderr;
       const timestamps = call.request.timestamps;
 
-      let session;
+      let session: LogsStreamSession;
       try {
         session = await opts.containers.streamContainerLogs(workloadId, {
           follow,
@@ -937,7 +945,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
       let closed = false;
 
       const parser = createDockerEventsParser(
-        (event) => {
+        (event: Record<string, unknown>) => {
           safeStreamWrite(
             call,
             create(StreamEventsResponseSchema, {
@@ -949,7 +957,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
           );
         },
         {
-          onError: (payload, error) => {
+          onError: (payload: string, error: unknown) => {
             safeStreamWrite(
               call,
               create(StreamEventsResponseSchema, {
@@ -1081,7 +1089,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
         }
       };
 
-      call.on('data', async (req) => {
+      call.on('data', async (req: ExecRequest) => {
         if (!req?.msg?.case) return;
         if (req.msg.case === 'start') {
           if (ctx) {
@@ -1150,7 +1158,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               killed: false,
             };
             ctx = context;
-            context.finish = (reason, killed) => finish(context, reason, killed);
+            context.finish = (reason: ExecExitReason, killed?: boolean) => finish(context, reason, killed);
             activeExecutions.set(context.executionId, context);
 
             const handleTimeout = async (target: ExecutionContext, reason: ExecExitReason) => {

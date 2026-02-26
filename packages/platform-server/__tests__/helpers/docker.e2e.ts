@@ -9,8 +9,8 @@ import { create } from '@bufbuild/protobuf';
 
 import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/server';
 import { ContainerService, NonceCache, buildAuthHeaders } from '../../../docker-runner/src';
-import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '@agyn/runner-proto/grpc.js';
-import { ReadyRequestSchema } from '@agyn/runner-proto';
+import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '../../src/proto/grpc.js';
+import { ReadyRequestSchema } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
 export const RUNNER_SECRET = 'docker-e2e-secret';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
