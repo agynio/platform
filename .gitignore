@@ -27,3 +27,6 @@ packages/.DS_Store
 packages/platform-ui/storybook-static/
 packages/platform-server/data/
 charts/platform-server/charts/
+# Generated protobuf outputs
+packages/**/src/proto/gen/
+packages/runner-proto/src/gen/
