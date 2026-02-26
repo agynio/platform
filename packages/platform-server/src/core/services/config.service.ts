@@ -51,11 +51,6 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
-  dockerRunnerBaseUrl: z
-    .string()
-    .min(1, 'DOCKER_RUNNER_BASE_URL is required')
-    .url('DOCKER_RUNNER_BASE_URL must be a valid URL')
-    .transform((value) => value.trim().replace(/\/+$/, '')),
   dockerRunnerSharedSecret: z
     .string()
     .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
@@ -66,6 +61,14 @@ export const configSchema = z.object({
     .transform((v) => {
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) ? num : 30_000;
+    }),
+  dockerRunnerGrpcHost: z.string().default('127.0.0.1'),
+  dockerRunnerGrpcPort: z
+    .union([z.string(), z.number()])
+    .default('7171')
+    .transform((v) => {
+      const num = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(num) ? num : 7171;
     }),
   dockerRunnerOptional: z
     .union([z.boolean(), z.string()])
@@ -106,8 +109,6 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) && num >= 0 ? num : 0;
     }),
-  // Workspace container network name
-  workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
   nixAllowedChannels: z
     .string()
@@ -359,16 +360,20 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  get dockerRunnerBaseUrl(): string {
-    return this.params.dockerRunnerBaseUrl;
-  }
-
   get dockerRunnerSharedSecret(): string {
     return this.params.dockerRunnerSharedSecret;
   }
 
   get dockerRunnerTimeoutMs(): number {
     return this.params.dockerRunnerTimeoutMs;
+  }
+
+  get dockerRunnerGrpcHost(): string {
+    return this.params.dockerRunnerGrpcHost;
+  }
+
+  get dockerRunnerGrpcPort(): number {
+    return this.params.dockerRunnerGrpcPort;
   }
 
   get dockerRunnerOptional(): boolean {
@@ -399,8 +404,8 @@ export class ConfigService implements Config {
     return this.params.volumeGcSweepTimeoutMs;
   }
 
-  getDockerRunnerBaseUrl(): string {
-    return this.dockerRunnerBaseUrl;
+  getDockerRunnerGrpcAddress(): string {
+    return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
   }
 
   getDockerRunnerSharedSecret(): string {
@@ -437,10 +442,6 @@ export class ConfigService implements Config {
 
   getVolumeGcSweepTimeoutMs(): number {
     return this.volumeGcSweepTimeoutMs;
-  }
-
-  get workspaceNetworkName(): string {
-    return this.params.workspaceNetworkName;
   }
 
   // Nix proxy getters
@@ -527,6 +528,7 @@ export class ConfigService implements Config {
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
     const graphRepoPathEnv = process.env.GRAPH_REPO_PATH;
     const graphBranchEnv = process.env.GRAPH_BRANCH;
+    const dockerRunnerPortEnv = process.env.DOCKER_RUNNER_PORT ?? process.env.DOCKER_RUNNER_GRPC_PORT;
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -545,16 +547,16 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
-      dockerRunnerBaseUrl: process.env.DOCKER_RUNNER_BASE_URL,
       dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
+      dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
+      dockerRunnerGrpcPort: dockerRunnerPortEnv,
       dockerRunnerOptional: process.env.DOCKER_RUNNER_OPTIONAL,
       dockerRunnerConnectRetryBaseDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS,
       dockerRunnerConnectRetryMaxDelayMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS,
       dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
       dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
       dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
-      workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,

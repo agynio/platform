@@ -20,6 +20,8 @@ export interface DockerEventMessage {
 }
 
 const RECENT_OOM_WINDOW_MS = 15_000; // 15 seconds proximity window
+const MISSING_STARTUP_SUPPRESS_MS = 10_000;
+const STARTUP_EVENT_TYPES = new Set<ContainerEventType>(['create', 'start', 'restart']);
 
 const ACTION_TO_EVENT_TYPE: Record<string, ContainerEventType> = {
   create: 'create',
@@ -44,6 +46,7 @@ export class ContainerEventProcessor {
   private prisma: PrismaClient;
   private queue: Promise<void> = Promise.resolve();
   private lastOomByContainer = new Map<string, number>();
+  private missingStartupLogByContainer = new Map<string, number>();
   private readonly logger = new Logger(ContainerEventProcessor.name);
 
   constructor(
@@ -94,13 +97,29 @@ export class ContainerEventProcessor {
     });
 
     if (!container) {
+      if (eventType === 'oom') this.recordOom(dockerId, eventTimeMs);
+
+      if (STARTUP_EVENT_TYPES.has(eventType)) {
+        const now = Date.now();
+        const lastLog = this.missingStartupLogByContainer.get(dockerId);
+        if (!lastLog || now - lastLog >= MISSING_STARTUP_SUPPRESS_MS) {
+          this.logger.debug('ContainerEventProcessor: container not yet registered for startup event', {
+            dockerId: this.shortId(dockerId),
+            eventType,
+          });
+          this.missingStartupLogByContainer.set(dockerId, now);
+        }
+        return;
+      }
+
       this.logger.warn('ContainerEventProcessor: container not found for event', {
         dockerId: this.shortId(dockerId),
         eventType,
       });
-      if (eventType === 'oom') this.recordOom(dockerId, eventTimeMs);
       return;
     }
+
+    this.missingStartupLogByContainer.delete(dockerId);
 
     const metadata = this.cloneMetadata(container.metadata) as MutableMetadata;
     const lastEventAtValue = typeof metadata.lastEventAt === 'string' ? metadata.lastEventAt : undefined;

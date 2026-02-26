@@ -1,4 +1,4 @@
-import type { ContainerInspectInfo } from 'dockerode';
+import type { ContainerInspectInfo } from './types';
 
 export interface ContainerMount {
   source: string;

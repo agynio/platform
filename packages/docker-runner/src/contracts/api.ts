@@ -1,5 +1,4 @@
-import type Docker from 'dockerode';
-import type { ContainerOpts, ExecOptions, ExecResult, Platform } from '../lib/types';
+import type { ContainerInspectInfo, ContainerOpts, ExecOptions, ExecResult, Platform } from '../lib/types';
 
 export type ErrorPayload = {
   error: {
@@ -19,7 +18,7 @@ export type RemoveContainerRequest = {
   force?: boolean;
   removeVolumes?: boolean;
 };
-export type InspectContainerResponse = Docker.ContainerInspectInfo;
+export type InspectContainerResponse = ContainerInspectInfo;
 export type FindByLabelsRequest = { labels: Record<string, string>; all?: boolean };
 export type FindByLabelsResponse = { containerIds: string[] };
 export type ExecRunRequest = { containerId: string; command: string[] | string; options?: ExecOptions };

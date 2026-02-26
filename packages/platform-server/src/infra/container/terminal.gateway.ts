@@ -8,7 +8,7 @@ import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.
 import { WorkspaceProvider } from '../../workspace/providers/workspace.provider';
 import { WorkspaceHandle } from '../../workspace/workspace.handle';
 import type { WorkspaceExecResult } from '../../workspace/runtime/workspace.runtime.provider';
-import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerRequestError } from './runnerGrpc.client';
 import { DockerRunnerStatusService } from './dockerRunnerStatus.service';
 
 const QuerySchema = z

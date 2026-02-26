@@ -15,7 +15,7 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
 import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
-import { HttpDockerRunnerClient, DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { RunnerGrpcClient, DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 
 import {
   DEFAULT_SOCKET,
@@ -32,7 +32,6 @@ import {
 
 const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
-const NETWORK_NAME = 'bridge';
 const TEST_IMAGE = 'nginx:1.25-alpine';
 
 @Controller('test/workspaces')
@@ -40,7 +39,6 @@ class TestWorkspaceController {
   constructor(
     private readonly workspaceProvider: WorkspaceProvider,
     private readonly prismaService: PrismaService,
-    private readonly configService: ConfigService,
   ) {}
 
   @Post()
@@ -55,7 +53,6 @@ class TestWorkspaceController {
       {
         image: TEST_IMAGE,
         persistentVolume: { mountPath: '/workspace' },
-        network: { name: this.configService.workspaceNetworkName },
         env: { TEST_SUITE: 'containers-fullstack' },
         ttlSeconds: 600,
       },
@@ -65,7 +62,7 @@ class TestWorkspaceController {
   }
 }
 
-Reflect.defineMetadata('design:paramtypes', [WorkspaceProvider, PrismaService, ConfigService], TestWorkspaceController);
+Reflect.defineMetadata('design:paramtypes', [WorkspaceProvider, PrismaService], TestWorkspaceController);
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
@@ -75,7 +72,7 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
   let prismaClient: ReturnType<PrismaService['getClient']>;
   let runner: RunnerHandle;
   let dbHandle: PostgresHandle;
-  let dockerClient: HttpDockerRunnerClient;
+  let dockerClient: RunnerGrpcClient;
   let configService: ConfigService;
   const createdThreads = new Set<string>();
   const createdContainers = new Set<string>();
@@ -86,14 +83,15 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
 
     const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
     runner = await startDockerRunnerProcess(socketPath);
-    dockerClient = new HttpDockerRunnerClient({ baseUrl: runner.baseUrl, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     clearTestConfig();
+    const [grpcHost, grpcPort] = runner.grpcAddress.split(':');
     configService = registerTestConfig({
-      dockerRunnerBaseUrl: runner.baseUrl,
       dockerRunnerSharedSecret: RUNNER_SECRET,
+      dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
+      dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
       agentsDatabaseUrl: dbHandle.connectionString,
-      workspaceNetworkName: NETWORK_NAME,
     });
 
     const moduleRef = await Test.createTestingModule({

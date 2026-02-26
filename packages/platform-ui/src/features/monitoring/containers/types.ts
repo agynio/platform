@@ -21,4 +21,4 @@ export type ContainerViewModel = {
 };
 
 export type ContainerStatus = 'running' | 'stopped' | 'starting' | 'stopping';
-export type ContainerRole = 'workspace' | 'dind';
+export type ContainerRole = 'workspace' | 'sidecar' | 'dind';

@@ -134,7 +134,7 @@ describe('ContainerService platform support', () => {
     expect(createOpts.HostConfig?.NetworkMode).toBe('host');
   });
 
-  it('merges NetworkingConfig from createExtras', async () => {
+  it('merges HostConfig from createExtras', async () => {
     const svc = new ContainerService(makeRegistry());
     const docker = attachMockDocker(svc);
     const createSpy = vi.spyOn(docker, 'createContainer');
@@ -144,19 +144,12 @@ describe('ContainerService platform support', () => {
       cmd: ['true'],
       createExtras: {
         HostConfig: { NanoCPUs: 500_000_000 },
-        NetworkingConfig: {
-          EndpointsConfig: {
-            agents_net: {
-              Aliases: ['thread-alias'],
-            },
-          },
-        },
       },
     });
     expect(container.id).toBeDefined();
 
     const createOpts = createSpy.mock.calls[0][0];
     expect(createOpts.HostConfig?.NanoCPUs).toBe(500_000_000);
-    expect(createOpts.NetworkingConfig?.EndpointsConfig?.agents_net?.Aliases).toEqual(['thread-alias']);
+    expect(createOpts.NetworkingConfig).toBeUndefined();
   });
 });

@@ -6,7 +6,6 @@ Overview
   - `hautech.ai/role=workspace`
   - `hautech.ai/thread_id=<id>`
   - Optional `hautech.ai/platform=linux/amd64|linux/arm64` when platform-aware pulls are used.
-- Network: `agents_net` for intra-stack communication (e.g., registry mirror, vault).
 
 Lifecycle
 - Provision
@@ -32,8 +31,8 @@ Thread closure cascade cleanup
 DinD and DOCKER_HOST
 - Optional sidecar Docker-in-Docker may be used for nested workloads. When enabled, set `DOCKER_HOST=tcp://localhost:2375` inside the workspace container.
 
-Registry mirror on agents_net
-- An optional HTTP-only Docker registry mirror can be deployed on the `agents_net` network to speed up pulls. Configure `DOCKER_MIRROR_URL` (e.g., `http://registry-mirror:5000`). This mirror is internal-only and not exposed publicly.
+Registry mirror
+- An optional HTTP-only Docker registry mirror can be deployed to speed up pulls. Configure `DOCKER_MIRROR_URL` (e.g., `http://registry-mirror:5000`). The mirror is internal-only and exposed only within the stack's compose network.
 
 Cross-links
 - Environment overlays and security: docs/config/env-overlays.md, docs/security/vault.md
@@ -56,10 +55,10 @@ Terminal WebSocket
 ## Test-only provisioning endpoint
 
 - The docker-backed full-stack integration test (`packages/platform-server/__tests__/containers.fullstack.docker.integration.test.ts`)
-  boots a real docker-runner + platform server pair and exercises the HTTP lifecycle.
+  boots a real docker-runner + platform server pair and exercises the gRPC lifecycle end-to-end.
 - Because there is no public "create workspace" REST endpoint, the test registers a private controller at
   `POST /test/workspaces`. This controller uses the production `WorkspaceProvider.ensureWorkspace` flow and
   stores the resulting container/thread IDs so that `/api/containers/:id` deletion can be exercised end-to-end.
-- The controller always provisions an `nginx:1.25-alpine` workspace on the `bridge` network and tags all
-  containers with `TEST_SUITE=containers-fullstack` for deterministic cleanup.
+- The controller always provisions an `nginx:1.25-alpine` workspace and tags all containers with
+  `TEST_SUITE=containers-fullstack` for deterministic cleanup.
 - The route is only mounted inside the integration test module; it is **not** part of the public API surface.

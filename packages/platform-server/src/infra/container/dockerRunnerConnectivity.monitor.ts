@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '../../core/services/config.service';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
-import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerRequestError } from './runnerGrpc.client';
 import { DockerRunnerStatusService } from './dockerRunnerStatus.service';
 
 @Injectable()
@@ -21,16 +21,16 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
   }
 
   async onModuleInit(): Promise<void> {
-    const baseUrl = this.configService.getDockerRunnerBaseUrl();
-    this.statusService.setBaseUrl(baseUrl);
+    const endpoint = this.configService.getDockerRunnerGrpcAddress();
+    this.statusService.setEndpoint(endpoint);
     const optional = this.configService.getDockerRunnerOptional();
     this.statusService.setOptional(optional);
     this.logger.log(
-      `Docker runner monitor initialized ${JSON.stringify({ baseUrl, optional })}`,
+      `Docker runner monitor initialized ${JSON.stringify({ endpoint, optional })}`,
     );
 
     if (!optional) {
-      await this.verifyRequiredRunner(baseUrl);
+      await this.verifyRequiredRunner(endpoint);
       this.scheduleProbe(this.configService.getDockerRunnerConnectProbeIntervalMs());
       return;
     }
@@ -46,7 +46,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
     }
   }
 
-  private async verifyRequiredRunner(baseUrl: string): Promise<void> {
+  private async verifyRequiredRunner(endpoint: string): Promise<void> {
     const startedAt = Date.now();
     try {
       await this.dockerClient.checkConnectivity();
@@ -55,12 +55,12 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
       this.retriesExhausted = false;
       this.statusService.markUp({ checkedAt: startedAt, durationMs });
       this.logger.log(
-        `Docker runner connectivity ok ${JSON.stringify({ dependency: 'docker-runner', baseUrl, durationMs })}`,
+        `Docker runner connectivity ok ${JSON.stringify({ dependency: 'docker-runner', endpoint, durationMs })}`,
       );
     } catch (error) {
       this.statusService.markDown({ checkedAt: startedAt, error });
       const payload = this.buildErrorPayload({
-        baseUrl,
+        endpoint,
         error,
         consecutiveFailures: 1,
       });
@@ -91,7 +91,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
     }
 
     const startedAt = Date.now();
-    const baseUrl = this.configService.getDockerRunnerBaseUrl();
+    const endpoint = this.configService.getDockerRunnerGrpcAddress();
 
     try {
       await this.dockerClient.checkConnectivity();
@@ -100,7 +100,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
       this.retriesExhausted = false;
       this.statusService.markUp({ checkedAt: startedAt, durationMs });
       this.logger.log(
-        `Docker runner connectivity ok ${JSON.stringify({ dependency: 'docker-runner', baseUrl, durationMs })}`,
+        `Docker runner connectivity ok ${JSON.stringify({ dependency: 'docker-runner', endpoint, durationMs })}`,
       );
       this.scheduleProbe(this.configService.getDockerRunnerConnectProbeIntervalMs());
     } catch (error) {
@@ -112,7 +112,7 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
 
       this.statusService.markDown({ checkedAt: startedAt, error, nextRetryAt });
       const payload = this.buildErrorPayload({
-        baseUrl,
+        endpoint,
         error,
         consecutiveFailures: this.failureCount,
         retryInMs: retryDelay,
@@ -151,18 +151,18 @@ export class DockerRunnerConnectivityMonitor implements OnModuleInit, OnModuleDe
   }
 
   private buildErrorPayload(details: {
-    baseUrl: string;
+    endpoint: string;
     error: unknown;
     consecutiveFailures: number;
     retryInMs?: number;
     nextRetryAt?: number;
   }): Record<string, unknown> {
-    const { baseUrl, error, consecutiveFailures, retryInMs, nextRetryAt } = details;
+    const { endpoint, error, consecutiveFailures, retryInMs, nextRetryAt } = details;
     const code = error instanceof DockerRunnerRequestError ? error.errorCode : undefined;
     const message = error instanceof Error ? error.message : String(error);
     return {
       dependency: 'docker-runner',
-      baseUrl,
+      endpoint,
       errorCode: code,
       message,
       retryInMs,

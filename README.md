@@ -138,7 +138,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 pnpm --filter @agyn/platform-server dev
 # UI (Vite dev server)
 pnpm --filter @agyn/platform-ui dev
-# docker-runner (Fastify dev server)
+# docker-runner (gRPC server)
 pnpm --filter @agyn/docker-runner dev
 ```
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
@@ -183,9 +183,9 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Vault:
   - VAULT_ENABLED (default false), VAULT_ADDR (default http://localhost:8200), VAULT_TOKEN (default dev-root)
 - Workspace/Docker:
-  - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_RUNNER_BASE_URL (required; default http://docker-runner:7071)
+  - DOCKER_RUNNER_GRPC_HOST (default docker-runner)
+  - DOCKER_RUNNER_GRPC_PORT (default 7171; DOCKER_RUNNER_PORT is accepted as an alias)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
   - DOCKER_RUNNER_OPTIONAL (default true; set to false to keep fail-fast bootstrap)
@@ -324,9 +324,6 @@ Secrets handling:
 - Port conflicts:
   - Symptom: services fail to bind.
   - Fix: adjust ports in docker-compose.yml or free the port.
-- Docker network name mismatch:
-  - Symptom: workspace containers cannot reach registry-mirror or ncps.
-  - Fix: ensure WORKSPACE_NETWORK_NAME=agents_net or adjust compose network name.
 - UI API upstream:
   - Symptom: UI cannot reach backend in Docker.
   - Fix: set API_UPSTREAM=http://host.docker.internal:3010 when running UI container locally.

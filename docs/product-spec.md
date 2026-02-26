@@ -37,8 +37,8 @@ Architecture and components
 - Persistence
   - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and staged working-tree swaps. Each upsert builds a full graph tree in a sibling directory, fsyncs it, and atomically swaps it into place (conflict/timeout/persist error modes preserved).
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
-- Containers and workspace network
-  - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
+- Containers and workspace runtime
+  - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Networking is managed by the runner. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror reachable at http://registry-mirror:5000.
   - Exec behavior: wall/idle timeouts, abort/kill on timeout, demux, and ANSI stripping.
 - Secrets and env overlays
   - Vault optionally resolves vault refs; Env overlays merge static and vault inputs; values never logged; per-node env overlays used for shell and MCP calls only.
@@ -82,7 +82,7 @@ Behaviors and failure modes
 
 Security model
 - Vault (optional) for secrets; vault endpoints require VAULT_ENABLED. Vault refs used in env overlays; secrets never logged.
-- Workspace network isolated; registry mirror HTTP-only and internal to agents_net.
+- Workspace containers rely on runner-managed networking; registry mirror remains HTTP-only on the internal compose network.
 - Env overlays explicit/per-exec; no host env inheritance beyond container defaults.
 - API guard against forbidden MCP executable mutations.
 - Access control is currently out of scope; assume trusted network.
@@ -116,7 +116,7 @@ Configuration matrix (server env vars)
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
-  - DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000), DOCKER_RUNNER_OPTIONAL (default true; set false to fail-fast), and DOCKER_RUNNER_CONNECT_* knobs (RETRY_BASE_DELAY_MS=500, RETRY_MAX_DELAY_MS=30000, RETRY_JITTER_MS=250, PROBE_INTERVAL_MS=30000, MAX_RETRIES=0 for unlimited background retries).
+  - DOCKER_RUNNER_GRPC_HOST, DOCKER_RUNNER_GRPC_PORT (or DOCKER_RUNNER_PORT), DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000), DOCKER_RUNNER_OPTIONAL (default true; set false to fail-fast), and DOCKER_RUNNER_CONNECT_* knobs (RETRY_BASE_DELAY_MS=500, RETRY_MAX_DELAY_MS=30000, RETRY_JITTER_MS=250, PROBE_INTERVAL_MS=30000, MAX_RETRIES=0 for unlimited background retries).
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)
@@ -132,7 +132,7 @@ HTTP API and sockets (pointers)
 Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_BASE_URL, DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_GRPC_HOST, DOCKER_RUNNER_GRPC_PORT (or DOCKER_RUNNER_PORT), DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev

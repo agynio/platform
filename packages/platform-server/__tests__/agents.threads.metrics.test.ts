@@ -16,7 +16,7 @@ describe('Agents threads metrics aggregation', () => {
     await stub.run.create({ data: { threadId: childId, status: 'running' } });
     // Active reminder on leaf
     await stub.reminder.create({ data: { threadId: leafId, note: 'x', at: new Date(Date.now() + 1000), completedAt: null } });
-    // Running containers: one workspace on child, one dind on leaf (excluded)
+    // Running containers: one workspace on child, one sidecar on leaf (excluded)
     await stub.container.create({
       data: {
         threadId: childId,
@@ -29,8 +29,8 @@ describe('Agents threads metrics aggregation', () => {
       data: {
         threadId: leafId,
         status: 'running',
-        name: 'din-container',
-        metadata: { labels: { 'hautech.ai/role': 'dind' } },
+        name: 'sidecar-container',
+        metadata: { labels: { 'hautech.ai/role': 'sidecar' } },
       },
     });
 

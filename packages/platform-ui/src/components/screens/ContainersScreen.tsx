@@ -6,7 +6,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { ContainerActivityTimeline } from './ContainerActivityTimeline';
 
 export type ContainerStatus = 'running' | 'stopped' | 'starting' | 'stopping';
-export type ContainerRole = 'workspace' | 'dind';
+export type ContainerRole = 'workspace' | 'sidecar' | 'dind';
 
 export interface Container {
   id: string;
@@ -19,7 +19,7 @@ export interface Container {
   lastUsedAt: string;
   ttl?: string; // Time to live
   volumes: string[];
-  parentId?: string; // For DinD containers, reference to workspace container
+  parentId?: string; // For sidecar containers, reference to workspace container
   threadId?: string; // Associated thread ID for View thread functionality
 }
 
@@ -74,19 +74,19 @@ export default function ContainersScreen({
     if (processedIds.has(container.id)) return;
 
     if (container.role === 'workspace') {
-      const dinds = filteredContainers.filter(
-        (c) => c.role === 'dind' && c.parentId === container.id
+      const sidecars = filteredContainers.filter(
+        (c) => (c.role === 'sidecar' || c.role === 'dind') && c.parentId === container.id
       );
-      if (dinds.length > 0) {
-        groupedContainers.push([container, ...dinds]);
+      if (sidecars.length > 0) {
+        groupedContainers.push([container, ...sidecars]);
         processedIds.add(container.id);
-        dinds.forEach((s) => processedIds.add(s.id));
+        sidecars.forEach((s) => processedIds.add(s.id));
       } else {
         groupedContainers.push(container);
         processedIds.add(container.id);
       }
     } else if (!container.parentId) {
-      // DinD without parent
+      // Sidecar without parent
       groupedContainers.push(container);
       processedIds.add(container.id);
     }
@@ -503,7 +503,7 @@ export default function ContainersScreen({
                         </div>
                       )}
 
-                      {/* DinD Containers (Expanded) */}
+                      {/* Sidecar Containers (Expanded) */}
                       {hasDinds && sidecarsOpen && (
                         <div className="ml-8 mt-2 space-y-2">
                           {dinds.map((dind) => (
@@ -532,12 +532,12 @@ export default function ContainersScreen({
                                         </Tooltip.Portal>
                                       </Tooltip.Root>
                                     </Tooltip.Provider>
-                                    <Badge variant="neutral" size="sm">DinD</Badge>
+                                  <Badge variant="neutral" size="sm">Sidecar</Badge>
                                     {getStatusBadge(dind.status)}
                                   </div>
                                   <div className="text-xs text-[var(--agyn-text-subtle)] mt-1">{dind.image}</div>
                                   
-                                  {/* DinD Metadata */}
+                                  {/* Sidecar Metadata */}
                                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs mt-2">
                                     <div className="flex items-center gap-2">
                                       <span className="text-[var(--agyn-text-subtle)]">Started:</span>
@@ -546,7 +546,7 @@ export default function ContainersScreen({
                                   </div>
                                 </div>
                                 
-                                {/* DinD Actions */}
+                                {/* Sidecar Actions */}
                                 <div className="flex items-center gap-1">
                                   <Tooltip.Provider delayDuration={300}>
                                     <Tooltip.Root>

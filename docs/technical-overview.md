@@ -60,18 +60,18 @@ Workspace container platform
 Per-workspace Docker-in-Docker and registry mirror
 - Each workspace container can be created with DOCKER_HOST=tcp://localhost:2375 and a co-located Docker-in-Docker sidecar (docker:27-dind) running in the same network namespace (HostConfig.NetworkMode=container:<workspaceId>), with privileged=true and an anonymous volume for /var/lib/docker.
 - The sidecar exposes its Docker API only inside the workspace namespace; port 2375 is not published on the host.
-- A lightweight pull-through cache is provided via a compose service `registry-mirror` (registry:2 in proxy mode) on a shared bridge network `agents_net`.
-- The mirror is HTTP-only and reachable only within `agents_net` by name `registry-mirror`.
+- A lightweight pull-through cache is provided via a compose service `registry-mirror` (registry:2 in proxy mode) reachable at `http://registry-mirror:5000` from runner-managed workspace containers.
+- The mirror is HTTP-only and exposed only on the internal compose network.
 - DinD is started with `--registry-mirror` pointing at DOCKER_MIRROR_URL (default http://registry-mirror:5000), so image pulls inside workspaces use the proxy cache.
 - Readiness: the server waits for the DinD engine to be ready before executing any initial scripts.
 - To override the mirror, set environment variable `DOCKER_MIRROR_URL` to an alternate URL.
 
 Remote Docker runner
 - The platform-server always routes container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
-- The runner exposes authenticated Fastify HTTP/SSE/WebSocket endpoints with HMAC headers derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
-- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default http://docker-runner:7071).
-- Container events are forwarded via SSE so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
-- Connectivity is tracked by a background `DockerRunnerConnectivityMonitor` that polls `/v1/ready` with exponential backoff (base-delay, max-delay, jitter, probe interval, and optional retry cap are configurable via DOCKER_RUNNER_CONNECT_* env vars).
+- The runner exposes authenticated gRPC endpoints; every request includes HMAC metadata derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
+- Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default `docker-runner:${DOCKER_RUNNER_GRPC_PORT}` with `DOCKER_RUNNER_GRPC_PORT` defaulting to 7171; `DOCKER_RUNNER_PORT` remains an accepted alias).
+- Container events, logs, and exec streams flow over long-lived gRPC streams so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.
+- Connectivity is tracked by a background `DockerRunnerConnectivityMonitor` that probes the gRPC `Ready` method with exponential backoff (base-delay, max-delay, jitter, probe interval, and optional retry cap are configurable via DOCKER_RUNNER_CONNECT_* env vars).
 - When `DOCKER_RUNNER_OPTIONAL=true` (default) the server continues booting even if the runner is unreachable; when set to `false` the first failed probe aborts bootstrap (legacy fail-fast mode).
 - The monitor streams status into `DockerRunnerStatusService`, which feeds `/health`, Volume GC, REST guards, and terminal/websocket gating. Terminals and container APIs short-circuit with `docker_runner_not_ready` until status returns `up`.
 

@@ -2,7 +2,7 @@ Nix Cache Proxy (ncps)
 
 Overview
 
-- ncps runs on the internal agents_net only; do not expose host ports.
+- ncps runs on the stack's internal compose network only; do not expose host ports.
 - Only trust public keys from caches you control. Obtain the key from http://ncps:8501/pubkey.
 - The storage volume holds cached binaries; size may grow with usage – plan disk space accordingly.
 
@@ -42,7 +42,7 @@ export NCPS_URL_CONTAINER=http://ncps:8501
 # export NCPS_AUTH_TOKEN="Bearer ..."
 ```
 
-- Workspace containers automatically join the network specified by `WORKSPACE_NETWORK_NAME` (default `agents_net`), so keep `NCPS_URL_CONTAINER=http://ncps:8501` and ensure that network exists on the host.
+- Workspace container networking is managed by the runner. Ensure runner-provisioned containers can reach `http://ncps:8501` when `NCPS_URL_CONTAINER` points to that address.
 
 Injection behavior
 

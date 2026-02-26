@@ -17,6 +17,7 @@ import {
   LogsStreamSession,
   Platform,
   PLATFORM_LABEL,
+  type ContainerInspectInfo,
 } from './types';
 
 const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
@@ -398,6 +399,24 @@ export class ContainerService implements DockerClientPort {
     } else {
       hijackStream.pipe(stdoutStream);
     }
+
+    const closeOutputs = () => {
+      try {
+        stdoutStream.end();
+      } catch {
+        // ignore close errors
+      }
+      if (demux) {
+        try {
+          stderrStream.end();
+        } catch {
+          // ignore close errors
+        }
+      }
+    };
+
+    hijackStream.once('end', closeOutputs);
+    hijackStream.once('close', closeOutputs);
 
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
@@ -862,7 +881,7 @@ export class ContainerService implements DockerClientPort {
     return details.Config?.Labels ?? undefined;
   }
 
-  async inspectContainer(containerId: string): Promise<Docker.ContainerInspectInfo> {
+  async inspectContainer(containerId: string): Promise<ContainerInspectInfo> {
     const container = this.docker.getContainer(containerId);
     return container.inspect();
   }

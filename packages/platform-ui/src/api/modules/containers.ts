@@ -10,9 +10,9 @@ export type ContainerItem = {
   lastUsedAt: string;
   killAfterAt: string | null;
   // Derived from metadata.labels['hautech.ai/role']
-  role: 'workspace' | 'dind' | string;
+  role: 'workspace' | 'sidecar' | string;
   // Optional sidecars attached to this container (e.g., DinD)
-  sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: 'running'|'stopped'|'terminating'|'failed'; name: string }>;
+  sidecars?: Array<{ containerId: string; role: 'sidecar' | 'dind'; image: string; status: 'running'|'stopped'|'terminating'|'failed'; name: string }>;
   mounts?: Array<{ source: string; destination: string }>;
 };
 

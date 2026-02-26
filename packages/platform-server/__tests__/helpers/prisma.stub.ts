@@ -227,7 +227,12 @@ export function createPrismaStub() {
       const self_working = isRunning.has(root);
       const desc_working = sub.some((id) => id !== root && isRunning.has(id));
       const reminders_count = reminders.filter((rem) => sub.includes(rem.threadId) && rem.completedAt == null).length;
-      const containers_count = containers.filter((cont) => cont.status === 'running' && cont.threadId && sub.includes(cont.threadId) && (cont.metadata?.labels?.['hautech.ai/role'] ?? 'workspace') !== 'dind').length;
+      const containers_count = containers.filter((cont) => {
+        if (cont.status !== 'running') return false;
+        if (!cont.threadId || !sub.includes(cont.threadId)) return false;
+        const role = cont.metadata?.labels?.['hautech.ai/role'] ?? 'workspace';
+        return role !== 'dind' && role !== 'sidecar';
+      }).length;
       out.push({ root_id: root, reminders_count, containers_count, desc_working, self_working });
     }
     return out;

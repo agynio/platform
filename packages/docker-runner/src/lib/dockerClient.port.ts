@@ -1,5 +1,6 @@
 import type { ContainerHandle } from './container.handle';
 import type {
+  ContainerInspectInfo,
   ContainerOpts,
   ExecOptions,
   ExecResult,
@@ -36,6 +37,6 @@ export interface DockerClientPort {
   removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void>;
   findContainerByLabels(labels: Record<string, string>, options?: { all?: boolean }): Promise<ContainerHandle | undefined>;
   putArchive(containerId: string, data: Buffer | NodeJS.ReadableStream, options: { path: string }): Promise<void>;
-  inspectContainer(containerId: string): Promise<import('dockerode').ContainerInspectInfo>;
+  inspectContainer(containerId: string): Promise<ContainerInspectInfo>;
   getEventsStream(options: { since?: number; filters?: DockerEventFilters }): Promise<NodeJS.ReadableStream>;
 }

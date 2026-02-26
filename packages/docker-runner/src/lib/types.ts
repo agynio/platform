@@ -5,6 +5,18 @@ export type Platform = (typeof SUPPORTED_PLATFORMS)[number];
 
 export const PLATFORM_LABEL = 'hautech.ai/platform';
 
+export type SidecarOpts = {
+  image: string;
+  cmd?: string[];
+  env?: Record<string, string> | string[];
+  privileged?: boolean;
+  autoRemove?: boolean;
+  anonymousVolumes?: string[];
+  labels?: Record<string, string>;
+  createExtras?: Partial<ContainerCreateOptions>;
+  networkMode?: string;
+};
+
 export type ContainerOpts = {
   image?: string;
   name?: string;
@@ -22,6 +34,7 @@ export type ContainerOpts = {
   anonymousVolumes?: string[];
   createExtras?: Partial<ContainerCreateOptions>;
   ttlSeconds?: number;
+  sidecars?: SidecarOpts[];
 };
 
 export type ExecOptions = {
@@ -69,4 +82,35 @@ export type LogsStreamOptions = {
 export type LogsStreamSession = {
   stream: NodeJS.ReadableStream;
   close: () => Promise<void>;
+};
+
+export type ContainerInspectMount = {
+  Type?: string;
+  Source?: string;
+  Destination?: string;
+  RW?: boolean;
+  ReadOnly?: boolean;
+  Name?: string;
+};
+
+export type ContainerInspectState = {
+  Status?: string;
+  Running?: boolean;
+};
+
+export type ContainerInspectNetworkSettings = {
+  Networks?: Record<string, Record<string, unknown>>;
+};
+
+export type ContainerInspectInfo = {
+  Id?: string;
+  Name?: string;
+  Image?: string;
+  Config?: {
+    Image?: string;
+    Labels?: Record<string, string>;
+  };
+  Mounts?: ContainerInspectMount[];
+  State?: ContainerInspectState;
+  NetworkSettings?: ContainerInspectNetworkSettings;
 };

@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 const runnerConfigSchema = z.object({
-  port: z
+  grpcPort: z
     .union([z.string(), z.number()])
-    .default('7071')
+    .default('7171')
     .transform((value) => {
       const num = typeof value === 'number' ? value : Number(value);
-      return Number.isFinite(num) ? num : 7071;
+      return Number.isFinite(num) ? num : 7171;
     }),
-  host: z.string().default('0.0.0.0'),
+  grpcHost: z.string().default('0.0.0.0'),
   sharedSecret: z.string().min(1, 'DOCKER_RUNNER_SHARED_SECRET is required'),
   signatureTtlMs: z
     .union([z.string(), z.number()])
@@ -24,9 +24,10 @@ const runnerConfigSchema = z.object({
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 
 export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
+  const grpcPortEnv = env.DOCKER_RUNNER_PORT ?? env.DOCKER_RUNNER_GRPC_PORT;
   const parsed = runnerConfigSchema.safeParse({
-    port: env.DOCKER_RUNNER_PORT,
-    host: env.DOCKER_RUNNER_HOST,
+    grpcPort: grpcPortEnv,
+    grpcHost: env.DOCKER_RUNNER_GRPC_HOST,
     sharedSecret: env.DOCKER_RUNNER_SHARED_SECRET,
     signatureTtlMs: env.DOCKER_RUNNER_SIGNATURE_TTL_MS,
     dockerSocket: env.DOCKER_SOCKET ?? env.DOCKER_RUNNER_SOCKET,

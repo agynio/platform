@@ -156,7 +156,7 @@ describe('MonitoringContainers page', () => {
           killAfterAt: null,
           role: 'workspace',
           sidecars: [
-            { containerId: 'dind1234567890', role: 'dind', image: 'dind:latest', status: 'terminating', name: 'dind-helper' },
+            { containerId: 'dind1234567890', role: 'sidecar', image: 'dind:latest', status: 'terminating', name: 'dind-helper' },
           ],
           mounts: [
             { source: 'ha_ws_thread', destination: '/workspace' },
@@ -265,7 +265,7 @@ describe('MonitoringContainers page', () => {
     expect(sidecar).toMatchObject({
       id: 'dind1234567890',
       containerId: 'dind1234567890',
-      role: 'dind',
+      role: 'sidecar',
       status: 'stopping',
       parentId: 'abcdef1234567890',
       name: 'dind-helper',

@@ -20,7 +20,7 @@ import { IsEnum, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min 
 import { Transform, Type } from 'class-transformer';
 import { sanitizeContainerMounts, type ContainerMount } from '@agyn/docker-runner';
 import { ContainerAdminService } from './containerAdmin.service';
-import { DockerRunnerRequestError } from './httpDockerRunner.client';
+import { DockerRunnerRequestError } from './runnerGrpc.client';
 import { ConfigService } from '../../core/services/config.service';
 import { RequireDockerRunnerGuard } from './requireDockerRunner.guard';
 
@@ -103,7 +103,7 @@ type DeleteFailureLog = {
   containerId: string;
   requestId: string | null;
   runnerCalled: boolean;
-  runnerBaseUrl: string;
+  runnerEndpoint: string;
   failureKind: DeleteFailureKind;
   runnerStatusCode?: number;
   runnerErrorCode?: string;
@@ -191,7 +191,7 @@ export class ListContainerEventsQueryDto {
 export class ContainersController {
   private prisma: PrismaClient;
   private readonly logger = new Logger(ContainersController.name);
-  private readonly runnerBaseUrl: string;
+  private readonly runnerEndpoint: string;
 
   constructor(
     @Inject(PrismaService) prismaSvc: { getClient(): PrismaClient },
@@ -199,7 +199,7 @@ export class ContainersController {
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.prisma = prismaSvc.getClient();
-    this.runnerBaseUrl = this.configService.getDockerRunnerBaseUrl();
+    this.runnerEndpoint = this.configService.getDockerRunnerGrpcAddress();
   }
 
   @Get()
@@ -212,8 +212,8 @@ export class ContainersController {
     startedAt: string;
     lastUsedAt: string;
     killAfterAt: string | null;
-    role: 'workspace' | 'dind' | string;
-    sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus; name: string }>;
+    role: 'workspace' | 'sidecar' | string;
+    sidecars?: Array<{ containerId: string; role: 'sidecar' | 'dind'; image: string; status: ContainerStatus; name: string }>;
     mounts?: Array<{ source: string; destination: string }>;
     autoRemoved: boolean;
     health: ContainerHealth | null;
@@ -333,17 +333,17 @@ export class ContainersController {
       const lastEventAt = typeof meta.lastEventAt === 'string' ? meta.lastEventAt : undefined;
       return { labels, mounts, autoRemoved, health, lastEventAt };
     };
-    // Exclude DinD from top-level list (only attach as sidecars)
+    // Exclude sidecars from top-level list (only attach as attachments)
     const filteredRows = rows.filter((row) => {
       const { labels } = toMetadata(row.metadata);
       const role = labels['hautech.ai/role'] ?? 'workspace';
-      return role !== 'dind';
+      return role !== 'dind' && role !== 'sidecar';
     });
 
     // Optimize: preselect DinD sidecars for current parent set via JSON-path raw query;
     // provide a safe fallback when $queryRaw is not implemented by the Prisma stub.
     const parentIds = filteredRows.map((row) => row.containerId);
-    const byParent: Record<string, Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus; name: string }>> = {};
+    const byParent: Record<string, Array<{ containerId: string; role: 'sidecar' | 'dind'; image: string; status: ContainerStatus; name: string }>> = {};
     const hasQueryRaw = (() => {
       const obj = this.prisma as unknown as Record<string, unknown>;
       const fn = obj && (obj['$queryRaw'] as unknown);
@@ -356,7 +356,7 @@ export class ContainersController {
       } else {
         const q = Prisma.sql`
           SELECT "containerId", "image", "status", "metadata", "name" FROM "Container"
-          WHERE "metadata"->'labels'->>'hautech.ai/role' = 'dind'
+          WHERE "metadata"->'labels'->>'hautech.ai/role' IN ('dind', 'sidecar')
             AND ("metadata"->'labels'->>'hautech.ai/parent_cid') IN (${Prisma.join(parentIds)})
         `;
         sidecarSource = await this.prisma.$queryRaw<Array<{ containerId: string; image: string; status: string; metadata: unknown; name: string }>>(q);
@@ -372,7 +372,7 @@ export class ContainersController {
       const { labels } = toMetadata(sc.metadata);
       const role = labels['hautech.ai/role'];
       const parent = labels['hautech.ai/parent_cid'];
-      if (role !== 'dind') continue;
+      if (role !== 'dind' && role !== 'sidecar') continue;
       if (!parent) continue;
       if (!parentIds.includes(parent)) continue;
       const status: ContainerStatus = typeof sc.status === 'string'
@@ -380,7 +380,13 @@ export class ContainersController {
         : (sc.status as ContainerStatus);
       const arr = byParent[parent] || (byParent[parent] = []);
       const name = sanitizeName(sc.name);
-      arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status, name });
+      arr.push({
+        containerId: sc.containerId,
+        role: role === 'dind' ? 'dind' : 'sidecar',
+        image: sc.image,
+        status,
+        name,
+      });
     }
 
     const toIso = (d: unknown): string => {
@@ -602,7 +608,7 @@ export class ContainersController {
       containerId: this.shortId(containerId),
       requestId: context.requestId ?? null,
       runnerCalled: context.runnerCalled,
-      runnerBaseUrl: this.runnerBaseUrl,
+      runnerEndpoint: this.runnerEndpoint,
       failureKind: this.resolveFailureKind(error, context),
     };
     if (error instanceof DockerRunnerRequestError) {

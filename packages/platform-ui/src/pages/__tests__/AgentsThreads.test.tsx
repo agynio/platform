@@ -110,7 +110,7 @@ type ContainerMock = {
   startedAt: string;
   lastUsedAt: string;
   killAfterAt: string | null;
-  role: 'workspace' | 'dind' | string;
+  role: 'workspace' | 'sidecar' | 'dind' | string;
 };
 
 

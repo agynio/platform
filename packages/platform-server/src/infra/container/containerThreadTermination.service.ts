@@ -67,9 +67,7 @@ export class ContainerThreadTerminationService {
       await this.processContainer(containerId, {
         threadId,
         cache,
-        pendingIds,
         processed,
-        queue,
         nowIso,
         prisma,
       });
@@ -81,14 +79,12 @@ export class ContainerThreadTerminationService {
     context: {
       threadId: string;
       cache: Map<string, { status: ContainerStatus; metadata: ContainerMetadata }>;
-      pendingIds: Set<string>;
       processed: Set<string>;
-      queue: string[];
       nowIso: string;
       prisma: PrismaClient;
     },
   ): Promise<void> {
-    const { threadId, cache, pendingIds, processed, queue, nowIso, prisma } = context;
+    const { threadId, cache, processed, nowIso, prisma } = context;
     const record = await this.ensureRegistryRecord(containerId, threadId, cache);
     if (!record) {
       processed.add(containerId);
@@ -131,16 +127,6 @@ export class ContainerThreadTerminationService {
     }
 
     processed.add(containerId);
-
-    const sidecars = await this.safeFindDinDSidecars(containerId);
-    for (const sc of sidecars) {
-      if (pendingIds.has(sc)) {
-        if (!processed.has(sc) && !queue.includes(sc)) queue.push(sc);
-        continue;
-      }
-      pendingIds.add(sc);
-      queue.push(sc);
-    }
   }
 
   private async ensureRegistryRecord(
@@ -170,19 +156,6 @@ export class ContainerThreadTerminationService {
       return await this.containerService.findContainersByLabels({ 'hautech.ai/thread_id': threadId }, { all: true });
     } catch (error: unknown) {
       this.logger.error('ContainerThreadTermination: failed to list containers by thread label', { threadId, error });
-      return [];
-    }
-  }
-
-  private async safeFindDinDSidecars(containerId: string): Promise<string[]> {
-    try {
-      const handles = await this.containerService.findContainersByLabels(
-        { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': containerId },
-        { all: true },
-      );
-      return handles.map((h) => h.id);
-    } catch (error: unknown) {
-      this.logger.error('ContainerThreadTermination: failed to list DinD sidecars', { containerId, error });
       return [];
     }
   }

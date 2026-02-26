@@ -5,7 +5,7 @@ import type { PrismaClient, ContainerEventType } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ContainerAdminService } from '../src/infra/container/containerAdmin.service';
 import { NotFoundException, HttpException, Logger } from '@nestjs/common';
-import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 import { ConfigService } from '../src/core/services/config.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 
@@ -280,7 +280,7 @@ describe('ContainersController routes', () => {
   let prismaSvc: PrismaStub;
   let controller: ContainersController;
   let containerAdmin: Pick<ContainerAdminService, 'deleteContainer'>;
-  let configService: Pick<ConfigService, 'dockerRunnerBaseUrl'>;
+  let configService: Pick<ConfigService, 'getDockerRunnerGrpcAddress'>;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
@@ -288,8 +288,7 @@ describe('ContainersController routes', () => {
       deleteContainer: vi.fn().mockResolvedValue(undefined),
     } as Pick<ContainerAdminService, 'deleteContainer'>;
     configService = {
-      dockerRunnerBaseUrl: 'http://runner.local',
-      getDockerRunnerBaseUrl: () => 'http://runner.local',
+      getDockerRunnerGrpcAddress: () => 'grpc://runner.local:9090',
     } as ConfigService;
     controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
     // Typed query adapter to avoid any/double assertions
@@ -361,7 +360,7 @@ describe('ContainersController routes', () => {
         killAfterAt: null,
         updatedAt: new Date(now - 1500),
         name: 'dind_helper',
-        metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'cid-1' } },
+        metadata: { labels: { 'hautech.ai/role': 'sidecar', 'hautech.ai/parent_cid': 'cid-1' } },
       },
     ];
     prismaSvc.client.container.rows = rows;
@@ -402,9 +401,9 @@ describe('ContainersController routes', () => {
     expect(first.autoRemoved).toBe(false);
     expect(first.health).toBeNull();
     expect(first.lastEventAt).toBeNull();
-    // sidecars for cid-1 include a dind
+    // sidecars for cid-1 include a DinD helper
     expect(first.sidecars && first.sidecars.length).toBeGreaterThan(0);
-    expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'dind', image: 'dind:latest', status: 'running' });
+    expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'sidecar', image: 'dind:latest', status: 'running' });
   });
 
   it('supports sorting by lastUsedAt desc', async () => {
@@ -481,7 +480,7 @@ describe('ContainersController routes', () => {
     expect(items.length).toBe(1);
   });
 
-  it('skips $queryRaw when list has no non-dind parents', async () => {
+  it('skips $queryRaw when list has no non-sidecar parents', async () => {
     const now = new Date();
     const rows: Row[] = [
       {
@@ -494,7 +493,7 @@ describe('ContainersController routes', () => {
         lastUsedAt: now,
         killAfterAt: null,
         updatedAt: now,
-        metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'missing' } },
+        metadata: { labels: { 'hautech.ai/role': 'sidecar', 'hautech.ai/parent_cid': 'missing' } },
       },
     ];
     const prismaSvcWithRaw = new PrismaStubWithQueryRaw(rows);
@@ -650,7 +649,7 @@ describe('ContainersController routes', () => {
       containerId: 'cid-1',
       requestId: 'req-log-1',
       runnerCalled: true,
-      runnerBaseUrl: 'http://runner.local',
+      runnerEndpoint: 'grpc://runner.local:9090',
       failureKind: 'runner_unreachable',
       runnerStatusCode: 0,
       runnerErrorCode: 'runner_connection_refused',
@@ -691,7 +690,7 @@ describe('ContainersController routes', () => {
       containerId: 'cid-1',
       requestId: 'req-log-2',
       runnerCalled: true,
-      runnerBaseUrl: 'http://runner.local',
+      runnerEndpoint: 'grpc://runner.local:9090',
       failureKind: 'unknown',
       errorMessage: 'tcp connection reset',
       errorStack: deleteError.stack,

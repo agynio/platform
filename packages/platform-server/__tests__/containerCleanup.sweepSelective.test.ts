@@ -28,33 +28,27 @@ describe('ContainerCleanupService.sweepSelective', () => {
     return { service, registry, containers };
   };
 
-  it('cleans DinD sidecars before workspace containers', async () => {
+  it('stops workspace container without manual sidecar cleanup', async () => {
     const { service, registry, containers } = makeService();
     registry.listByThread.mockResolvedValue([{ containerId: 'workspace', status: 'running' }]);
-    containers.findContainersByLabels.mockImplementation(async (labels: Record<string, string>) => {
-      if (labels['hautech.ai/parent_cid'] === 'workspace') return [{ id: 'sidecar' }];
-      return [];
-    });
 
     await service.sweepSelective('thread-1', { graceSeconds: 7, force: true, deleteEphemeral: true });
 
-    expect(containers.stopContainer.mock.calls.map(([id]) => id)).toEqual(['sidecar', 'workspace']);
+    expect(containers.findContainersByLabels).not.toHaveBeenCalled();
+    expect(containers.stopContainer.mock.calls).toEqual([['workspace', 7]]);
     expect(containers.removeContainer.mock.calls).toEqual([
-      ['sidecar', { force: true, removeVolumes: true }],
       ['workspace', { force: true, removeVolumes: true }],
     ]);
     expect(registry.markStopped).toHaveBeenCalledWith('workspace', 'thread_closed');
   });
 
-  it('respects deleteEphemeral=false by keeping sidecar volumes', async () => {
+  it('respects deleteEphemeral=false when removing workspace', async () => {
     const { service, registry, containers } = makeService();
     registry.listByThread.mockResolvedValue([{ containerId: 'workspace', status: 'running' }]);
-    containers.findContainersByLabels.mockResolvedValue([{ id: 'sidecar' }]);
 
     await service.sweepSelective('thread-2', { graceSeconds: 5, force: false, deleteEphemeral: false });
 
     expect(containers.removeContainer.mock.calls).toEqual([
-      ['sidecar', { force: true, removeVolumes: false }],
       ['workspace', { force: false, removeVolumes: false }],
     ]);
   });

@@ -32,7 +32,7 @@ import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEv
 import { VolumeGcService } from '../src/infra/container/volumeGc.job';
 import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
-import { DockerRunnerRequestError } from '../src/infra/container/httpDockerRunner.client';
+import { DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 import { HealthController } from '../src/infra/health/health.controller';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
@@ -196,7 +196,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
 
   const dockerClientStub = {
     checkConnectivity: vi.fn().mockResolvedValue({ status: 200 }),
-    getBaseUrl: vi.fn(() => runnerConfigDefaults.dockerRunnerBaseUrl),
+    getEndpoint: vi.fn(() => `${runnerConfigDefaults.dockerRunnerGrpcHost}:${runnerConfigDefaults.dockerRunnerGrpcPort}`),
     listContainersByVolume: vi.fn().mockResolvedValue([]),
     removeVolume: vi.fn().mockResolvedValue(undefined),
   } satisfies Partial<DockerClient>;
@@ -367,7 +367,9 @@ describe('App bootstrap smoke test', () => {
       const { AppModule } = await import('../src/bootstrap/app.module');
       const stubs = createBootstrapStubs();
       const previousEnv = {
-        DOCKER_RUNNER_BASE_URL: process.env.DOCKER_RUNNER_BASE_URL,
+        DOCKER_RUNNER_GRPC_HOST: process.env.DOCKER_RUNNER_GRPC_HOST,
+        DOCKER_RUNNER_PORT: process.env.DOCKER_RUNNER_PORT,
+        DOCKER_RUNNER_GRPC_PORT: process.env.DOCKER_RUNNER_GRPC_PORT,
         DOCKER_RUNNER_SHARED_SECRET: process.env.DOCKER_RUNNER_SHARED_SECRET,
         DOCKER_RUNNER_OPTIONAL: process.env.DOCKER_RUNNER_OPTIONAL,
         VOLUME_GC_ENABLED: process.env.VOLUME_GC_ENABLED,
@@ -375,7 +377,9 @@ describe('App bootstrap smoke test', () => {
         VOLUME_GC_SWEEP_TIMEOUT_MS: process.env.VOLUME_GC_SWEEP_TIMEOUT_MS,
       } as const;
 
-      process.env.DOCKER_RUNNER_BASE_URL = 'http://127.0.0.1:59999';
+      process.env.DOCKER_RUNNER_GRPC_HOST = '127.0.0.1';
+      process.env.DOCKER_RUNNER_PORT = '59999';
+      delete process.env.DOCKER_RUNNER_GRPC_PORT;
       process.env.DOCKER_RUNNER_SHARED_SECRET = 'shared-secret';
       process.env.DOCKER_RUNNER_OPTIONAL = 'true';
       process.env.VOLUME_GC_ENABLED = 'true';
@@ -396,6 +400,8 @@ describe('App bootstrap smoke test', () => {
             dockerRunnerConnectRetryMaxDelayMs: 10,
             dockerRunnerConnectRetryJitterMs: 0,
             ...runnerConfigDefaults,
+            dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
+            dockerRunnerGrpcPort: Number(process.env.DOCKER_RUNNER_PORT),
           }),
         ),
       );
@@ -405,7 +411,9 @@ describe('App bootstrap smoke test', () => {
         .mockRejectedValue(
           new DockerRunnerRequestError(503, 'runner_unreachable', true, 'runner offline'),
         );
-      stubs.dockerClientStub.getBaseUrl = vi.fn(() => process.env.DOCKER_RUNNER_BASE_URL || '');
+      stubs.dockerClientStub.getEndpoint = vi.fn(
+        () => `${process.env.DOCKER_RUNNER_GRPC_HOST}:${process.env.DOCKER_RUNNER_PORT}`,
+      );
       const volumeGcStarted: string[] = [];
       stubs.volumeGcStub.start = vi.fn((intervalMs?: number) => {
         volumeGcStarted.push(`started:${intervalMs}`);
