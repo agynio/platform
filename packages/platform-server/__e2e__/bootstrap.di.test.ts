@@ -27,7 +27,6 @@ const REQUIRED_ENV = {
   CONTAINERS_CLEANUP_ENABLED: 'false',
   VOLUME_GC_ENABLED: 'false',
   NCPS_ENABLED: 'false',
-  WORKSPACE_NETWORK_NAME: 'agents_net',
 } as const;
 
 const TEST_TIMEOUT_MS = 20_000;

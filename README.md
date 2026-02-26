@@ -183,7 +183,6 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Vault:
   - VAULT_ENABLED (default false), VAULT_ADDR (default http://localhost:8200), VAULT_TOKEN (default dev-root)
 - Workspace/Docker:
-  - WORKSPACE_NETWORK_NAME (default agents_net)
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_GRPC_HOST (default docker-runner)
   - DOCKER_RUNNER_GRPC_PORT (default 7171; DOCKER_RUNNER_PORT is accepted as an alias)
@@ -325,9 +324,6 @@ Secrets handling:
 - Port conflicts:
   - Symptom: services fail to bind.
   - Fix: adjust ports in docker-compose.yml or free the port.
-- Docker network name mismatch:
-  - Symptom: workspace containers cannot reach registry-mirror or ncps.
-  - Fix: ensure WORKSPACE_NETWORK_NAME=agents_net or adjust compose network name.
 - UI API upstream:
   - Symptom: UI cannot reach backend in Docker.
   - Fix: set API_UPSTREAM=http://host.docker.internal:3010 when running UI container locally.

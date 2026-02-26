@@ -24,7 +24,6 @@ import {
 const WORKSPACE_ROLE_LABEL = 'hautech.ai/role';
 const THREAD_ID_LABEL = 'hautech.ai/thread_id';
 const NODE_ID_LABEL = 'hautech.ai/node_id';
-const DEFAULT_NETWORK_NAME = 'agents_net';
 const DEFAULT_TTL_SECONDS = 86_400;
 
 const DOCKER_ROLE_DIND = 'dind';
@@ -47,8 +46,6 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   capabilities(): WorkspaceRuntimeCapabilities {
     return {
       persistentVolume: true,
-      network: true,
-      networkAliases: true,
       dockerInDocker: true,
       stdioSession: true,
       terminalSession: true,
@@ -59,7 +56,6 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   async ensureWorkspace(key: WorkspaceKey, spec: WorkspaceSpec): Promise<EnsureWorkspaceResult> {
     const baseLabels = this.buildBaseLabels(key);
     const workspaceLabels = { ...baseLabels, [WORKSPACE_ROLE_LABEL]: 'workspace' } as Record<string, string>;
-    const networkName = spec.network?.name ?? DEFAULT_NETWORK_NAME;
 
     let handle = await this.containers.findContainerByLabels(workspaceLabels);
     let created = false;
@@ -93,25 +89,8 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
       recreatedForPlatform = true;
     }
 
-    let isAttached: boolean | undefined;
-    let recreatedForNetwork = false;
-    if (handle) {
-      isAttached = await this.isAttachedToNetwork(handle.id, networkName);
-      if (!isAttached) {
-        this.logger.debug('Recreating workspace container', {
-          ...logContext,
-          containerId: handle.id.substring(0, 12),
-          reason: 'network_detach',
-          expectedNetwork: networkName,
-        });
-        await this.stopAndRemoveContainer(handle);
-        handle = undefined;
-        recreatedForNetwork = true;
-      }
-    }
-
     if (!handle) {
-      handle = await this.createWorkspace(key, spec, baseLabels, workspaceLabels, networkName);
+      handle = await this.createWorkspace(key, spec, baseLabels, workspaceLabels);
       created = true;
       if (!handle) {
         throw new Error('workspace_provision_failed');
@@ -141,10 +120,8 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
       containerId: workspaceHandle.id.substring(0, 12),
       keyPlatform: key.platform ?? null,
       existingPlatformLabel: existingPlatformLabel ?? null,
-      isAttachedToNetwork: isAttached ?? null,
       created,
       recreatedForPlatform,
-      recreatedForNetwork,
     });
     return { workspaceId: workspaceHandle.id, created, providerType, status };
   }
@@ -354,31 +331,16 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     }
   }
 
-  private async isAttachedToNetwork(containerId: string, networkName: string): Promise<boolean> {
-    if (!networkName) return true;
-    try {
-      const networks = await this.containers.getContainerNetworks(containerId);
-      return networks.includes(networkName);
-    } catch (err) {
-      this.logger.warn('Failed to inspect workspace networks', {
-        containerId: containerId.substring(0, 12),
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return false;
-    }
-  }
-
   private async createWorkspace(
     key: WorkspaceKey,
     spec: WorkspaceSpec,
     baseLabels: Record<string, string>,
     workspaceLabels: Record<string, string>,
-    networkName: string,
   ): Promise<ContainerHandle> {
     const binds = spec.persistentVolume
       ? [this.volumeBindFor(key.threadId, spec.persistentVolume.mountPath)]
       : undefined;
-    const createExtras = this.buildCreateExtras(networkName, spec.network?.aliases, spec.resources);
+    const createExtras = this.buildCreateExtras(spec.resources);
     const sidecars = spec.dockerInDocker?.enabled
       ? [this.buildDinDSidecarOpts(baseLabels, spec.dockerInDocker?.mirrorUrl)]
       : undefined;
@@ -437,21 +399,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
     }
   }
 
-  private buildCreateExtras(
-    networkName: string,
-    aliases: string[] | undefined,
-    resources: WorkspaceSpec['resources'] | undefined,
-  ): ContainerOpts['createExtras'] | undefined {
-    const networking = networkName
-      ? {
-          NetworkingConfig: {
-            EndpointsConfig: {
-              [networkName]: aliases && aliases.length > 0 ? { Aliases: aliases } : {},
-            },
-          },
-        }
-      : undefined;
-
+  private buildCreateExtras(resources: WorkspaceSpec['resources'] | undefined): ContainerOpts['createExtras'] | undefined {
     const hostConfig = resources
       ? {
           HostConfig: {
@@ -461,10 +409,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
         }
       : undefined;
 
-    if (networking && hostConfig) {
-      return { ...hostConfig, ...networking };
-    }
-    return hostConfig ?? networking ?? undefined;
+    return hostConfig ?? undefined;
   }
 
   private volumeBindFor(threadId: string, mountPath: string): string {

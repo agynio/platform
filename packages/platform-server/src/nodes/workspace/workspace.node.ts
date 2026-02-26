@@ -109,9 +109,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     } else {
       platform = selection;
     }
-    const networkName = this.configService.workspaceNetworkName;
-
-    const { spec, nixConfigInjected } = await this.buildWorkspaceSpec(threadId, networkName);
+    const { spec, nixConfigInjected } = await this.buildWorkspaceSpec();
 
     const { workspaceId, created } = await this.workspaceProvider.ensureWorkspace(
       {
@@ -160,10 +158,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     return handle;
   }
 
-  private async buildWorkspaceSpec(
-    threadId: string,
-    networkName: string,
-  ): Promise<{ spec: WorkspaceSpec; nixConfigInjected: boolean }> {
+  private async buildWorkspaceSpec(): Promise<{ spec: WorkspaceSpec; nixConfigInjected: boolean }> {
     const enableDinD = this.config?.enableDinD ?? false;
     const volumeConfig: VolumeConfig | undefined = this.config?.volumes;
     const volumesEnabled = volumeConfig?.enabled ?? false;
@@ -195,14 +190,12 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     }
 
     const envWithDinD = enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged || undefined;
-    const networkAlias = this.sanitizeNetworkAlias(threadId);
     const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
     const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);
 
     const spec: WorkspaceSpec = {
       workingDir: normalizedMountPath,
       env: envWithDinD,
-      network: { name: networkName, aliases: [networkAlias] },
       dockerInDocker: { enabled: enableDinD, mirrorUrl: dockerMirrorUrl },
       ttlSeconds: this.config?.ttlSeconds ?? DEFAULT_TTL_SECONDS,
     };
@@ -221,25 +214,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     }
 
     return { spec, nixConfigInjected };
-  }
-
-  private sanitizeNetworkAlias(threadId: string): string {
-    const normalized = (threadId ?? '').toLowerCase();
-    const replaced = normalized.replace(/[^a-z0-9_.-]/g, '-');
-    const collapsed = replaced.replace(/-+/g, '-');
-    const trimmed = collapsed.replace(/^-+/, '').replace(/-+$/, '');
-    const truncated = trimmed.slice(0, 63);
-    if (truncated && /^[a-z0-9]/.test(truncated)) return truncated;
-    const alnum = normalized.replace(/[^a-z0-9]/g, '');
-    if (alnum) {
-      const suffix = alnum.slice(0, 61);
-      return `ws-${suffix}`.slice(0, 63);
-    }
-    const encoded = Array.from(normalized)
-      .map((ch) => ch.charCodeAt(0).toString(36))
-      .join('')
-      .slice(0, 20);
-    return `ws-${encoded || 'thread'}`.slice(0, 63);
   }
 
   private async runWorkspaceNetworkDiagnostics(handle: WorkspaceHandle): Promise<void> {

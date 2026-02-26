@@ -37,8 +37,8 @@ Architecture and components
 - Persistence
   - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and staged working-tree swaps. Each upsert builds a full graph tree in a sibling directory, fsyncs it, and atomically swaps it into place (conflict/timeout/persist error modes preserved).
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
-- Containers and workspace network
-  - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
+- Containers and workspace runtime
+  - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Networking is managed by the runner. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror reachable at http://registry-mirror:5000.
   - Exec behavior: wall/idle timeouts, abort/kill on timeout, demux, and ANSI stripping.
 - Secrets and env overlays
   - Vault optionally resolves vault refs; Env overlays merge static and vault inputs; values never logged; per-node env overlays used for shell and MCP calls only.
@@ -82,7 +82,7 @@ Behaviors and failure modes
 
 Security model
 - Vault (optional) for secrets; vault endpoints require VAULT_ENABLED. Vault refs used in env overlays; secrets never logged.
-- Workspace network isolated; registry mirror HTTP-only and internal to agents_net.
+- Workspace containers rely on runner-managed networking; registry mirror remains HTTP-only on the internal compose network.
 - Env overlays explicit/per-exec; no host env inheritance beyond container defaults.
 - API guard against forbidden MCP executable mutations.
 - Access control is currently out of scope; assume trusted network.

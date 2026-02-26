@@ -60,8 +60,8 @@ Workspace container platform
 Per-workspace Docker-in-Docker and registry mirror
 - Each workspace container can be created with DOCKER_HOST=tcp://localhost:2375 and a co-located Docker-in-Docker sidecar (docker:27-dind) running in the same network namespace (HostConfig.NetworkMode=container:<workspaceId>), with privileged=true and an anonymous volume for /var/lib/docker.
 - The sidecar exposes its Docker API only inside the workspace namespace; port 2375 is not published on the host.
-- A lightweight pull-through cache is provided via a compose service `registry-mirror` (registry:2 in proxy mode) on a shared bridge network `agents_net`.
-- The mirror is HTTP-only and reachable only within `agents_net` by name `registry-mirror`.
+- A lightweight pull-through cache is provided via a compose service `registry-mirror` (registry:2 in proxy mode) reachable at `http://registry-mirror:5000` from runner-managed workspace containers.
+- The mirror is HTTP-only and exposed only on the internal compose network.
 - DinD is started with `--registry-mirror` pointing at DOCKER_MIRROR_URL (default http://registry-mirror:5000), so image pulls inside workspaces use the proxy cache.
 - Readiness: the server waits for the DinD engine to be ready before executing any initial scripts.
 - To override the mirror, set environment variable `DOCKER_MIRROR_URL` to an alternate URL.

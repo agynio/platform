@@ -21,7 +21,6 @@ async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig
     dockerMirrorUrl: undefined,
     ncpsEnabled: false,
     ncpsUrl: undefined,
-    workspaceNetworkName: 'agents_net',
   } as unknown as ConfigService;
 
   const ncpsKeyService = {
@@ -56,7 +55,7 @@ describe('WorkspaceNode resource limits', () => {
     expect(provider.ensureCalls.length).toBeGreaterThan(0);
     const spec = provider.ensureCalls[0].spec;
     expect(spec.resources).toEqual({ cpuNano: 500_000_000, memoryBytes: 536_870_912 });
-    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-1'] });
+    expect(spec).not.toHaveProperty('network');
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -70,7 +69,7 @@ describe('WorkspaceNode resource limits', () => {
 
     const spec = provider.ensureCalls[0].spec;
     expect(spec.resources).toEqual({ cpuNano: 750_000_000, memoryBytes: 1_073_741_824 });
-    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-2'] });
+    expect(spec).not.toHaveProperty('network');
   });
 
   it('logs and ignores invalid limits', async () => {
@@ -83,7 +82,7 @@ describe('WorkspaceNode resource limits', () => {
 
     const spec = provider.ensureCalls[0].spec;
     expect(spec.resources).toBeUndefined();
-    expect(spec.network).toEqual({ name: 'agents_net', aliases: ['thread-3'] });
+    expect(spec).not.toHaveProperty('network');
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 });

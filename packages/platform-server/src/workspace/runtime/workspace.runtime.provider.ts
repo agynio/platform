@@ -18,10 +18,6 @@ export type WorkspaceSpec = {
   persistentVolume?: {
     mountPath: string;
   };
-  network?: {
-    name: string;
-    aliases?: string[];
-  };
   dockerInDocker?: {
     enabled: boolean;
     mirrorUrl?: string;
@@ -35,8 +31,6 @@ export type WorkspaceSpec = {
 
 export type WorkspaceRuntimeCapabilities = {
   persistentVolume: boolean;
-  network: boolean;
-  networkAliases: boolean;
   dockerInDocker: boolean;
   stdioSession: boolean;
   terminalSession: boolean;

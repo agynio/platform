@@ -109,8 +109,6 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) && num >= 0 ? num : 0;
     }),
-  // Workspace container network name
-  workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
   nixAllowedChannels: z
     .string()
@@ -446,10 +444,6 @@ export class ConfigService implements Config {
     return this.volumeGcSweepTimeoutMs;
   }
 
-  get workspaceNetworkName(): string {
-    return this.params.workspaceNetworkName;
-  }
-
   // Nix proxy getters
   get nixAllowedChannels(): string[] {
     return this.params.nixAllowedChannels;
@@ -563,7 +557,6 @@ export class ConfigService implements Config {
       dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
       dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
       dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
-      workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,

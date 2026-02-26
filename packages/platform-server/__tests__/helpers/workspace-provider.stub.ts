@@ -38,8 +38,6 @@ export class WorkspaceProviderStub extends WorkspaceProvider {
   capabilities(): WorkspaceProviderCapabilities {
     return {
       persistentVolume: true,
-      network: true,
-      networkAliases: true,
       dockerInDocker: true,
       stdioSession: true,
       terminalSession: true,

@@ -76,8 +76,6 @@ class WorkspaceProviderStub extends WorkspaceProvider {
   capabilities() {
     return {
       persistentVolume: true,
-      network: true,
-      networkAliases: true,
       dockerInDocker: true,
       stdioSession: true,
       terminalSession: true,

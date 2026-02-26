@@ -29,7 +29,6 @@ if (!RUNNER_SECRET) {
 const TEST_IMAGE = 'ghcr.io/agynio/devcontainer:latest';
 const THREAD_ID = `grpc-exec-${Date.now()}`;
 const TEST_TIMEOUT_MS = 30_000;
-const TEST_NETWORK = process.env.DOCKER_WORKSPACE_TEST_NETWORK ?? 'bridge';
 
 class NoopContainerRegistry {
   async registerStart(): Promise<void> {}
@@ -80,7 +79,7 @@ beforeAll(async () => {
 
   const ensure = await provider.ensureWorkspace(
     { threadId: THREAD_ID, role: 'workspace' },
-    { image: TEST_IMAGE, ttlSeconds: 600, network: { name: TEST_NETWORK } },
+    { image: TEST_IMAGE, ttlSeconds: 600 },
   );
   workspaceId = ensure.workspaceId;
 }, TEST_TIMEOUT_MS);

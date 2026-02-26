@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
@@ -27,25 +26,6 @@ import {
 const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe.sequential;
 
-async function runDockerCommand(args: string[]): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('docker', args, { stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`docker ${args.join(' ')} exited with code ${code ?? 0}`));
-    });
-  });
-}
-
-async function ensureNetwork(name: string): Promise<void> {
-  await runDockerCommand(['network', 'create', name]);
-}
-
-async function removeNetwork(name: string): Promise<void> {
-  await runDockerCommand(['network', 'rm', name]);
-}
-
 describeOrSkip('Docker workspace reuse lifecycle', () => {
   let runner: RunnerHandle;
   let dockerClient: RunnerGrpcClient;
@@ -55,12 +35,10 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
   let containerRegistry: ContainerRegistry;
   let workspaceProvider: DockerWorkspaceRuntimeProvider;
   let workspaceNode: WorkspaceNode;
-  const networkName = `workspace-reuse-${randomUUID().slice(0, 8)}`;
   const createdContainers = new Set<string>();
   const createdThreads = new Set<string>();
 
   beforeAll(async () => {
-    await ensureNetwork(networkName);
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
@@ -75,7 +53,6 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
       dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
       dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
       agentsDatabaseUrl: dbHandle.connectionString,
-      workspaceNetworkName: networkName,
     });
 
     prismaService = new PrismaService(configService);
@@ -134,7 +111,6 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     if (dbHandle) {
       await dbHandle.stop();
     }
-    await removeNetwork(networkName).catch(() => undefined);
     clearTestConfig();
   }, 120_000);
 
@@ -147,7 +123,6 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     createdContainers.add(firstHandle.id);
     const writeResult = await firstHandle.exec(['sh', '-lc', 'echo shell-data > /workspace/reuse.txt']);
     expect(writeResult.exitCode).toBe(0);
-    await expect(dockerClient.getContainerNetworks(firstHandle.id)).resolves.toContain(networkName);
 
     const mcpHandle = await workspaceNode.provide(threadId);
     expect(mcpHandle.id).toBe(firstHandle.id);
@@ -171,7 +146,6 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     createdContainers.add(firstHandle.id);
     const writeResult = await firstHandle.exec(['sh', '-lc', 'echo shell-only > /workspace/shell.txt']);
     expect(writeResult.exitCode).toBe(0);
-    await expect(dockerClient.getContainerNetworks(firstHandle.id)).resolves.toContain(networkName);
 
     const secondHandle = await workspaceNode.provide(threadId);
     expect(secondHandle.id).toBe(firstHandle.id);

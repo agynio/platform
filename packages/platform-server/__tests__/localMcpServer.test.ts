@@ -129,8 +129,6 @@ class MockWorkspaceProvider extends WorkspaceProvider {
   capabilities(): WorkspaceProviderCapabilities {
     return {
       persistentVolume: false,
-      network: false,
-      networkAliases: false,
       dockerInDocker: false,
       stdioSession: true,
       terminalSession: false,

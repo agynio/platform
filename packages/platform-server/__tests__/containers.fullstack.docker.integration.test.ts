@@ -32,7 +32,6 @@ import {
 
 const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
-const NETWORK_NAME = 'bridge';
 const TEST_IMAGE = 'nginx:1.25-alpine';
 
 @Controller('test/workspaces')
@@ -40,7 +39,6 @@ class TestWorkspaceController {
   constructor(
     private readonly workspaceProvider: WorkspaceProvider,
     private readonly prismaService: PrismaService,
-    private readonly configService: ConfigService,
   ) {}
 
   @Post()
@@ -55,7 +53,6 @@ class TestWorkspaceController {
       {
         image: TEST_IMAGE,
         persistentVolume: { mountPath: '/workspace' },
-        network: { name: this.configService.workspaceNetworkName },
         env: { TEST_SUITE: 'containers-fullstack' },
         ttlSeconds: 600,
       },
@@ -65,7 +62,7 @@ class TestWorkspaceController {
   }
 }
 
-Reflect.defineMetadata('design:paramtypes', [WorkspaceProvider, PrismaService, ConfigService], TestWorkspaceController);
+Reflect.defineMetadata('design:paramtypes', [WorkspaceProvider, PrismaService], TestWorkspaceController);
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
@@ -95,7 +92,6 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
       dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
       dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
       agentsDatabaseUrl: dbHandle.connectionString,
-      workspaceNetworkName: NETWORK_NAME,
     });
 
     const moduleRef = await Test.createTestingModule({
