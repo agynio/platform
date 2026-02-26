@@ -96,7 +96,6 @@ import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout'
 import type { DockerClient } from './dockerClient.token';
 
 export const EXEC_REQUEST_TIMEOUT_SLACK_MS = 5_000;
-const INSPECT_NETWORK_NAMES_LABEL = 'hautech.ai/inspect/network-names';
 
 export class DockerRunnerRequestError extends Error {
   readonly statusCode: number;
@@ -672,33 +671,13 @@ export class RunnerGrpcClient implements DockerClient {
       Name: mount.source ?? undefined,
     }));
 
-    const configLabels = { ...(response.configLabels ?? {}) } as Record<string, string>;
-    const networkLabelRaw = configLabels[INSPECT_NETWORK_NAMES_LABEL];
-    let networkNames: string[] = [];
-    if (typeof networkLabelRaw === 'string') {
-      try {
-        const parsed: unknown = JSON.parse(networkLabelRaw);
-        if (Array.isArray(parsed)) {
-          networkNames = parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
-        }
-      } catch {
-        // ignore malformed network label payloads
-      }
-      delete configLabels[INSPECT_NETWORK_NAMES_LABEL];
-    }
-
-    const networks: Record<string, Record<string, never>> = {};
-    for (const name of networkNames) {
-      networks[name] = {};
-    }
-
     const inspect = {
       Id: response.id ?? '',
       Name: response.name ?? undefined,
       Image: response.image ?? undefined,
       Config: {
         Image: response.configImage ?? undefined,
-        Labels: configLabels,
+        Labels: response.configLabels ?? {},
       },
       Mounts: mounts,
       State:
@@ -709,7 +688,7 @@ export class RunnerGrpcClient implements DockerClient {
             }
           : undefined,
       NetworkSettings: {
-        Networks: networks,
+        Networks: {},
       },
     };
 

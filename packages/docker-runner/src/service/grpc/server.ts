@@ -149,7 +149,6 @@ const CONTAINER_STOP_TIMEOUT_SEC = 10;
 const SIDECAR_ROLE_LABEL = 'hautech.ai/role';
 const SIDECAR_ROLE_VALUE = 'sidecar';
 const PARENT_CONTAINER_LABEL = 'hautech.ai/parent_cid';
-const INSPECT_NETWORK_NAMES_LABEL = 'hautech.ai/inspect/network-names';
 
 async function findSidecarHandles(containers: ContainerService, workloadId: string): Promise<ContainerHandle[]> {
   try {
@@ -619,13 +618,6 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             readOnly: mount.ReadOnly === true || mount.RW === false,
           }),
         );
-        const networkNames = Object.keys(details.NetworkSettings?.Networks ?? {});
-        const configLabels = {
-          ...(details.Config?.Labels ?? {}),
-          ...(networkNames.length > 0
-            ? { [INSPECT_NETWORK_NAMES_LABEL]: JSON.stringify(networkNames) }
-            : {}),
-        };
         callback(
           null,
           create(InspectWorkloadResponseSchema, {
@@ -633,7 +625,7 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             name: details.Name ?? '',
             image: details.Image ?? '',
             configImage: details.Config?.Image ?? '',
-            configLabels,
+            configLabels: details.Config?.Labels ?? {},
             mounts,
             stateStatus: details.State?.Status ?? '',
             stateRunning: details.State?.Running === true,
