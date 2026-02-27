@@ -52,4 +52,38 @@ describe('ContainerService execContainer', () => {
     expect(result.stderr).toBe('');
     expect(containerInspect).toHaveBeenCalledTimes(1);
   });
+
+  it('sends signals to exec process group when terminating after timeout', async () => {
+    const service = new ContainerService();
+    const killSpy = vi
+      .spyOn(process, 'kill')
+      .mockImplementation(() => true as unknown as ReturnType<typeof process.kill>);
+    try {
+      const exec = {
+        inspect: vi.fn(async () => ({ ID: 'exec-xyz', Pid: 4321 })),
+      } as unknown as { inspect: () => Promise<{ ID: string; Pid: number }> };
+
+      Reflect.set(service as unknown as object, 'delay', vi.fn(async () => undefined));
+      Reflect.set(service as unknown as object, 'isProcessAlive', vi.fn(() => true));
+
+      type TerminateExecProcessFn = (
+        execLike: { inspect: () => Promise<{ ID: string; Pid: number }> },
+        context: { containerId: string; reason: 'timeout' | 'idle_timeout'; timeoutMs?: number; idleTimeoutMs?: number },
+      ) => Promise<void>;
+      const terminateExecProcess = Reflect.get(service as unknown as object, 'terminateExecProcess') as TerminateExecProcessFn;
+
+      await terminateExecProcess.call(service, exec, {
+        containerId: 'cid-xyz',
+        reason: 'timeout',
+        timeoutMs: 500,
+      });
+
+      expect(killSpy).toHaveBeenCalledWith(-4321, 'SIGTERM');
+      expect(killSpy).toHaveBeenCalledWith(4321, 'SIGTERM');
+      expect(killSpy).toHaveBeenCalledWith(-4321, 'SIGKILL');
+      expect(killSpy).toHaveBeenCalledWith(4321, 'SIGKILL');
+    } finally {
+      killSpy.mockRestore();
+    }
+  });
 });

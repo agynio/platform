@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { Metadata, status } from '@grpc/grpc-js';
 import { NonceCache, verifyAuthHeaders } from '@agyn/docker-runner';
 import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
+import type { RunnerServiceGrpcClientInstance } from '../../src/proto/grpc.js';
 
 import {
   RunnerGrpcClient,
+  RunnerGrpcExecClient,
   DockerRunnerRequestError,
   EXEC_REQUEST_TIMEOUT_SLACK_MS,
 } from '../../src/infra/container/runnerGrpc.client';
+import { ExecTimeoutError } from '../../src/utils/execTimeout';
 
 describe('RunnerGrpcClient', () => {
   it('sends signed runner metadata on touchLastUsed calls', async () => {
@@ -47,11 +50,11 @@ describe('RunnerGrpcClient', () => {
     expect(verification.ok).toBe(true);
   });
 
-  it('maps gRPC errors to DockerRunnerRequestError', async () => {
+  it('sanitizes infra details from gRPC errors', async () => {
     const client = new RunnerGrpcClient({ address: 'grpc://runner', sharedSecret: 'secret' });
-    const error = Object.assign(new Error('runner missing workload'), {
-      code: status.NOT_FOUND,
-      details: 'runner missing workload',
+    const error = Object.assign(new Error('Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071'), {
+      code: status.DEADLINE_EXCEEDED,
+      details: 'Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071',
     });
 
     const translated = (client as unknown as {
@@ -60,11 +63,45 @@ describe('RunnerGrpcClient', () => {
 
     expect(translated).toBeInstanceOf(DockerRunnerRequestError);
     expect(translated).toMatchObject({
-      statusCode: 404,
-      errorCode: 'runner_not_found',
-      retryable: false,
-      message: 'runner missing workload',
+      statusCode: 504,
+      errorCode: 'runner_timeout',
+      retryable: true,
+      message: 'Deadline exceeded after 305.002s',
     });
+    expect(translated.message.includes('remote_addr')).toBe(false);
+    expect(translated.message.includes('LB pick')).toBe(false);
+  });
+});
+
+describe('RunnerGrpcExecClient', () => {
+  it('converts gRPC deadline exceeded errors to ExecTimeoutError', () => {
+    const execClient = new RunnerGrpcExecClient({
+      address: 'grpc://runner',
+      sharedSecret: 'secret',
+      client: {} as RunnerServiceGrpcClientInstance,
+    });
+    const mapper = (execClient as unknown as {
+      mapGrpcDeadlineToTimeout: (
+        error: Error,
+        context: { stdout: string; stderr: string; timeoutMs?: number; idleTimeoutMs?: number },
+      ) => ExecTimeoutError | undefined;
+    }).mapGrpcDeadlineToTimeout;
+
+    const error = Object.assign(new Error('Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071'), {
+      code: status.DEADLINE_EXCEEDED,
+      details: 'Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071',
+    });
+
+    const timeoutError = mapper.call(execClient, error, {
+      stdout: 'partial-out',
+      stderr: 'partial-err',
+      timeoutMs: 1500,
+    });
+
+    expect(timeoutError).toBeInstanceOf(ExecTimeoutError);
+    expect(timeoutError?.message).toBe('Exec timed out after 1500ms');
+    expect(timeoutError?.stdout).toBe('partial-out');
+    expect(timeoutError?.stderr).toBe('partial-err');
   });
 });
 

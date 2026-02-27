@@ -454,7 +454,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         workdir: cwd ?? cfg.workdir,
         timeoutMs,
         idleTimeoutMs,
-        killOnTimeout: true,
+        killOnTimeout: false,
         logToPid1: cfg.logToPid1,
         onOutput: (source, chunk) => handleChunk(source as OutputSource, chunk),
       });
@@ -772,7 +772,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         workdir: cwd ?? cfg.workdir,
         timeoutMs: cfg.executionTimeoutMs,
         idleTimeoutMs: cfg.idleTimeoutMs,
-        killOnTimeout: true,
+        killOnTimeout: false,
         logToPid1: cfg.logToPid1,
         onOutput: (source, chunk) => {
           if (truncated && !allowNextChunkAfterTruncate) return;

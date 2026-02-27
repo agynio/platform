@@ -277,23 +277,17 @@ export class ContainerService implements DockerClientPort {
       );
       return { stdout, stderr, exitCode };
     } catch (err: unknown) {
-      const isTimeout = isExecTimeoutError(err) || isExecIdleTimeoutError(err);
-      if (isTimeout && options?.killOnTimeout) {
-        // Gracefully stop the container to ensure process-tree cleanup.
-        try {
-          this.warn('Exec timeout detected; stopping container', {
-            containerId,
-            timeoutMs: options?.timeoutMs,
-            idleTimeoutMs: options?.idleTimeoutMs,
-          });
-          await this.stopContainer(containerId, 10);
-        } catch (stopErr) {
-          // Log but do not swallow original timeout error
-          this.error('Failed to stop container after exec timeout', {
-            containerId,
-            error: this.errorContext(stopErr),
-          });
-        }
+      const isHardTimeout = isExecTimeoutError(err);
+      const isIdleTimeout = isExecIdleTimeoutError(err);
+      if (isHardTimeout || isIdleTimeout) {
+        const reason = isIdleTimeout ? 'idle_timeout' : 'timeout';
+        const timeoutValue = (err as ExecTimeoutError | ExecIdleTimeoutError).timeoutMs;
+        await this.terminateExecProcess(exec, {
+          containerId,
+          reason,
+          timeoutMs: isHardTimeout ? options?.timeoutMs ?? timeoutValue : options?.timeoutMs,
+          idleTimeoutMs: isIdleTimeout ? options?.idleTimeoutMs ?? timeoutValue : options?.idleTimeoutMs,
+        });
       }
       throw err;
     }
@@ -421,6 +415,10 @@ export class ContainerService implements DockerClientPort {
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
 
+    const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
+      await this.terminateExecProcess(exec, { containerId: inspectData.Id, reason });
+    };
+
     const close = async (): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
       try {
         hijackStream.end();
@@ -449,6 +447,7 @@ export class ContainerService implements DockerClientPort {
       stderr: demux ? stderrStream : undefined,
       close,
       execId,
+      terminateProcessGroup,
     };
   }
 
@@ -806,6 +805,82 @@ export class ContainerService implements DockerClientPort {
         });
       });
     });
+  }
+
+  private async terminateExecProcess(
+    exec: Exec,
+    context: { containerId: string; reason: 'timeout' | 'idle_timeout'; timeoutMs?: number; idleTimeoutMs?: number },
+  ): Promise<void> {
+    try {
+      const details = await exec.inspect();
+      const execId = typeof details.ID === 'string' ? details.ID : undefined;
+      const pid = typeof details.Pid === 'number' ? details.Pid : undefined;
+      if (!pid || pid <= 0) {
+        this.warn('Exec timeout detected but PID unavailable; skipping process termination', {
+          containerId: context.containerId,
+          execId,
+          reason: context.reason,
+        });
+        return;
+      }
+
+      const baseLog: Record<string, unknown> = {
+        containerId: context.containerId,
+        execId,
+        pid,
+        reason: context.reason,
+        timeoutMs: context.timeoutMs,
+        idleTimeoutMs: context.idleTimeoutMs,
+      };
+
+      this.warn('Exec timeout detected; terminating process group', baseLog);
+      this.signalExecProcess(pid, 'SIGTERM', baseLog);
+      await this.delay(750);
+      if (!this.isProcessAlive(pid)) return;
+      this.warn('Exec process group still running after SIGTERM; sending SIGKILL', baseLog);
+      this.signalExecProcess(pid, 'SIGKILL', baseLog);
+      await this.delay(150);
+    } catch (error) {
+      this.warn('Failed to terminate exec process group after timeout', {
+        containerId: context.containerId,
+        reason: context.reason,
+        error: this.errorContext(error),
+      });
+    }
+  }
+
+  private signalExecProcess(pid: number, signal: NodeJS.Signals, context: Record<string, unknown>): void {
+    const targets = [-Math.abs(pid), pid];
+    for (const target of targets) {
+      try {
+        process.kill(target, signal);
+        this.debug('Sent signal to exec process target', { ...context, signal, target });
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err?.code === 'ESRCH') continue;
+        this.warn('Failed to signal exec process target', {
+          ...context,
+          signal,
+          target,
+          error: this.errorContext(err),
+        });
+      }
+    }
+  }
+
+  private async delay(ms: number): Promise<void> {
+    if (ms <= 0) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      return err?.code !== 'ESRCH';
+    }
   }
 
   // Demultiplex docker multiplexed stream if modem.demuxStream is available; otherwise fall back to manual demux

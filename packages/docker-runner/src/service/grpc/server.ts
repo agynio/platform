@@ -1164,20 +1164,21 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
             const handleTimeout = async (target: ExecutionContext, reason: ExecExitReason) => {
               if (target.finished || target.cancelRequested) return;
               target.reason = reason;
-              target.killed = target.killOnTimeout;
-              if (target.killOnTimeout) {
-                try {
-                  await opts.containers.stopContainer(target.targetId, CONTAINER_STOP_TIMEOUT_SEC);
-                } catch (stopErr) {
-                  console.warn('Failed to stop container on exec timeout', {
-                    containerId: target.targetId,
-                    error: stopErr instanceof Error ? stopErr.message : stopErr,
-                    reason,
-                  });
-                }
+              const terminationReason = reason === ExecExitReason.IDLE_TIMEOUT ? 'idle_timeout' : 'timeout';
+              try {
+                await target.session.terminateProcessGroup(terminationReason);
+                target.killed = true;
+              } catch (terminateErr) {
+                target.killed = false;
+                console.warn('Failed to terminate exec process group on timeout', {
+                  executionId: target.executionId,
+                  containerId: target.targetId,
+                  reason,
+                  error: terminateErr instanceof Error ? terminateErr.message : terminateErr,
+                });
               }
               try {
-                await target.finish?.(reason, target.killOnTimeout);
+                await target.finish?.(reason, target.killed);
               } catch {
                 // finish already emits structured error; swallow here
               }

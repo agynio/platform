@@ -16,7 +16,7 @@ Shell tool
   - `cwd?: string` — optional per-call working directory override for the executed command.
 - Behavior:
   - Pass `env`, `workdir`, `executionTimeoutMs`, `idleTimeoutMs` to container.exec (per exec only).
-  - On timeout and when killOnTimeout=true, the container is stopped with a 10s grace period.
+  - Execution and idle timeouts terminate only the exec process group (SIGTERM, short grace, then SIGKILL) without stopping the container.
   - Empty string sets a variable to empty (does not unset).
 
 MCP server
