@@ -22,6 +22,15 @@ Graph persistence
 - Set `NCPS_URL_SERVER` (host-reachable) and `NCPS_URL_CONTAINER` (in-network, e.g., `http://ncps:8501`) together so Nix substituters resolve correctly inside workspaces.
 - When the server injects `NIX_CONFIG`, workspace startup logs the resolved substituters/trusted keys and runs `getent hosts ncps` plus `curl http://ncps:8501/nix-cache-info`, emitting warnings if connectivity fails.
 -
+- **DinD ulimit verification**
+  - Start a workspace with `dockerInDocker.enabled` so the `docker:27-dind` sidecar launches alongside the main container.
+  - In the DinD container, inspect the dockerd process limits and confirm both `open files` and `processes` report `soft = 1048576`, `hard = 1048576`:
+    - `cat /proc/$(pidof dockerd)/limits | egrep 'open files|processes'`
+  - Launch a k3d cluster inside the DinD daemon and ensure the server container inherits the higher soft limit:
+    - `docker inspect --format '{{json .HostConfig.Ulimits}}' <k3d_server_cid>`
+    - `docker exec -it <k3d_server_cid> sh -lc 'ulimit -n; cat /proc/self/limits | egrep "open files|processes"'`
+  - Review k3s logs and confirm there are no fsnotify `too many open files` warnings or CRI restarts.
+
 - Workspace volume GC runs in the background (enabled by default). Tune with:
   - `VOLUME_GC_ENABLED` (default `true`)
   - `VOLUME_GC_INTERVAL_MS` (default `60000`)

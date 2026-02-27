@@ -419,15 +419,33 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
 
   private buildDinDSidecarOpts(baseLabels: Record<string, string>, mirrorUrl?: string): SidecarOpts {
     const registryMirror = mirrorUrl ?? DIND_DEFAULT_MIRROR;
+    const sidecarUlimits = [
+      { Name: 'nofile', Soft: 1_048_576, Hard: 1_048_576 },
+      { Name: 'nproc', Soft: 1_048_576, Hard: 1_048_576 },
+    ];
     return {
       image: DIND_IMAGE,
       env: { DOCKER_TLS_CERTDIR: '' },
-      cmd: ['-H', DIND_HOST, '--registry-mirror', registryMirror],
+      cmd: [
+        '-H',
+        DIND_HOST,
+        '--registry-mirror',
+        registryMirror,
+        '--default-ulimit',
+        'nofile=1048576:1048576',
+        '--default-ulimit',
+        'nproc=1048576:1048576',
+      ],
       privileged: true,
       autoRemove: true,
       anonymousVolumes: ['/var/lib/docker'],
       labels: { ...baseLabels },
       networkMode: 'container:main',
+      createExtras: {
+        HostConfig: {
+          Ulimits: sidecarUlimits,
+        },
+      },
     };
   }
 
