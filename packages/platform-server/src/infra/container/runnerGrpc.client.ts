@@ -916,6 +916,7 @@ export class RunnerGrpcExecClient {
     let finished = false;
     let finalResult: ExecResult | undefined;
     let cancelledLocally = false;
+    let forcedTerminationReason: 'timeout' | 'idle_timeout' | undefined;
     const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
     const { timeoutMs: requestedTimeoutMs, idleTimeoutMs: requestedIdleTimeoutMs } = this.extractRequestedTimeouts(start);
     let readyResolve: (() => void) | undefined;
@@ -996,6 +997,23 @@ export class RunnerGrpcExecClient {
       if (event.case === 'exit') {
         const stdoutTail = Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8');
         const stderrTail = Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8');
+        if (
+          forcedTerminationReason &&
+          (event.value.reason === ExecExitReason.CANCELLED || event.value.reason === ExecExitReason.COMPLETED)
+        ) {
+          const timeoutMs =
+            forcedTerminationReason === 'timeout'
+              ? this.resolveTimeoutValue(requestedTimeoutMs, requestedIdleTimeoutMs)
+              : this.resolveTimeoutValue(requestedIdleTimeoutMs, requestedTimeoutMs);
+          const forcedError =
+            forcedTerminationReason === 'timeout'
+              ? new ExecTimeoutError(timeoutMs, stdoutTail, stderrTail)
+              : new ExecIdleTimeoutError(timeoutMs, stdoutTail, stderrTail);
+          forcedTerminationReason = undefined;
+          fail(forcedError);
+          return;
+        }
+        forcedTerminationReason = undefined;
         const timeoutError = this.mapExitReasonToError(event.value.reason, {
           stdout: stdoutTail,
           stderr: stderrTail,
@@ -1131,7 +1149,34 @@ export class RunnerGrpcExecClient {
       return closePromise;
     };
 
-    return { stdin, stdout, stderr, close, execId: resolvedExecId };
+    const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
+      const targetExecId = execId ?? resolvedExecId;
+      if (!targetExecId) {
+        throw new DockerRunnerRequestError(404, 'runner_exec_not_found', false, 'Execution not active');
+      }
+      this.logger?.warn('Requesting runner exec termination', {
+        execId: targetExecId,
+        reason,
+      });
+      forcedTerminationReason = reason;
+      try {
+        const cancelled = await this.cancelExecution(targetExecId, true);
+        if (cancelled) {
+          cancelledLocally = true;
+          return;
+        }
+        forcedTerminationReason = undefined;
+        this.logger?.warn('Runner exec termination request acknowledged, execution already finished', {
+          execId: targetExecId,
+          reason,
+        });
+      } catch (error) {
+        forcedTerminationReason = undefined;
+        throw error;
+      }
+    };
+
+    return { stdin, stdout, stderr, close, execId: resolvedExecId, terminateProcessGroup };
   }
 
   async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {
