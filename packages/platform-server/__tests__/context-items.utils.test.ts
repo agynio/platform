@@ -243,6 +243,7 @@ describe('contextItemInputFromMessage', () => {
       outputBytes: Buffer.byteLength(binary, 'utf8'),
     });
     expect(result.contentJson).toEqual({
+      role: 'tool',
       type: 'function_call_output',
       call_id: 'call-bin',
       output: {
@@ -261,6 +262,7 @@ describe('contextItemInputFromMessage', () => {
     expect(result.contentText).toBe('plain output');
     expect(result.metadata).toEqual({ type: 'function_call_output', callId: 'call-text' });
     expect(result.contentJson).toEqual({
+      role: 'tool',
       type: 'function_call_output',
       call_id: 'call-text',
       output: 'plain output',
