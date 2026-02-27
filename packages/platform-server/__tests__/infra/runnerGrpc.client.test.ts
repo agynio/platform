@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { ClientDuplexStream } from '@grpc/grpc-js';
 import { Metadata, status } from '@grpc/grpc-js';
 import { NonceCache, verifyAuthHeaders } from '@agyn/docker-runner';
 import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
@@ -11,6 +13,12 @@ import {
   EXEC_REQUEST_TIMEOUT_SLACK_MS,
 } from '../../src/infra/container/runnerGrpc.client';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
+
+class MockClientStream<Req = unknown> extends EventEmitter {
+  write = vi.fn((_chunk: Req) => true);
+  end = vi.fn(() => this);
+  cancel = vi.fn(() => undefined);
+}
 
 describe('RunnerGrpcClient', () => {
   it('sends signed runner metadata on touchLastUsed calls', async () => {
@@ -74,34 +82,43 @@ describe('RunnerGrpcClient', () => {
 });
 
 describe('RunnerGrpcExecClient', () => {
-  it('converts gRPC deadline exceeded errors to ExecTimeoutError', () => {
+  it('rejects exec calls with ExecTimeoutError when the stream exceeds its deadline', async () => {
+    const stream = new MockClientStream();
+    const execStub = vi.fn(
+      () => stream as unknown as ClientDuplexStream<unknown, unknown>,
+    );
     const execClient = new RunnerGrpcExecClient({
       address: 'grpc://runner',
       sharedSecret: 'secret',
-      client: {} as RunnerServiceGrpcClientInstance,
+      client: { exec: execStub } as unknown as RunnerServiceGrpcClientInstance,
     });
-    const mapper = (execClient as unknown as {
-      mapGrpcDeadlineToTimeout: (
-        error: Error,
-        context: { stdout: string; stderr: string; timeoutMs?: number; idleTimeoutMs?: number },
-      ) => ExecTimeoutError | undefined;
-    }).mapGrpcDeadlineToTimeout;
+
+    const execPromise = execClient.exec('container-1', ['echo', 'hi'], { timeoutMs: 1_500 });
 
     const error = Object.assign(new Error('Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071'), {
       code: status.DEADLINE_EXCEEDED,
       details: 'Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071',
     });
 
-    const timeoutError = mapper.call(execClient, error, {
-      stdout: 'partial-out',
-      stderr: 'partial-err',
-      timeoutMs: 1500,
+    queueMicrotask(() => {
+      stream.emit('error', error);
     });
 
-    expect(timeoutError).toBeInstanceOf(ExecTimeoutError);
-    expect(timeoutError?.message).toBe('Exec timed out after 1500ms');
-    expect(timeoutError?.stdout).toBe('partial-out');
-    expect(timeoutError?.stderr).toBe('partial-err');
+    const failure = await execPromise.catch((err) => err);
+
+    expect(execStub).toHaveBeenCalledTimes(1);
+    expect(stream.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msg: expect.objectContaining({ case: 'start' }),
+      }),
+    );
+    expect(failure).toBeInstanceOf(ExecTimeoutError);
+    expect(failure).toMatchObject({
+      timeoutMs: 1_500,
+      stdout: '',
+      stderr: '',
+      message: 'Exec timed out after 1500ms',
+    });
   });
 });
 
