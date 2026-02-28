@@ -112,7 +112,6 @@ model Thread {
   // Channel descriptor for replying to origin channel
   channel   Json?
   modelUsed String? @map("model_used")
-  workspaceVolumeRemovedAt DateTime? @map("workspace_volume_removed_at")
   createdAt DateTime     @default(now())
 
   runs       Run[]
@@ -128,17 +127,18 @@ model Thread {
 }
 
 model WorkspaceVolume {
-  id         String   @id @default(uuid()) @db.Uuid
-  threadId   String   @db.Uuid
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId   String   @db.Uuid @map("thread_id")
   thread     Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  volumeName String
-  removedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  volumeName String   @map("volume_name")
+  removedAt  DateTime? @map("removed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  @@index([threadId])
-  @@index([removedAt])
-  @@index([threadId, removedAt])
+  @@unique([volumeName], map: "workspace_volumes_volume_name_key")
+  @@index([threadId], map: "workspace_volumes_thread_id_idx")
+  @@index([removedAt], map: "workspace_volumes_removed_at_idx")
+  @@index([threadId, removedAt], map: "workspace_volumes_thread_id_removed_at_idx")
   @@map("workspace_volumes")
 }
 
