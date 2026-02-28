@@ -63,4 +63,21 @@ describe('NotificationsGrpcPublisher', () => {
     });
     expect(options?.signal).toBeInstanceOf(AbortSignal);
   });
+
+  it('rejects payloads with non-JSON values', async () => {
+    const publisher = new NotificationsGrpcPublisher(config);
+
+    await expect(
+      publisher.publishToRooms({
+        rooms: ['threads'],
+        event: 'node_status',
+        payload: { invalid: () => undefined },
+        source: 'test-source',
+      }),
+    ).rejects.toThrowError(
+      'NotificationsGrpcPublisher payload values must be JSON-serializable; field "invalid" is function',
+    );
+
+    expect(publishMock).not.toHaveBeenCalled();
+  });
 });
