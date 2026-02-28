@@ -157,7 +157,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     const previousKey = this.currentKey?.key;
     const state = await this.generateAndPersistKey(trigger);
     this.applyKeyState(state);
-    if (previousKey) {
+    if (previousKey && previousKey !== state.key) {
       await this.revokeKey(previousKey, `rotation:${trigger}`);
     }
   }
@@ -243,17 +243,21 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const response = await this.fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body) });
-        if (!response.ok) {
-          await this.handleProvisionNonOk(response, attempt, maxAttempts, baseDelayMs);
-          continue;
+        if (response.ok) {
+          const data = (await this.safeReadJson(response)) as { key?: string; expires?: string } | undefined;
+          return this.toVirtualKeyState(data);
         }
 
-        const data = (await this.safeReadJson(response)) as { key?: string; expires?: string } | undefined;
-        if (!data?.key || typeof data.key !== 'string') {
-          throw new Error('litellm_provision_invalid_response');
+        const fallback = await this.processProvisionFailure(
+          response,
+          attempt,
+          maxAttempts,
+          baseDelayMs,
+        );
+        if (fallback) {
+          return fallback;
         }
-        const expiresAt = this.parseExpiry(data.expires);
-        return { key: data.key, expiresAt };
+        continue;
       } catch (error) {
         if (attempt >= maxAttempts) {
           this.logger.error('LiteLLM provisioning failed after retries', error);
@@ -269,20 +273,72 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private async handleProvisionNonOk(
-    resp: Response,
+    status: number,
+    body: string,
     attempt: number,
     maxAttempts: number,
     baseDelayMs: number,
   ): Promise<void> {
-    const text = await this.safeReadText(resp);
     this.logger.error(
-      `LiteLLM provisioning failed ${JSON.stringify({ status: String(resp.status), body: this.redact(text) })}`,
+      `LiteLLM provisioning failed ${JSON.stringify({ status: String(status), body: this.redact(body) })}`,
     );
-    if (resp.status >= 500 && attempt < maxAttempts) {
+    if (status >= 500 && attempt < maxAttempts) {
       await this.delay(baseDelayMs * Math.pow(2, attempt - 1));
       return;
     }
-    throw new Error(`litellm_provision_failed_${resp.status}`);
+    throw new Error(`litellm_provision_failed_${status}`);
+  }
+
+  private async processProvisionFailure(
+    response: Response,
+    attempt: number,
+    maxAttempts: number,
+    baseDelayMs: number,
+  ): Promise<VirtualKeyState | null> {
+    const errorText = await this.safeReadText(response);
+    const conflict = await this.resolveAliasConflict(response.status, errorText);
+    if (conflict) {
+      return conflict;
+    }
+    await this.handleProvisionNonOk(response.status, errorText, attempt, maxAttempts, baseDelayMs);
+    return null;
+  }
+
+  private async resolveAliasConflict(status: number, rawBody: string): Promise<VirtualKeyState | null> {
+    if (status !== 400) return null;
+
+    const parsedMessage = this.extractErrorMessage(rawBody) ?? rawBody;
+    const normalized = parsedMessage.toLowerCase();
+    if (!normalized.includes('alias') || !normalized.includes('already exists')) {
+      return null;
+    }
+
+    const persisted = await this.keyStore.load(this.keyAlias);
+    if (!persisted?.key) {
+      throw new Error('litellm_alias_conflict_without_persisted_key');
+    }
+
+    this.logger.warn(
+      `LiteLLM alias conflict encountered, reusing persisted key ${JSON.stringify({ alias: this.keyAlias })}`,
+    );
+    return { key: persisted.key, expiresAt: persisted.expiresAt };
+  }
+
+  private extractErrorMessage(rawBody: string): string | undefined {
+    try {
+      const payload = JSON.parse(rawBody) as { error?: { message?: unknown } } | undefined;
+      const candidate = payload?.error?.message;
+      return typeof candidate === 'string' ? candidate : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private toVirtualKeyState(data: { key?: unknown; expires?: string } | undefined): VirtualKeyState {
+    if (!data || typeof data.key !== 'string') {
+      throw new Error('litellm_provision_invalid_response');
+    }
+    return { key: data.key, expiresAt: this.parseExpiry(data.expires) };
   }
 
   private parseExpiry(candidate: string | undefined): Date | null {
