@@ -99,6 +99,39 @@ import type { DockerClient } from './dockerClient.token';
 
 export const EXEC_REQUEST_TIMEOUT_SLACK_MS = 5_000;
 
+const RUNNER_ERROR_MESSAGE_FALLBACK = 'Runner request failed';
+
+const INFRA_DETAIL_PATTERNS = [
+  /remote_addr\s*=[^,]+/gi,
+  /\bLB pick:[^,]+/gi,
+  /\bresolver:[^,]+/gi,
+  /\bsubchannel:[^,]+/gi,
+  /\bendpoint_picker:[^,]+/gi,
+];
+
+const sanitizeInfraMessage = (message: string): string => {
+  if (!message) return '';
+  let sanitized = message;
+  for (const pattern of INFRA_DETAIL_PATTERNS) {
+    sanitized = sanitized.replace(pattern, ' ').trim();
+  }
+  sanitized = sanitized
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .join(', ');
+  return sanitized.replace(/\s{2,}/g, ' ').trim();
+};
+
+const extractSanitizedServiceErrorMessage = (error: ServiceError): { sanitized: string; raw: string } => {
+  const rawDetails = typeof error.details === 'string' ? error.details : '';
+  const rawMessage = typeof error.message === 'string' ? error.message : '';
+  const raw = rawDetails || rawMessage || '';
+  const sanitizedText = sanitizeInfraMessage(raw);
+  const sanitized = sanitizedText.length > 0 ? sanitizedText : RUNNER_ERROR_MESSAGE_FALLBACK;
+  return { sanitized, raw };
+};
+
 export class DockerRunnerRequestError extends Error {
   readonly statusCode: number;
   readonly errorCode: string;
@@ -555,9 +588,9 @@ export class RunnerGrpcClient implements DockerClient {
 
   private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
     const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
-    const message = error.details || error.message || 'gRPC runner error';
+    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(error);
     if (grpcCode === status.CANCELLED) {
-      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, message);
+      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, sanitizedMessage);
     }
     const statusCode = this.grpcStatusToHttpStatus(grpcCode);
     const errorCode = this.grpcStatusToErrorCode(grpcCode);
@@ -568,7 +601,8 @@ export class RunnerGrpcClient implements DockerClient {
         path,
         grpcStatus: statusName,
         grpcCode,
-        message,
+        message: sanitizedMessage,
+        rawMessage: rawMessage || undefined,
       });
     } else {
       this.logger.warn(`Runner gRPC call failed`, {
@@ -577,14 +611,15 @@ export class RunnerGrpcClient implements DockerClient {
         grpcCode,
         httpStatus: statusCode,
         errorCode,
-        message,
+        message: sanitizedMessage,
+        rawMessage: rawMessage || undefined,
       });
     }
     const retryable =
       grpcCode === status.UNAVAILABLE ||
       grpcCode === status.RESOURCE_EXHAUSTED ||
       grpcCode === status.DEADLINE_EXCEEDED;
-    return new DockerRunnerRequestError(statusCode, errorCode, retryable, message);
+    return new DockerRunnerRequestError(statusCode, errorCode, retryable, sanitizedMessage);
   }
 
   private grpcStatusToHttpStatus(grpcCode: status): number {
@@ -834,6 +869,16 @@ export class RunnerGrpcExecClient {
           fail(new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, 'Execution aborted'));
           return;
         }
+        const timeoutError = this.mapGrpcDeadlineToTimeout(err, {
+          stdout: this.composeOutput(stdoutChunks),
+          stderr: this.composeOutput(stderrChunks),
+          timeoutMs: requestedTimeoutMs,
+          idleTimeoutMs: requestedIdleTimeoutMs,
+        });
+        if (timeoutError) {
+          fail(timeoutError);
+          return;
+        }
         fail(this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH }));
       });
 
@@ -876,6 +921,7 @@ export class RunnerGrpcExecClient {
     let finished = false;
     let finalResult: ExecResult | undefined;
     let cancelledLocally = false;
+    let forcedTerminationReason: 'timeout' | 'idle_timeout' | undefined;
     const start = this.createStartRequest({ containerId, command, interactiveOptions: options });
     const { timeoutMs: requestedTimeoutMs, idleTimeoutMs: requestedIdleTimeoutMs } = this.extractRequestedTimeouts(start);
     let readyResolve: (() => void) | undefined;
@@ -956,6 +1002,23 @@ export class RunnerGrpcExecClient {
       if (event.case === 'exit') {
         const stdoutTail = Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8');
         const stderrTail = Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8');
+        if (
+          forcedTerminationReason &&
+          (event.value.reason === ExecExitReason.CANCELLED || event.value.reason === ExecExitReason.COMPLETED)
+        ) {
+          const timeoutMs =
+            forcedTerminationReason === 'timeout'
+              ? this.resolveTimeoutValue(requestedTimeoutMs, requestedIdleTimeoutMs)
+              : this.resolveTimeoutValue(requestedIdleTimeoutMs, requestedTimeoutMs);
+          const forcedError =
+            forcedTerminationReason === 'timeout'
+              ? new ExecTimeoutError(timeoutMs, stdoutTail, stderrTail)
+              : new ExecIdleTimeoutError(timeoutMs, stdoutTail, stderrTail);
+          forcedTerminationReason = undefined;
+          fail(forcedError);
+          return;
+        }
+        forcedTerminationReason = undefined;
         const timeoutError = this.mapExitReasonToError(event.value.reason, {
           stdout: stdoutTail,
           stderr: stderrTail,
@@ -980,6 +1043,16 @@ export class RunnerGrpcExecClient {
 
     call.on('error', (err: ServiceError) => {
       if (finished) return;
+      const timeoutError = this.mapGrpcDeadlineToTimeout(err, {
+        stdout: finalResult?.stdout ?? '',
+        stderr: finalResult?.stderr ?? '',
+        timeoutMs: requestedTimeoutMs,
+        idleTimeoutMs: requestedIdleTimeoutMs,
+      });
+      if (timeoutError) {
+        fail(timeoutError);
+        return;
+      }
       const translated = this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH });
       fail(translated);
     });
@@ -1081,7 +1154,34 @@ export class RunnerGrpcExecClient {
       return closePromise;
     };
 
-    return { stdin, stdout, stderr, close, execId: resolvedExecId };
+    const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
+      const targetExecId = execId ?? resolvedExecId;
+      if (!targetExecId) {
+        throw new DockerRunnerRequestError(404, 'runner_exec_not_found', false, 'Execution not active');
+      }
+      this.logger?.warn('Requesting runner exec termination', {
+        execId: targetExecId,
+        reason,
+      });
+      forcedTerminationReason = reason;
+      try {
+        const cancelled = await this.cancelExecution(targetExecId, true);
+        if (cancelled) {
+          cancelledLocally = true;
+          return;
+        }
+        forcedTerminationReason = undefined;
+        this.logger?.warn('Runner exec termination request acknowledged, execution already finished', {
+          execId: targetExecId,
+          reason,
+        });
+      } catch (error) {
+        forcedTerminationReason = undefined;
+        throw error;
+      }
+    };
+
+    return { stdin, stdout, stderr, close, execId: resolvedExecId, terminateProcessGroup };
   }
 
   async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {
@@ -1238,6 +1338,16 @@ export class RunnerGrpcExecClient {
     return undefined;
   }
 
+  private mapGrpcDeadlineToTimeout(
+    error: ServiceError,
+    context: { stdout: string; stderr: string; timeoutMs?: number; idleTimeoutMs?: number },
+  ): ExecTimeoutError | undefined {
+    if (error.code !== status.DEADLINE_EXCEEDED) return undefined;
+    const resolved = this.resolveTimeoutValue(context.timeoutMs, context.idleTimeoutMs);
+    const effectiveTimeout = resolved > 0 ? resolved : this.defaultDeadlineMs ?? 0;
+    return new ExecTimeoutError(effectiveTimeout, context.stdout, context.stderr);
+  }
+
   private resolveTimeoutValue(primary?: number, fallback?: number): number {
     if (typeof primary === 'number' && primary > 0) return primary;
     if (typeof fallback === 'number' && fallback > 0) return fallback;
@@ -1246,9 +1356,9 @@ export class RunnerGrpcExecClient {
 
   private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
     const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
-    const message = error.details || error.message || 'gRPC runner error';
+    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(error);
     if (grpcCode === status.CANCELLED) {
-      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, message);
+      return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, sanitizedMessage);
     }
     const statusName = (status as unknown as Record<number, string>)[grpcCode] ?? 'UNKNOWN';
     const path = context?.path ?? RUNNER_SERVICE_EXEC_PATH;
@@ -1257,21 +1367,23 @@ export class RunnerGrpcExecClient {
         path,
         grpcStatus: statusName,
         grpcCode,
-        message,
+        message: sanitizedMessage,
+        rawMessage: rawMessage || undefined,
       });
     } else {
       this.logger?.warn(`Runner exec gRPC call failed`, {
         path,
         grpcStatus: statusName,
         grpcCode,
-        message,
+        message: sanitizedMessage,
+        rawMessage: rawMessage || undefined,
       });
     }
     const retryable =
       grpcCode === status.UNAVAILABLE ||
       grpcCode === status.RESOURCE_EXHAUSTED ||
       grpcCode === status.DEADLINE_EXCEEDED;
-    return new DockerRunnerRequestError(0, 'runner_grpc_error', retryable, message);
+    return new DockerRunnerRequestError(0, 'runner_grpc_error', retryable, sanitizedMessage);
   }
 
   private attachAbortSignal(

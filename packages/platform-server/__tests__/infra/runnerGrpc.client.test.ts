@@ -1,13 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { ClientDuplexStream } from '@grpc/grpc-js';
 import { Metadata, status } from '@grpc/grpc-js';
 import { NonceCache, verifyAuthHeaders } from '@agyn/docker-runner';
 import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
+import type { RunnerServiceGrpcClientInstance } from '../../src/proto/grpc.js';
 
 import {
   RunnerGrpcClient,
+  RunnerGrpcExecClient,
   DockerRunnerRequestError,
   EXEC_REQUEST_TIMEOUT_SLACK_MS,
 } from '../../src/infra/container/runnerGrpc.client';
+import { ExecTimeoutError } from '../../src/utils/execTimeout';
+
+class MockClientStream<Req = unknown> extends EventEmitter {
+  write = vi.fn((_chunk: Req) => true);
+  end = vi.fn(() => this);
+  cancel = vi.fn(() => undefined);
+}
 
 describe('RunnerGrpcClient', () => {
   it('sends signed runner metadata on touchLastUsed calls', async () => {
@@ -47,11 +58,11 @@ describe('RunnerGrpcClient', () => {
     expect(verification.ok).toBe(true);
   });
 
-  it('maps gRPC errors to DockerRunnerRequestError', async () => {
+  it('sanitizes infra details from gRPC errors', async () => {
     const client = new RunnerGrpcClient({ address: 'grpc://runner', sharedSecret: 'secret' });
-    const error = Object.assign(new Error('runner missing workload'), {
-      code: status.NOT_FOUND,
-      details: 'runner missing workload',
+    const error = Object.assign(new Error('Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071'), {
+      code: status.DEADLINE_EXCEEDED,
+      details: 'Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071',
     });
 
     const translated = (client as unknown as {
@@ -60,10 +71,53 @@ describe('RunnerGrpcClient', () => {
 
     expect(translated).toBeInstanceOf(DockerRunnerRequestError);
     expect(translated).toMatchObject({
-      statusCode: 404,
-      errorCode: 'runner_not_found',
-      retryable: false,
-      message: 'runner missing workload',
+      statusCode: 504,
+      errorCode: 'runner_timeout',
+      retryable: true,
+      message: 'Deadline exceeded after 305.002s',
+    });
+    expect(translated.message.includes('remote_addr')).toBe(false);
+    expect(translated.message.includes('LB pick')).toBe(false);
+  });
+});
+
+describe('RunnerGrpcExecClient', () => {
+  it('rejects exec calls with ExecTimeoutError when the stream exceeds its deadline', async () => {
+    const stream = new MockClientStream();
+    const execStub = vi.fn(
+      () => stream as unknown as ClientDuplexStream<unknown, unknown>,
+    );
+    const execClient = new RunnerGrpcExecClient({
+      address: 'grpc://runner',
+      sharedSecret: 'secret',
+      client: { exec: execStub } as unknown as RunnerServiceGrpcClientInstance,
+    });
+
+    const execPromise = execClient.exec('container-1', ['echo', 'hi'], { timeoutMs: 1_500 });
+
+    const error = Object.assign(new Error('Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071'), {
+      code: status.DEADLINE_EXCEEDED,
+      details: 'Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071',
+    });
+
+    queueMicrotask(() => {
+      stream.emit('error', error);
+    });
+
+    const failure = await execPromise.catch((err) => err);
+
+    expect(execStub).toHaveBeenCalledTimes(1);
+    expect(stream.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msg: expect.objectContaining({ case: 'start' }),
+      }),
+    );
+    expect(failure).toBeInstanceOf(ExecTimeoutError);
+    expect(failure).toMatchObject({
+      timeoutMs: 1_500,
+      stdout: '',
+      stderr: '',
+      message: 'Exec timed out after 1500ms',
     });
   });
 });

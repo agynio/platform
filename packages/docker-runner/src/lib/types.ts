@@ -68,6 +68,7 @@ export type InteractiveExecSession = {
   stderr?: NodeJS.ReadableStream;
   close: () => Promise<ExecResult>;
   execId: string;
+  terminateProcessGroup: (reason: 'timeout' | 'idle_timeout') => Promise<void>;
 };
 
 export type LogsStreamOptions = {

@@ -69,7 +69,7 @@ Behaviors and failure modes
   - VERSION_CONFLICT (409), LOCK_TIMEOUT (409), PERSIST_FAILED (500).
   - Schema validation errors trigger key stripping and up to 3 retries.
 - Container exec
-  - executionTimeout and idleTimeout produce structured timeouts with captured tail output; optional killOnTimeout stops container. Benign stop/remove errors swallowed (304/404/409).
+  - executionTimeout and idleTimeout produce structured timeouts with captured tail output; runner terminates the exec process group (SIGTERM then SIGKILL) without stopping the container. Benign stop/remove errors swallowed (304/404/409).
 - MCP
   - Tool call failures normalized with message/code/retriable; transport disconnect to be handled by restart/backoff (planned).
 - Slack

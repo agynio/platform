@@ -25,13 +25,15 @@ describe('ContainerService idle timeout with killOnTimeout=false', () => {
         exec: vi.fn(async (_opts: any) => ({
           start: (_: any, cb: any) => cb(undefined, { on: () => {}, once: () => {}, pipe: () => {}, end: () => {} }),
           inspect: vi.fn(async () => ({})),
-        })),
+    })),
       })),
       modem: { demuxStream: () => {} },
     };
     (svc as any).docker = docker;
     const idleErr = new ExecIdleTimeoutError(123, '', '');
     vi.spyOn(svc as any, 'startAndCollectExec').mockRejectedValue(idleErr);
+    const terminateSpy = vi.fn(async () => undefined);
+    Reflect.set(svc as unknown as object, 'terminateExecProcess', terminateSpy);
 
     await expect(
       svc.execContainer('cid', 'echo', { idleTimeoutMs: 123, killOnTimeout: false }),
@@ -41,5 +43,7 @@ describe('ContainerService idle timeout with killOnTimeout=false', () => {
     expect(docker.getContainer).toHaveBeenCalledTimes(1);
     const stoppedCalled = docker.getContainer.mock.results.some((r: any) => r.value.stop.mock.calls.length > 0);
     expect(stoppedCalled).toBe(false);
+    expect(terminateSpy).toHaveBeenCalledTimes(1);
+    expect(terminateSpy.mock.calls[0][1]).toMatchObject({ reason: 'idle_timeout', idleTimeoutMs: 123 });
   });
 });
