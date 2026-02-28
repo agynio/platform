@@ -20,7 +20,7 @@ Table of contents
 - Glossary and changelog templates (pointers)
 
 Overview and personas
-- Graph-driven AI agent platform composing agents, tools, triggers, memory, and MCP servers into a live-updatable LangGraph runtime. The server exposes HTTP APIs and Socket.IO to manage the graph, provision nodes, execute tools, and observe runs. UI offers a builder to configure graphs and view checkpoints/status.
+- Graph-driven AI agent platform composing agents, tools, triggers, memory, and MCP servers into a live-updatable LangGraph runtime. The platform-server exposes HTTP APIs and gRPC notifications, while a dedicated notifications service bridges those notifications to Socket.IO for the UI. UI offers a builder to configure graphs and view checkpoints/status.
 - Personas
   - Agent Builder (developer)
   - Platform Operator (SRE)
@@ -32,7 +32,7 @@ Architecture and components
   - Unknown-key handling and retries: apply strips unknown config keys on schema validation errors and retries up to 3 times.
   - Checkpointing via Postgres (default); streaming UI integration planned.
 - Server
-  - HTTP APIs and Socket.IO for management and status streaming.
+  - HTTP APIs and a gRPC notifications publisher (Socket.IO bridge implemented by a separate notifications service).
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
 - Persistence
   - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and staged working-tree swaps. Each upsert builds a full graph tree in a sibling directory, fsyncs it, and atomically swaps it into place (conflict/timeout/persist error modes preserved).
@@ -109,6 +109,7 @@ Configuration matrix (server env vars)
   - LLM_PROVIDER (litellm | openai)
   - If `LLM_PROVIDER=litellm`: LITELLM_BASE_URL and LITELLM_MASTER_KEY
   - If `LLM_PROVIDER=openai`: OPENAI_API_KEY (OPENAI_BASE_URL optional)
+  - NOTIFICATIONS_GRPC_ADDR (gRPC endpoint for the notifications bridge)
 - Optional
   - GRAPH_REPO_PATH (default ./data/graph)
   - GRAPH_BRANCH (default main)
@@ -117,6 +118,7 @@ Configuration matrix (server env vars)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_GRPC_HOST, DOCKER_RUNNER_GRPC_PORT (or DOCKER_RUNNER_PORT), DOCKER_RUNNER_SHARED_SECRET (required for docker-runner), plus optional DOCKER_RUNNER_TIMEOUT_MS (default 30000), DOCKER_RUNNER_OPTIONAL (default true; set false to fail-fast), and DOCKER_RUNNER_CONNECT_* knobs (RETRY_BASE_DELAY_MS=500, RETRY_MAX_DELAY_MS=30000, RETRY_JITTER_MS=250, PROBE_INTERVAL_MS=30000, MAX_RETRIES=0 for unlimited background retries).
+  - NOTIFICATIONS_GRPC_DEADLINE_MS (default 3000)
   - MCP_TOOLS_STALE_TIMEOUT_MS
   - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)

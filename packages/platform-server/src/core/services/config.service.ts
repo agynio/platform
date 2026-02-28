@@ -109,6 +109,17 @@ export const configSchema = z.object({
       const num = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(num) && num >= 0 ? num : 0;
     }),
+  notificationsGrpcAddr: z
+    .string()
+    .min(1, 'NOTIFICATIONS_GRPC_ADDR is required')
+    .transform((value) => value.trim()),
+  notificationsGrpcDeadlineMs: z
+    .union([z.string(), z.number()])
+    .default('3000')
+    .transform((value) => {
+      const num = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(num) && num > 0 ? num : 3000;
+    }),
   // Nix search/proxy settings
   nixAllowedChannels: z
     .string()
@@ -513,6 +524,12 @@ export class ConfigService implements Config {
   get agentsDatabaseUrl(): string {
     return this.params.agentsDatabaseUrl;
   }
+  get notificationsGrpcAddr(): string {
+    return this.params.notificationsGrpcAddr;
+  }
+  get notificationsGrpcDeadlineMs(): number {
+    return this.params.notificationsGrpcDeadlineMs;
+  }
   get corsOrigins(): string[] {
     return this.params.corsOrigins ?? [];
   }
@@ -557,6 +574,8 @@ export class ConfigService implements Config {
       dockerRunnerConnectRetryJitterMs: process.env.DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS,
       dockerRunnerConnectProbeIntervalMs: process.env.DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS,
       dockerRunnerConnectMaxRetries: process.env.DOCKER_RUNNER_CONNECT_MAX_RETRIES,
+      notificationsGrpcAddr: process.env.NOTIFICATIONS_GRPC_ADDR,
+      notificationsGrpcDeadlineMs: process.env.NOTIFICATIONS_GRPC_DEADLINE_MS,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,

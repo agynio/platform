@@ -246,6 +246,21 @@ services:
       start_period: 10s
     networks:
       - agents_net
+
+  notifications:
+    build:
+      context: .
+      dockerfile: packages/notifications/Dockerfile
+    restart: unless-stopped
+    environment:
+      NOTIFICATIONS_HOST: 0.0.0.0
+      NOTIFICATIONS_GRPC_PORT: 50051
+      NOTIFICATIONS_SOCKET_PORT: 4000
+    ports:
+      - "50051:50051"
+      - "4000:4000"
+    networks:
+      - agents_net
       
 volumes:
   vault-file:

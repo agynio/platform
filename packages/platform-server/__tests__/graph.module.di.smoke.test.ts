@@ -27,6 +27,38 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { runnerConfigDefaults } from './helpers/config';
+import { UI_NOTIFICATIONS_PUBLISHER } from '../src/notifications/ui-notifications.publisher';
+
+const connectMocks = vi.hoisted(() => {
+  const publish = vi.fn().mockResolvedValue(undefined);
+  return {
+    publish,
+    createPromiseClient: vi.fn(() => ({ publish })),
+  };
+});
+
+vi.mock('@connectrpc/connect', () => ({
+  createPromiseClient: connectMocks.createPromiseClient,
+}));
+
+const connectNodeMocks = vi.hoisted(() => ({
+  createConnectTransport: vi.fn(() => ({})),
+}));
+
+vi.mock('@connectrpc/connect-node', () => ({
+  createConnectTransport: connectNodeMocks.createConnectTransport,
+}));
+
+vi.mock('../src/proto/gen/agynio/api/notifications/v1/notifications_connect', () => ({
+  NotificationsService: {
+    typeName: 'agynio.api.notifications.v1.NotificationsService',
+    methods: {
+      publish: {
+        name: 'Publish',
+      },
+    },
+  },
+}));
 
 process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -177,6 +209,8 @@ if (!shouldRunDbTests) {
           litellmBaseUrl: 'http://127.0.0.1:4000',
           litellmMasterKey: 'test-master-key',
           ...runnerConfigDefaults,
+          notificationsGrpcAddr: 'notifications:50051',
+          notificationsGrpcDeadlineMs: 3000,
         }),
       );
       ConfigService.register(configServiceStub);
@@ -218,6 +252,7 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(RunEventsService).useFactory(() => runEventsStub as RunEventsService);
       builder.overrideProvider(AgentsPersistenceService).useFactory(() => agentsPersistenceStub as AgentsPersistenceService);
       builder.overrideProvider(ThreadsMetricsService).useFactory(() => threadsMetricsStub as ThreadsMetricsService);
+      builder.overrideProvider(UI_NOTIFICATIONS_PUBLISHER).useValue({ publishToRooms: vi.fn().mockResolvedValue(undefined) });
       builder.overrideProvider(VaultService).useFactory(() => vaultStub as VaultService);
       builder.overrideProvider(SlackAdapter).useFactory(() => slackAdapterStub as SlackAdapter);
       builder.overrideProvider(LiveGraphRuntime).useFactory(() => liveRuntimeStub);

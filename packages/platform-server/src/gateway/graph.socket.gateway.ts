@@ -19,6 +19,10 @@ import {
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../events/run-events.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { PrismaService } from '../core/services/prisma.service';
+import {
+  UI_NOTIFICATIONS_PUBLISHER,
+  type UiNotificationsPublisher,
+} from '../notifications/ui-notifications.publisher';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -116,6 +120,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(UI_NOTIFICATIONS_PUBLISHER) private readonly notificationsPublisher: UiNotificationsPublisher,
   ) {}
 
   onModuleInit(): void {
@@ -462,7 +467,6 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     payload: T,
     schema: z.ZodType<T>,
   ) {
-    if (!this.io) return;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
       this.logger.error(
@@ -623,7 +627,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     const ids = Array.from(new Set(this.pendingThreads));
     this.pendingThreads.clear();
     this.metricsTimer = null;
-    if (!this.io || ids.length === 0) return;
+    if (ids.length === 0) return;
     try {
       const map = await this.metrics.getThreadsMetrics(ids);
       for (const id of ids) {
@@ -688,18 +692,16 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     event: string,
     payload: unknown,
   ) {
-    if (!this.io || rooms.length === 0) return;
-    for (const room of rooms) {
-      try {
-        this.io.to(room).emit(event, payload);
-      } catch (error) {
+    if (rooms.length === 0) return;
+    void this.notificationsPublisher
+      .publishToRooms({ rooms, event, payload, source: 'platform-server' })
+      .catch((error: unknown) => {
         const errPayload =
           error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
         this.logger.warn(
-          `GraphSocketGateway: emit error ${this.formatContext({ event, room, error: errPayload })}`,
+          `GraphSocketGateway: notifications publish error ${this.formatContext({ event, rooms, error: errPayload })}`,
         );
-      }
-    }
+      });
   }
 
   private formatContext(context: Record<string, unknown>): string {

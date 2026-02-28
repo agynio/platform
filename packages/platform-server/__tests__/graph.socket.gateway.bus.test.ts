@@ -115,8 +115,15 @@ function createGatewayTestContext(): GatewayTestContext {
   const runtime = { subscribe: vi.fn() } as any;
   const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
   const prisma = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
+  const notificationsPublisher = { publishToRooms: vi.fn().mockResolvedValue(undefined) };
 
-  const gateway = new GraphSocketGateway(runtime, metrics, prisma, eventsBus as EventsBusService);
+  const gateway = new GraphSocketGateway(
+    runtime,
+    metrics,
+    prisma,
+    eventsBus as EventsBusService,
+    notificationsPublisher,
+  );
   const internalLogger = (gateway as unknown as { logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void; log: (...args: unknown[]) => void; debug: (...args: unknown[]) => void } }).logger;
   const logger = {
     warn: vi.spyOn(internalLogger, 'warn').mockImplementation(() => undefined),

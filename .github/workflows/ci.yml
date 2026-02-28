@@ -26,7 +26,7 @@ jobs:
         uses: bufbuild/buf-setup-action@v1
 
       - name: Generate runner protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Get pnpm store directory
         id: pnpm-store
@@ -56,7 +56,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Type-check platform server
         run: pnpm --filter @agyn/platform-server run typecheck
@@ -96,7 +96,7 @@ jobs:
         uses: bufbuild/buf-setup-action@v1
 
       - name: Generate runner protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Get pnpm store directory
         id: pnpm-store
@@ -126,7 +126,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Apply platform-server migrations
         env:
@@ -159,7 +159,7 @@ jobs:
         uses: bufbuild/buf-setup-action@v1
 
       - name: Generate runner protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Get pnpm store directory
         id: pnpm-store
@@ -189,7 +189,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Start LiteLLM docker compose stack
         run: docker compose -f packages/platform-server/test/litellm/docker-compose.yml up -d
@@ -228,7 +228,7 @@ jobs:
         uses: bufbuild/buf-setup-action@v1
 
       - name: Generate runner protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Get pnpm store directory
         id: pnpm-store
@@ -258,7 +258,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Run UI tests (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui test
@@ -313,7 +313,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Build Storybook (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui run build-storybook
@@ -363,7 +363,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       - name: Approve necessary build scripts
         run: pnpm approve-builds @prisma/client esbuild msw
@@ -417,7 +417,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
-        run: pnpm proto:generate
+        run: pnpm proto:gen
 
       # Build all workspaces in topological order so library outputs exist
       - name: Build UI workspace (topo order)
