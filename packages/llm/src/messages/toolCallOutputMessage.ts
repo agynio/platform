@@ -27,9 +27,6 @@ export class ToolCallOutputMessage {
   }
 
   toPlain(): ResponseInputItem.FunctionCallOutput {
-    return {
-      ...this._source,
-      role: 'tool',
-    } as ResponseInputItem.FunctionCallOutput;
+    return this._source;
   }
 }
