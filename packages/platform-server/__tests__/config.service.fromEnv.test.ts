@@ -7,6 +7,7 @@ const previousEnv: Record<string, string | undefined> = {
   litellmBaseUrl: process.env.LITELLM_BASE_URL,
   litellmMasterKey: process.env.LITELLM_MASTER_KEY,
   agentsDbUrl: process.env.AGENTS_DATABASE_URL,
+  notificationsGrpcAddr: process.env.NOTIFICATIONS_GRPC_ADDR,
 };
 
 describe('ConfigService.fromEnv', () => {
@@ -15,6 +16,11 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_BASE_URL = previousEnv.litellmBaseUrl;
     process.env.LITELLM_MASTER_KEY = previousEnv.litellmMasterKey;
     process.env.AGENTS_DATABASE_URL = previousEnv.agentsDbUrl;
+    if (previousEnv.notificationsGrpcAddr === undefined) {
+      delete process.env.NOTIFICATIONS_GRPC_ADDR;
+    } else {
+      process.env.NOTIFICATIONS_GRPC_ADDR = previousEnv.notificationsGrpcAddr;
+    }
     ConfigService.clearInstanceForTest();
   });
 
@@ -23,6 +29,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_BASE_URL = 'http://127.0.0.1:4000/';
     process.env.LITELLM_MASTER_KEY = '  sk-dev-master-1234  ';
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
+    process.env.NOTIFICATIONS_GRPC_ADDR = 'notifications:50051';
 
     const config = ConfigService.fromEnv();
 

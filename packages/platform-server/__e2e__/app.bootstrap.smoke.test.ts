@@ -34,6 +34,10 @@ import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRu
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import { DockerRunnerRequestError } from '../src/infra/container/runnerGrpc.client';
 import { HealthController } from '../src/infra/health/health.controller';
+import {
+  UI_NOTIFICATIONS_PUBLISHER,
+  type UiNotificationsPublisher,
+} from '../src/notifications/ui-notifications.publisher';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -41,6 +45,27 @@ process.env.NCPS_ENABLED = process.env.NCPS_ENABLED || 'false';
 process.env.CONTAINERS_CLEANUP_ENABLED = process.env.CONTAINERS_CLEANUP_ENABLED || 'false';
 process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
 process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234';
+process.env.NOTIFICATIONS_GRPC_ADDR = process.env.NOTIFICATIONS_GRPC_ADDR || 'notifications:50051';
+process.env.NOTIFICATIONS_GRPC_DEADLINE_MS = process.env.NOTIFICATIONS_GRPC_DEADLINE_MS || '3000';
+
+vi.mock('../src/notifications/notifications-grpc.publisher', () => {
+  class NotificationsGrpcPublisher {
+    async publishToRooms(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
+
+  const NOTIFICATIONS_PUBLISHER_CONFIG = Symbol('NOTIFICATIONS_PUBLISHER_CONFIG');
+
+  return {
+    NotificationsGrpcPublisher,
+    NOTIFICATIONS_PUBLISHER_CONFIG,
+    NOTIFICATIONS_GRPC_PUBLISHER_PROVIDER: {
+      provide: UI_NOTIFICATIONS_PUBLISHER,
+      useExisting: NotificationsGrpcPublisher,
+    },
+  };
+});
 
 const TEST_TIMEOUT_MS = 15_000;
 const agentProbeToken = Symbol('agent_node_probe');
@@ -63,6 +88,7 @@ type BootstrapStubs = {
   dockerClientStub: Partial<DockerClient>;
   volumeGcStub: Partial<VolumeGcService>;
   connectivityMonitorStub: Partial<DockerRunnerConnectivityMonitor>;
+  notificationsPublisherStub: UiNotificationsPublisher;
 };
 
 const createBootstrapStubs = (): BootstrapStubs => {
@@ -206,6 +232,9 @@ const createBootstrapStubs = (): BootstrapStubs => {
     onModuleInit: vi.fn(),
     onModuleDestroy: vi.fn(),
   } satisfies Partial<DockerRunnerConnectivityMonitor>;
+  const notificationsPublisherStub: UiNotificationsPublisher = {
+    publishToRooms: vi.fn().mockResolvedValue(undefined),
+  };
 
   return {
     prismaServiceStub,
@@ -225,6 +254,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
     dockerClientStub,
     volumeGcStub,
     connectivityMonitorStub,
+    notificationsPublisherStub,
   };
 };
 
@@ -263,6 +293,8 @@ const applyBootstrapOverrides = (
     .useValue(stubs.liveGraphRuntimeStub)
     .overrideProvider(LLMProvisioner)
     .useValue(stubs.llmProvisionerStub)
+    .overrideProvider(UI_NOTIFICATIONS_PUBLISHER)
+    .useValue(stubs.notificationsPublisherStub)
     .overrideProvider(LLMSettingsService)
     .useValue({})
     .overrideProvider(DockerWorkspaceEventsWatcher)

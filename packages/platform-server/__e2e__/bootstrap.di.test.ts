@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { NestFactory } from '@nestjs/core';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
@@ -27,9 +27,65 @@ const REQUIRED_ENV = {
   CONTAINERS_CLEANUP_ENABLED: 'false',
   VOLUME_GC_ENABLED: 'false',
   NCPS_ENABLED: 'false',
+  NOTIFICATIONS_GRPC_ADDR: 'notifications:50051',
 } as const;
 
 const TEST_TIMEOUT_MS = 20_000;
+
+vi.mock('../src/notifications/notifications-grpc.publisher', async () => {
+  const { UI_NOTIFICATIONS_PUBLISHER } = await vi.importActual<
+    typeof import('../src/notifications/ui-notifications.publisher')
+  >('../src/notifications/ui-notifications.publisher');
+
+  class NotificationsGrpcPublisher {
+    async publishToRooms(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
+
+  const NOTIFICATIONS_PUBLISHER_CONFIG = Symbol('NOTIFICATIONS_PUBLISHER_CONFIG');
+
+  return {
+    NotificationsGrpcPublisher,
+    NOTIFICATIONS_PUBLISHER_CONFIG,
+    NOTIFICATIONS_GRPC_PUBLISHER_PROVIDER: {
+      provide: UI_NOTIFICATIONS_PUBLISHER,
+      useExisting: NotificationsGrpcPublisher,
+    },
+  };
+});
+
+vi.mock('../src/llm/provisioners/litellm.key.store', () => {
+  class LiteLLMKeyStore {
+    private readonly store = new Map<string, { key: string; expiresAt: Date | null }>();
+
+    async load(alias: string): Promise<{ alias: string; key: string; expiresAt: Date | null } | null> {
+      const record = this.store.get(alias);
+      if (!record) return null;
+      return { alias, ...record };
+    }
+
+    async save(record: { alias: string; key: string; expiresAt: Date | null }): Promise<void> {
+      this.store.set(record.alias, { key: record.key, expiresAt: record.expiresAt });
+    }
+
+    async delete(alias: string): Promise<void> {
+      this.store.delete(alias);
+    }
+  }
+
+  return { LiteLLMKeyStore };
+});
+
+vi.mock('../src/core/services/startupRecovery.service', () => {
+  class StartupRecoveryService {
+    async onApplicationBootstrap(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
+
+  return { StartupRecoveryService };
+});
 
 describe('Production bootstrap DI', () => {
   let savedEnv: Record<string, string | undefined> = {};
