@@ -16,13 +16,16 @@ import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.st
 import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
 
 import type { LLM } from '@agyn/llm';
-import { FunctionTool, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { AIMessage, FunctionTool, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 
 vi.mock('@agyn/docker-runner', () => ({}));
 
+type MixedOutput = ReturnType<ResponseMessage['toPlain']>['output'];
+
 type ScriptStep =
   | { kind: 'tool_call'; callId: string; name: string; args?: string }
-  | { kind: 'text'; text: string };
+  | { kind: 'text'; text: string }
+  | { kind: 'response'; output: MixedOutput };
 
 class ScriptableLLM implements Pick<LLM, 'call'> {
   readonly inputs: Array<{ raw: Parameters<LLM['call']>[0]['input']; flat: unknown[] }> = [];
@@ -61,6 +64,10 @@ class ScriptableLLM implements Pick<LLM, 'call'> {
         arguments: step.args ?? '{}',
       } as any);
       return new ResponseMessage({ output: [toolCall.toPlain()] as any });
+    }
+
+    if (step.kind === 'response') {
+      return new ResponseMessage({ output: step.output as any });
     }
 
     return ResponseMessage.fromText(step.text);
@@ -289,6 +296,72 @@ describe('LLM full-flow duplication integration', () => {
       } else {
         expect(summary.counts.response).toBeGreaterThan(0);
       }
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
+  it('captures duplicate assistant items when first response mixes tool call and empty text', async () => {
+    const fixture = await createAgentFixture();
+    const { agent, moduleRef, registerCallModelLLM } = fixture;
+
+    try {
+      const scriptedLLM = new ScriptableLLM();
+      const toolCallPlain = new ToolCallMessage({
+        type: 'function_call',
+        call_id: 'call-mixed',
+        name: 'demo',
+        arguments: '{}',
+      } as any).toPlain();
+      const emptyAssistantPlain = AIMessage.fromText('').toPlain();
+
+      scriptedLLM.setScript([
+        { kind: 'response', output: [toolCallPlain, emptyAssistantPlain] },
+        { kind: 'text', text: 'final' },
+      ]);
+      registerCallModelLLM(scriptedLLM);
+
+      const result = await agent.invoke('thread-mixed', [HumanMessage.fromText('start')] );
+      expect(result).toBeInstanceOf(ResponseMessage);
+      expect(result.text).toBe('final');
+
+      expect(scriptedLLM.inputs.length).toBe(2);
+      const secondCallInput = scriptedLLM.inputs[1];
+      const rawMessages = secondCallInput?.raw ?? [];
+      const flattenedMessages = secondCallInput?.flat ?? [];
+
+      const summary = summarizeInput(rawMessages);
+      console.info('Second call input (mixed response):', JSON.stringify(summary, null, 2));
+      console.debug('Second call flattened input (mixed response):', JSON.stringify(flattenedMessages, null, 2));
+
+      const responseMessages = rawMessages.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
+      expect(responseMessages.length).toBe(1);
+      const responsePayloads = responseMessages.map((msg) => msg.toPlain());
+      console.debug('Second call response payloads (mixed response):', JSON.stringify(responsePayloads, null, 2));
+
+      const [firstResponse] = responseMessages;
+      const responseOutputs = firstResponse.output;
+      expect(responseOutputs.length).toBe(2);
+      const toolCallOutputs = responseOutputs.filter((output) => output instanceof ToolCallMessage);
+      const assistantOutputs = responseOutputs.filter((output) => output instanceof AIMessage);
+
+      expect(toolCallOutputs.length).toBe(1);
+      expect(assistantOutputs.length).toBe(1);
+      expect(assistantOutputs[0]?.text).toBe('');
+
+      const flattenedFunctionCalls = flattenedMessages.filter((entry) => entry?.type === 'function_call');
+      const flattenedAssistantMessages = flattenedMessages.filter(
+        (entry) => entry?.type === 'message' && entry?.role === 'assistant',
+      );
+
+      expect(flattenedFunctionCalls.length).toBe(1);
+      const emptyAssistantFlattened = flattenedAssistantMessages.filter((entry) => {
+        const contents = Array.isArray(entry?.content) ? entry.content : [];
+        const textContent = contents.find((c: any) => c?.type === 'output_text');
+        return textContent?.text === '';
+      });
+      expect(flattenedAssistantMessages.length).toBe(1);
+      expect(emptyAssistantFlattened.length).toBe(1);
     } finally {
       await moduleRef.close();
     }
