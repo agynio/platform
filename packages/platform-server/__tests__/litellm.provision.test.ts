@@ -39,13 +39,15 @@ const respondJson = (payload: unknown, init?: ResponseInit) =>
 
 const respondStatus = (status: number, body = '') => new Response(body, { status });
 
-const baseConfig = (): ConfigService => {
+const baseConfig = (overrides: Partial<Config> = {}): ConfigService => {
   const params: Partial<Config> = {
     llmProvider: 'litellm',
     litellmBaseUrl: 'http://litellm.local:4000',
     litellmMasterKey: 'sk-master',
     agentsDatabaseUrl: 'postgres://dev:dev@localhost:5432/agents',
     ...runnerConfigDefaults,
+    litellmKeyAlias: 'agents/unit-test',
+    ...overrides,
   };
   return new ConfigService().init(configSchema.parse(params));
 };
@@ -91,6 +93,43 @@ describe('LiteLLMProvisioner', () => {
     );
     expect(generateCalls.length).toBeGreaterThanOrEqual(1);
     expect(store.current?.key).toBe('sk-new');
+    await provisioner.teardown();
+  });
+
+  it('passes configured alias, duration, and models when generating keys', async () => {
+    const store = new InMemoryKeyStore();
+    const expires = new Date(Date.now() + 45 * 60 * 1000).toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getUrl(input);
+      if (url.endsWith('/key/generate')) {
+        return respondJson({ key: 'sk-config', expires });
+      }
+      if (url.endsWith('/key/delete')) {
+        return respondJson({ deleted_keys: [] });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    const provisioner = new LiteLLMProvisioner(
+      baseConfig({
+        litellmKeyAlias: 'agents/custom',
+        litellmKeyDuration: '45m',
+        litellmModels: ['gpt-4o', 'claude-4.1'],
+      }),
+      store,
+      fetchMock as unknown as typeof fetch,
+    );
+    await provisioner.init();
+
+    const generateCall = fetchMock.mock.calls.find(([arg]) => getUrl(arg as RequestInfo | URL).endsWith('/key/generate'));
+    expect(generateCall).toBeDefined();
+    const requestInit = generateCall?.[1] as RequestInit;
+    expect(requestInit?.body).toBeDefined();
+    const parsedBody = JSON.parse(String(requestInit?.body)) as Record<string, unknown>;
+    expect(parsedBody.key_alias).toBe('agents/custom');
+    expect(parsedBody.duration).toBe('45m');
+    expect(parsedBody.models).toEqual(['gpt-4o', 'claude-4.1']);
+
     await provisioner.teardown();
   });
 

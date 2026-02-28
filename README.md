@@ -106,8 +106,9 @@ pnpm install
 2) Configure environments:
 - Server: copy packages/platform-server/.env.example to .env, then set:
   - AGENTS_DATABASE_URL (required) — e.g. postgresql://agents:agents@localhost:5443/agents
-  - LLM_PROVIDER — litellm or openai (no default)
+  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI
   - LITELLM_BASE_URL, LITELLM_MASTER_KEY (required for LiteLLM path)
+  - Optional LiteLLM tuning: LITELLM_KEY_ALIAS (default `agents/<env>/<deployment>`), LITELLM_KEY_DURATION (`30d`), LITELLM_MODELS (`all-team-models`)
   - Optional: CORS_ORIGINS, VAULT_* (see packages/platform-server/src/core/services/config.service.ts and .env.example)
 - UI: copy packages/platform-ui/.env.example to .env and set:
   - VITE_API_BASE_URL — e.g. http://localhost:3010
@@ -149,7 +150,7 @@ The docker-runner dev script automatically loads the first `.env` it finds (pref
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):
     - ghcr.io/agynio/platform-server
     - ghcr.io/agynio/platform-ui
-  - Example: server (env must include AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY):
+- Example: server (env must include AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY; optionally set LLM_PROVIDER):
 ```bash
 docker run --rm -p 3010:3010 \
   -e AGENTS_DATABASE_URL=postgresql://agents:agents@host.docker.internal:5443/agents \
@@ -170,7 +171,7 @@ docker run --rm -p 8080:80 \
 Key environment variables (server) from packages/platform-server/.env.example and src/core/services/config.service.ts:
 - Required:
   - AGENTS_DATABASE_URL — Postgres connection for platform-server
-  - LLM_PROVIDER — litellm or openai
+  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI
   - LITELLM_BASE_URL — LiteLLM root URL (must not include /v1; default host in docker-compose is 127.0.0.1:4000)
   - LITELLM_MASTER_KEY — admin key for LiteLLM
 - Optional LLM:
@@ -290,7 +291,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 - Local compose: docker-compose.yml includes all supporting services required for dev workflows.
 - Server container:
   - Image: ghcr.io/agynio/platform-server
-  - Required env: AGENTS_DATABASE_URL, LLM_PROVIDER, LITELLM_BASE_URL, LITELLM_MASTER_KEY, optional Vault and CORS
+- Required env: AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY (LLM_PROVIDER optional), optional Vault and CORS
   - Exposes 3010; healthcheck verifies TCP connectivity
 - UI container:
   - Image: ghcr.io/agynio/platform-ui

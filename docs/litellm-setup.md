@@ -27,15 +27,15 @@ Initial configuration (via UI)
   - In the Agents UI, the Model field now accepts free-text. Enter either your alias name (e.g., gpt-5) or a provider-prefixed identifier (e.g., openai/gpt-4o-mini). The UI does not validate availability; runtime will surface errors if misconfigured.
 
 App configuration: LiteLLM admin requirements
-- Set `LLM_PROVIDER=litellm` on the platform server.
+- `LLM_PROVIDER` defaults to `litellm`. Override to `openai` only when bypassing LiteLLM.
 - LiteLLM administration env vars are required at boot:
   - `LITELLM_BASE_URL=http://localhost:4000`
   - `LITELLM_MASTER_KEY=sk-<master-key>`
 - The server provisions virtual keys by calling LiteLLM's admin API. Missing either env produces a `503 litellm_missing_config` response for the LLM settings API and disables UI writes.
 - Optional overrides for generated virtual keys:
-  - `LITELLM_MODELS=gpt-5` (comma-separated list)
-  - `LITELLM_KEY_DURATION=30d`
-  - `LITELLM_KEY_ALIAS=agents-${process.pid}`
+  - `LITELLM_MODELS=gpt-5` (comma-separated list; default `all-team-models`)
+  - `LITELLM_KEY_DURATION=30d` (default `30d`)
+  - `LITELLM_KEY_ALIAS=agents-${process.pid}` (defaults to `agents/<env>/<deployment>`)
   - Limits: `LITELLM_MAX_BUDGET`, `LITELLM_RPM_LIMIT`, `LITELLM_TPM_LIMIT`, `LITELLM_TEAM_ID`
 - Runtime requests use `${LITELLM_BASE_URL}/v1` with either the master key or the generated virtual key.
 

@@ -79,6 +79,19 @@ extraEnvVars: []
 extraEnvVarsCM: ""
 extraEnvVarsSecret: ""
 
+llm:
+  provider: litellm
+  litellm:
+    baseUrl: http://litellm:4000
+    masterKeySecretRef:
+      name: ""
+      key: ""
+    masterKey: ""
+    keyAlias: ""
+    keyDuration: 30d
+    models:
+      - all-team-models
+
 configMounts: []
 extraVolumeMounts: []
 extraVolumes: []

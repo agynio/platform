@@ -1,7 +1,6 @@
 import { LLM } from '@agyn/llm';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
-import os from 'node:os';
 import { ConfigService } from '../../core/services/config.service';
 import { LLMProvisioner } from './llm.provisioner';
 import { LiteLLMKeyStore } from './litellm.key.store';
@@ -41,7 +40,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     }
     this.keyStore = keyStore;
     this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
-    this.keyAlias = this.resolveAlias();
+    this.keyAlias = this.cfg.litellmKeyAlias;
   }
 
   init(): Promise<void> {
@@ -218,8 +217,8 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     };
     const body: Record<string, unknown> = {
       key_alias: this.keyAlias,
-      models: this.toList(process.env.LITELLM_MODELS, ['all-team-models']),
-      duration: process.env.LITELLM_KEY_DURATION || '30d',
+      models: [...this.cfg.litellmModels],
+      duration: this.cfg.litellmKeyDuration,
     };
 
     const setNumeric = (value: string | undefined, key: string) => {
@@ -346,14 +345,6 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     }
   }
 
-  private toList(v: string | undefined, fallback: string[]): string[] {
-    const parts = (v || '')
-      .split(',')
-      .map((x) => x.trim())
-      .filter(Boolean);
-    return parts.length ? parts : fallback;
-  }
-
   private async safeReadText(resp: Response): Promise<string> {
     try {
       return await resp.text();
@@ -372,21 +363,6 @@ export class LiteLLMProvisioner extends LLMProvisioner {
 
   private redact(value: string): string {
     return value?.replace(/(sk-[A-Za-z0-9_-]{6,})/g, '[REDACTED]') ?? value;
-  }
-
-  private resolveAlias(): string {
-    const explicit = (process.env.LITELLM_KEY_ALIAS ?? '').trim();
-    if (explicit) return explicit;
-
-    const envName = (process.env.AGENTS_ENV ?? process.env.NODE_ENV ?? 'local').replace(/\s+/g, '-');
-    const deployment =
-      process.env.AGENTS_DEPLOYMENT ||
-      process.env.DEPLOYMENT_ID ||
-      process.env.HOSTNAME ||
-      os.hostname() ||
-      'unknown';
-    const normalizedDeployment = deployment.replace(/\s+/g, '-');
-    return `agents/${envName}/${normalizedDeployment}`;
   }
 
   private describeError(error: unknown): string {

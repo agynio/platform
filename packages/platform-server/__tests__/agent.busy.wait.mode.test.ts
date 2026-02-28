@@ -9,7 +9,7 @@ import type { LLMContext, LLMState } from '../src/llm/types';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
-import { runnerConfigDefaults } from './helpers/config';
+import { buildConfigInput } from './helpers/config';
 
 class PassthroughReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState): Promise<LLMState> {
@@ -40,13 +40,14 @@ describe('Agent busy gating (wait mode)', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-            configSchema.parse({
-              llmProvider: 'openai',
-              agentsDatabaseUrl: 'postgres://user:pass@host/db',
-              litellmBaseUrl: 'http://localhost:4000',
-              litellmMasterKey: 'sk-test',
-              ...runnerConfigDefaults,
-            }),
+            configSchema.parse(
+              buildConfigInput({
+                llmProvider: 'openai',
+                agentsDatabaseUrl: 'postgres://user:pass@host/db',
+                litellmBaseUrl: 'http://localhost:4000',
+                litellmMasterKey: 'sk-test',
+              }),
+            ),
           ),
         },
         { provide: LLMProvisioner, useValue: {} },

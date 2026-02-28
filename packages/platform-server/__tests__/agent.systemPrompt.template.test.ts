@@ -14,7 +14,7 @@ import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import type { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import { runnerConfigDefaults } from './helpers/config';
+import { buildConfigInput } from './helpers/config';
 
 const EmptySchema = z.object({});
 
@@ -63,13 +63,14 @@ const createAgentHarness = async () => {
       {
         provide: ConfigService,
         useValue: new ConfigService().init(
-          configSchema.parse({
-            llmProvider: 'openai',
-            agentsDatabaseUrl: 'postgres://localhost/agents',
-            litellmBaseUrl: 'http://localhost:4000',
-            litellmMasterKey: 'sk-test',
-            ...runnerConfigDefaults,
-          }),
+          configSchema.parse(
+            buildConfigInput({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://localhost/agents',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
+            }),
+          ),
         ),
       },
       {

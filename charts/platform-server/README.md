@@ -31,6 +31,14 @@ summarised below.
 | `service.ports[0].port` | Service port | `3010` |
 | `containerPorts[0].containerPort` | Container listen port | `3010` |
 | `env` | Static environment variables | `NODE_ENV=production`, `PORT=3010` |
+| `llm.provider` | LLM provider (`litellm` \| `openai`) | `litellm` |
+| `llm.litellm.baseUrl` | LiteLLM admin endpoint (no `/v1`) | `http://litellm:4000` |
+| `llm.litellm.masterKeySecretRef.name` | Secret with LiteLLM master key | `""` |
+| `llm.litellm.masterKeySecretRef.key` | Secret key for LiteLLM master key | `""` |
+| `llm.litellm.masterKey` | Inline LiteLLM master key (not recommended) | `""` |
+| `llm.litellm.keyAlias` | LiteLLM virtual key alias (empty → auto) | `""` |
+| `llm.litellm.keyDuration` | Virtual key duration window | `30d` |
+| `llm.litellm.models` | Comma-joined LiteLLM model allowlist | `['all-team-models']` |
 | `livenessProbe.httpGet.path` | Liveness probe path | `/healthz` |
 | `readinessProbe.httpGet.path` | Readiness probe path | `/readyz` |
 | `resources.requests` | CPU/Memory requests | `100m` / `128Mi` |

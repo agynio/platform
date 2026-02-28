@@ -106,10 +106,11 @@ Configuration matrix (server env vars)
   - GITHUB_APP_PRIVATE_KEY (PEM; multiline ok)
   - GITHUB_INSTALLATION_ID
   - GH_TOKEN
-  - LLM_PROVIDER (litellm | openai)
-  - If `LLM_PROVIDER=litellm`: LITELLM_BASE_URL and LITELLM_MASTER_KEY
+  - If using LiteLLM (default): LITELLM_BASE_URL and LITELLM_MASTER_KEY
   - If `LLM_PROVIDER=openai`: OPENAI_API_KEY (OPENAI_BASE_URL optional)
 - Optional
+  - LLM_PROVIDER (defaults to `litellm`; set to `openai` to bypass LiteLLM)
+  - LiteLLM tuning: LITELLM_KEY_ALIAS (default `agents/<env>/<deployment>`), LITELLM_KEY_DURATION (`30d`), LITELLM_MODELS (`all-team-models`)
   - GRAPH_REPO_PATH (default ./data/graph)
   - GRAPH_BRANCH (default main)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
@@ -132,7 +133,7 @@ HTTP API and sockets (pointers)
 Runbooks
 - Local dev
   - Prereqs: Node 18+, pnpm, Docker, Postgres.
-  - Set: LLM_PROVIDER=litellm, LITELLM_BASE_URL, LITELLM_MASTER_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_GRPC_HOST, DOCKER_RUNNER_GRPC_PORT (or DOCKER_RUNNER_PORT), DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Set: LITELLM_BASE_URL, LITELLM_MASTER_KEY (LLM_PROVIDER optional; defaults to litellm), GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL, DOCKER_RUNNER_GRPC_HOST, DOCKER_RUNNER_GRPC_PORT (or DOCKER_RUNNER_PORT), DOCKER_RUNNER_SHARED_SECRET. Optional VAULT_* and DOCKER_MIRROR_URL.
   - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev

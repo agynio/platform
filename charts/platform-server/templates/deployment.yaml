@@ -1,1 +1,30 @@
-{{- include "service-base.deployment" . -}}
+{{- $ctx := deepCopy . -}}
+{{- $values := deepCopy .Values -}}
+{{- $llm := $values.llm | default (dict) -}}
+{{- $provider := default "litellm" $llm.provider -}}
+{{- $llmEnv := list (dict "name" "LLM_PROVIDER" "value" $provider) -}}
+{{- $litellm := $llm.litellm | default (dict) -}}
+{{- if $litellm.baseUrl }}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_BASE_URL" "value" $litellm.baseUrl) -}}
+{{- end }}
+{{- if $litellm.keyAlias }}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_KEY_ALIAS" "value" $litellm.keyAlias) -}}
+{{- end }}
+{{- $duration := default "30d" $litellm.keyDuration -}}
+{{- if $duration }}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_KEY_DURATION" "value" $duration) -}}
+{{- end }}
+{{- $models := $litellm.models | default (list "all-team-models") -}}
+{{- if gt (len $models) 0 -}}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_MODELS" "value" (join "," $models)) -}}
+{{- end -}}
+{{- $secretRef := $litellm.masterKeySecretRef -}}
+{{- if and $secretRef $secretRef.name $secretRef.key }}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_MASTER_KEY" "valueFrom" (dict "secretKeyRef" (dict "name" $secretRef.name "key" $secretRef.key))) -}}
+{{- else if $litellm.masterKey }}
+{{- $llmEnv = append $llmEnv (dict "name" "LITELLM_MASTER_KEY" "value" $litellm.masterKey) -}}
+{{- end }}
+{{- $existingExtra := $values.extraEnvVars | default (list) -}}
+{{- $_ := set $values "extraEnvVars" (concat $llmEnv $existingExtra) -}}
+{{- $_ := set $ctx "Values" $values -}}
+{{- include "service-base.deployment" $ctx -}}

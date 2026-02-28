@@ -26,7 +26,7 @@ import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
-import { runnerConfigDefaults } from './helpers/config';
+import { buildConfigInput } from './helpers/config';
 
 process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -171,13 +171,14 @@ if (!shouldRunDbTests) {
       });
 
       const configServiceStub = new ConfigService().init(
-        configSchema.parse({
-          llmProvider: 'openai',
-          agentsDatabaseUrl: 'postgres://localhost:5432/test',
-          litellmBaseUrl: 'http://127.0.0.1:4000',
-          litellmMasterKey: 'test-master-key',
-          ...runnerConfigDefaults,
-        }),
+        configSchema.parse(
+          buildConfigInput({
+            llmProvider: 'openai',
+            agentsDatabaseUrl: 'postgres://localhost:5432/test',
+            litellmBaseUrl: 'http://127.0.0.1:4000',
+            litellmMasterKey: 'test-master-key',
+          }),
+        ),
       );
       ConfigService.register(configServiceStub);
 

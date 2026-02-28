@@ -9,7 +9,7 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { ThreadTransportService } from '../src/messaging/threadTransport.service';
-import { runnerConfigDefaults } from './helpers/config';
+import { buildConfigInput } from './helpers/config';
 
 import { AIMessage, HumanMessage, Loop, Reducer, ResponseMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
@@ -42,14 +42,15 @@ describe('AgentNode termination auto-send', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
-          configSchema.parse({
-            llmProvider: 'litellm',
-            litellmBaseUrl: 'http://127.0.0.1:4000',
-            litellmMasterKey: 'sk-dev-master-1234',
-            agentsDatabaseUrl: 'postgres://user:pass@host/db',
-            ...runnerConfigDefaults,
-          }),
-        ),
+            configSchema.parse(
+              buildConfigInput({
+                llmProvider: 'litellm',
+                litellmBaseUrl: 'http://127.0.0.1:4000',
+                litellmMasterKey: 'sk-dev-master-1234',
+                agentsDatabaseUrl: 'postgres://user:pass@host/db',
+              }),
+            ),
+          ),
         },
         {
           provide: LLMProvisioner,

@@ -5,7 +5,7 @@ import { Injectable } from '@nestjs/common';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { configSchema, ConfigService } from '../src/core/services/config.service';
-import { runnerConfigDefaults } from './helpers/config';
+import { buildConfigInput } from './helpers/config';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -78,13 +78,14 @@ const createAgentFixture = async () => {
       {
         provide: ConfigService,
         useValue: new ConfigService().init(
-          configSchema.parse({
-            llmProvider: 'openai',
-            agentsDatabaseUrl: 'postgres://user:pass@host/db',
-            litellmBaseUrl: 'http://localhost:4000',
-            litellmMasterKey: 'sk-test',
-            ...runnerConfigDefaults,
-          }),
+          configSchema.parse(
+            buildConfigInput({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://user:pass@host/db',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
+            }),
+          ),
         ),
       },
       AutoSendTestAgentNode,
@@ -139,13 +140,14 @@ const createAgentWithTransportFixture = async () => {
       {
         provide: ConfigService,
         useValue: new ConfigService().init(
-          configSchema.parse({
-            llmProvider: 'openai',
-            agentsDatabaseUrl: 'postgres://user:pass@host/db',
-            litellmBaseUrl: 'http://localhost:4000',
-            litellmMasterKey: 'sk-test',
-            ...runnerConfigDefaults,
-          }),
+          configSchema.parse(
+            buildConfigInput({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://user:pass@host/db',
+              litellmBaseUrl: 'http://localhost:4000',
+              litellmMasterKey: 'sk-test',
+            }),
+          ),
         ),
       },
       AutoSendTestAgentNode,

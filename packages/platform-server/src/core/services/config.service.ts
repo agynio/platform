@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
+import os from 'node:os';
 dotenv.config();
 
 export const configSchema = z.object({
@@ -8,8 +9,8 @@ export const configSchema = z.object({
   githubAppId: z.string().min(1).optional(),
   githubAppPrivateKey: z.string().min(1).optional(),
   githubInstallationId: z.string().min(1).optional(),
-  // LLM provider selection: must be explicit; no default
-  llmProvider: z.enum(['openai', 'litellm']),
+  // LLM provider selection defaults to LiteLLM
+  llmProvider: z.enum(['openai', 'litellm']).default('litellm'),
   openaiApiKey: z.string().optional(),
   openaiBaseUrl: z.string().optional(),
   // LiteLLM admin configuration (required)
@@ -23,6 +24,18 @@ export const configSchema = z.object({
     .string()
     .min(1, 'LITELLM_MASTER_KEY is required')
     .transform((value) => value.trim()),
+  litellmKeyAlias: z
+    .string()
+    .min(1, 'LITELLM_KEY_ALIAS is required')
+    .transform((value) => value.trim()),
+  litellmKeyDuration: z
+    .string()
+    .min(1, 'LITELLM_KEY_DURATION is required')
+    .transform((value) => value.trim()),
+  litellmModels: z
+    .array(z.string().min(1))
+    .default(['all-team-models'])
+    .transform((models) => models.map((model) => model.trim()).filter((model) => model.length > 0)),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
   graphRepoPath: z.string().default('./data/graph'),
@@ -241,6 +254,7 @@ export type Config = z.infer<typeof configSchema>;
 
 @Injectable()
 export class ConfigService implements Config {
+  private static readonly logger = new Logger(ConfigService.name);
   private static sharedInstance?: ConfigService;
 
   private _params?: Config;
@@ -322,6 +336,15 @@ export class ConfigService implements Config {
   }
   get litellmMasterKey(): string {
     return this.params.litellmMasterKey;
+  }
+  get litellmKeyAlias(): string {
+    return this.params.litellmKeyAlias;
+  }
+  get litellmKeyDuration(): string {
+    return this.params.litellmKeyDuration;
+  }
+  get litellmModels(): string[] {
+    return this.params.litellmModels;
   }
   get githubToken(): string | undefined {
     return this.params.githubToken;
@@ -523,6 +546,12 @@ export class ConfigService implements Config {
   // No global messaging adapter config in Slack-only v1
 
   static fromEnv(): ConfigService {
+    const llmProvider = ConfigService.normalizeLlmProvider(process.env.LLM_PROVIDER);
+    const openaiApiKey = ConfigService.resolveLegacyOpenAiKey(llmProvider, process.env.OPENAI_API_KEY);
+    const openaiBaseUrl = ConfigService.resolveLegacyOpenAiBaseUrl(llmProvider, process.env.OPENAI_BASE_URL);
+    const litellmKeyAlias = ConfigService.resolveLiteLlmKeyAlias(process.env);
+    const litellmKeyDuration = ConfigService.coerceString(process.env.LITELLM_KEY_DURATION) ?? '30d';
+    const litellmModels = ConfigService.parseCsv(process.env.LITELLM_MODELS, ['all-team-models']);
     const legacy = process.env.NCPS_URL;
     const urlServer = process.env.NCPS_URL_SERVER || legacy;
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
@@ -533,9 +562,14 @@ export class ConfigService implements Config {
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
-      llmProvider: process.env.LLM_PROVIDER,
-      litellmBaseUrl: process.env.LITELLM_BASE_URL,
-      litellmMasterKey: process.env.LITELLM_MASTER_KEY,
+      llmProvider,
+      openaiApiKey,
+      openaiBaseUrl,
+      litellmBaseUrl: ConfigService.coerceString(process.env.LITELLM_BASE_URL),
+      litellmMasterKey: ConfigService.coerceString(process.env.LITELLM_MASTER_KEY),
+      litellmKeyAlias,
+      litellmKeyDuration,
+      litellmModels,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
       graphRepoPath: graphRepoPathEnv,
@@ -586,5 +620,82 @@ export class ConfigService implements Config {
     const config = new ConfigService().init(parsed);
     ConfigService.register(config);
     return config;
+  }
+
+  private static normalizeLlmProvider(value: string | undefined): 'openai' | 'litellm' {
+    const normalized = ConfigService.coerceString(value)?.toLowerCase();
+    if (normalized === 'openai') {
+      return 'openai';
+    }
+    if (normalized === 'litellm') {
+      return 'litellm';
+    }
+    if (value && normalized) {
+      ConfigService.logger.warn(
+        `LLM_PROVIDER value "${value}" is not supported; defaulting to "litellm"`,
+      );
+    }
+    return 'litellm';
+  }
+
+  private static resolveLegacyOpenAiKey(
+    provider: 'openai' | 'litellm',
+    candidate: string | undefined,
+  ): string | undefined {
+    const trimmed = ConfigService.coerceString(candidate);
+    if (provider === 'openai' && trimmed) {
+      ConfigService.logger.warn('OPENAI_API_KEY is deprecated; LiteLLM is the default provider.');
+      return trimmed;
+    }
+    return undefined;
+  }
+
+  private static resolveLegacyOpenAiBaseUrl(
+    provider: 'openai' | 'litellm',
+    candidate: string | undefined,
+  ): string | undefined {
+    const trimmed = ConfigService.coerceString(candidate);
+    if (provider === 'openai' && trimmed) {
+      ConfigService.logger.warn('OPENAI_BASE_URL is deprecated; LiteLLM is the default provider.');
+      return trimmed;
+    }
+    return undefined;
+  }
+
+  private static resolveLiteLlmKeyAlias(env: NodeJS.ProcessEnv): string {
+    const explicit = ConfigService.coerceString(env.LITELLM_KEY_ALIAS);
+    if (explicit) {
+      return explicit;
+    }
+
+    const envName = (ConfigService.coerceString(env.AGENTS_ENV) ?? ConfigService.coerceString(env.NODE_ENV) ?? 'local')
+      .replace(/\s+/g, '-');
+    const deployment =
+      ConfigService.coerceString(env.AGENTS_DEPLOYMENT) ??
+      ConfigService.coerceString(env.DEPLOYMENT_ID) ??
+      ConfigService.coerceString(env.HOSTNAME) ??
+      os.hostname() ??
+      'unknown';
+    return `agents/${envName}/${deployment.replace(/\s+/g, '-')}`;
+  }
+
+  private static parseCsv(value: string | undefined, fallback: string[]): string[] {
+    const trimmed = ConfigService.coerceString(value);
+    if (!trimmed) {
+      return fallback;
+    }
+    const parts = trimmed
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    return parts.length > 0 ? parts : fallback;
+  }
+
+  private static coerceString(value: string | undefined): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 }

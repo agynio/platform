@@ -113,8 +113,9 @@ Persistent conversation state (Prisma)
   - `pnpm --filter @agyn/platform-server prisma studio`
 - Best-effort: if AGENTS_DATABASE_URL is not set or DB errors occur, reducers fall back to in-memory only.
 - Local dev:
-  - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
-  - When `LLM_PROVIDER=litellm`, the server expects `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY`.
+  - `LLM_PROVIDER` defaults to `litellm`. Set it to `openai` to use direct OpenAI access.
+  - When using LiteLLM, configure `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY`.
+    - Optional overrides: `LITELLM_KEY_ALIAS` (defaults to `agents/<env>/<deployment>`), `LITELLM_KEY_DURATION` (`30d`), and `LITELLM_MODELS` (`all-team-models`).
     - In docker-compose development the admin base defaults to `http://127.0.0.1:4000` if unset.
     - For all other environments, set an explicit `LITELLM_BASE_URL` and master key.
 
@@ -125,6 +126,10 @@ For local administration of LiteLLM credentials and models, configure the follow
 ```env
 LITELLM_BASE_URL=http://127.0.0.1:4000
 LITELLM_MASTER_KEY=sk-dev-master-1234
+# Optional overrides:
+LITELLM_KEY_ALIAS=agents/local/dev
+LITELLM_KEY_DURATION=30d
+LITELLM_MODELS=all-team-models
 ```
 
 Replace `sk-dev-master-1234` with your actual LiteLLM master key if it differs.
