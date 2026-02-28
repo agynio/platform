@@ -172,6 +172,7 @@ export class ThreadCleanupCoordinator {
 
   private async deleteWorkspaceVolume(threadId: string): Promise<void> {
     const volumeName = `ha_ws_${threadId}`;
+    let registryRefs: Array<{ containerId: string; threadId: string | null; status: ContainerStatus }> = [];
     try {
       const dockerContainers = await this.containerService.listContainersByVolume(volumeName);
       if (dockerContainers.length > 0) {
@@ -186,7 +187,7 @@ export class ThreadCleanupCoordinator {
         return;
       }
 
-      const registryRefs = await this.registry.findByVolume(volumeName);
+      registryRefs = await this.registry.findByVolume(volumeName);
       const mismatchedRefs = registryRefs.filter(
         (ref) => ref.threadId !== threadId || ref.status !== 'stopped',
       );
