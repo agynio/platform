@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createPromiseClient } from '@connectrpc/connect';
+import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
-import { NotificationsService } from '../proto/gen/agynio/api/notifications/v1/notifications_connect';
+import { NotificationsService } from '../proto/gen/agynio/api/notifications/v1/notifications_pb.js';
 import type { UiNotificationPublishRequest, UiNotificationsPublisher } from './ui-notifications.publisher';
 import { UI_NOTIFICATIONS_PUBLISHER } from './ui-notifications.publisher';
 
@@ -43,10 +43,10 @@ export class NotificationsGrpcPublisher implements UiNotificationsPublisher {
 
   constructor(@Inject(NOTIFICATIONS_PUBLISHER_CONFIG) private readonly config: NotificationsPublisherConfig) {
     /*
-     * connect-es marks generated service definitions with @ts-nocheck, so createPromiseClient() currently
+     * connect-es marks generated service definitions with @ts-nocheck, so createClient() currently
      * erases type information to `any`. We validate the publish method below before storing the client.
      */
-    const candidate = createPromiseClient<typeof NotificationsService>(
+    const candidate = createClient<typeof NotificationsService>(
       NotificationsService,
       createConnectTransport({
         baseUrl: config.baseUrl,

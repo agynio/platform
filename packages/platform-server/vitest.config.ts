@@ -10,6 +10,7 @@ export default defineConfig({
       DOCKER_RUNNER_GRPC_HOST: "docker-runner",
       DOCKER_RUNNER_GRPC_PORT: "7171",
       DOCKER_RUNNER_SHARED_SECRET: "test-shared-secret",
+      NOTIFICATIONS_GRPC_ADDR: "notifications:50051",
     },
     fileParallelism: false,
     coverage: {

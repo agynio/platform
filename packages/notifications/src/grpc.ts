@@ -9,7 +9,7 @@ import { NotificationBroadcaster } from './broadcaster';
 import type { SocketBridge } from './socket';
 import { PublishInputSchema } from './validation';
 import type { JsonValue, PublishedNotification } from './types';
-import { NotificationsService } from './proto/gen/agynio/api/notifications/v1/notifications_connect.js';
+import { NotificationsService } from './proto/gen/agynio/api/notifications/v1/notifications_pb.js';
 import {
   NotificationEnvelopeSchema,
   PublishResponseSchema,

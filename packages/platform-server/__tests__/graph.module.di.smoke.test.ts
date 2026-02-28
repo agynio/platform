@@ -33,12 +33,12 @@ const connectMocks = vi.hoisted(() => {
   const publish = vi.fn().mockResolvedValue(undefined);
   return {
     publish,
-    createPromiseClient: vi.fn(() => ({ publish })),
+    createClient: vi.fn(() => ({ publish })),
   };
 });
 
 vi.mock('@connectrpc/connect', () => ({
-  createPromiseClient: connectMocks.createPromiseClient,
+  createClient: connectMocks.createClient,
 }));
 
 const connectNodeMocks = vi.hoisted(() => ({
@@ -49,7 +49,7 @@ vi.mock('@connectrpc/connect-node', () => ({
   createConnectTransport: connectNodeMocks.createConnectTransport,
 }));
 
-vi.mock('../src/proto/gen/agynio/api/notifications/v1/notifications_connect', () => ({
+vi.mock('../src/proto/gen/agynio/api/notifications/v1/notifications_pb.js', () => ({
   NotificationsService: {
     typeName: 'agynio.api.notifications.v1.NotificationsService',
     methods: {
