@@ -534,6 +534,8 @@ export class ConfigService implements Config {
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       llmProvider: process.env.LLM_PROVIDER,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      openaiBaseUrl: process.env.OPENAI_BASE_URL,
       litellmBaseUrl: process.env.LITELLM_BASE_URL,
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       githubToken: process.env.GH_TOKEN,

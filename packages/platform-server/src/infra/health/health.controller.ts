@@ -7,11 +7,17 @@ export class HealthController {
 
   @Get('health')
   getHealth() {
+    const dockerRunner = this.dockerRunnerStatus?.getSnapshot?.() ?? {
+      status: 'unknown',
+      optional: true,
+      consecutiveFailures: 0,
+    };
+
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
       dependencies: {
-        dockerRunner: this.dockerRunnerStatus.getSnapshot(),
+        dockerRunner,
       },
     };
   }
