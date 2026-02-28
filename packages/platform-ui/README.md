@@ -7,8 +7,9 @@ Quickstart
 - Run tests: pnpm -w -F @agyn/platform-ui test
 - Dev: pnpm -w -F @agyn/platform-ui dev
 
-Env configuration (required)
-- VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically and websockets connect to `/socket.io` on the same origin.
+Env configuration
+- VITE_API_BASE_URL (required): base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically.
+- VITE_SOCKET_BASE_URL (optional): override the notifications Socket.IO origin. Defaults to `VITE_API_BASE_URL` when unset; the UI always connects to `/socket.io` on the resolved origin.
 - VITE_UI_MOCK_SIDEBAR (optional, default `false`): enable mock sidebar templates only for local prototyping. Requires a dev build (`import.meta.env.DEV`). Never enable in production builds.
 
 API base URL
@@ -16,6 +17,7 @@ API base URL
 
 Notes
 - Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.
+- Socket connections default to the same origin as the API unless VITE_SOCKET_BASE_URL is provided.
 
 Provider setup
 ```tsx

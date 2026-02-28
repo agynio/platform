@@ -1,12 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 
 describe('GraphSocketGateway metrics coalescing', () => {
   it('coalesces multiple schedules into single batch computation', async () => {
     vi.useFakeTimers();
-    const adapter = new FastifyAdapter();
-    const fastify = adapter.getInstance();
     const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     // Stub metrics service to capture calls
     const getThreadsMetrics = vi.fn(async (_ids: string[]) =>
@@ -27,11 +24,15 @@ describe('GraphSocketGateway metrics coalescing', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub, prismaStub, eventsBusStub as any);
-    // Attach and stub io emit sink
-    gateway.init({ server: fastify.server });
-    const captured: Array<{ room: string; event: string; payload: any }> = [];
-    (gateway as any)['io'] = { to: (room: string) => ({ emit: (event: string, payload: any) => { captured.push({ room, event, payload }); } }) };
+    const notificationsPublisher = { publishToRooms: vi.fn().mockResolvedValue(undefined) };
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metricsStub,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
+    gateway.onModuleInit();
 
     gateway.scheduleThreadMetrics('t1');
     gateway.scheduleThreadMetrics('t2');
@@ -42,10 +43,10 @@ describe('GraphSocketGateway metrics coalescing', () => {
     // Assert single batch computation and grouped emits to both rooms
     expect(getThreadsMetrics).toHaveBeenCalledTimes(1);
     expect(getThreadsMetrics).toHaveBeenCalledWith(['t1', 't2']);
-    const activityThreadsRoom = captured.filter((e) => e.event === 'thread_activity_changed' && e.room === 'threads');
-    const remindersThreadsRoom = captured.filter((e) => e.event === 'thread_reminders_count' && e.room === 'threads');
-    expect(activityThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
-    expect(remindersThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    const activityCalls = notificationsPublisher.publishToRooms.mock.calls.filter((call) => call[0].event === 'thread_activity_changed');
+    const remindersCalls = notificationsPublisher.publishToRooms.mock.calls.filter((call) => call[0].event === 'thread_reminders_count');
+    expect(activityCalls.map((call) => call[0].payload.threadId).sort()).toEqual(['t1', 't2']);
+    expect(remindersCalls.map((call) => call[0].payload.threadId).sort()).toEqual(['t1', 't2']);
     vi.useRealTimers();
   });
 });

@@ -144,7 +144,14 @@ if (!shouldRunRealtimeTests) {
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
     const eventsBus = createEventsBusNoop();
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaStub, eventsBus);
+    const notificationsPublisher = { publishToRooms: async () => undefined };
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaStub,
+      eventsBus,
+      notificationsPublisher,
+    );
     gateway.onModuleInit();
     gateway.init({ server });
 
@@ -203,7 +210,14 @@ if (!shouldRunRealtimeTests) {
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
+    const notificationsPublisher = { publishToRooms: async () => undefined };
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaService,
+      eventsBus,
+      notificationsPublisher,
+    );
     gateway.onModuleInit();
 
     const server = createServer();
@@ -267,7 +281,14 @@ if (!shouldRunRealtimeTests) {
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
+    const notificationsPublisher = { publishToRooms: async () => undefined };
+    const gateway = new GraphSocketGateway(
+      runtime,
+      metricsDouble.service,
+      prismaService,
+      eventsBus,
+      notificationsPublisher,
+    );
     gateway.onModuleInit();
 
     const server = createServer();

@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AddressInfo } from 'net';
 import { PassThrough } from 'node:stream';
 import { io as createClient, type Socket } from 'socket.io-client';
+import type { Server as SocketIOServer } from 'socket.io';
 import WebSocket, { type RawData } from 'ws';
 
 import type { MessageKind, RunStatus } from '@prisma/client';
@@ -17,6 +18,11 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import {
+  UI_NOTIFICATIONS_PUBLISHER,
+  type UiNotificationPublishRequest,
+  type UiNotificationsPublisher,
+} from '../src/notifications/ui-notifications.publisher';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -33,6 +39,20 @@ import type {
   WorkspaceLogsRequest,
   WorkspaceLogsSession,
 } from '../src/workspace/runtime/workspace.runtime.provider';
+
+class NotificationsPublisherStub implements UiNotificationsPublisher {
+  private emitter: ((rooms: string[], event: string, payload: unknown) => void) | null = null;
+
+  setEmitter(emitter: (rooms: string[], event: string, payload: unknown) => void): void {
+    this.emitter = emitter;
+  }
+
+  async publishToRooms(request: UiNotificationPublishRequest): Promise<void> {
+    if (!this.emitter) return;
+    const { rooms, event, payload } = request;
+    this.emitter(rooms, event, payload);
+  }
+}
 
 class LiveGraphRuntimeStub {
   subscribe() {
@@ -325,6 +345,7 @@ describe('Socket gateway real server handshakes', () => {
         { provide: DockerRunnerStatusService, useValue: runnerStatusStub },
         EventsBusService,
         RunEventsService,
+        { provide: UI_NOTIFICATIONS_PUBLISHER, useClass: NotificationsPublisherStub },
       ],
     }).compile();
 
@@ -341,6 +362,15 @@ describe('Socket gateway real server handshakes', () => {
 
     graphGateway = app.get(GraphSocketGateway);
     graphGateway.init({ server: fastify.server });
+
+    const notificationsPublisher = app.get(UI_NOTIFICATIONS_PUBLISHER) as NotificationsPublisherStub;
+    notificationsPublisher.setEmitter((rooms, event, payload) => {
+      const io = (graphGateway as unknown as { io?: SocketIOServer }).io;
+      if (!io) throw new Error('GraphSocketGateway missing io instance');
+      for (const room of rooms) {
+        io.to(room).emit(event, payload);
+      }
+    });
 
     await app.listen(0, '127.0.0.1');
 

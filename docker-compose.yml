@@ -246,6 +246,38 @@ services:
       start_period: 10s
     networks:
       - agents_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agents_net
+
+  notifications:
+    build:
+      context: .
+      dockerfile: packages/notifications/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      NOTIFICATIONS_HOST: 0.0.0.0
+      NOTIFICATIONS_GRPC_PORT: 50051
+      NOTIFICATIONS_REDIS_URL: redis://redis:6379
+      NOTIFICATIONS_CHANNEL: notifications.v1
+    ports:
+      - "50051:50051"
+    networks:
+      - agents_net
       
 volumes:
   vault-file:

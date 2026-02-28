@@ -36,14 +36,15 @@ Design principles
 - Container isolation per thread: Tools and MCP operations run in per-thread containers to isolate state.
 
 Layers
-- Application server: wires services, loads persisted graph, exposes minimal REST (templates/graph) and a Socket.IO stream for checkpoints.
+- Application server: wires services, loads persisted graph, and publishes realtime graph events over gRPC.
+- Notifications service: receives gRPC notifications from the platform-server, publishes them to Redis, and the notifications gateway fan-outs the Redis channel to Socket.IO clients.
 - Graph runtime: live diff/apply engine enforcing reversible edges via ports and template registries.
 - Templates: declarative registration of node factories and their ports.
 - Triggers: external event sources (Slack, PR polling) that push messages into agents.
 - Nodes: graph components like LLM invocation and memory.
 - Tools: actions callable by the LLM (bash, GitHub clone, Slack message) and adapters.
 - MCP: local server inside a workspace container with transport over docker exec.
-- Services: infra clients and helpers (config, docker container provision, Prisma/Postgres, Slack, GitHub, checkpointer, sockets).
+- Services: infra clients and helpers (config, docker container provision, Prisma/Postgres, Slack, GitHub, checkpointer, notifications publisher).
 
 Workspace container platform
 - containerProvider.staticConfig.platform: Optional; enum of `linux/amd64` or `linux/arm64`.
@@ -84,4 +85,5 @@ Defaults and toggles
 How to Develop & Test
 - Prereqs: Node.js 20+, pnpm 9+, Docker, Postgres
 - Run server: pnpm --filter @agyn/platform-server dev
+- Run notifications bridge: pnpm --filter @agyn/notifications dev
 - Tests: pnpm --filter @agyn/platform-server test

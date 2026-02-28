@@ -4,6 +4,8 @@ export const runnerConfigDefaults = {
   dockerRunnerSharedSecret: 'test-shared-secret',
   dockerRunnerGrpcHost: '127.0.0.1',
   dockerRunnerGrpcPort: 7171,
+  notificationsGrpcAddr: 'notifications:50051',
+  notificationsGrpcDeadlineMs: 3000,
 } as const;
 
 const defaultConfigInput = {

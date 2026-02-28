@@ -3,14 +3,16 @@
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
+  VITE_SOCKET_BASE_URL?: string;
   STORYBOOK?: string;
 };
 
 function resolveStorybookFallback(name: keyof ViteEnv): string | null {
-  if (name !== 'VITE_API_BASE_URL') return null;
   const isStorybook = import.meta.env?.STORYBOOK === 'true';
   if (!isStorybook) return null;
-  return 'http://localhost:4173/api';
+  if (name === 'VITE_API_BASE_URL') return 'http://localhost:4173/api';
+  if (name === 'VITE_SOCKET_BASE_URL') return 'http://localhost:4173';
+  return null;
 }
 
 function requireEnv(name: keyof ViteEnv): string {
@@ -50,9 +52,12 @@ function deriveBase(raw: string, options: { stripApi: boolean }): string {
 }
 
 const rawApiBase = requireEnv('VITE_API_BASE_URL');
-
 const apiBaseUrl = deriveBase(rawApiBase, { stripApi: true });
-const socketBaseUrl = deriveBase(rawApiBase, { stripApi: true });
+
+const socketEnv = import.meta.env?.VITE_SOCKET_BASE_URL;
+const useApiFallback = !(typeof socketEnv === 'string' && socketEnv.trim().length > 0);
+const rawSocketBase = useApiFallback ? rawApiBase : (socketEnv as string);
+const socketBaseUrl = deriveBase(rawSocketBase, { stripApi: useApiFallback });
 export const config = {
   apiBaseUrl,
   socketBaseUrl,

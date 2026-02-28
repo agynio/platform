@@ -7,3 +7,5 @@ process.env.DOCKER_RUNNER_GRPC_HOST ||= 'docker-runner';
 process.env.DOCKER_RUNNER_GRPC_PORT ||= process.env.DOCKER_RUNNER_PORT || '7171';
 process.env.DOCKER_RUNNER_PORT ||= process.env.DOCKER_RUNNER_GRPC_PORT;
 process.env.DOCKER_RUNNER_SHARED_SECRET ||= 'test-shared-secret';
+process.env.NOTIFICATIONS_GRPC_ADDR ||= 'notifications:50051';
+process.env.NOTIFICATIONS_GRPC_DEADLINE_MS ||= '3000';
