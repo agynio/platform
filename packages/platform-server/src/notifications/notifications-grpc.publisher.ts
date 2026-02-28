@@ -31,7 +31,9 @@ export class NotificationsGrpcPublisher implements UiNotificationsPublisher {
 
   async publishToRooms(request: UiNotificationPublishRequest): Promise<void> {
     const { rooms, event, payload, source } = request;
-    if (!Array.isArray(rooms) || rooms.length === 0) return;
+    if (!Array.isArray(rooms) || rooms.length === 0) {
+      throw new Error('NotificationsGrpcPublisher requires at least one room');
+    }
 
     let jsonPayload: Record<string, unknown> | undefined;
     if (payload !== undefined) {
