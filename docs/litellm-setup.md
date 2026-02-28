@@ -27,7 +27,7 @@ Initial configuration (via UI)
   - In the Agents UI, the Model field now accepts free-text. Enter either your alias name (e.g., gpt-5) or a provider-prefixed identifier (e.g., openai/gpt-4o-mini). The UI does not validate availability; runtime will surface errors if misconfigured.
 
 App configuration: LiteLLM admin requirements
-- `LLM_PROVIDER` defaults to `litellm`. Override to `openai` only when bypassing LiteLLM.
+- `LLM_PROVIDER` defaults to `litellm`. Override to `openai` only when bypassing LiteLLM. Other values will cause startup to fail.
 - LiteLLM administration env vars are required at boot:
   - `LITELLM_BASE_URL=http://localhost:4000`
   - `LITELLM_MASTER_KEY=sk-<master-key>`

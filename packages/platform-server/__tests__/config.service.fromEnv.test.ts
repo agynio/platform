@@ -70,6 +70,17 @@ describe('ConfigService.fromEnv', () => {
     expect(config.litellmKeyAlias).toBe('agents/staging/web-1');
   });
 
+  it('throws when LLM_PROVIDER is not recognized', () => {
+    process.env.LLM_PROVIDER = 'anthropic';
+    process.env.LITELLM_BASE_URL = 'http://litellm.internal:4000';
+    process.env.LITELLM_MASTER_KEY = 'sk-master';
+    process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
+
+    expect(() => ConfigService.fromEnv()).toThrowError(
+      'LLM_PROVIDER must be either "litellm" or "openai", received "anthropic"',
+    );
+  });
+
   it('maps legacy OPENAI_* variables only when provider is openai', () => {
     process.env.LLM_PROVIDER = 'openai';
     process.env.LITELLM_BASE_URL = 'http://litellm.fallback:4000';

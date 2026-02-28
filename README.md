@@ -106,7 +106,7 @@ pnpm install
 2) Configure environments:
 - Server: copy packages/platform-server/.env.example to .env, then set:
   - AGENTS_DATABASE_URL (required) — e.g. postgresql://agents:agents@localhost:5443/agents
-  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI
+  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI. Other values are rejected.
   - LITELLM_BASE_URL, LITELLM_MASTER_KEY (required for LiteLLM path)
   - Optional LiteLLM tuning: LITELLM_KEY_ALIAS (default `agents/<env>/<deployment>`), LITELLM_KEY_DURATION (`30d`), LITELLM_MODELS (`all-team-models`)
   - Optional: CORS_ORIGINS, VAULT_* (see packages/platform-server/src/core/services/config.service.ts and .env.example)
@@ -171,7 +171,7 @@ docker run --rm -p 8080:80 \
 Key environment variables (server) from packages/platform-server/.env.example and src/core/services/config.service.ts:
 - Required:
   - AGENTS_DATABASE_URL — Postgres connection for platform-server
-  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI
+  - LLM_PROVIDER (optional) — defaults to `litellm`; set to `openai` to use direct OpenAI. Other values are rejected.
   - LITELLM_BASE_URL — LiteLLM root URL (must not include /v1; default host in docker-compose is 127.0.0.1:4000)
   - LITELLM_MASTER_KEY — admin key for LiteLLM
 - Optional LLM:

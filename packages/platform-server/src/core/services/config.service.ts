@@ -623,19 +623,19 @@ export class ConfigService implements Config {
   }
 
   private static normalizeLlmProvider(value: string | undefined): 'openai' | 'litellm' {
-    const normalized = ConfigService.coerceString(value)?.toLowerCase();
-    if (normalized === 'openai') {
-      return 'openai';
-    }
-    if (normalized === 'litellm') {
+    const trimmed = ConfigService.coerceString(value);
+    if (!trimmed) {
       return 'litellm';
     }
-    if (value && normalized) {
-      ConfigService.logger.warn(
-        `LLM_PROVIDER value "${value}" is not supported; defaulting to "litellm"`,
-      );
+
+    const normalized = trimmed.toLowerCase();
+    if (normalized === 'openai' || normalized === 'litellm') {
+      return normalized;
     }
-    return 'litellm';
+
+    throw new Error(
+      `LLM_PROVIDER must be either "litellm" or "openai", received "${trimmed}"`,
+    );
   }
 
   private static resolveLegacyOpenAiKey(
