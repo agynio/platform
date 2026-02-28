@@ -5,6 +5,7 @@ const prismaStub = {
   thread: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
+    updateMany: vi.fn(async () => ({ count: 0 })),
   },
   run: {
     findMany: vi.fn(),
@@ -47,6 +48,7 @@ const makeCoordinator = () => {
     listContainersByVolume: vi.fn(async () => [] as string[]),
     removeVolume: vi.fn(async (volumeName: string) => {
       record(`volume:${volumeName}`);
+      return 'removed' as const;
     }),
   };
   const prismaService = { getClient: () => prismaStub };
@@ -110,6 +112,7 @@ describe('ThreadCleanupCoordinator', () => {
     vi.clearAllMocks();
     prismaStub.thread.findUnique.mockReset();
     prismaStub.thread.findMany.mockReset();
+    prismaStub.thread.updateMany.mockReset();
     prismaStub.run.findMany.mockReset();
   });
 
@@ -166,6 +169,15 @@ describe('ThreadCleanupCoordinator', () => {
       ['ha_ws_child', { force: true }],
       ['ha_ws_root', { force: true }],
     ]);
+    expect(prismaStub.thread.updateMany.mock.calls.map(([args]) => args.where.id)).toEqual([
+      'leaf',
+      'child',
+      'root',
+    ]);
+    for (const [args] of prismaStub.thread.updateMany.mock.calls) {
+      expect(args.where.workspaceVolumeRemovedAt).toBeNull();
+      expect(args.data.workspaceVolumeRemovedAt).toBeInstanceOf(Date);
+    }
     expect(reminders.cancelThreadReminders.mock.calls.map(([args]) => args)).toEqual([
       { threadId: 'leaf' },
       { threadId: 'child' },
@@ -253,6 +265,12 @@ describe('ThreadCleanupCoordinator', () => {
       deleteEphemeral: true,
     });
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
+    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'root', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
+    const updateArgs = prismaStub.thread.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.workspaceVolumeRemovedAt).toBeInstanceOf(Date);
     expect(reminders.cancelThreadReminders).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'root' });
@@ -281,6 +299,7 @@ describe('ThreadCleanupCoordinator', () => {
 
     expect(containerService.removeVolume).not.toHaveBeenCalled();
     expect(registry.markStopped).not.toHaveBeenCalled();
+    expect(prismaStub.thread.updateMany).not.toHaveBeenCalled();
     expect(reminders.cancelThreadReminders).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'root' });
@@ -310,6 +329,10 @@ describe('ThreadCleanupCoordinator', () => {
     expect(registry.markStopped).toHaveBeenCalledTimes(1);
     expect(registry.markStopped).toHaveBeenCalledWith('root-c1', 'workspace_volume_removed');
     expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'root', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
   });
 
   it('removes workspace volume when registry reports foreign references', async () => {
@@ -330,6 +353,10 @@ describe('ThreadCleanupCoordinator', () => {
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
     expect(registry.markStopped).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'root', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
   });
 
   it('does not warn when registry references are already stopped for the thread', async () => {
@@ -351,5 +378,50 @@ describe('ThreadCleanupCoordinator', () => {
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
     expect(registry.markStopped).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
+    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'root', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
+  });
+
+  it('marks workspace volume removal when Docker reports not_found', async () => {
+    const now = new Date();
+    prismaStub.thread.findUnique.mockResolvedValue({ id: 'root', parentId: null, status: 'closed', createdAt: now });
+    prismaStub.thread.findMany.mockResolvedValue([]);
+    prismaStub.run.findMany.mockResolvedValue([]);
+
+    const { coordinator, containerService, registry } = makeCoordinator();
+    registry.listByThread.mockResolvedValue([]);
+    registry.findByVolume.mockResolvedValue([]);
+    containerService.listContainersByVolume.mockResolvedValue([]);
+    containerService.removeVolume.mockResolvedValueOnce('not_found');
+
+    await coordinator.closeThreadWithCascade('root');
+
+    expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
+    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'root', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
+  });
+
+  it('does not mark workspace volume removal when Docker removal fails with non-404 error', async () => {
+    const now = new Date();
+    prismaStub.thread.findUnique.mockResolvedValue({ id: 'root', parentId: null, status: 'closed', createdAt: now });
+    prismaStub.thread.findMany.mockResolvedValue([]);
+    prismaStub.run.findMany.mockResolvedValue([]);
+
+    const { coordinator, containerService, registry, logger } = makeCoordinator();
+    registry.listByThread.mockResolvedValue([]);
+    registry.findByVolume.mockResolvedValue([]);
+    containerService.listContainersByVolume.mockResolvedValue([]);
+    const error = Object.assign(new Error('boom'), { statusCode: 500 });
+    containerService.removeVolume.mockRejectedValueOnce(error);
+
+    await coordinator.closeThreadWithCascade('root');
+
+    expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
+    expect(prismaStub.thread.updateMany).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
   });
 });

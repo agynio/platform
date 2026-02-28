@@ -26,12 +26,13 @@ describe('VolumeGcService', () => {
     const prisma = {
       thread: {
         findMany: vi.fn(async () => [] as Array<{ id: string }>),
+        updateMany: vi.fn(async () => ({ count: 0 })),
       },
     };
     const prismaService = { getClient: () => prisma };
     const containerService = {
       listContainersByVolume: vi.fn(async () => [] as string[]),
-      removeVolume: vi.fn(async () => undefined),
+      removeVolume: vi.fn(async () => 'removed' as const),
     };
     const dockerRunnerStatus = {
       getSnapshot: vi.fn(() => ({
@@ -57,10 +58,17 @@ describe('VolumeGcService', () => {
     const { service, prisma, containerService } = makeService();
     prisma.thread.findMany.mockResolvedValue([{ id: 'thread-1' }]);
 
-    await service.sweep(new Date('2024-01-01T00:00:00Z'));
+    const now = new Date('2024-01-01T00:00:00Z');
+    await service.sweep(now);
 
     expect(containerService.listContainersByVolume).toHaveBeenCalledWith('ha_ws_thread-1');
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_thread-1', { force: true });
+    expect(prisma.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'thread-1', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
+    const updateArgs = prisma.thread.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.workspaceVolumeRemovedAt.toISOString()).toBe(now.toISOString());
   });
 
   it('skips volumes still referenced by containers', async () => {
@@ -71,16 +79,34 @@ describe('VolumeGcService', () => {
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
     expect(containerService.removeVolume).not.toHaveBeenCalled();
+    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 
-  it('swallows 404 errors when removing volumes', async () => {
+  it('marks volumes as removed when runner reports not_found', async () => {
     const { service, prisma, containerService } = makeService();
     prisma.thread.findMany.mockResolvedValue([{ id: 'thread-3' }]);
-    containerService.removeVolume.mockRejectedValueOnce({ statusCode: 404 });
+    containerService.removeVolume.mockResolvedValueOnce('not_found');
+    const now = new Date('2024-01-01T12:00:00Z');
+
+    await service.sweep(now);
+
+    expect(containerService.removeVolume).toHaveBeenCalledTimes(1);
+    expect(prisma.thread.updateMany).toHaveBeenCalledWith({
+      where: { id: 'thread-3', workspaceVolumeRemovedAt: null },
+      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    });
+    const updateArgs = prisma.thread.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.workspaceVolumeRemovedAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it('does not mark volumes when removal fails with non-404 error', async () => {
+    const { service, prisma, containerService } = makeService();
+    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-err' }]);
+    containerService.removeVolume.mockRejectedValueOnce(new Error('boom'));
 
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
-    expect(containerService.removeVolume).toHaveBeenCalledTimes(1);
+    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 
   it('honors VOLUME_GC_MAX_PER_SWEEP limit', async () => {
@@ -91,7 +117,7 @@ describe('VolumeGcService', () => {
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
     expect(prisma.thread.findMany).toHaveBeenCalledWith({
-      where: { status: 'closed' },
+      where: { status: 'closed', workspaceVolumeRemovedAt: null },
       select: { id: true },
       orderBy: { createdAt: 'desc' },
       take: 1,
@@ -114,11 +140,12 @@ describe('VolumeGcService', () => {
   });
 
   it('skips sweep entirely when docker runner is down', async () => {
-    const { service, containerService } = makeService({ runnerStatus: 'down' });
+    const { service, containerService, prisma } = makeService({ runnerStatus: 'down' });
 
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
     expect(containerService.listContainersByVolume).not.toHaveBeenCalled();
+    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 
   it('enforces sweep timeout', async () => {

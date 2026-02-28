@@ -112,6 +112,7 @@ model Thread {
   // Channel descriptor for replying to origin channel
   channel   Json?
   modelUsed String? @map("model_used")
+  workspaceVolumeRemovedAt DateTime? @map("workspace_volume_removed_at")
   createdAt DateTime     @default(now())
 
   runs       Run[]

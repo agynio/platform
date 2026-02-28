@@ -87,7 +87,7 @@ export class VolumeGcService {
 
     const prisma = this.prisma;
     const candidates = await prisma.thread.findMany({
-      where: { status: 'closed' },
+      where: { status: 'closed', workspaceVolumeRemovedAt: null },
       select: { id: true },
       orderBy: { createdAt: 'desc' },
       take: this.maxPerSweep,
@@ -118,7 +118,7 @@ export class VolumeGcService {
     );
 
     this.logger.log(
-      `VolumeGC: sweep complete${this.format({ total: candidates.length, removed: counts.removed, referenced: counts.referenced, cooldown: counts.cooldown, errors: counts.error })}`,
+      `VolumeGC: sweep complete${this.format({ total: candidates.length, removed: counts.removed, referenced: counts.referenced, notFound: counts.not_found, cooldown: counts.cooldown, errors: counts.error })}`,
     );
   }
 
@@ -157,6 +157,7 @@ export class VolumeGcService {
     this.lastAttempt.set(threadId, nowMs);
 
     const volumeName = `ha_ws_${threadId}`;
+    const removedAt = new Date(nowMs);
 
     try {
       const containers = await this.containerService.listContainersByVolume(volumeName);
@@ -168,15 +169,23 @@ export class VolumeGcService {
       }
 
       try {
-        await this.containerService.removeVolume(volumeName, { force: true });
-        this.logger.log(
-          `VolumeGC: removed workspace volume${this.format({ threadId, volumeName })}`,
-        );
-        return 'removed';
+        const outcome = await this.containerService.removeVolume(volumeName, { force: true });
+        if (outcome === 'removed') {
+          this.logger.log(
+            `VolumeGC: removed workspace volume${this.format({ threadId, volumeName })}`,
+          );
+        } else {
+          this.logger.debug(
+            `VolumeGC: volume already missing${this.format({ threadId, volumeName })}`,
+          );
+        }
+        await this.markWorkspaceVolumeRemoved(threadId, removedAt);
+        return outcome;
       } catch (error) {
         const statusCode = this.extractStatusCode(error);
         if (statusCode === 404) {
           this.logger.debug(`VolumeGC: volume already missing${this.format({ threadId, volumeName })}`);
+          await this.markWorkspaceVolumeRemoved(threadId, removedAt);
           return 'not_found';
         }
 
@@ -186,6 +195,19 @@ export class VolumeGcService {
     } catch (error) {
       this.logger.error(`VolumeGC: failed listing containers for volume${this.format({ threadId, volumeName, error })}`);
       return 'error';
+    }
+  }
+
+  private async markWorkspaceVolumeRemoved(threadId: string, removedAt: Date): Promise<void> {
+    try {
+      await this.prisma.thread.updateMany({
+        where: { id: threadId, workspaceVolumeRemovedAt: null },
+        data: { workspaceVolumeRemovedAt: removedAt },
+      });
+    } catch (error) {
+      this.logger.error(
+        `VolumeGC: failed to mark workspace volume removal${this.format({ threadId, error })}`,
+      );
     }
   }
 

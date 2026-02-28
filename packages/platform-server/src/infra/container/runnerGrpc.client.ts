@@ -47,6 +47,7 @@ import {
   ReadyRequestSchema,
   ReadyResponse,
   RemoveVolumeRequestSchema,
+  RemoveVolumeResponse,
   RemoveWorkloadRequestSchema,
   RunnerError,
   ExecExitReason,
@@ -370,22 +371,24 @@ export class RunnerGrpcClient implements DockerClient {
     return response?.targetIds ?? [];
   }
 
-  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
+  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found'> {
     const request = create(RemoveVolumeRequestSchema, {
       volumeName,
       force: options?.force ?? false,
     });
-    await this.unary<RemoveVolumeRequest, unknown>(
+    const response = await this.unary<RemoveVolumeRequest, RemoveVolumeResponse>(
       RUNNER_SERVICE_REMOVE_VOLUME_PATH,
       request,
       (req, metadata, callOptions, callback) => {
         if (callOptions) {
-          this.client.removeVolume(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
+          this.client.removeVolume(req, metadata, callOptions, (err: ServiceError | null, value?: RemoveVolumeResponse) => callback(err, value));
         } else {
-          this.client.removeVolume(req, metadata, (err: ServiceError | null) => callback(err));
+          this.client.removeVolume(req, metadata, (err: ServiceError | null, value?: RemoveVolumeResponse) => callback(err, value));
         }
       },
     );
+    const outcome = (response as { outcome?: 'removed' | 'not_found' } | undefined)?.outcome;
+    return outcome === 'not_found' ? 'not_found' : 'removed';
   }
 
   async findContainerByLabels(
