@@ -13,6 +13,7 @@ const MIN_REFRESH_DELAY_MS = 60_000;
 const REFRESH_GRACE_MS = 5 * 60_000;
 const REFRESH_RETRY_BASE_DELAY_MS = 15_000;
 const REFRESH_RETRY_MAX_DELAY_MS = 5 * 60_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 @Injectable()
 export class LiteLLMProvisioner extends LLMProvisioner {
@@ -173,7 +174,8 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     if (!expiresAt) return;
 
     const msUntilExpiry = expiresAt.getTime() - Date.now();
-    const delay = Math.max(MIN_REFRESH_DELAY_MS, msUntilExpiry - REFRESH_GRACE_MS);
+    const desiredDelay = Math.max(MIN_REFRESH_DELAY_MS, msUntilExpiry - REFRESH_GRACE_MS);
+    const delay = Math.min(desiredDelay, MAX_TIMEOUT_MS);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       void this.runScheduledRefresh('refresh', 0);
