@@ -14,6 +14,7 @@ const DEFAULT_SWEEP_TIMEOUT_MS = 15_000;
 const SWEEP_TIMEOUT_ERROR = 'VOLUME_GC_SWEEP_TIMEOUT';
 
 type SweepOutcome = 'removed' | 'referenced' | 'cooldown' | 'error' | 'not_found';
+type VolumeCandidate = { id: string; threadId: string; volumeName: string };
 
 @Injectable()
 export class VolumeGcService {
@@ -86,15 +87,18 @@ export class VolumeGcService {
     }
 
     const prisma = this.prisma;
-    const candidates = await prisma.thread.findMany({
-      where: { status: 'closed', workspaceVolumeRemovedAt: null },
-      select: { id: true },
+    const candidates = await prisma.workspaceVolume.findMany({
+      where: {
+        removedAt: null,
+        thread: { status: 'closed' },
+      },
+      select: { id: true, threadId: true, volumeName: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
       take: this.maxPerSweep,
     });
 
     if (!candidates.length) {
-      this.logger.debug('VolumeGC: no closed threads found for sweep');
+      this.logger.debug('VolumeGC: no workspace volumes found for sweep');
       return;
     }
 
@@ -109,9 +113,9 @@ export class VolumeGcService {
     const nowMs = now.getTime();
 
     await Promise.allSettled(
-      candidates.map(({ id }) =>
+      candidates.map((volume) =>
         limit(async () => {
-          const outcome = await this.handleThread(id, nowMs);
+          const outcome = await this.handleVolume(volume, nowMs);
           counts[outcome] += 1;
         }),
       ),
@@ -148,22 +152,22 @@ export class VolumeGcService {
     }
   }
 
-  private async handleThread(threadId: string, nowMs: number): Promise<SweepOutcome> {
-    const last = this.lastAttempt.get(threadId);
+  private async handleVolume(volume: VolumeCandidate, nowMs: number): Promise<SweepOutcome> {
+    const last = this.lastAttempt.get(volume.threadId);
     if (typeof last === 'number' && nowMs - last < this.cooldownMs) {
       return 'cooldown';
     }
 
-    this.lastAttempt.set(threadId, nowMs);
+    this.lastAttempt.set(volume.threadId, nowMs);
 
-    const volumeName = `ha_ws_${threadId}`;
+    const volumeName = volume.volumeName ?? `ha_ws_${volume.threadId}`;
     const removedAt = new Date(nowMs);
 
     try {
       const containers = await this.containerService.listContainersByVolume(volumeName);
       if (containers.length > 0) {
         this.logger.debug(
-          `VolumeGC: skipping volume due to live references${this.format({ threadId, volumeName, containerCount: containers.length })}`,
+          `VolumeGC: skipping volume due to live references${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName, containerCount: containers.length })}`,
         );
         return 'referenced';
       }
@@ -172,41 +176,59 @@ export class VolumeGcService {
         const outcome = await this.containerService.removeVolume(volumeName, { force: true });
         if (outcome === 'removed') {
           this.logger.log(
-            `VolumeGC: removed workspace volume${this.format({ threadId, volumeName })}`,
+            `VolumeGC: removed workspace volume${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName })}`,
           );
-        } else {
-          this.logger.debug(
-            `VolumeGC: volume already missing${this.format({ threadId, volumeName })}`,
-          );
+          await this.markWorkspaceVolumeRemoved(volume.id, removedAt);
+          return 'removed';
         }
-        await this.markWorkspaceVolumeRemoved(threadId, removedAt);
-        return outcome;
-      } catch (error) {
-        const statusCode = this.extractStatusCode(error);
-        if (statusCode === 404) {
-          this.logger.debug(`VolumeGC: volume already missing${this.format({ threadId, volumeName })}`);
-          await this.markWorkspaceVolumeRemoved(threadId, removedAt);
+
+        if (outcome === 'not_found') {
+          this.logger.debug(
+            `VolumeGC: volume already missing${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName })}`,
+          );
+          await this.markWorkspaceVolumeRemoved(volume.id, removedAt);
           return 'not_found';
         }
 
-        this.logger.error(`VolumeGC: failed removing volume${this.format({ threadId, volumeName, error })}`);
+        if (outcome === 'referenced') {
+          this.logger.debug(
+            `VolumeGC: removal reported active references${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName })}`,
+          );
+          return 'referenced';
+        }
+        return 'error';
+      } catch (error) {
+        const statusCode = this.extractStatusCode(error);
+        if (statusCode === 404) {
+          this.logger.debug(
+            `VolumeGC: volume already missing${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName })}`,
+          );
+          await this.markWorkspaceVolumeRemoved(volume.id, removedAt);
+          return 'not_found';
+        }
+
+        this.logger.error(
+          `VolumeGC: failed removing volume${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName, error })}`,
+        );
         return 'error';
       }
     } catch (error) {
-      this.logger.error(`VolumeGC: failed listing containers for volume${this.format({ threadId, volumeName, error })}`);
+      this.logger.error(
+        `VolumeGC: failed listing containers for volume${this.format({ threadId: volume.threadId, workspaceVolumeId: volume.id, volumeName, error })}`,
+      );
       return 'error';
     }
   }
 
-  private async markWorkspaceVolumeRemoved(threadId: string, removedAt: Date): Promise<void> {
+  private async markWorkspaceVolumeRemoved(workspaceVolumeId: string, removedAt: Date): Promise<void> {
     try {
-      await this.prisma.thread.updateMany({
-        where: { id: threadId, workspaceVolumeRemovedAt: null },
-        data: { workspaceVolumeRemovedAt: removedAt },
+      await this.prisma.workspaceVolume.updateMany({
+        where: { id: workspaceVolumeId, removedAt: null },
+        data: { removedAt },
       });
     } catch (error) {
       this.logger.error(
-        `VolumeGC: failed to mark workspace volume removal${this.format({ threadId, error })}`,
+        `VolumeGC: failed to mark workspace volume removal${this.format({ workspaceVolumeId, error })}`,
       );
     }
   }

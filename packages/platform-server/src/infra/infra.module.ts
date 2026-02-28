@@ -86,9 +86,9 @@ import { HealthController } from './health/health.controller';
     },
     {
       provide: WorkspaceProvider,
-      useFactory: (dockerClient: DockerClient, registry: ContainerRegistry) =>
-        new DockerWorkspaceRuntimeProvider(dockerClient, registry),
-      inject: [DOCKER_CLIENT, ContainerRegistry],
+      useFactory: (dockerClient: DockerClient, registry: ContainerRegistry, prisma: PrismaService) =>
+        new DockerWorkspaceRuntimeProvider(dockerClient, registry, prisma),
+      inject: [DOCKER_CLIENT, ContainerRegistry, PrismaService],
     },
     ContainerAdminService,
     TerminalSessionsService,

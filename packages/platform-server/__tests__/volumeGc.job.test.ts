@@ -24,8 +24,8 @@ describe('VolumeGcService', () => {
 
   const makeService = (options: { runnerStatus?: 'up' | 'down'; sweepTimeoutMs?: number } = {}) => {
     const prisma = {
-      thread: {
-        findMany: vi.fn(async () => [] as Array<{ id: string }>),
+      workspaceVolume: {
+        findMany: vi.fn(async () => [] as Array<{ id: string; threadId: string; volumeName: string; createdAt: Date }>),
         updateMany: vi.fn(async () => ({ count: 0 })),
       },
     };
@@ -56,69 +56,80 @@ describe('VolumeGcService', () => {
 
   it('removes volumes with no live references', async () => {
     const { service, prisma, containerService } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-1' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([
+      { id: 'volume-1', threadId: 'thread-1', volumeName: 'ha_ws_thread-1', createdAt: new Date('2023-12-31T23:00:00Z') },
+    ]);
 
     const now = new Date('2024-01-01T00:00:00Z');
     await service.sweep(now);
 
     expect(containerService.listContainersByVolume).toHaveBeenCalledWith('ha_ws_thread-1');
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_thread-1', { force: true });
-    expect(prisma.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'thread-1', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prisma.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-1', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
-    const updateArgs = prisma.thread.updateMany.mock.calls[0][0];
-    expect(updateArgs.data.workspaceVolumeRemovedAt.toISOString()).toBe(now.toISOString());
+    const updateArgs = prisma.workspaceVolume.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.removedAt.toISOString()).toBe(now.toISOString());
   });
 
   it('skips volumes still referenced by containers', async () => {
     const { service, prisma, containerService } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-2' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([
+      { id: 'volume-2', threadId: 'thread-2', volumeName: 'ha_ws_thread-2', createdAt: new Date('2023-12-31T23:10:00Z') },
+    ]);
     containerService.listContainersByVolume.mockResolvedValue(['cid-123']);
 
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
     expect(containerService.removeVolume).not.toHaveBeenCalled();
-    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
+    expect(prisma.workspaceVolume.updateMany).not.toHaveBeenCalled();
   });
 
   it('marks volumes as removed when runner reports not_found', async () => {
     const { service, prisma, containerService } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-3' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([
+      { id: 'volume-3', threadId: 'thread-3', volumeName: 'ha_ws_thread-3', createdAt: new Date('2023-12-31T23:20:00Z') },
+    ]);
     containerService.removeVolume.mockResolvedValueOnce('not_found');
     const now = new Date('2024-01-01T12:00:00Z');
 
     await service.sweep(now);
 
     expect(containerService.removeVolume).toHaveBeenCalledTimes(1);
-    expect(prisma.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'thread-3', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prisma.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-3', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
-    const updateArgs = prisma.thread.updateMany.mock.calls[0][0];
-    expect(updateArgs.data.workspaceVolumeRemovedAt.toISOString()).toBe(now.toISOString());
+    const updateArgs = prisma.workspaceVolume.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.removedAt.toISOString()).toBe(now.toISOString());
   });
 
   it('does not mark volumes when removal fails with non-404 error', async () => {
     const { service, prisma, containerService } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-err' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([
+      { id: 'volume-err', threadId: 'thread-err', volumeName: 'ha_ws_thread-err', createdAt: new Date('2023-12-31T23:30:00Z') },
+    ]);
     containerService.removeVolume.mockRejectedValueOnce(new Error('boom'));
 
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
-    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
+    expect(prisma.workspaceVolume.updateMany).not.toHaveBeenCalled();
   });
 
   it('honors VOLUME_GC_MAX_PER_SWEEP limit', async () => {
     process.env.VOLUME_GC_MAX_PER_SWEEP = '1';
     const { service, prisma } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-a' }, { id: 'thread-b' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([
+      { id: 'volume-a', threadId: 'thread-a', volumeName: 'ha_ws_thread-a', createdAt: new Date('2023-12-31T23:40:00Z') },
+      { id: 'volume-b', threadId: 'thread-b', volumeName: 'ha_ws_thread-b', createdAt: new Date('2023-12-31T23:35:00Z') },
+    ]);
 
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
-    expect(prisma.thread.findMany).toHaveBeenCalledWith({
-      where: { status: 'closed', workspaceVolumeRemovedAt: null },
-      select: { id: true },
+    expect(prisma.workspaceVolume.findMany).toHaveBeenCalledWith({
+      where: { removedAt: null, thread: { status: 'closed' } },
+      select: { id: true, threadId: true, volumeName: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
       take: 1,
     });
@@ -126,12 +137,18 @@ describe('VolumeGcService', () => {
 
   it('applies cooldown between attempts for the same thread', async () => {
     const { service, prisma, containerService } = makeService();
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-c' }]);
+    const candidate = {
+      id: 'volume-c',
+      threadId: 'thread-c',
+      volumeName: 'ha_ws_thread-c',
+      createdAt: new Date('2023-12-31T23:50:00Z'),
+    };
+    prisma.workspaceVolume.findMany.mockResolvedValue([candidate]);
 
     const firstTime = new Date('2024-01-01T00:00:00Z');
     await service.sweep(firstTime);
 
-    prisma.thread.findMany.mockResolvedValue([{ id: 'thread-c' }]);
+    prisma.workspaceVolume.findMany.mockResolvedValue([candidate]);
     const secondTime = new Date(firstTime.getTime() + 1_000);
     await service.sweep(secondTime);
 
@@ -145,7 +162,7 @@ describe('VolumeGcService', () => {
     await service.sweep(new Date('2024-01-01T00:00:00Z'));
 
     expect(containerService.listContainersByVolume).not.toHaveBeenCalled();
-    expect(prisma.thread.updateMany).not.toHaveBeenCalled();
+    expect(prisma.workspaceVolume.updateMany).not.toHaveBeenCalled();
   });
 
   it('enforces sweep timeout', async () => {

@@ -34,7 +34,7 @@ export interface DockerClientPort {
   getContainerNetworks(containerId: string): Promise<string[]>;
   findContainersByLabels(labels: Record<string, string>, options?: { all?: boolean }): Promise<ContainerHandle[]>;
   listContainersByVolume(volumeName: string): Promise<string[]>;
-  removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found'>;
+  removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found' | 'referenced'>;
   findContainerByLabels(labels: Record<string, string>, options?: { all?: boolean }): Promise<ContainerHandle | undefined>;
   putArchive(containerId: string, data: Buffer | NodeJS.ReadableStream, options: { path: string }): Promise<void>;
   inspectContainer(containerId: string): Promise<ContainerInspectInfo>;

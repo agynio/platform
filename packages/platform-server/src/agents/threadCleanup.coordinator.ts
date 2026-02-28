@@ -171,9 +171,20 @@ export class ThreadCleanupCoordinator {
   }
 
   private async deleteWorkspaceVolume(threadId: string): Promise<void> {
-    const volumeName = `ha_ws_${threadId}`;
+    const fallbackVolumeName = `ha_ws_${threadId}`;
     let registryRefs: Array<{ containerId: string; threadId: string | null; status: ContainerStatus }> = [];
+    let workspaceVolume: { id: string; volumeName: string } | null = null;
+    let volumeName = fallbackVolumeName;
+    let shouldReconcile = false;
+
     try {
+      workspaceVolume = await this.prisma.workspaceVolume.findFirst({
+        where: { threadId, removedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, volumeName: true },
+      });
+
+      volumeName = workspaceVolume?.volumeName ?? fallbackVolumeName;
       const dockerContainers = await this.containerService.listContainersByVolume(volumeName);
       if (dockerContainers.length > 0) {
         this.logger.warn(
@@ -206,15 +217,21 @@ export class ThreadCleanupCoordinator {
       const outcome = await this.containerService.removeVolume(volumeName, { force: true });
       if (outcome === 'removed') {
         this.logger.log(`ThreadCleanup: workspace volume removed${this.format({ threadId, volumeName })}`);
-      } else {
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
+        shouldReconcile = true;
+      } else if (outcome === 'not_found') {
         this.logger.debug(
           `ThreadCleanup: workspace volume already missing${this.format({ threadId, volumeName })}`,
         );
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
+        shouldReconcile = true;
+      } else {
+        this.logger.debug(
+          `ThreadCleanup: workspace volume removal blocked due to references${this.format({ threadId, volumeName })}`,
+        );
       }
 
-      await this.markWorkspaceVolumeRemoved(threadId);
-
-      if (registryRefs.length > 0) {
+      if (shouldReconcile && registryRefs.length > 0) {
         await this.reconcileRegistryVolumeReferences(threadId, volumeName, registryRefs);
       }
     } catch (error) {
@@ -223,7 +240,7 @@ export class ThreadCleanupCoordinator {
         this.logger.debug(
           `ThreadCleanup: workspace volume already missing${this.format({ threadId, volumeName })}`,
         );
-        await this.markWorkspaceVolumeRemoved(threadId);
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
         if (registryRefs.length > 0) {
           await this.reconcileRegistryVolumeReferences(threadId, volumeName, registryRefs);
         }
@@ -236,15 +253,23 @@ export class ThreadCleanupCoordinator {
     }
   }
 
-  private async markWorkspaceVolumeRemoved(threadId: string): Promise<void> {
+  private async markWorkspaceVolumeRemoved(
+    workspaceVolumeId: string | undefined,
+    threadId: string,
+    removedAt: Date,
+  ): Promise<void> {
+    if (!workspaceVolumeId) {
+      return;
+    }
+
     try {
-      await this.prisma.thread.updateMany({
-        where: { id: threadId, workspaceVolumeRemovedAt: null },
-        data: { workspaceVolumeRemovedAt: new Date() },
+      await this.prisma.workspaceVolume.updateMany({
+        where: { id: workspaceVolumeId, removedAt: null },
+        data: { removedAt },
       });
     } catch (error) {
       this.logger.error(
-        `ThreadCleanup: failed to mark workspace volume removal${this.format({ threadId, error })}`,
+        `ThreadCleanup: failed to mark workspace volume removal${this.format({ threadId, workspaceVolumeId, error })}`,
       );
     }
   }

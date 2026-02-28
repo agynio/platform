@@ -10,6 +10,10 @@ const prismaStub = {
   run: {
     findMany: vi.fn(),
   },
+  workspaceVolume: {
+    findFirst: vi.fn(),
+    updateMany: vi.fn(async () => ({ count: 0 })),
+  },
 };
 
 const makeCoordinator = () => {
@@ -114,6 +118,13 @@ describe('ThreadCleanupCoordinator', () => {
     prismaStub.thread.findMany.mockReset();
     prismaStub.thread.updateMany.mockReset();
     prismaStub.run.findMany.mockReset();
+    prismaStub.workspaceVolume.findFirst.mockReset();
+    prismaStub.workspaceVolume.updateMany.mockReset();
+    prismaStub.workspaceVolume.findFirst.mockImplementation(async ({ where }: { where?: { threadId?: string } }) => {
+      const threadId = where?.threadId;
+      if (!threadId) return undefined;
+      return { id: `volume-${threadId}`, volumeName: `ha_ws_${threadId}` };
+    });
   });
 
   it('cascades leaf-first, closes descendants, and terminates runs', async () => {
@@ -169,14 +180,14 @@ describe('ThreadCleanupCoordinator', () => {
       ['ha_ws_child', { force: true }],
       ['ha_ws_root', { force: true }],
     ]);
-    expect(prismaStub.thread.updateMany.mock.calls.map(([args]) => args.where.id)).toEqual([
-      'leaf',
-      'child',
-      'root',
+    expect(prismaStub.workspaceVolume.updateMany.mock.calls.map(([args]) => args.where.id)).toEqual([
+      'volume-leaf',
+      'volume-child',
+      'volume-root',
     ]);
-    for (const [args] of prismaStub.thread.updateMany.mock.calls) {
-      expect(args.where.workspaceVolumeRemovedAt).toBeNull();
-      expect(args.data.workspaceVolumeRemovedAt).toBeInstanceOf(Date);
+    for (const [args] of prismaStub.workspaceVolume.updateMany.mock.calls) {
+      expect(args.where.removedAt).toBeNull();
+      expect(args.data.removedAt).toBeInstanceOf(Date);
     }
     expect(reminders.cancelThreadReminders.mock.calls.map(([args]) => args)).toEqual([
       { threadId: 'leaf' },
@@ -265,12 +276,12 @@ describe('ThreadCleanupCoordinator', () => {
       deleteEphemeral: true,
     });
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
-    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'root', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prismaStub.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-root', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
-    const updateArgs = prismaStub.thread.updateMany.mock.calls[0][0];
-    expect(updateArgs.data.workspaceVolumeRemovedAt).toBeInstanceOf(Date);
+    const updateArgs = prismaStub.workspaceVolume.updateMany.mock.calls[0][0];
+    expect(updateArgs.data.removedAt).toBeInstanceOf(Date);
     expect(reminders.cancelThreadReminders).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'root' });
@@ -299,7 +310,7 @@ describe('ThreadCleanupCoordinator', () => {
 
     expect(containerService.removeVolume).not.toHaveBeenCalled();
     expect(registry.markStopped).not.toHaveBeenCalled();
-    expect(prismaStub.thread.updateMany).not.toHaveBeenCalled();
+    expect(prismaStub.workspaceVolume.updateMany).not.toHaveBeenCalled();
     expect(reminders.cancelThreadReminders).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'root' });
     expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'root' });
@@ -329,9 +340,9 @@ describe('ThreadCleanupCoordinator', () => {
     expect(registry.markStopped).toHaveBeenCalledTimes(1);
     expect(registry.markStopped).toHaveBeenCalledWith('root-c1', 'workspace_volume_removed');
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'root', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prismaStub.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-root', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
   });
 
@@ -353,9 +364,9 @@ describe('ThreadCleanupCoordinator', () => {
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
     expect(registry.markStopped).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'root', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prismaStub.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-root', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
   });
 
@@ -378,9 +389,9 @@ describe('ThreadCleanupCoordinator', () => {
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
     expect(registry.markStopped).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
-    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'root', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prismaStub.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-root', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
   });
 
@@ -399,9 +410,9 @@ describe('ThreadCleanupCoordinator', () => {
     await coordinator.closeThreadWithCascade('root');
 
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
-    expect(prismaStub.thread.updateMany).toHaveBeenCalledWith({
-      where: { id: 'root', workspaceVolumeRemovedAt: null },
-      data: { workspaceVolumeRemovedAt: expect.any(Date) },
+    expect(prismaStub.workspaceVolume.updateMany).toHaveBeenCalledWith({
+      where: { id: 'volume-root', removedAt: null },
+      data: { removedAt: expect.any(Date) },
     });
   });
 
@@ -421,7 +432,7 @@ describe('ThreadCleanupCoordinator', () => {
     await coordinator.closeThreadWithCascade('root');
 
     expect(containerService.removeVolume).toHaveBeenCalledWith('ha_ws_root', { force: true });
-    expect(prismaStub.thread.updateMany).not.toHaveBeenCalled();
+    expect(prismaStub.workspaceVolume.updateMany).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalled();
   });
 });

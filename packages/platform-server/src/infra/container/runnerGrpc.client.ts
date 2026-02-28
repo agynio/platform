@@ -371,7 +371,7 @@ export class RunnerGrpcClient implements DockerClient {
     return response?.targetIds ?? [];
   }
 
-  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found'> {
+  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found' | 'referenced'> {
     const request = create(RemoveVolumeRequestSchema, {
       volumeName,
       force: options?.force ?? false,
@@ -387,8 +387,10 @@ export class RunnerGrpcClient implements DockerClient {
         }
       },
     );
-    const outcome = (response as { outcome?: 'removed' | 'not_found' } | undefined)?.outcome;
-    return outcome === 'not_found' ? 'not_found' : 'removed';
+    const outcome = (response as { outcome?: 'removed' | 'not_found' | 'referenced' } | undefined)?.outcome;
+    if (outcome === 'not_found') return 'not_found';
+    if (outcome === 'referenced') return 'referenced';
+    return 'removed';
   }
 
   async findContainerByLabels(
