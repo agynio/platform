@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
-import type { LLMContext, LLMContextState, LLMState } from '../types';
+import type { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
+import { ResponseMessage } from '@agyn/llm';
 
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 
@@ -39,9 +40,11 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
         system: persistedContext.system ?? incomingContext.system,
       };
 
+      const mergedMessages = this.mergeResponseMessages(persisted.messages, state.messages);
+
       const merged: LLMState = {
         summary: persisted.summary ?? state.summary,
-        messages: [...persisted.messages, ...state.messages],
+        messages: mergedMessages,
         context: mergedContext,
         meta: state.meta,
       };
@@ -54,6 +57,47 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
       this.logger.error(`LoadLLMReducer failed ${JSON.stringify({ threadId: ctx.threadId, error: errorInfo })}`);
       return { ...state, context: this.ensureContext(state.context) };
     }
+  }
+
+  private mergeResponseMessages(persisted: LLMMessage[], incoming: LLMMessage[]): LLMMessage[] {
+    if (persisted.length === 0) return [...incoming];
+    if (incoming.length === 0) return [...persisted];
+
+    const merged: LLMMessage[] = [];
+    const seen = new Set<string>();
+    const combined = [...persisted, ...incoming];
+
+    for (const message of combined) {
+      if (message instanceof ResponseMessage) {
+        const key = this.canonicalJSONStringify(message.toPlain());
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+      }
+      merged.push(message);
+    }
+
+    return merged;
+  }
+
+  private canonicalJSONStringify(value: unknown): string {
+    return JSON.stringify(this.canonicalize(value));
+  }
+
+  private canonicalize(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.canonicalize(entry));
+    }
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+      const normalized: Record<string, unknown> = {};
+      for (const [key, entry] of entries) {
+        normalized[key] = this.canonicalize(entry);
+      }
+      return normalized;
+    }
+    return value;
   }
 
   private ensureContext(context: LLMContextState | undefined): LLMContextState {
