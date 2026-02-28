@@ -37,7 +37,7 @@ Design principles
 
 Layers
 - Application server: wires services, loads persisted graph, and publishes realtime graph events over gRPC.
-- Notifications service: receives gRPC notifications from the platform-server and re-broadcasts them via Socket.IO to UI clients.
+- Notifications service: receives gRPC notifications from the platform-server, publishes them to Redis, and the notifications gateway fan-outs the Redis channel to Socket.IO clients.
 - Graph runtime: live diff/apply engine enforcing reversible edges via ports and template registries.
 - Templates: declarative registration of node factories and their ports.
 - Triggers: external event sources (Slack, PR polling) that push messages into agents.

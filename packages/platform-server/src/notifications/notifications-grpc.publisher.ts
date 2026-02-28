@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createClient } from '@connectrpc/connect';
+import { createClient, type Client } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import { NotificationsService } from '../proto/gen/agynio/api/notifications/v1/notifications_pb.js';
 import type { UiNotificationPublishRequest, UiNotificationsPublisher } from './ui-notifications.publisher';
@@ -17,46 +17,16 @@ function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-type NotificationsPublishClient = {
-  publish(
-    request: {
-      event: string;
-      rooms: string[];
-      payload?: Record<string, unknown> | undefined;
-      source?: string;
-    },
-    options?: { signal?: AbortSignal },
-  ): Promise<unknown>;
-};
-
-function isNotificationsPublishClient(value: unknown): value is NotificationsPublishClient {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { publish?: unknown }).publish === 'function'
-  );
-}
-
 @Injectable()
 export class NotificationsGrpcPublisher implements UiNotificationsPublisher {
-  private readonly client: NotificationsPublishClient;
+  private readonly client: Client<typeof NotificationsService>;
 
   constructor(@Inject(NOTIFICATIONS_PUBLISHER_CONFIG) private readonly config: NotificationsPublisherConfig) {
-    /*
-     * connect-es marks generated service definitions with @ts-nocheck, so createClient() currently
-     * erases type information to `any`. We validate the publish method below before storing the client.
-     */
-    const candidate = createClient<typeof NotificationsService>(
-      NotificationsService,
-      createConnectTransport({
-        baseUrl: config.baseUrl,
-        httpVersion: '2',
-      }),
-    );
-    if (!isNotificationsPublishClient(candidate)) {
-      throw new Error('Notifications gRPC client missing publish implementation');
-    }
-    this.client = candidate;
+    const transport = createConnectTransport({
+      baseUrl: config.baseUrl,
+      httpVersion: '2',
+    });
+    this.client = createClient(NotificationsService, transport);
   }
 
   async publishToRooms(request: UiNotificationPublishRequest): Promise<void> {

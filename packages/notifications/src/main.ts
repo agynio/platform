@@ -1,30 +1,25 @@
 import { loadConfig } from './config';
 import { createLogger } from './logger';
-import { NotificationBroadcaster } from './broadcaster';
-import { SocketBridge } from './socket';
 import { GrpcServer } from './grpc';
+import { RedisNotificationBus } from './redis-notifications';
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
-const broadcaster = new NotificationBroadcaster(logger);
-const socket = new SocketBridge({
-  host: config.host,
-  port: config.socketPort,
-  path: config.socketPath,
-  corsOrigins: config.socketCorsOrigins,
+const notifications = new RedisNotificationBus({
+  channel: config.redisChannel,
+  redisUrl: config.redisUrl,
   logger,
 });
 const grpc = new GrpcServer({
   host: config.host,
   port: config.grpcPort,
-  broadcaster,
-  socket,
+  notifications,
   logger,
 });
 
 const start = async () => {
   try {
-    await socket.start();
+    await notifications.start();
     await grpc.start();
     logger.info('notifications service started');
   } catch (error) {
@@ -36,7 +31,7 @@ const start = async () => {
 const shutdown = async (signal: string) => {
   logger.info({ signal }, 'shutting down notifications service');
   try {
-    await Promise.all([grpc.close(), socket.close()]);
+    await Promise.all([grpc.close(), notifications.close()]);
     logger.info('notifications service stopped');
     process.exit(0);
   } catch (error) {

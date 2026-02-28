@@ -141,6 +141,7 @@ Runbooks
   - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
 - Docker Compose stack
   - Services: postgres, vault (auto-init), registry-mirror.
+  - Notifications: gRPC-only service publishes to Redis (`NOTIFICATIONS_REDIS_URL`, default `redis://redis:6379`) on channel `NOTIFICATIONS_CHANNEL` (default `notifications.v1`); Socket.IO fan-out is handled by the gateway.
   - Observability: Tracing services have been removed; follow upcoming observability docs for replacements.
   - Vault init: vault/auto-init.sh populates root token/unseal keys; set VAULT_ENABLED=true and VAULT_ADDR/VAULT_TOKEN.
   - Postgres checkpointer: LANGGRAPH_CHECKPOINTER defaults to postgres; configure POSTGRES_URL for the checkpointer connection.

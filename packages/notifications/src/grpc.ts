@@ -5,10 +5,9 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { ConnectError, Code, type HandlerContext } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { createServer, type Http2Server } from 'node:http2';
-import { NotificationBroadcaster } from './broadcaster';
-import type { SocketBridge } from './socket';
 import { PublishInputSchema } from './validation';
 import type { JsonValue, PublishedNotification } from './types';
+import type { NotificationFanout } from './redis-notifications';
 import { NotificationsService } from './proto/gen/agynio/api/notifications/v1/notifications_pb.js';
 import {
   NotificationEnvelopeSchema,
@@ -24,8 +23,7 @@ import {
 type GrpcServerOptions = {
   host: string;
   port: number;
-  broadcaster: NotificationBroadcaster;
-  socket: SocketBridge;
+  notifications: NotificationFanout;
   logger: Logger;
 };
 
@@ -73,7 +71,7 @@ export class GrpcServer {
 
   constructor(private readonly options: GrpcServerOptions) {
     this.logger = options.logger.child({ scope: 'grpc' });
-    const publishImpl = async (request: PublishRequest): Promise<PublishResponse> => {
+    const publishImpl = async (request: PublishRequest, _context: HandlerContext): Promise<PublishResponse> => {
       const parsed = PublishInputSchema.safeParse({
         event: request.event,
         rooms: request.rooms,
@@ -97,8 +95,19 @@ export class GrpcServer {
       };
 
       this.logger.debug({ event: notification.event, rooms: notification.rooms }, 'publish request accepted');
-      this.options.socket.broadcast(notification);
-      this.options.broadcaster.publish(notification);
+      try {
+        await this.options.notifications.publish(notification);
+      } catch (error) {
+        this.logger.error(
+          {
+            event: notification.event,
+            rooms: notification.rooms,
+            error: error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) },
+          },
+          'publish request failed',
+        );
+        throw new ConnectError('failed to publish notification', Code.Internal);
+      }
 
       return create(PublishResponseSchema, {
         id: notification.id,
@@ -135,7 +144,7 @@ export class GrpcServer {
         }
       };
 
-      const unsubscribe = this.options.broadcaster.subscribe(push);
+      const unsubscribe = this.options.notifications.subscribe(push);
       const abortHandler = (): void => {
         stop();
       };
@@ -166,11 +175,14 @@ export class GrpcServer {
       return iterator;
     };
 
+    this.publish = publishImpl;
+    this.subscribe = subscribeImpl;
+
     const handler = connectNodeAdapter({
       routes: (router) => {
-        router.service(NotificationsService as unknown as never, {
-          publish: publishImpl as unknown as never,
-          subscribe: subscribeImpl as unknown as never,
+        router.service(NotificationsService, {
+          publish: this.publish,
+          subscribe: this.subscribe,
         });
       },
     });
@@ -180,6 +192,10 @@ export class GrpcServer {
     server.on('request', handler);
     this.server = server;
   }
+
+  readonly publish: (request: PublishRequest, context: HandlerContext) => Promise<PublishResponse>;
+
+  readonly subscribe: (request: SubscribeRequest, context: HandlerContext) => AsyncIterable<SubscribeResponse>;
 
   async start(): Promise<void> {
     const { host, port } = this.options;
@@ -192,11 +208,16 @@ export class GrpcServer {
   async close(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       this.server.close((error: Error | undefined) => {
-        if (error) {
-          reject(error);
-        } else {
+        if (!error) {
           resolve();
+          return;
         }
+        const errorWithCode = error as NodeJS.ErrnoException;
+        if (errorWithCode.code === 'ERR_SERVER_NOT_RUNNING') {
+          resolve();
+          return;
+        }
+        reject(error);
       });
     });
   }

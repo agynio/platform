@@ -6,20 +6,18 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(50_051),
-  NOTIFICATIONS_SOCKET_PORT: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(4_000),
   NOTIFICATIONS_HOST: z
     .string()
     .default('0.0.0.0')
     .transform((value) => value.trim().length > 0 ? value.trim() : '0.0.0.0'),
-  NOTIFICATIONS_SOCKET_PATH: z
+  NOTIFICATIONS_REDIS_URL: z
     .string()
-    .default('/socket.io')
-    .transform((value) => (value.startsWith('/') ? value : `/${value}`)),
-  NOTIFICATIONS_SOCKET_CORS_ORIGINS: z.string().optional(),
+    .min(1, 'NOTIFICATIONS_REDIS_URL is required')
+    .transform((value) => value.trim()),
+  NOTIFICATIONS_CHANNEL: z
+    .string()
+    .default('notifications.v1')
+    .transform((value) => value.trim().length > 0 ? value.trim() : 'notifications.v1'),
   LOG_LEVEL: z
     .string()
     .default('info')
@@ -28,29 +26,19 @@ const envSchema = z.object({
 
 export type Config = {
   grpcPort: number;
-  socketPort: number;
   host: string;
-  socketPath: string;
-  socketCorsOrigins: string[];
+  redisUrl: string;
+  redisChannel: string;
   logLevel: string;
-};
-
-const parseCorsOrigins = (value: string | undefined): string[] => {
-  if (!value) return [];
-  return value
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
 };
 
 export const loadConfig = (): Config => {
   const env = envSchema.parse(process.env);
   return {
     grpcPort: env.NOTIFICATIONS_GRPC_PORT,
-    socketPort: env.NOTIFICATIONS_SOCKET_PORT,
     host: env.NOTIFICATIONS_HOST,
-    socketPath: env.NOTIFICATIONS_SOCKET_PATH,
-    socketCorsOrigins: parseCorsOrigins(env.NOTIFICATIONS_SOCKET_CORS_ORIGINS),
+    redisUrl: env.NOTIFICATIONS_REDIS_URL,
+    redisChannel: env.NOTIFICATIONS_CHANNEL,
     logLevel: env.LOG_LEVEL,
   };
 };
