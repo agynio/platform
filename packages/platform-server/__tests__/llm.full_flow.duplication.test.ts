@@ -16,15 +16,7 @@ import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.st
 import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
 
 import type { LLM } from '@agyn/llm';
-import {
-  AIMessage,
-  FunctionTool,
-  HumanMessage,
-  ResponseMessage,
-  SystemMessage,
-  ToolCallMessage,
-  ToolCallOutputMessage,
-} from '@agyn/llm';
+import { FunctionTool, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 
 vi.mock('@agyn/docker-runner', () => ({}));
 
@@ -330,10 +322,37 @@ describe('LLM full-flow duplication integration', () => {
 
       const summary = summarizeInput(freshRunInput);
       console.info('First call input after load (new run):', JSON.stringify(summary, null, 2));
+
+      const responseMessages = freshRunInput.filter(
+        (msg): msg is ResponseMessage => msg instanceof ResponseMessage,
+      );
+      const responsePayloads = responseMessages.map((msg) => msg.toPlain());
+
+      if (responsePayloads.length > 0) {
+        console.debug(
+          'First call response payloads:',
+          JSON.stringify(responsePayloads, null, 2),
+        );
+      }
+
       if (summary.counts.response === 2) {
         expect(summary.counts.response).toBe(2);
       } else {
         expect(summary.counts.response).toBeGreaterThan(0);
+      }
+
+      if (responsePayloads.length === 2) {
+        const [firstPayload, secondPayload] = responsePayloads;
+        const areEqual = JSON.stringify(firstPayload) === JSON.stringify(secondPayload);
+        console.debug(
+          'Response payload deep equality:',
+          JSON.stringify({ areEqual }, null, 2),
+        );
+        if (areEqual) {
+          expect(secondPayload).toEqual(firstPayload);
+        } else {
+          expect(secondPayload).not.toEqual(firstPayload);
+        }
       }
     } finally {
       await moduleRef.close();
