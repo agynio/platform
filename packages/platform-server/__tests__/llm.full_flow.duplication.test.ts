@@ -144,6 +144,14 @@ class DemoToolNode extends BaseToolNode<unknown> {
   }
 }
 
+const createToolCallPlain = (callId: string, name = 'demo', args = '{}') =>
+  new ToolCallMessage({
+    type: 'function_call',
+    call_id: callId,
+    name,
+    arguments: args,
+  } as any).toPlain();
+
 type AgentFixture = {
   agent: AgentNode;
   moduleRef: Awaited<ReturnType<typeof Test.createTestingModule>>;
@@ -307,12 +315,7 @@ describe('LLM full-flow duplication integration', () => {
 
     try {
       const scriptedLLM = new ScriptableLLM();
-      const toolCallPlain = new ToolCallMessage({
-        type: 'function_call',
-        call_id: 'call-mixed',
-        name: 'demo',
-        arguments: '{}',
-      } as any).toPlain();
+      const toolCallPlain = createToolCallPlain('call-mixed');
       const emptyAssistantPlain = AIMessage.fromText('').toPlain();
 
       scriptedLLM.setScript([
@@ -362,6 +365,60 @@ describe('LLM full-flow duplication integration', () => {
       });
       expect(flattenedAssistantMessages.length).toBe(1);
       expect(emptyAssistantFlattened.length).toBe(1);
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
+  it('captures duplicate tool_call assistant outputs within a single run', async () => {
+    const fixture = await createAgentFixture();
+    const { agent, moduleRef, registerCallModelLLM } = fixture;
+
+    try {
+      const scriptedLLM = new ScriptableLLM();
+      const duplicateCallId = 'call-duplicate';
+      scriptedLLM.setScript([
+        {
+          kind: 'response',
+          output: [createToolCallPlain(duplicateCallId), createToolCallPlain(duplicateCallId)],
+        },
+        { kind: 'text', text: 'final' },
+      ]);
+      registerCallModelLLM(scriptedLLM);
+
+      const result = await agent.invoke('thread-duplicate-single', [HumanMessage.fromText('start')]);
+      expect(result).toBeInstanceOf(ResponseMessage);
+      expect(result.text).toBe('final');
+
+      expect(scriptedLLM.inputs.length).toBe(2);
+      const secondCallInput = scriptedLLM.inputs[1];
+      const rawMessages = secondCallInput?.raw ?? [];
+      const flattenedMessages = secondCallInput?.flat ?? [];
+
+      const summary = summarizeInput(rawMessages);
+      console.info('Second call input (duplicate tool calls, single run):', JSON.stringify(summary, null, 2));
+      console.debug(
+        'Second call flattened input (duplicate tool calls, single run):',
+        JSON.stringify(flattenedMessages, null, 2),
+      );
+
+      const responseMessages = rawMessages.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
+      expect(responseMessages.length).toBe(1);
+      const [response] = responseMessages;
+      const toolCallOutputs = response.output.filter((entry) => entry instanceof ToolCallMessage) as ToolCallMessage[];
+      const assistantOutputs = response.output.filter((entry) => entry instanceof AIMessage);
+
+      expect(toolCallOutputs.length).toBe(2);
+      expect(toolCallOutputs[0].toPlain()).toEqual(toolCallOutputs[1].toPlain());
+      expect(assistantOutputs.length).toBe(0);
+
+      const flattenedFunctionCalls = flattenedMessages.filter((entry) => entry?.type === 'function_call');
+      expect(flattenedFunctionCalls.length).toBe(2);
+      console.debug(
+        'Second call flattened function calls (duplicate tool calls, single run):',
+        JSON.stringify(flattenedFunctionCalls, null, 2),
+      );
+      expect(flattenedFunctionCalls[0]).toEqual(flattenedFunctionCalls[1]);
     } finally {
       await moduleRef.close();
     }
@@ -427,6 +484,76 @@ describe('LLM full-flow duplication integration', () => {
           expect(secondPayload).not.toEqual(firstPayload);
         }
       }
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
+  it('persists duplicate tool_call outputs across runs', async () => {
+    const fixture = await createAgentFixture();
+    const { agent, moduleRef, registerCallModelLLM } = fixture;
+
+    try {
+      const callId = 'call-duplicate-persist';
+      const firstRunLLM = new ScriptableLLM();
+      firstRunLLM.setScript([
+        {
+          kind: 'response',
+          output: [createToolCallPlain(callId), createToolCallPlain(callId)],
+        },
+        { kind: 'text', text: 'final' },
+      ]);
+      registerCallModelLLM(firstRunLLM);
+
+      const firstResult = await agent.invoke('thread-duplicate-persist', [HumanMessage.fromText('initial')]);
+      expect(firstResult).toBeInstanceOf(ResponseMessage);
+
+      const secondRunLLM = new ScriptableLLM();
+      secondRunLLM.setScript([{ kind: 'text', text: 'follow-up' }]);
+      registerCallModelLLM(secondRunLLM);
+
+      const followUp = await agent.invoke('thread-duplicate-persist', [HumanMessage.fromText('next')]);
+      expect(followUp).toBeInstanceOf(ResponseMessage);
+      expect(followUp.text).toBe('follow-up');
+
+      expect(secondRunLLM.inputs.length).toBe(1);
+      const firstCallInput = secondRunLLM.inputs[0];
+      const rawMessages = firstCallInput?.raw ?? [];
+      const flattenedMessages = firstCallInput?.flat ?? [];
+
+      const summary = summarizeInput(rawMessages);
+      console.info(
+        'First call input after load (duplicate tool calls, new run):',
+        JSON.stringify(summary, null, 2),
+      );
+      console.debug(
+        'First call flattened input after load (duplicate tool calls, new run):',
+        JSON.stringify(flattenedMessages, null, 2),
+      );
+
+      const responseMessages = rawMessages.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
+      expect(responseMessages.length).toBeGreaterThan(0);
+      const duplicateResponse = responseMessages.find((msg) =>
+        msg.output.some((entry) => entry instanceof ToolCallMessage),
+      );
+      expect(duplicateResponse).toBeDefined();
+
+      const toolCallOutputs = duplicateResponse!.output.filter(
+        (entry): entry is ToolCallMessage => entry instanceof ToolCallMessage,
+      );
+      const assistantOutputs = duplicateResponse!.output.filter((entry) => entry instanceof AIMessage);
+
+      expect(toolCallOutputs.length).toBe(2);
+      expect(toolCallOutputs[0].toPlain()).toEqual(toolCallOutputs[1].toPlain());
+      expect(assistantOutputs.length).toBe(0);
+      console.debug(
+        'Persisted duplicate tool call payloads:',
+        JSON.stringify(toolCallOutputs.map((entry) => entry.toPlain()), null, 2),
+      );
+
+      const flattenedFunctionCalls = flattenedMessages.filter((entry) => entry?.type === 'function_call');
+      expect(flattenedFunctionCalls.length).toBeGreaterThanOrEqual(2);
+      expect(flattenedFunctionCalls[0]).toEqual(flattenedFunctionCalls[1]);
     } finally {
       await moduleRef.close();
     }
