@@ -300,16 +300,34 @@ describe('LLM full-flow duplication integration', () => {
       expect(result.text).toBe('final');
 
       expect(scriptedLLM.inputs.length).toBe(2);
-      const secondCallInput = scriptedLLM.inputs[1]?.raw ?? [];
-      expect(secondCallInput.length).toBeGreaterThan(0);
+      const secondCall = scriptedLLM.inputs[1];
+      expect(secondCall).toBeDefined();
 
-      const summary = summarizeInput(secondCallInput);
+      const summary = summarizeInput(secondCall?.raw ?? []);
       console.info('Second call input (single run):', JSON.stringify(summary, null, 2));
-      if (summary.counts.response === 2) {
-        expect(summary.counts.response).toBe(2);
-      } else {
-        expect(summary.counts.response).toBeGreaterThan(0);
-      }
+
+      expect(secondCall?.flat ?? []).toMatchObject([
+        {
+          role: 'system',
+          content: [{ type: 'input_text', text: 'You are a helpful AI assistant.' }],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'start' }],
+        },
+        {
+          type: 'function_call',
+          call_id: 'call-1',
+          name: 'demo',
+          arguments: '{}',
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call-1',
+          output: 'ok',
+        },
+      ]);
     } finally {
       await moduleRef.close();
     }
@@ -358,13 +376,28 @@ describe('LLM full-flow duplication integration', () => {
       expect(assistantOutputs.length).toBe(1);
       expect(assistantOutputs[0]?.text).toBe('');
 
-      const flattenedFunctionCalls = flattenedMessages.filter((entry) => entry?.type === 'function_call');
-      const flattenedAssistantMessages = flattenedMessages.filter(
-        (entry) => entry?.type === 'message' && entry?.role === 'assistant',
-      );
-
-      expect(flattenedFunctionCalls.length).toBe(1);
-      expect(flattenedAssistantMessages.length).toBe(0);
+      expect(flattenedMessages).toMatchObject([
+        {
+          role: 'system',
+          content: [{ type: 'input_text', text: 'You are a helpful AI assistant.' }],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'start' }],
+        },
+        {
+          type: 'function_call',
+          call_id: 'call-mixed',
+          name: 'demo',
+          arguments: '{}',
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call-mixed',
+          output: 'ok',
+        },
+      ]);
     } finally {
       await moduleRef.close();
     }
@@ -447,7 +480,8 @@ describe('LLM full-flow duplication integration', () => {
       expect(followUp).toBeInstanceOf(ResponseMessage);
 
       expect(secondRunLLM.inputs.length).toBe(1);
-      const freshRunInput = secondRunLLM.inputs[0]?.raw ?? [];
+      const secondRunCall = secondRunLLM.inputs[0];
+      const freshRunInput = secondRunCall?.raw ?? [];
       expect(freshRunInput.length).toBeGreaterThan(0);
 
       const summary = summarizeInput(freshRunInput);
@@ -465,25 +499,43 @@ describe('LLM full-flow duplication integration', () => {
         );
       }
 
-      if (summary.counts.response === 2) {
-        expect(summary.counts.response).toBe(2);
-      } else {
-        expect(summary.counts.response).toBeGreaterThan(0);
-      }
+      console.debug(
+        'First call flattened input after load (new run):',
+        JSON.stringify(secondRunCall?.flat ?? [], null, 2),
+      );
 
-      if (responsePayloads.length === 2) {
-        const [firstPayload, secondPayload] = responsePayloads;
-        const areEqual = JSON.stringify(firstPayload) === JSON.stringify(secondPayload);
-        console.debug(
-          'Response payload deep equality:',
-          JSON.stringify({ areEqual }, null, 2),
-        );
-        if (areEqual) {
-          expect(secondPayload).toEqual(firstPayload);
-        } else {
-          expect(secondPayload).not.toEqual(firstPayload);
-        }
-      }
+      expect(secondRunCall?.flat ?? []).toMatchObject([
+        {
+          role: 'system',
+          content: [{ type: 'input_text', text: 'You are a helpful AI assistant.' }],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'initial' }],
+        },
+        {
+          type: 'function_call',
+          call_id: 'call-1',
+          name: 'demo',
+          arguments: '{}',
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call-1',
+          output: 'ok',
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'final' }],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'next' }],
+        },
+      ]);
     } finally {
       await moduleRef.close();
     }

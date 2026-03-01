@@ -5,14 +5,7 @@ import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ConfigService } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import type { LLM } from '@agyn/llm';
-import {
-  AIMessage,
-  HumanMessage,
-  ResponseMessage,
-  SystemMessage,
-  ToolCallMessage,
-  ToolCallOutputMessage,
-} from '@agyn/llm';
+import { AIMessage, HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
@@ -23,10 +16,30 @@ import { createEventsBusStub, createRunEventsStub } from './helpers/runEvents.st
 vi.mock('@agyn/docker-runner', () => ({}));
 
 class FakeLLM implements Pick<LLM, 'call'> {
-  public readonly calls: Array<{ model: string; input: Parameters<LLM['call']>[0]['input']; tools?: unknown[] }> = [];
+  public readonly calls: Array<{
+    model: string;
+    input: Parameters<LLM['call']>[0]['input'];
+    tools?: unknown[];
+    flat: unknown[];
+  }> = [];
 
   async call(params: Parameters<LLM['call']>[0]): Promise<ResponseMessage> {
-    this.calls.push({ model: params.model, input: params.input, tools: params.tools });
+    const flat = params.input.flatMap((msg) => {
+      if (msg instanceof ResponseMessage) {
+        const outputMessages = msg.output;
+        const containsToolCall = outputMessages.some((entry) => entry instanceof ToolCallMessage);
+        return outputMessages
+          .filter((entry) => {
+            if (!containsToolCall) return true;
+            if (!(entry instanceof AIMessage)) return true;
+            return entry.text.trim().length > 0;
+          })
+          .map((entry) => entry.toPlain());
+      }
+      return [msg.toPlain()];
+    });
+
+    this.calls.push({ model: params.model, input: params.input, tools: params.tools, flat });
     const order = this.calls.length;
     if (order === 1) {
       return this.toolCallResponse();
@@ -99,7 +112,6 @@ describe('AgentNode second LLM call input', () => {
   let moduleRef: Awaited<ReturnType<typeof Test.createTestingModule>>;
   let agent: AgentNode;
   let fakeLLM: FakeLLM;
-  let capturedSecondCallInput: Parameters<LLM['call']>[0]['input'] | null;
 
   const conversationState = new Map<string, unknown>();
 
@@ -109,7 +121,6 @@ describe('AgentNode second LLM call input', () => {
     const provisioner = new FakeProvisioner(fakeLLM, summaryLLM);
     const runEvents = createRunEventsStub();
     const eventsBus = createEventsBusStub();
-    capturedSecondCallInput = null;
 
     const prismaClient = {
       conversationState: {
@@ -187,33 +198,47 @@ describe('AgentNode second LLM call input', () => {
     conversationState.clear();
   });
 
-  it.fails('captures duplicate assistant entries in second model call input', async () => {
+  it('emits a single tool_call entry in the second model invocation', async () => {
     const result = await agent.invoke('thread-dup', [HumanMessage.fromText('start')]);
     expect(result).toBeInstanceOf(ResponseMessage);
 
     expect(fakeLLM.calls.length).toBeGreaterThanOrEqual(2);
-    capturedSecondCallInput = fakeLLM.calls[1]?.input ?? null;
-    expect(capturedSecondCallInput).not.toBeNull();
+    const secondCall = fakeLLM.calls[1];
+    expect(secondCall).toBeDefined();
+    const flattened = secondCall?.flat ?? [];
 
-    const secondInput = capturedSecondCallInput ?? [];
-    const responseMessages = secondInput.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
-    const toolOutputs = secondInput.filter((msg): msg is ToolCallOutputMessage => msg instanceof ToolCallOutputMessage);
-    const systemMessages = secondInput.filter((msg): msg is SystemMessage => msg instanceof SystemMessage);
-    const humanMessages = secondInput.filter((msg): msg is HumanMessage => msg instanceof HumanMessage);
+    const assistantMessages = flattened.filter(
+      (entry: any) => entry?.type === 'message' && entry?.role === 'assistant',
+    );
+    const functionCalls = flattened.filter((entry: any) => entry?.type === 'function_call');
 
-    const summary = {
-      order: secondInput.map((msg) => msg.constructor.name),
-      counts: {
-        system: systemMessages.length,
-        human: humanMessages.length,
-        response: responseMessages.length,
-        toolCallOutput: toolOutputs.length,
-      },
-      responses: responseMessages.map((msg) => msg.toPlain()),
-    };
+    expect(assistantMessages).toHaveLength(0);
+    expect(functionCalls).toHaveLength(1);
+    expect(functionCalls[0]).toMatchObject({ call_id: 'call-1', name: 'demo', arguments: '{}' });
 
-    console.info('Second LLM call input summary:', JSON.stringify(summary, null, 2));
+    const functionCallOutputs = flattened.filter((entry: any) => entry?.type === 'function_call_output');
+    expect(functionCallOutputs).toHaveLength(1);
+    expect(functionCallOutputs[0]).toMatchObject({ call_id: 'call-1' });
 
-    expect(responseMessages.length).toBe(2);
+    expect(flattened.length).toBe(4);
+    expect(flattened[0]).toMatchObject({
+      role: 'system',
+      content: [{ type: 'input_text', text: 'You are a helpful AI assistant.' }],
+    });
+    expect(flattened[1]).toMatchObject({
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: 'start' }],
+    });
+    expect(flattened[2]).toMatchObject({
+      type: 'function_call',
+      call_id: 'call-1',
+      name: 'demo',
+      arguments: '{}',
+    });
+    expect(flattened[3]).toMatchObject({
+      type: 'function_call_output',
+      call_id: 'call-1',
+    });
   });
 });

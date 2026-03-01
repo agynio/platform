@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
-import type { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
+import type { LLMContext, LLMContextState, LLMState } from '../types';
 
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 
@@ -39,7 +39,8 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
         system: persistedContext.system ?? incomingContext.system,
       };
 
-      const mergedMessages = this.mergeResponseMessages(persisted.messages, state.messages);
+      // Preserve the persisted transcript order and append the newly received messages.
+      const mergedMessages = [...persisted.messages, ...state.messages];
 
       const merged: LLMState = {
         summary: persisted.summary ?? state.summary,
@@ -57,14 +58,6 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
       return { ...state, context: this.ensureContext(state.context) };
     }
   }
-
-  private mergeResponseMessages(persisted: LLMMessage[], incoming: LLMMessage[]): LLMMessage[] {
-    if (persisted.length === 0) return [...incoming];
-    if (incoming.length === 0) return [...persisted];
-
-    return [...persisted, ...incoming];
-  }
-
   private ensureContext(context: LLMContextState | undefined): LLMContextState {
     if (!context) return { messageIds: [], memory: [], pendingNewContextItemIds: [] };
     return {

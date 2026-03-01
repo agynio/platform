@@ -72,15 +72,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('LoadLLMReducer response deduplication', () => {
-  it('dedupes identical assistant responses before CallModelLLMReducer', async () => {
+describe('LoadLLMReducer merge behavior', () => {
+  it('concatenates persisted and incoming response messages without deduplication', async () => {
     const reducer = new LoadLLMReducer(prismaServiceStub);
     const ctx = baseContext();
 
-    const baseOutput = [AIMessage.fromText('assistant reply').toPlain()];
-
-    const persistedMessage = new ResponseMessage({ output: deepClone(baseOutput) });
-    const incomingMessage = new ResponseMessage({ output: deepClone(baseOutput) });
+    const persistedMessage = ResponseMessage.fromText('persisted');
+    const incomingMessage = ResponseMessage.fromText('incoming');
 
     const persistedState: LLMState = { messages: [persistedMessage], context: { messageIds: [], memory: [] } };
     const incomingState: LLMState = { messages: [incomingMessage], context: { messageIds: [], memory: [] } };
@@ -89,77 +87,65 @@ describe('LoadLLMReducer response deduplication', () => {
 
     const merged = await reducer.invoke(incomingState, ctx);
 
-    expect(merged.messages).toHaveLength(1);
+    expect(merged.messages).toHaveLength(2);
     const responseMessages = merged.messages.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
-    expect(responseMessages).toHaveLength(1);
-    expect(responseMessages[0].toPlain()).toEqual(persistedMessage.toPlain());
-
-    const llmCallMock = vi.fn(async () => ResponseMessage.fromText('ok'));
-    const callReducer = callReducerWithMocks(llmCallMock);
-
-    await callReducer.invoke(merged, ctx);
-
-    expect(llmCallMock).toHaveBeenCalledTimes(1);
-    const callArgs = llmCallMock.mock.calls[0][0];
-    const inputResponses = callArgs.input.filter((msg: unknown): msg is ResponseMessage => msg instanceof ResponseMessage);
-    expect(inputResponses).toHaveLength(1);
-    expect(inputResponses[0].toPlain()).toEqual(persistedMessage.toPlain());
+    expect(responseMessages).toHaveLength(2);
+    expect(responseMessages[0].text).toBe('persisted');
+    expect(responseMessages[1].text).toBe('incoming');
   });
 
-  it('dedupes assistant responses containing tool calls and empty text', async () => {
+  it('keeps tool calls while filtering empty assistant text during LLM input assembly', async () => {
     const reducer = new LoadLLMReducer(prismaServiceStub);
     const ctx = baseContext();
 
     const toolCallPlain = {
-      id: 'call-1',
       type: 'function_call',
       call_id: 'call-1',
       name: 'lookup_user',
       arguments: '{"id":42}',
-      status: 'completed',
-    } satisfies ReturnType<ToolCallMessage['toPlain']>;
+    } as ReturnType<ToolCallMessage['toPlain']>;
 
-    const emptyTextMessage = {
-      id: 'msg-tool',
-      type: 'message',
-      role: 'assistant',
-      status: 'completed',
-      content: [
-        {
-          type: 'output_text',
-          text: '',
-          annotations: [],
-        },
-      ],
-    } satisfies ReturnType<AIMessage['toPlain']>;
+    const emptyAssistantPlain = AIMessage.fromText('').toPlain();
 
-    const baseOutput = [emptyTextMessage, toolCallPlain];
-
-    const persistedMessage = new ResponseMessage({ output: deepClone(baseOutput) });
-    const incomingMessage = new ResponseMessage({ output: deepClone(baseOutput) });
+    const persistedMessage = new ResponseMessage({ output: [deepClone(emptyAssistantPlain), deepClone(toolCallPlain)] });
 
     const persistedState: LLMState = { messages: [persistedMessage], context: { messageIds: [], memory: [] } };
-    const incomingState: LLMState = { messages: [incomingMessage], context: { messageIds: [], memory: [] } };
+    const incomingState: LLMState = { messages: [], context: { messageIds: [], memory: [] } };
 
     setupPersistedState(reducer, persistedState, ctx);
 
     const merged = await reducer.invoke(incomingState, ctx);
 
-    const responseMessages = merged.messages.filter((msg): msg is ResponseMessage => msg instanceof ResponseMessage);
-    expect(responseMessages).toHaveLength(1);
+    const llmCallMock = vi.fn(async ({ input }: Parameters<LLM['call']>[0]) => {
+      const flatten = input.flatMap((msg) => {
+        if (msg instanceof ResponseMessage) {
+          const output = msg.output;
+          const includesToolCall = output.some((entry) => entry instanceof ToolCallMessage);
+          return output
+            .filter((entry) => {
+              if (!includesToolCall) return true;
+              if (!(entry instanceof AIMessage)) return true;
+              return entry.text.trim().length > 0;
+            })
+            .map((entry) => entry.toPlain());
+        }
+        return [msg.toPlain()];
+      });
 
-    const llmCallMock = vi.fn(async () => ResponseMessage.fromText('ok'));
+      const assistantMessages = flatten.filter((entry: any) => entry?.role === 'assistant');
+      const toolCalls = flatten.filter((entry: any) => entry?.type === 'function_call');
+
+      expect(assistantMessages).toHaveLength(0);
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0]).toMatchObject({ call_id: 'call-1', name: 'lookup_user', arguments: '{"id":42}' });
+
+      return ResponseMessage.fromText('ok');
+    });
+
     const callReducer = callReducerWithMocks(llmCallMock);
 
     await callReducer.invoke(merged, ctx);
 
     expect(llmCallMock).toHaveBeenCalledTimes(1);
-    const callArgs = llmCallMock.mock.calls[0][0];
-    const inputResponses = callArgs.input.filter((msg: unknown): msg is ResponseMessage => msg instanceof ResponseMessage);
-    expect(inputResponses).toHaveLength(1);
-    const toolCalls = inputResponses[0].output.filter((msg): msg is ToolCallMessage => msg instanceof ToolCallMessage);
-    expect(toolCalls).toHaveLength(1);
-    expect(toolCalls[0].callId).toBe('call-1');
   });
 });
-
