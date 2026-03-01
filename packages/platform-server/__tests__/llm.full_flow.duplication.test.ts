@@ -39,14 +39,20 @@ class ScriptableLLM implements Pick<LLM, 'call'> {
   }
 
   async call(params: Parameters<LLM['call']>[0]): Promise<ResponseMessage> {
-    const flat = params.input
-      .map((msg) => {
-        if (msg instanceof ResponseMessage) {
-          return msg.output.map((entry) => entry.toPlain());
-        }
-        return msg.toPlain();
-      })
-      .flat();
+    const flat = params.input.flatMap((msg) => {
+      if (msg instanceof ResponseMessage) {
+        const outputMessages = msg.output;
+        const containsToolCall = outputMessages.some((entry) => entry instanceof ToolCallMessage);
+        return outputMessages
+          .filter((entry) => {
+            if (!containsToolCall) return true;
+            if (!(entry instanceof AIMessage)) return true;
+            return entry.text.trim().length > 0;
+          })
+          .map((entry) => entry.toPlain());
+      }
+      return [msg.toPlain()];
+    });
 
     this.inputs.push({ raw: params.input, flat });
 
@@ -309,7 +315,7 @@ describe('LLM full-flow duplication integration', () => {
     }
   });
 
-  it('captures duplicate assistant items when first response mixes tool call and empty text', async () => {
+  it('filters empty assistant outputs when paired with tool calls', async () => {
     const fixture = await createAgentFixture();
     const { agent, moduleRef, registerCallModelLLM } = fixture;
 
@@ -358,13 +364,7 @@ describe('LLM full-flow duplication integration', () => {
       );
 
       expect(flattenedFunctionCalls.length).toBe(1);
-      const emptyAssistantFlattened = flattenedAssistantMessages.filter((entry) => {
-        const contents = Array.isArray(entry?.content) ? entry.content : [];
-        const textContent = contents.find((c: any) => c?.type === 'output_text');
-        return textContent?.text === '';
-      });
-      expect(flattenedAssistantMessages.length).toBe(1);
-      expect(emptyAssistantFlattened.length).toBe(1);
+      expect(flattenedAssistantMessages.length).toBe(0);
     } finally {
       await moduleRef.close();
     }

@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
 import type { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
-import { ResponseMessage } from '@agyn/llm';
 
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 
@@ -63,41 +62,7 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
     if (persisted.length === 0) return [...incoming];
     if (incoming.length === 0) return [...persisted];
 
-    const merged: LLMMessage[] = [];
-    const seen = new Set<string>();
-    const combined = [...persisted, ...incoming];
-
-    for (const message of combined) {
-      if (message instanceof ResponseMessage) {
-        const key = this.canonicalJSONStringify(message.toPlain());
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-      }
-      merged.push(message);
-    }
-
-    return merged;
-  }
-
-  private canonicalJSONStringify(value: unknown): string {
-    return JSON.stringify(this.canonicalize(value));
-  }
-
-  private canonicalize(value: unknown): unknown {
-    if (Array.isArray(value)) {
-      return value.map((entry) => this.canonicalize(entry));
-    }
-    if (value && typeof value === 'object') {
-      const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-      const normalized: Record<string, unknown> = {};
-      for (const [key, entry] of entries) {
-        normalized[key] = this.canonicalize(entry);
-      }
-      return normalized;
-    }
-    return value;
+    return [...persisted, ...incoming];
   }
 
   private ensureContext(context: LLMContextState | undefined): LLMContextState {

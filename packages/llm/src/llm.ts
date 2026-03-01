@@ -23,15 +23,20 @@ export class LLM {
   constructor(private openAI: OpenAI) {}
 
   async call(params: { model: string; input: Array<LLMInput>; tools?: Array<FunctionTool> }) {
-    const flattenInput = params.input
-      .map((m) => {
-        if (m instanceof ResponseMessage) {
-          return m.output //
-            .map((o) => o.toPlain());
-        }
-        return m.toPlain();
-      })
-      .flat();
+    const flattenInput = params.input.flatMap((m) => {
+      if (m instanceof ResponseMessage) {
+        const outputMessages = m.output;
+        const containsToolCall = outputMessages.some((entry) => entry instanceof ToolCallMessage);
+        return outputMessages
+          .filter((entry) => {
+            if (!containsToolCall) return true;
+            if (!(entry instanceof AIMessage)) return true;
+            return entry.text.trim().length > 0;
+          })
+          .map((entry) => entry.toPlain());
+      }
+      return [m.toPlain()];
+    });
 
     const toolDefinitions = params.tools?.map((tool) => tool.definition());
 
