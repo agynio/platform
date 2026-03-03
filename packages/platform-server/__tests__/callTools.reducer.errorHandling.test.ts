@@ -120,13 +120,18 @@ describe('CallToolsLLMReducer error isolation', () => {
     expect(payload.details.errorId.length).toBeGreaterThan(0);
   });
 
-  it('sanitizes MCP errors while preserving code and errorId', async () => {
+  it('formats MCP error message with exit code and captured output', async () => {
     const tool = {
       name: 'mcp-failing',
       description: 'throws McpError',
       schema: z.object({}),
       async execute() {
-        throw new McpError('Tool broke', 'TOOL_CALL_ERROR');
+        throw new McpError('Tool broke', {
+          code: 'TOOL_CALL_ERROR',
+          exitCode: 17,
+          stderr: 'fatal: something bad\nretry suggestion\n',
+          stdout: 'line one\nline two\n',
+        });
       },
     } as any;
 
@@ -141,9 +146,41 @@ describe('CallToolsLLMReducer error isolation', () => {
       errorId: expect.any(String),
       name: 'McpError',
       code: 'TOOL_CALL_ERROR',
+      exitCode: 17,
     });
     expect(payload.details.stack).toBeUndefined();
     expect(payload.details.message).toBeUndefined();
+    expect(payload.message).toBe(
+      '[exit code 17] Process exited with code 17\n' +
+        '---\n' +
+        'fatal: something bad\nretry suggestion\nline one\nline two',
+    );
+  });
+
+  it('sanitizes MCP errors without exec output data', async () => {
+    const tool = {
+      name: 'mcp-minimal',
+      description: 'throws McpError without metadata',
+      schema: z.object({}),
+      async execute() {
+        throw new McpError('Tool broke', 'TOOL_CALL_ERROR');
+      },
+    } as any;
+
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool] });
+    const result = await reducer.invoke(buildState('mcp-minimal', 'call-mcp-min', JSON.stringify({})), ctx);
+
+    const payload = parseErrorPayload(result);
+    expect(payload.error_code).toBe('MCP_CALL_ERROR');
+    expect(payload.message).toBe(`[TOOL_CALL_ERROR] MCP tool failed\n---\n(no output)`);
+    expect(payload.details).toMatchObject({
+      errorId: expect.any(String),
+      name: 'McpError',
+      code: 'TOOL_CALL_ERROR',
+    });
+    expect(payload.details.exitCode).toBeUndefined();
   });
 
   it('enforces TOOL_OUTPUT_TOO_LARGE limit', async () => {

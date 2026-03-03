@@ -42,6 +42,10 @@ export class WorkspaceExecTransport {
   private stdin?: NodeJS.WritableStream;
   private stdout = new PassThrough();
   private stderr = new PassThrough();
+  private stdoutText = '';
+  private stderrText = '';
+  private execResult: { exitCode?: number; stdout: string; stderr: string } | null = null;
+  private sessionClosePromise?: Promise<void>;
   private closed = false;
   private static seq = 0;
   private readonly id = ++WorkspaceExecTransport.seq;
@@ -73,14 +77,17 @@ export class WorkspaceExecTransport {
     }
 
     this.stdout.on('data', (chunk: Buffer) => {
-      this.logger.debug(`[WorkspaceExecTransport#${this.id} stdout] ${chunk.toString().trim()}`);
+      const text = chunk.toString('utf8');
+      this.stdoutText += text;
+      this.logger.debug(`[WorkspaceExecTransport#${this.id} stdout] ${text.trim()}`);
       this.readBuffer.append(chunk);
       this.processReadBuffer();
     });
     this.stdout.on('error', (err) => this.onerror?.(err));
 
     this.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
+      const text = chunk.toString('utf8');
+      this.stderrText += text;
       if (text.trim().length > 0) {
         this.logger.error(`[WorkspaceExecTransport#${this.id} stderr] ${text.trim()}`);
       }
@@ -131,7 +138,7 @@ export class WorkspaceExecTransport {
       // ignore errors closing stdin
     }
     try {
-      await this.session?.close().catch(() => undefined);
+      await this.ensureSessionClosed();
     } catch {
       // ignore close errors
     }
@@ -142,7 +149,57 @@ export class WorkspaceExecTransport {
   private handleClose(): void {
     if (this.closed) return;
     this.closed = true;
-    this.logger.log(`[WorkspaceExecTransport#${this.id}] STREAM CLOSED`);
-    this.onclose?.();
+    this.ensureSessionClosed()
+      .catch((err) => {
+        this.logger.warn(`[WorkspaceExecTransport#${this.id}] Failed to finalize session error=${(err as Error).message}`);
+      })
+      .finally(() => {
+        this.logger.log(`[WorkspaceExecTransport#${this.id}] STREAM CLOSED`);
+        this.onclose?.();
+      });
+  }
+
+  private async ensureSessionClosed(): Promise<void> {
+    if (!this.session) {
+      this.setExecResult();
+      return;
+    }
+    if (!this.sessionClosePromise) {
+      this.sessionClosePromise = this.session
+        .close()
+        .then((result) => {
+          this.setExecResult(result ?? undefined);
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `[WorkspaceExecTransport#${this.id}] session.close() failed error=${err instanceof Error ? err.message : String(err)}`,
+          );
+          this.setExecResult();
+        });
+    }
+    await this.sessionClosePromise;
+  }
+
+  private setExecResult(result?: { exitCode: number; stdout: string; stderr: string }): void {
+    if (this.execResult) return;
+    const normalizedExit = result && Number.isFinite(result.exitCode) ? result.exitCode : undefined;
+    const stdout = result?.stdout ?? this.stdoutText;
+    const stderr = result?.stderr ?? this.stderrText;
+    this.execResult = {
+      exitCode: normalizedExit,
+      stdout,
+      stderr,
+    };
+  }
+
+  getExecResult(): { exitCode?: number; stdout: string; stderr: string } {
+    if (this.execResult) {
+      return { ...this.execResult };
+    }
+    return {
+      exitCode: undefined,
+      stdout: this.stdoutText,
+      stderr: this.stderrText,
+    };
   }
 }

@@ -450,6 +450,23 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         raw: result,
       };
     } catch (e: unknown) {
+      let exitCode: number | undefined;
+      let stdout = '';
+      let stderr = '';
+      if (transport) {
+        try {
+          await transport.close();
+        } catch (closeErr) {
+          this.logger.error(
+            `[MCP:${this.config.namespace}] Error closing transport after tool failure error=${this.formatError(closeErr)}`,
+          );
+        }
+        const execResult = transport.getExecResult();
+        exitCode = execResult.exitCode;
+        stdout = execResult.stdout;
+        stderr = execResult.stderr;
+        transport = undefined;
+      }
       const errObj = e as { code?: string } | unknown;
       const emsg =
         e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
@@ -458,7 +475,13 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         errObj && typeof errObj === 'object' && 'code' in errObj
           ? String((errObj as { code?: unknown }).code)
           : 'TOOL_CALL_ERROR';
-      throw new McpError(`Tool '${name}' failed: ${ename}: ${emsg}`.trim(), code);
+      throw new McpError(`Tool '${name}' failed: ${ename}: ${emsg}`.trim(), {
+        code,
+        cause: e,
+        exitCode,
+        stdout,
+        stderr,
+      });
     } finally {
       // Clean up after tool call
       if (client) {

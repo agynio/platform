@@ -58,14 +58,37 @@ export interface JsonRpcTransport {
   sessionId?: string; // optional for reconnect semantics (unused for now)
 }
 
+export type McpErrorOptions = {
+  code?: string;
+  cause?: unknown;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+};
+
 export class McpError extends Error {
   public code?: string;
+  public exitCode?: number;
+  public stdout?: string;
+  public stderr?: string;
 
-  constructor(message: string, codeOrOptions?: string | { code?: string; cause?: unknown }) {
+  constructor(message: string, codeOrOptions?: string | McpErrorOptions) {
     const hasOptionsObject = typeof codeOrOptions === 'object' && codeOrOptions !== null;
-    const cause = hasOptionsObject ? (codeOrOptions as { cause?: unknown }).cause : undefined;
+    const options = hasOptionsObject ? (codeOrOptions as McpErrorOptions) : undefined;
+    const cause = options?.cause;
     super(message, cause !== undefined ? { cause } : undefined);
-    this.code = hasOptionsObject ? (codeOrOptions as { code?: string }).code : codeOrOptions;
+    this.code = hasOptionsObject ? options?.code : (codeOrOptions as string | undefined);
+    if (options) {
+      if (typeof options.exitCode === 'number' && Number.isFinite(options.exitCode)) {
+        this.exitCode = options.exitCode;
+      }
+      if (typeof options.stdout === 'string') {
+        this.stdout = options.stdout;
+      }
+      if (typeof options.stderr === 'string') {
+        this.stderr = options.stderr;
+      }
+    }
     this.name = 'McpError';
   }
 }
