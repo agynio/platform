@@ -1,6 +1,7 @@
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
 import { McpError } from '../../nodes/mcp/types';
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
@@ -71,6 +72,29 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       return { name: error.name, message: error.message, stack: error.stack };
     }
     return { message: String(error) };
+  }
+
+  private buildToolErrorDetails(error: unknown, errorCode: ToolCallErrorCode, errorId: string): Record<string, unknown> {
+    if (error instanceof McpError) {
+      return {
+        errorId,
+        name: error.name,
+        ...(error.code ? { code: error.code } : {}),
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        errorId,
+        name: error.name,
+      };
+    }
+
+    return {
+      errorId,
+      name: 'UnknownError',
+      ...(errorCode ? { code: errorCode } : {}),
+    };
   }
 
   private tools?: FunctionTool[];
@@ -326,17 +350,18 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           };
         }
       } catch (err) {
+        const errorId = uuidv4();
         this.logger.error(
           `Error occurred while executing tool${this.format({
             tool: tool?.name ?? toolCall.name,
             callId: toolCall.callId,
+            errorId,
             error: this.errorInfo(err),
           })}`,
         );
         const message = err instanceof Error && err.message ? err.message : 'Unknown error';
-        const details =
-          err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
         const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
+        const details = this.buildToolErrorDetails(err, code, errorId);
         response = createErrorResponse({
           code,
           message: `Tool ${toolCall.name} execution failed: ${message}`,

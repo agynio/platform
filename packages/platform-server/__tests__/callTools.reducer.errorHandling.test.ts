@@ -10,6 +10,7 @@ import { CallAgentLinkingService } from '../src/agents/call-agent-linking.servic
 import { ShellCommandTool } from '../src/nodes/tools/shell_command/shell_command.tool';
 import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import type { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
+import { McpError } from '../src/nodes/mcp/types';
 
 const buildState = (name: string, callId: string, args: string) => {
   const response = new ResponseMessage({
@@ -109,7 +110,40 @@ describe('CallToolsLLMReducer error isolation', () => {
     const payload = parseErrorPayload(result);
     expect(payload.message).toContain('execution failed');
     expect(payload.error_code).toBe('TOOL_EXECUTION_ERROR');
-    expect(payload.details?.message).toBe('boom');
+    expect(payload.details).toMatchObject({
+      errorId: expect.any(String),
+      name: 'Error',
+    });
+    expect(payload.details.message).toBeUndefined();
+    expect(payload.details.stack).toBeUndefined();
+    expect(typeof payload.details.errorId).toBe('string');
+    expect(payload.details.errorId.length).toBeGreaterThan(0);
+  });
+
+  it('sanitizes MCP errors while preserving code and errorId', async () => {
+    const tool = {
+      name: 'mcp-failing',
+      description: 'throws McpError',
+      schema: z.object({}),
+      async execute() {
+        throw new McpError('Tool broke', 'TOOL_CALL_ERROR');
+      },
+    } as any;
+
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool] });
+    const result = await reducer.invoke(buildState('mcp-failing', 'call-mcp-fail', JSON.stringify({})), ctx);
+
+    const payload = parseErrorPayload(result);
+    expect(payload.error_code).toBe('MCP_CALL_ERROR');
+    expect(payload.details).toMatchObject({
+      errorId: expect.any(String),
+      name: 'McpError',
+      code: 'TOOL_CALL_ERROR',
+    });
+    expect(payload.details.stack).toBeUndefined();
+    expect(payload.details.message).toBeUndefined();
   });
 
   it('enforces TOOL_OUTPUT_TOO_LARGE limit', async () => {

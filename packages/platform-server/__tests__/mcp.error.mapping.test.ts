@@ -70,5 +70,11 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
     expect(payload.message).toContain(
       `Tool ${tool.name} execution failed: apply_patch failed (code=PATCH_FAIL retriable=false)`,
     );
+    expect(payload.details).toMatchObject({
+      errorId: expect.any(String),
+      name: 'McpError',
+    });
+    expect(payload.details.code).toBeUndefined();
+    expect(payload.details.stack).toBeUndefined();
   });
 });
