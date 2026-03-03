@@ -60,19 +60,17 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
     expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
     const [completionPayload] = runEvents.completeToolExecution.mock.calls[0];
     expect(completionPayload.status).toBe('error');
-    expect(completionPayload.errorMessage).toBe('[mcp_error] MCP tool failed\n---\n(no output)');
+    expect(completionPayload.errorMessage).toBe(
+      '[mcp_error] apply_patch failed (code=PATCH_FAIL retriable=false)\n---\napply_patch failed (code=PATCH_FAIL retriable=false)',
+    );
 
     const lastMessage = result.messages.at(-1) as ToolCallOutputMessage;
     expect(lastMessage).toBeInstanceOf(ToolCallOutputMessage);
-    const payload = JSON.parse(lastMessage.text);
-    expect(payload.status).toBe('error');
-    expect(payload.error_code).toBe('MCP_CALL_ERROR');
-    expect(payload.message).toBe('[mcp_error] MCP tool failed\n---\n(no output)');
-    expect(payload.details).toMatchObject({
-      errorId: expect.any(String),
-      name: 'McpError',
-    });
-    expect(payload.details.code).toBeUndefined();
-    expect(payload.details.stack).toBeUndefined();
+    const text = lastMessage.text;
+    expect(typeof text).toBe('string');
+    expect(text.startsWith('[mcp_error]')).toBe(true);
+    expect(text).toContain('\n---\n');
+    expect(text).toContain('apply_patch failed (code=PATCH_FAIL retriable=false)');
+    expect(() => JSON.parse(text)).toThrow();
   });
 });

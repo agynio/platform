@@ -104,23 +104,35 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private buildMcpFailureMessage(error: McpError): string {
-    const exitCode = typeof error.exitCode === 'number' && Number.isFinite(error.exitCode) ? error.exitCode : undefined;
-    const errorCode = typeof error.code === 'string' && error.code.trim().length > 0 ? error.code.trim() : undefined;
+    const exitCode = typeof error.exitCode === 'number' && Number.isFinite(error.exitCode)
+      ? Number(error.exitCode)
+      : null;
+    const codeLabel = exitCode !== null
+      ? `exit code ${exitCode}`
+      : typeof error.code === 'string' && error.code.trim().length > 0
+        ? error.code.trim()
+        : 'mcp_error';
 
-    const header = exitCode !== undefined
-      ? `[exit code ${exitCode}] Process exited with code ${exitCode}`
-      : errorCode
-        ? `[${errorCode}] MCP tool failed`
-        : '[mcp_error] MCP tool failed';
+    const message = typeof error.message === 'string' && error.message.length > 0 ? error.message : 'MCP tool failed';
+    const shortDescription = exitCode !== null
+      ? `Process exited with code ${exitCode}`
+      : message.split(/\r?\n/, 1)[0]?.trim() || 'MCP tool failed';
 
     const stderr = this.normalizeExecOutput(error.stderr ?? null);
     const stdout = this.normalizeExecOutput(error.stdout ?? null);
-    const bodyParts: string[] = [];
-    if (stderr) bodyParts.push(stderr);
-    if (stdout) bodyParts.push(stdout);
-    const body = bodyParts.length > 0 ? bodyParts.join('\n') : '(no output)';
 
-    return `${header}\n---\n${body}`;
+    const segments: string[] = [message];
+    const streamSegments: string[] = [];
+    if (stderr) streamSegments.push(stderr);
+    if (stdout) streamSegments.push(stdout);
+    if (streamSegments.length > 0) {
+      segments.push('');
+      segments.push(streamSegments.join('\n'));
+    }
+
+    const body = segments.join('\n');
+
+    return `[${codeLabel}] ${shortDescription}\n---\n${body}`;
   }
 
   private tools?: FunctionTool[];
@@ -386,18 +398,24 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           })}`,
         );
         const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
-        const baseMessage = err instanceof Error && err.message ? err.message : 'Unknown error';
-        const message =
-          code === 'MCP_CALL_ERROR' && err instanceof McpError
-            ? this.buildMcpFailureMessage(err)
-            : `Tool ${toolCall.name} execution failed: ${baseMessage}`;
-        const details = this.buildToolErrorDetails(err, code, errorId);
-        response = createErrorResponse({
-          code,
-          message,
-          originalArgs: input,
-          details,
-        });
+        if (err instanceof McpError) {
+          const formatted = this.buildMcpFailureMessage(err);
+          response = {
+            status: 'error',
+            raw: formatted,
+            output: formatted,
+          };
+        } else {
+          const baseMessage = err instanceof Error && err.message ? err.message : 'Unknown error';
+          const message = `Tool ${toolCall.name} execution failed: ${baseMessage}`;
+          const details = this.buildToolErrorDetails(err, code, errorId);
+          response = createErrorResponse({
+            code,
+            message,
+            originalArgs: input,
+            details,
+          });
+        }
       }
 
       if (!response) {
