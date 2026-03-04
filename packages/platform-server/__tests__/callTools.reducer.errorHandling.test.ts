@@ -144,12 +144,13 @@ describe('CallToolsLLMReducer error isolation', () => {
     expect(last).toBeInstanceOf(ToolCallOutputMessage);
     const text = last.text;
     expect(typeof text).toBe('string');
-    expect(text.startsWith('[exit code 17]')).toBe(true);
+    expect(text.startsWith('[exit code 17] Process exited with code 17')).toBe(true);
     expect(text).toContain('\n---\n');
     expect(text).toContain('Process exited with code 17');
     expect(text).toContain('fatal: something bad');
     expect(text).toContain('line one');
     expect(text).toContain('line two');
+    expect(text).not.toContain('Tool broke');
     expect(() => JSON.parse(text)).toThrow();
   });
 
@@ -172,9 +173,33 @@ describe('CallToolsLLMReducer error isolation', () => {
     expect(last).toBeInstanceOf(ToolCallOutputMessage);
     const text = last.text;
     expect(typeof text).toBe('string');
-    expect(text).toBe('[TOOL_CALL_ERROR] Tool broke\n---\nTool broke');
+    expect(text).toBe('[mcp_error] mcp-minimal failed\n---\nTool broke');
     expect(text).toContain('\n---\n');
     expect(() => JSON.parse(text)).toThrow();
+  });
+
+  it('deduplicates identical MCP streams in body', async () => {
+    const tool = {
+      name: 'mcp-dup',
+      description: 'throws identical streams',
+      schema: z.object({}),
+      async execute() {
+        throw new McpError('Tool duplicate', {
+          stderr: 'same output\n',
+          stdout: 'same output\n',
+        });
+      },
+    } as any;
+
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [tool] });
+    const result = await reducer.invoke(buildState('mcp-dup', 'call-dup', JSON.stringify({})), ctx);
+
+    const last = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(last).toBeInstanceOf(ToolCallOutputMessage);
+    const text = last.text;
+    expect(text).toBe('[mcp_error] mcp-dup failed\n---\nsame output');
   });
 
   it('enforces TOOL_OUTPUT_TOO_LARGE limit', async () => {

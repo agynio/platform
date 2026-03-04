@@ -61,14 +61,14 @@ describe('CallToolsLLMReducer MCP error mapping', () => {
     const [completionPayload] = runEvents.completeToolExecution.mock.calls[0];
     expect(completionPayload.status).toBe('error');
     expect(completionPayload.errorMessage).toBe(
-      '[mcp_error] apply_patch failed (code=PATCH_FAIL retriable=false)\n---\napply_patch failed (code=PATCH_FAIL retriable=false)',
+      '[mcp_error] demo_codex_apply_patch failed\n---\napply_patch failed (code=PATCH_FAIL retriable=false)',
     );
 
     const lastMessage = result.messages.at(-1) as ToolCallOutputMessage;
     expect(lastMessage).toBeInstanceOf(ToolCallOutputMessage);
     const text = lastMessage.text;
     expect(typeof text).toBe('string');
-    expect(text.startsWith('[mcp_error]')).toBe(true);
+    expect(text.startsWith('[mcp_error] demo_codex_apply_patch failed')).toBe(true);
     expect(text).toContain('\n---\n');
     expect(text).toContain('apply_patch failed (code=PATCH_FAIL retriable=false)');
     expect(() => JSON.parse(text)).toThrow();
