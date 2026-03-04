@@ -28,16 +28,8 @@ RUN pnpm --filter @agyn/platform-ui build
 
 FROM nginx:1.27-alpine AS runtime
 
-RUN apk add --no-cache gettext
-
-COPY packages/platform-ui/docker/nginx.conf.template /etc/nginx/templates/default.conf.template
-
-COPY packages/platform-ui/docker/entrypoint.sh /docker-entrypoint.sh
-
-RUN chmod +x /docker-entrypoint.sh
+COPY packages/platform-ui/docker/default.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /workspace/packages/platform-ui/dist /usr/share/nginx/html
 
 EXPOSE 80
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
