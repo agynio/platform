@@ -62,7 +62,7 @@ main() {
   export KUBECONFIG="${kubeconfig_path}"
 
   cd "${SCRIPT_DIR}/packages/platform-server"
-  exec devspace dev -n platform --kube-context agyn-local "$@"
+  exec devspace dev "$@"
 }
 
 main "$@"

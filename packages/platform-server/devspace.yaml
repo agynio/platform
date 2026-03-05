@@ -3,13 +3,6 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
 
-images:
-  platform-server:
-    image: platform-server-devspace
-    context: ../..
-    dockerfile: Dockerfile
-    rebuildStrategy: always
-
 deployments:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
@@ -19,8 +12,8 @@ deployments:
         path: ../../charts/platform-server
       values:
         image:
-          repository: ${runtime.images.platform-server.image}
-          tag: ${runtime.images.platform-server.tag}
+          repository: ghcr.io/agynio/platform-server
+          tag: dev
           pullPolicy: IfNotPresent
 
 dev:

@@ -26,9 +26,9 @@ From the repository root, run:
 ./devspace.sh
 ```
 
-DevSpace builds the local image, deploys the chart release `platform-server`,
-and syncs `packages/platform-server` into the pod. The container process runs
-the same entrypoint as `pnpm dev` (`tsx src/index.ts`).
+DevSpace deploys the prebuilt image `ghcr.io/agynio/platform-server:dev` and
+syncs `packages/platform-server` into the pod for live iteration. The container
+process runs the same entrypoint as `pnpm dev` (`tsx src/index.ts`).
 
 To confirm the deployment is ready, check the pod status:
 
