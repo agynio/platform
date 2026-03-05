@@ -15,15 +15,17 @@ This guide walks through launching `platform-server` inside the
 ## 1. Prepare the cluster
 
 Run `agynio/bootstrap_v2` according to its Quickstart to provision the cluster
-and supporting services. The wrapper script added in this repository resolves
-the generated kubeconfig automatically.
+and supporting services. The Quickstart configures kubectl with the
+`agyn-local` context (or provides the kubeconfig path). Ensure your shell has
+the appropriate kubeconfig exported before proceeding.
 
 ## 2. Start DevSpace
 
-From the repository root, run:
+Change into `packages/platform-server` and run:
 
 ```bash
-./devspace.sh
+cd packages/platform-server
+devspace dev
 ```
 
 DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
