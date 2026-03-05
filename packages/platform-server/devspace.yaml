@@ -31,13 +31,21 @@ dev:
         args:
           - -c
           - |
-            pnpm install --filter @agyn/platform-server... --recursive --prefer-offline
+            while [ ! -f package.json ]; do
+              echo "Waiting for sources to sync..."
+              sleep 1
+            done
+            if [ ! -d node_modules ]; then
+              pnpm install --prefer-offline
+            fi
             pnpm --dir packages/platform-server dev
         sync:
-          - path: .:/opt/app/packages/platform-server
+          - path: ../..:/opt/app
             excludePaths:
               - node_modules
               - dist
-              - .devspace
               - .git
-              - prisma/generated
+              - .devspace
+              - packages/platform-server/node_modules
+              - packages/platform-server/dist
+              - packages/platform-server/prisma/generated

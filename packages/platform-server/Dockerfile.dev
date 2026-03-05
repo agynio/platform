@@ -19,11 +19,10 @@ RUN apt-get update \
       inotify-tools \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/app
+RUN npm install --global tsx@^4.20.5 \
+ && npm cache clean --force
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY tsconfig.base.json tsconfig.json ./
-COPY packages ./packages
+WORKDIR /opt/app
 
 RUN mkdir -p /pnpm /pnpm-store \
  && chown -R node:node /opt/app /pnpm /pnpm-store
