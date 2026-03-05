@@ -14,20 +14,16 @@ This guide walks through launching `platform-server` inside the
 
 ## 1. Prepare the cluster
 
-1. Run `agynio/bootstrap_v2` according to its Quickstart to provision the
-   cluster and supporting services.
-2. Export the kubeconfig path and select the context:
-   ```bash
-   export KUBECONFIG="$(pwd)/bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml"
-   kubectl config use-context agyn-local
-   ```
+Run `agynio/bootstrap_v2` according to its Quickstart to provision the cluster
+and supporting services. The wrapper script added in this repository resolves
+the generated kubeconfig automatically.
 
 ## 2. Start DevSpace
 
-From `packages/platform-server`, run:
+From the repository root, run:
 
 ```bash
-devspace dev
+./devspace.sh
 ```
 
 DevSpace builds the local image, deploys the chart release `platform-server`,
