@@ -30,6 +30,4 @@ jobs:
           context: .
           file: packages/platform-server/Dockerfile
           push: true
-          tags: |
-            ghcr.io/agynio/platform-server:dev
-            ghcr.io/agynio/platform-server:sha-${{ github.sha }}
+          tags: ghcr.io/agynio/platform-server:dev
