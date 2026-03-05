@@ -6,31 +6,20 @@ This guide walks through launching `platform-server` inside the
 ## Prerequisites
 
 - macOS or Linux workstation with Docker (or k3d) installed
-- [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
-- [`helm`](https://helm.sh/docs/intro/install/)
 - [`devspace`](https://devspace.sh/docs/cli/installation)
-- [`argocd` CLI](https://argo-cd.readthedocs.io/en/stable/cli_installation/) (or
-  access to the Argo CD UI)
-- `agynio/bootstrap_v2` repository cloned locally
+- Local cluster provisioned via
+  [`agynio/bootstrap_v2`](https://github.com/agynio/bootstrap_v2) (follow the
+  Quickstart in its README; it provides the kubeconfig path—usually
+  `bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`).
 
 ## 1. Prepare the cluster
 
-1. Follow `bootstrap_v2/README.md` to create the k3d cluster (or targeted
-   environment) and generate the kubeconfig.
-2. Apply the Terraform stacks in order:
-   ```bash
-   cd bootstrap_v2/stacks/k8s && terraform init && terraform apply
-   cd ../system && terraform init && terraform apply
-   cd ../platform && terraform init && terraform apply
-   ```
-3. Export the kubeconfig path and select the context:
+1. Run `agynio/bootstrap_v2` according to its Quickstart to provision the
+   cluster and supporting services.
+2. Export the kubeconfig path and select the context:
    ```bash
    export KUBECONFIG="$(pwd)/bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml"
    kubectl config use-context agyn-local
-   ```
-4. Confirm the `platform` namespace is present:
-   ```bash
-   kubectl get ns platform
    ```
 
 ## 2. Pause Argo CD reconciliation
