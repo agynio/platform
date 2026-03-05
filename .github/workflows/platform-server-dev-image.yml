@@ -1,4 +1,4 @@
-name: Build platform-server image
+name: Platform Server (Dev Image)
 
 on:
   push:
