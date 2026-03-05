@@ -1,8 +1,7 @@
 # DevSpace workflow for platform-server
 
-This guide explains how to replace the Argo CD managed `platform-server`
-deployment with a locally built image while developing against the
-`bootstrap_v2` Kubernetes cluster.
+This guide walks through launching `platform-server` inside the
+`bootstrap_v2` cluster with a single `devspace dev` invocation.
 
 ## Prerequisites
 
@@ -11,182 +10,75 @@ deployment with a locally built image while developing against the
 - [`helm`](https://helm.sh/docs/intro/install/)
 - [`devspace`](https://devspace.sh/docs/cli/installation)
 - [`argocd` CLI](https://argo-cd.readthedocs.io/en/stable/cli_installation/) (or
-  access to Argo CD UI)
+  access to the Argo CD UI)
 - `agynio/bootstrap_v2` repository cloned locally
 
-## 1. Bootstrap the local cluster
+## 1. Prepare the cluster
 
-1. Follow the instructions in `bootstrap_v2/README.md` to initialise the k3d
-   cluster (or targeted environment) and create the `~/.kube` entry.
+1. Follow `bootstrap_v2/README.md` to create the k3d cluster (or targeted
+   environment) and generate the kubeconfig.
 2. Apply the Terraform stacks in order:
    ```bash
    cd bootstrap_v2/stacks/k8s && terraform init && terraform apply
    cd ../system && terraform init && terraform apply
    cd ../platform && terraform init && terraform apply
    ```
-3. Point `kubectl` and DevSpace at the generated kubeconfig (the default path
-   is `bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`):
+3. Export the kubeconfig path and select the context:
    ```bash
    export KUBECONFIG="$(pwd)/bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml"
    kubectl config use-context agyn-local
    ```
-4. Confirm the `platform` namespace exists:
+4. Confirm the `platform` namespace is present:
    ```bash
    kubectl get ns platform
    ```
 
 ## 2. Pause Argo CD reconciliation
 
-Argo CD continually reconciles the `platform-server` Application. Suspend it to
-avoid clobbering DevSpace deployments:
+Suspend the managed deployment while DevSpace is in control:
 
 ```bash
 argocd app set platform-server --sync-policy none
 argocd app terminate-op platform-server || true
 ```
 
-> If you cannot use the Argo CLI, patch the Application directly:
-> ```bash
-> kubectl patch application platform-server -n argocd \
->   --type merge -p '{"spec":{"syncPolicy":null}}'
-> ```
+Record the current settings so you can restore automation later.
 
-Record the current automated settings so you can restore them during cleanup.
+## 3. Start DevSpace
 
-## 3. Build & deploy with DevSpace
-
-From `packages/platform-server` run:
+From `packages/platform-server`, run:
 
 ```bash
-devspace dev -n platform
+devspace dev
 ```
 
-The default workflow builds the Docker image, deploys the Helm chart release
-`platform-server`, forwards port `3010`, and syncs the package sources into
-the container. The chart values point all dependencies to in-cluster services
-(`platform-db`, `litellm`, `vault`, `docker-runner`) and mount ephemeral
-volumes at `/tmp` and `/opt/app/packages/platform-server/data`.
+DevSpace builds the local image, deploys the chart release `platform-server`,
+and syncs `packages/platform-server` into the pod. The container process runs
+the same entrypoint as `pnpm dev` (`tsx src/index.ts`).
 
-### Hot-reload profile
-
-Use the `hot-reload` profile to start `tsx watch` inside the container:
+To verify the service through the Istio gateway, map `api.agyn.dev` to the
+gateway endpoint (typically `127.0.0.1` in k3d) or use:
 
 ```bash
-devspace dev -n platform -p hot-reload
+curl --resolve api.agyn.dev:443:127.0.0.1 \
+  https://api.agyn.dev/healthz --insecure
 ```
 
-This profile keeps the watcher running in the foreground so code edits trigger
-live reloads after sync completes.
+The bootstrap_v2 gateway certificate is self-signed; trust the CA or pass
+`--insecure` while testing locally.
 
-### Debug profile
+## 4. Cleanup and resume Argo CD
 
-Expose the Node.js inspector and start the server under `node --inspect`:
-
-```bash
-devspace dev -n platform -p debug
-```
-
-Then attach your debugger to `localhost:9229`.
-
-### Importing the image into k3d
-
-When using k3d without a registry mirror, import the image into the cluster as
-part of the workflow:
-
-```bash
-devspace dev -n platform -p k3d-import
-```
-
-Profiles may be combined, e.g. `-p k3d-import,hot-reload`.
-
-### Remote registry profile (optional)
-
-To publish the dev image to GHCR (or another registry you configure), use the
-`remote-registry` profile. Authenticate to the registry first, then run:
-
-```bash
-devspace dev -n platform -p remote-registry
-```
-
-Override `images.platform-server.image` in `devspace.yaml` if you need a
-different registry path.
-
-### Docker runner shared secret
-
-The deployment reads `DOCKER_RUNNER_SHARED_SECRET` from the Kubernetes Secret
-`docker-runner-shared-secret`. If this Secret is not present in the `platform`
-namespace, create it once before running DevSpace:
-
-```bash
-kubectl -n platform create secret generic docker-runner-shared-secret \
-  --from-literal=DOCKER_RUNNER_SHARED_SECRET=<shared-secret>
-```
-
-Use the same value generated for the Docker runner chart in `bootstrap_v2` (or
-any value accepted by your cluster).
-
-## 4. Verify the deployment
-
-1. Check the dev pod is ready:
+1. Terminate DevSpace (`Ctrl+C`).
+2. Purge the dev release:
    ```bash
-   kubectl -n platform get pods -l app.kubernetes.io/name=platform-server
+   devspace purge
    ```
-2. Reach the API through the Istio gateway route (`https://api.agyn.dev`):
-   - Map `api.agyn.dev` to your gateway endpoint (for k3d this is typically
-     `127.0.0.1`) via `/etc/hosts`, or supply a one-off override such as:
-     ```bash
-     curl --resolve api.agyn.dev:443:127.0.0.1 \
-       https://api.agyn.dev/healthz --insecure
-     ```
-   - The gateway certificate is self-signed in bootstrap_v2; trust the CA or
-     use `--insecure` while developing.
-3. Confirm Postgres, LiteLLM, Vault, and the Docker runner are reachable from
-   the pod logs (DevSpace streams them automatically). Authentication material
-   for LiteLLM is read from the `litellm-master-key` secret. Ensure the
-   `docker-runner-shared-secret` Secret contains the expected
-   `DOCKER_RUNNER_SHARED_SECRET` key if your cluster uses a non-default value.
-
-### Bypass gateway (local-only)
-
-To interact with the service directly on `localhost`, enable the
-`local-portforward` profile when starting DevSpace:
-
-```bash
-devspace dev -n platform --profile local-portforward
-```
-
-The profile can be combined with others (e.g. `--profile local-portforward,hot-reload`).
-Once active, query the API via `http://localhost:3010/healthz`.
-
-### Prisma migrations
-
-The DevSpace chart injects a `platform-server-migrations` initContainer that
-executes `pnpm exec prisma migrate deploy` against `platform-db`. If you need to
-rerun migrations manually, exec into the pod and run:
-
-```bash
-kubectl -n platform exec deploy/platform-server -- \
-  corepack pnpm --dir /opt/app/packages/platform-server exec prisma migrate deploy
-```
-
-## 5. Cleanup & restore Argo CD
-
-1. Terminate the DevSpace session (`Ctrl+C`).
-2. Remove the dev release and synced resources:
-   ```bash
-   devspace purge -n platform
-   ```
-3. Resume Argo CD automation (restore the values captured earlier):
+3. Restore Argo CD automation:
    ```bash
    argocd app set platform-server --sync-policy automated --self-heal --prune
    argocd app sync platform-server
    ```
-   or, if patching directly:
-   ```bash
-   kubectl patch application platform-server -n argocd \
-     --type merge \
-     -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true,"allowEmpty":false}}}}'
-   ```
 
-After Argo regains control, the managed deployment should reconcile back to the
-Git revision set in `bootstrap_v2`.
+After Argo resumes, the managed deployment reconciles back to the Git state
+defined in `bootstrap_v2`.
