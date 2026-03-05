@@ -34,14 +34,12 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  enabled: true
-  fsGroup: 1000
+  enabled: false
+  fsGroup: null
 
 securityContext:
   enabled: true
   runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
   capabilities:
@@ -76,8 +74,6 @@ env:
     value: production
   - name: PORT
     value: "3010"
-  - name: GRAPH_REPO_PATH
-    value: /opt/app/packages/platform-server/data/graph
 envFrom: []
 extraEnvVars: []
 extraEnvVarsCM: ""
@@ -97,20 +93,8 @@ llm:
       - all-team-models
 
 configMounts: []
-extraVolumeMounts:
-  - name: tmp
-    mountPath: /tmp
-  - name: data
-    mountPath: /opt/app/data
-  - name: data
-    mountPath: /opt/app/packages/platform-server/data
-  - name: data
-    mountPath: /data
-extraVolumes:
-  - name: tmp
-    emptyDir: {}
-  - name: data
-    emptyDir: {}
+extraVolumeMounts: []
+extraVolumes: []
 
 initContainers: []
 extraContainers: []

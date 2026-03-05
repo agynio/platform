@@ -30,7 +30,7 @@ summarised below.
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `service.ports[0].port` | Service port | `3010` |
 | `containerPorts[0].containerPort` | Container listen port | `3010` |
-| `env` | Static environment variables | `NODE_ENV=production`, `PORT=3010`, `GRAPH_REPO_PATH=/opt/app/packages/platform-server/data/graph` |
+| `env` | Static environment variables | `NODE_ENV=production`, `PORT=3010` |
 | `llm.provider` | LLM provider (`litellm` \| `openai`) | `litellm` |
 | `llm.litellm.baseUrl` | LiteLLM admin endpoint (no `/v1`) | `http://litellm:4000` |
 | `llm.litellm.masterKeySecretRef.name` | Secret with LiteLLM master key | `""` |
