@@ -25,6 +25,14 @@ dev:
     containers:
       platform-server:
         container: platform-server
+        workingDir: /opt/app
+        command:
+          - sh
+        args:
+          - -c
+          - |
+            pnpm install --filter @agyn/platform-server... --recursive --prefer-offline
+            pnpm --dir packages/platform-server dev
         sync:
           - path: .:/opt/app/packages/platform-server
             excludePaths:

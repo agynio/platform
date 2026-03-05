@@ -26,9 +26,12 @@ From the repository root, run:
 ./devspace.sh
 ```
 
-DevSpace deploys the prebuilt image `ghcr.io/agynio/platform-server:dev` and
-syncs `packages/platform-server` into the pod for live iteration. The container
-process runs the same entrypoint as `pnpm dev` (`tsx src/index.ts`).
+DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
+which bundles the tooling needed for `pnpm dev` (corepack/pnpm, Git, file
+watchers), and syncs `packages/platform-server` into the pod for live
+iteration. The container process runs the same entrypoint as `pnpm dev` (`tsx
+src/index.ts`). Production images continue to be built by the existing CI
+pipeline and are separate from this workflow.
 
 To confirm the deployment is ready, check the pod status:
 

@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:20-slim
+
+ENV PNPM_HOME=/pnpm \
+    PNPM_STORE_PATH=/pnpm-store \
+    PATH=/pnpm:$PATH \
+    NODE_ENV=development
+
+RUN corepack enable \
+ && corepack prepare pnpm@10.5.0 --activate
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git \
+      bash \
+      openssh-client \
+      ca-certificates \
+      inotify-tools \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.base.json tsconfig.json ./
+COPY packages ./packages
+
+RUN mkdir -p /pnpm /pnpm-store \
+ && chown -R node:node /opt/app /pnpm /pnpm-store
+
+USER node
+
+CMD ["sleep", "infinity"]
