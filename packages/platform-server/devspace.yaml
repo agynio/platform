@@ -3,7 +3,6 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
   K3D_CLUSTER: agyn-local
-  DOCKER_RUNNER_SHARED_SECRET: dev-shared-secret
 
 images:
   platform-server:
@@ -18,11 +17,11 @@ deployments:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
     helm:
-      releaseName: platform-server-dev
+      releaseName: platform-server
       chart:
         path: ../../charts/platform-server
       values:
-        fullnameOverride: platform-server-dev
+        fullnameOverride: platform-server
         replicaCount: 1
         image:
           repository: ${runtime.images.platform-server.image}
@@ -55,7 +54,10 @@ deployments:
           - name: DOCKER_RUNNER_GRPC_PORT
             value: "7071"
           - name: DOCKER_RUNNER_SHARED_SECRET
-            value: ${DOCKER_RUNNER_SHARED_SECRET}
+            valueFrom:
+              secretKeyRef:
+                name: docker-runner-shared-secret
+                key: DOCKER_RUNNER_SHARED_SECRET
           - name: DOCKER_RUNNER_OPTIONAL
             value: "true"
           - name: DOCKER_RUNNER_TIMEOUT_MS
@@ -154,7 +156,7 @@ dev:
     namespace: ${PLATFORM_NAMESPACE}
     labelSelector:
       app.kubernetes.io/name: platform-server
-      app.kubernetes.io/instance: platform-server-dev
+      app.kubernetes.io/instance: platform-server
     ports:
       - port: "3010:3010"
     containers:

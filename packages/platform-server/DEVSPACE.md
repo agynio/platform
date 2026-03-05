@@ -62,7 +62,7 @@ devspace dev -n platform
 ```
 
 The default workflow builds the Docker image, deploys the Helm chart release
-`platform-server-dev`, forwards port `3010`, and syncs the package sources into
+`platform-server`, forwards port `3010`, and syncs the package sources into
 the container. The chart values point all dependencies to in-cluster services
 (`platform-db`, `litellm`, `vault`, `docker-runner`) and mount ephemeral
 volumes at `/tmp` and `/opt/app/packages/platform-server/data`.
@@ -111,6 +111,20 @@ devspace dev -n platform -p remote-registry
 Override `images.platform-server.image` in `devspace.yaml` if you need a
 different registry path.
 
+### Docker runner shared secret
+
+The deployment reads `DOCKER_RUNNER_SHARED_SECRET` from the Kubernetes Secret
+`docker-runner-shared-secret`. If this Secret is not present in the `platform`
+namespace, create it once before running DevSpace:
+
+```bash
+kubectl -n platform create secret generic docker-runner-shared-secret \
+  --from-literal=DOCKER_RUNNER_SHARED_SECRET=<shared-secret>
+```
+
+Use the same value generated for the Docker runner chart in `bootstrap_v2` (or
+any value accepted by your cluster).
+
 ## 4. Verify the deployment
 
 1. Check the dev pod is ready:
@@ -124,9 +138,9 @@ different registry path.
    ```
 3. Confirm Postgres, LiteLLM, Vault, and the Docker runner are reachable from
    the pod logs (DevSpace streams them automatically). Authentication material
-   for LiteLLM is read from the `litellm-master-key` secret; update the
-   `DOCKER_RUNNER_SHARED_SECRET` variable in `devspace.yaml` if your cluster
-   uses a non-default value.
+   for LiteLLM is read from the `litellm-master-key` secret. Ensure the
+   `docker-runner-shared-secret` Secret contains the expected
+   `DOCKER_RUNNER_SHARED_SECRET` key if your cluster uses a non-default value.
 
 ### Prisma migrations
 
@@ -135,7 +149,7 @@ executes `pnpm exec prisma migrate deploy` against `platform-db`. If you need to
 rerun migrations manually, exec into the pod and run:
 
 ```bash
-kubectl -n platform exec deploy/platform-server-dev -- \
+kubectl -n platform exec deploy/platform-server -- \
   corepack pnpm --dir /opt/app/packages/platform-server exec prisma migrate deploy
 ```
 
