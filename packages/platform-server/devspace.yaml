@@ -157,8 +157,6 @@ dev:
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
-    ports:
-      - port: "3010:3010"
     containers:
       platform-server:
         container: platform-server
@@ -205,7 +203,7 @@ profiles:
         value: /opt/app/packages/platform-server
   - name: debug
     patches:
-      - op: replace
+      - op: add
         path: dev["platform-server"].ports
         value:
           - port: "3010:3010"
@@ -236,6 +234,12 @@ profiles:
               - after:build:platform-server
             command: |
               k3d image import ${runtime.images.platform-server} --cluster ${K3D_CLUSTER}
+  - name: local-portforward
+    patches:
+      - op: add
+        path: dev["platform-server"].ports
+        value:
+          - port: "3010:3010"
   - name: remote-registry
     patches:
       - op: replace

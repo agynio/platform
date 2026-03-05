@@ -131,16 +131,32 @@ any value accepted by your cluster).
    ```bash
    kubectl -n platform get pods -l app.kubernetes.io/name=platform-server
    ```
-2. Port-forward the service and query the API:
-   ```bash
-   kubectl -n platform port-forward svc/platform-server 3010:3010
-   curl http://localhost:3010/healthz
-   ```
+2. Reach the API through the Istio gateway route (`https://api.agyn.dev`):
+   - Map `api.agyn.dev` to your gateway endpoint (for k3d this is typically
+     `127.0.0.1`) via `/etc/hosts`, or supply a one-off override such as:
+     ```bash
+     curl --resolve api.agyn.dev:443:127.0.0.1 \
+       https://api.agyn.dev/healthz --insecure
+     ```
+   - The gateway certificate is self-signed in bootstrap_v2; trust the CA or
+     use `--insecure` while developing.
 3. Confirm Postgres, LiteLLM, Vault, and the Docker runner are reachable from
    the pod logs (DevSpace streams them automatically). Authentication material
    for LiteLLM is read from the `litellm-master-key` secret. Ensure the
    `docker-runner-shared-secret` Secret contains the expected
    `DOCKER_RUNNER_SHARED_SECRET` key if your cluster uses a non-default value.
+
+### Bypass gateway (local-only)
+
+To interact with the service directly on `localhost`, enable the
+`local-portforward` profile when starting DevSpace:
+
+```bash
+devspace dev -n platform --profile local-portforward
+```
+
+The profile can be combined with others (e.g. `--profile local-portforward,hot-reload`).
+Once active, query the API via `http://localhost:3010/healthz`.
 
 ### Prisma migrations
 
