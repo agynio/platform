@@ -262,26 +262,34 @@ export class AgentsPersistenceService {
         }
       }
 
-      const existingThread = await tx.thread.findUnique({
-        where: { alias },
-        select: { id: true },
-      });
+      try {
+        const thread = await tx.thread.create({
+          data: {
+            alias,
+            summary: sanitizedSummary,
+            parentId,
+            assignedAgentNodeId: agentNodeId,
+          },
+        });
+        return { thread, wasCreated: true };
+      } catch (error) {
+        const isAliasConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002' &&
+          Array.isArray(error.meta?.target) &&
+          error.meta.target.includes('alias');
 
-      const thread = await tx.thread.upsert({
-        where: { alias },
-        update: {},
-        create: {
-          alias,
-          summary: sanitizedSummary,
-          parentId,
-          assignedAgentNodeId: agentNodeId,
-        },
-      });
+        if (!isAliasConflict) {
+          throw error;
+        }
 
-      return {
-        thread,
-        wasCreated: existingThread === null,
-      };
+        const existing = await tx.thread.findUnique({ where: { alias } });
+        if (!existing) {
+          throw new Error('thread_alias_resolution_failed');
+        }
+
+        return { thread: existing, wasCreated: false };
+      }
     });
 
     const created = thread;
