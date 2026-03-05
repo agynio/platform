@@ -1,0 +1,241 @@
+version: v2beta1
+
+vars:
+  PLATFORM_NAMESPACE: platform
+  K3D_CLUSTER: agyn-local
+  DOCKER_RUNNER_SHARED_SECRET: dev-shared-secret
+
+images:
+  platform-server:
+    image: platform-server-devspace
+    tags:
+      - dev
+    context: ../..
+    dockerfile: Dockerfile
+    rebuildStrategy: always
+
+deployments:
+  platform-server:
+    namespace: ${PLATFORM_NAMESPACE}
+    helm:
+      releaseName: platform-server-dev
+      chart:
+        path: ../../charts/platform-server
+      values:
+        fullnameOverride: platform-server-dev
+        replicaCount: 1
+        image:
+          repository: ${runtime.images.platform-server.image}
+          tag: ${runtime.images.platform-server.tag}
+          pullPolicy: IfNotPresent
+        livenessProbe:
+          enabled: false
+        readinessProbe:
+          enabled: false
+        securityContext:
+          enabled: true
+          readOnlyRootFilesystem: false
+        env:
+          - name: NODE_ENV
+            value: development
+          - name: PORT
+            value: "3010"
+          - name: GRAPH_REPO_PATH
+            value: /opt/app/packages/platform-server/data/graph
+          - name: AGENTS_DATABASE_URL
+            value: postgresql://agents:agents@platform-db:5432/agents
+          - name: LLM_PROVIDER
+            value: litellm
+          - name: LITELLM_BASE_URL
+            value: http://litellm:4000
+          - name: OPENAI_BASE_URL
+            value: http://litellm:4000/v1
+          - name: DOCKER_RUNNER_GRPC_HOST
+            value: docker-runner
+          - name: DOCKER_RUNNER_GRPC_PORT
+            value: "7071"
+          - name: DOCKER_RUNNER_SHARED_SECRET
+            value: ${DOCKER_RUNNER_SHARED_SECRET}
+          - name: DOCKER_RUNNER_OPTIONAL
+            value: "true"
+          - name: DOCKER_RUNNER_TIMEOUT_MS
+            value: "60000"
+          - name: DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS
+            value: "1000"
+          - name: DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS
+            value: "60000"
+          - name: DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS
+            value: "500"
+          - name: DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS
+            value: "10000"
+          - name: DOCKER_RUNNER_CONNECT_MAX_RETRIES
+            value: "120"
+          - name: VAULT_ENABLED
+            value: "true"
+          - name: VAULT_ADDR
+            value: http://vault:8200
+          - name: VAULT_TOKEN
+            value: dev-root
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        extraEnvVars:
+          - name: LITELLM_MASTER_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-master-key
+                key: LITELLM_MASTER_KEY
+          - name: LITELLM_SALT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-master-key
+                key: LITELLM_SALT_KEY
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-master-key
+                key: LITELLM_MASTER_KEY
+        initContainers:
+          - name: platform-server-permissions
+            image: alpine:3.19
+            imagePullPolicy: IfNotPresent
+            command:
+              - sh
+              - -c
+              - chown -R 1000:1000 /opt/app/packages/platform-server
+            securityContext:
+              runAsUser: 0
+              runAsGroup: 0
+              runAsNonRoot: false
+              allowPrivilegeEscalation: false
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+              - name: data
+                mountPath: /opt/app/data
+              - name: data
+                mountPath: /opt/app/packages/platform-server/data
+              - name: data
+                mountPath: /data
+          - name: platform-server-migrations
+            image: ${runtime.images.platform-server}
+            imagePullPolicy: IfNotPresent
+            command:
+              - corepack
+            args:
+              - pnpm
+              - --dir
+              - /opt/app/packages/platform-server
+              - exec
+              - prisma
+              - migrate
+              - deploy
+            env:
+              - name: AGENTS_DATABASE_URL
+                value: postgresql://agents:agents@platform-db:5432/agents
+              - name: NODE_ENV
+                value: development
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+              - name: data
+                mountPath: /opt/app/data
+              - name: data
+                mountPath: /opt/app/packages/platform-server/data
+              - name: data
+                mountPath: /data
+
+dev:
+  platform-server:
+    namespace: ${PLATFORM_NAMESPACE}
+    labelSelector:
+      app.kubernetes.io/name: platform-server
+      app.kubernetes.io/instance: platform-server-dev
+    ports:
+      - port: "3010:3010"
+    containers:
+      platform-server:
+        container: platform-server
+        sync:
+          - path: .:/opt/app/packages/platform-server
+            excludePaths:
+              - node_modules
+              - dist
+              - .devspace
+              - .git
+              - prisma/generated
+        logs:
+          enabled: false
+
+commands:
+  dev:
+    command: |
+      devspace dev -n ${PLATFORM_NAMESPACE}
+  purge:
+    command: |
+      devspace purge -n ${PLATFORM_NAMESPACE}
+  print:
+    command: |
+      devspace print
+
+profiles:
+  - name: hot-reload
+    patches:
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].command
+        value:
+          - pnpm
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].args
+        value:
+          - --dir
+          - /opt/app/packages/platform-server
+          - exec
+          - tsx
+          - watch
+          - src/index.ts
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].workingDir
+        value: /opt/app/packages/platform-server
+  - name: debug
+    patches:
+      - op: replace
+        path: dev["platform-server"].ports
+        value:
+          - port: "3010:3010"
+          - port: "9229:9229"
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].command
+        value:
+          - pnpm
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].args
+        value:
+          - --dir
+          - /opt/app/packages/platform-server
+          - exec
+          - tsx
+          - --inspect=0.0.0.0:9229
+          - src/index.ts
+      - op: add
+        path: dev["platform-server"].containers["platform-server"].workingDir
+        value: /opt/app/packages/platform-server
+  - name: k3d-import
+    patches:
+      - op: add
+        path: hooks
+        value:
+          - name: import-platform-server-image
+            events:
+              - after:build:platform-server
+            command: |
+              k3d image import ${runtime.images.platform-server} --cluster ${K3D_CLUSTER}
+  - name: remote-registry
+    patches:
+      - op: replace
+        path: images["platform-server"].image
+        value: ghcr.io/agynio/platform-server-devspace
