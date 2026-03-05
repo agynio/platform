@@ -254,7 +254,7 @@ export class AgentsPersistenceService {
     const parentId = params.parentId ?? null;
     const sanitizedSummary = this.sanitizeSummary(params.text);
 
-    const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const { thread, wasCreated } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (parentId) {
         const parent = await tx.thread.findUnique({ where: { id: parentId }, select: { id: true } });
         if (!parent) {
@@ -262,29 +262,45 @@ export class AgentsPersistenceService {
         }
       }
 
-      return tx.thread.create({
-        data: {
+      const existingThread = await tx.thread.findUnique({
+        where: { alias },
+        select: { id: true },
+      });
+
+      const thread = await tx.thread.upsert({
+        where: { alias },
+        update: {},
+        create: {
           alias,
           summary: sanitizedSummary,
           parentId,
           assignedAgentNodeId: agentNodeId,
         },
       });
+
+      return {
+        thread,
+        wasCreated: existingThread === null,
+      };
     });
 
-    this.eventsBus.emitThreadCreated({
-      id: created.id,
-      alias: created.alias,
-      summary: created.summary ?? null,
-      status: created.status,
-      createdAt: created.createdAt,
-      parentId: created.parentId ?? null,
-      channelNodeId: created.channelNodeId ?? null,
-      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
-    });
+    const created = thread;
 
-    if (created.parentId) {
-      this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
+    if (wasCreated) {
+      this.eventsBus.emitThreadCreated({
+        id: created.id,
+        alias: created.alias,
+        summary: created.summary ?? null,
+        status: created.status,
+        createdAt: created.createdAt,
+        parentId: created.parentId ?? null,
+        channelNodeId: created.channelNodeId ?? null,
+        assignedAgentNodeId: created.assignedAgentNodeId ?? null,
+      });
+
+      if (created.parentId) {
+        this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
+      }
     }
 
     return {

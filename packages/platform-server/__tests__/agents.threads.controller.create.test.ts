@@ -135,4 +135,31 @@ describe('AgentsThreadsController POST /api/agents/threads', () => {
       response: { error: 'parent_not_found' },
     });
   });
+
+  it('returns existing thread id when alias already exists', async () => {
+    const createThreadWithInitialMessage = vi.fn(async () => ({
+      id: 'thread-existing',
+      alias: 'alias-existing',
+      summary: null,
+      status: 'open',
+      createdAt: new Date(),
+      parentId: null,
+      channelNodeId: null,
+      assignedAgentNodeId: 'agent-1',
+    }));
+
+    const { controller, invoke } = await setup({ createThreadWithInitialMessage });
+
+    await expect(
+      controller.createThread({ text: 'hello again', alias: 'alias-existing', agentNodeId: 'agent-1' } as any),
+    ).resolves.toEqual({ id: 'thread-existing' });
+
+    expect(createThreadWithInitialMessage).toHaveBeenCalledWith({
+      alias: 'alias-existing',
+      text: 'hello again',
+      agentNodeId: 'agent-1',
+      parentId: null,
+    });
+    expect(invoke).toHaveBeenCalledWith('thread-existing', expect.any(Array));
+  });
 });
