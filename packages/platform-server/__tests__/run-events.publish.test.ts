@@ -37,7 +37,8 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     const runtime = { subscribe: vi.fn() } as any;
     const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
     const prismaStub = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
-    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    gateway = new GraphSocketGateway(runtime, metrics, prismaStub, eventsBus, notificationsPublisher);
     emitRunEventSpy = vi.spyOn(gateway, 'emitRunEvent');
     await gateway.onModuleInit();
   });

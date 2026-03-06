@@ -22,7 +22,8 @@ const REQUIRED_ENV = {
   OPENAI_API_KEY: 'sk-test-openai',
   LITELLM_BASE_URL: `http://127.0.0.1:${LITELLM_PORT}`,
   LITELLM_MASTER_KEY: 'sk-test-master-key',
-  AGENTS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/agents_test?schema=public',
+  AGENTS_DATABASE_URL:
+    process.env.AGENTS_DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/agents_test?schema=public',
   DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
   DOCKER_RUNNER_PORT: '59999',
   DOCKER_RUNNER_SHARED_SECRET: 'dev-shared-secret',

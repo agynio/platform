@@ -190,6 +190,54 @@ services:
       retries: 5
       start_period: 20s
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - agents_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  notifications:
+    image: ghcr.io/agynio/notifications:edge
+    container_name: notifications
+    restart: unless-stopped
+    environment:
+      GRPC_ADDR: 0.0.0.0:9090
+      REDIS_ADDR: redis:6379
+      REDIS_DB: "0"
+      REDIS_CHANNEL: notifications.v1
+    ports:
+      - "9090:9090"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - agents_net
+
+  notifications-gateway:
+    image: ghcr.io/agynio/notifications-gateway:edge
+    container_name: notifications-gateway
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: 0.0.0.0:3011
+      REDIS_ADDR: redis:6379
+      REDIS_DB: "0"
+      REDIS_CHANNEL: notifications.v1
+    ports:
+      - "3011:3011"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - agents_net
+
   # LiteLLM Postgres database
   litellm-db:
     image: postgres:16-alpine

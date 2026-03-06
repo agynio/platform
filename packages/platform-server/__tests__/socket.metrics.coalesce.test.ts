@@ -27,7 +27,14 @@ describe('GraphSocketGateway metrics coalescing', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metricsStub,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     // Attach and stub io emit sink
     gateway.init({ server: fastify.server });
     const captured: Array<{ room: string; event: string; payload: any }> = [];
