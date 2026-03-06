@@ -9,6 +9,8 @@ deployments:
       manifests:
         - devspace/argocd-sync-off.yaml
   platform-server:
+    dependsOn:
+      - argocd-sync-off
     namespace: ${PLATFORM_NAMESPACE}
     helm:
       releaseName: platform-server
