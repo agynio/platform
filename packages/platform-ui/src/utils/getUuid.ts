@@ -5,7 +5,7 @@ export function getUuid(): string {
     try {
       return crypto.randomUUID();
     } catch {
-      // fallback to uuid
+      // If randomUUID is blocked or fails, fall back to uuidv4.
     }
   }
   return uuidv4();
