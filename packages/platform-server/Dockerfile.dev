@@ -25,8 +25,8 @@ RUN npm install --global tsx@^4.20.5 \
 WORKDIR /opt/app
 
 RUN mkdir -p /pnpm /pnpm-store \
- && chown -R node:node /opt/app /pnpm /pnpm-store
+ && chown -R 1000:1000 /opt/app /pnpm /pnpm-store
 
-USER node
+USER 1000:1000
 
 CMD ["sleep", "infinity"]

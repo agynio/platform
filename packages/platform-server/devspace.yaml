@@ -10,6 +10,8 @@ deployments:
       releaseName: platform-server
       chart:
         path: ../../charts/platform-server
+      upgradeArgs:
+        - --reuse-values
       values:
         image:
           repository: ghcr.io/agynio/platform-server
@@ -25,22 +27,22 @@ dev:
     containers:
       platform-server:
         container: platform-server
-        workingDir: /opt/app
+        workingDir: /opt/app/data/workspace
         command:
           - sh
         args:
           - -c
           - |
+            mkdir -p /opt/app/data/workspace
+            cd /opt/app/data/workspace
             while [ ! -f package.json ]; do
               echo "Waiting for sources to sync..."
               sleep 1
             done
-            if [ ! -d node_modules ]; then
-              pnpm install --prefer-offline
-            fi
-            pnpm --dir packages/platform-server dev
+            pnpm install
+            pnpm --filter @agyn/platform-server dev
         sync:
-          - path: ../..:/opt/app
+          - path: ../..:/opt/app/data/workspace
             excludePaths:
               - node_modules
               - dist

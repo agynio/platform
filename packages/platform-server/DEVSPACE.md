@@ -30,12 +30,14 @@ devspace dev
 
 DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
 which bundles the tooling needed for `pnpm dev` (corepack/pnpm, Git, file
-watchers) but no application sources. The repository is synced into `/opt/app`
-for live iteration, and the container process runs the same entrypoint as
-`pnpm dev` (`tsx src/index.ts`). Environment variables, volume mounts, and
-security context are provided by `bootstrap_v2`; DevSpace does not override
-them. Production images continue to be built by the existing CI pipeline and
-are separate from this workflow.
+watchers) but no application sources. The repository is synced into the
+ephemeral workspace at `/opt/app/data/workspace` (backed by the `data`
+`emptyDir`), which is writable under the bootstrap-provisioned
+`securityContext`. The container process runs the same entrypoint as `pnpm
+dev` (`tsx src/index.ts`). Environment variables, volume mounts, and security
+context are provided by `bootstrap_v2`; DevSpace does not override them.
+Production images continue to be built by the existing CI pipeline and are
+separate from this workflow.
 
 To confirm the deployment is ready, check the pod status:
 
