@@ -292,34 +292,32 @@ export class AgentsPersistenceService {
       }
     });
 
-    const created = thread;
-
     if (wasCreated) {
       this.eventsBus.emitThreadCreated({
-        id: created.id,
-        alias: created.alias,
-        summary: created.summary ?? null,
-        status: created.status,
-        createdAt: created.createdAt,
-        parentId: created.parentId ?? null,
-        channelNodeId: created.channelNodeId ?? null,
-        assignedAgentNodeId: created.assignedAgentNodeId ?? null,
+        id: thread.id,
+        alias: thread.alias,
+        summary: thread.summary ?? null,
+        status: thread.status,
+        createdAt: thread.createdAt,
+        parentId: thread.parentId ?? null,
+        channelNodeId: thread.channelNodeId ?? null,
+        assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
       });
 
-      if (created.parentId) {
-        this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
+      if (thread.parentId) {
+        this.eventsBus.emitThreadMetricsAncestors({ threadId: thread.id });
       }
     }
 
     return {
-      id: created.id,
-      alias: created.alias,
-      summary: created.summary ?? null,
-      status: created.status,
-      createdAt: created.createdAt,
-      parentId: created.parentId ?? null,
-      channelNodeId: created.channelNodeId ?? null,
-      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
+      id: thread.id,
+      alias: thread.alias,
+      summary: thread.summary ?? null,
+      status: thread.status,
+      createdAt: thread.createdAt,
+      parentId: thread.parentId ?? null,
+      channelNodeId: thread.channelNodeId ?? null,
+      assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
     };
   }
 
