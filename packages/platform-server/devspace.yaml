@@ -4,13 +4,7 @@ vars:
   PLATFORM_NAMESPACE: platform
 
 deployments:
-  argocd-sync-off:
-    kubectl:
-      manifests:
-        - devspace/argocd-sync-off.yaml
   platform-server:
-    dependsOn:
-      - argocd-sync-off
     namespace: ${PLATFORM_NAMESPACE}
     helm:
       releaseName: platform-server
@@ -28,6 +22,21 @@ deployments:
           requests:
             cpu: 100m
             memory: 128Mi
+
+hooks:
+  - name: argocd-sync-policy-off
+    command: kubectl
+    args:
+      - patch
+      - application.argoproj.io/platform-server
+      - --namespace
+      - argocd
+      - --type=merge
+      - --field-manager=devspace-argocd-sync-off
+      - --patch-file
+      - devspace/argocd-sync-off.yaml
+    events:
+      - before:deploy:platform-server
 
 dev:
   platform-server:
