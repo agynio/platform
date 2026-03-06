@@ -39,11 +39,12 @@ context are provided by `bootstrap_v2`; DevSpace does not override them.
 Production images continue to be built by the existing CI pipeline and are
 separate from this workflow.
 
-At startup DevSpace applies an Argo CD `Application` manifest (no Argo CD CLI)
-that removes the `automated` sync policy for `platform-server` while pointing
-the application at the `noa/issue-1367` revision. This prevents the reconciler
-from reverting the dev Deployment/image while you are iterating locally and
-matches the branch tracked by this workflow.
+Before Helm installs anything, DevSpace now runs a hook that patches the Argo CD
+`Application/platform-server` with `kubectl patch --type merge --field-manager
+devspace-argocd-sync-off --patch-file devspace/argocd-sync-off.yaml`. The patch
+is a minimal merge object that removes only `spec.syncPolicy.automated`, so Argo
+stops auto-syncing the release without disturbing the rest of the application
+spec.
 
 The helm release now requests 2 GiB of memory to keep `pnpm` installs from
 being OOM-killed. The dev entrypoint waits for the sync to finish, installs
