@@ -254,7 +254,7 @@ export class AgentsPersistenceService {
     const parentId = params.parentId ?? null;
     const sanitizedSummary = this.sanitizeSummary(params.text);
 
-    const { thread, wasCreated } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (parentId) {
         const parent = await tx.thread.findUnique({ where: { id: parentId }, select: { id: true } });
         if (!parent) {
@@ -262,62 +262,40 @@ export class AgentsPersistenceService {
         }
       }
 
-      try {
-        const thread = await tx.thread.create({
-          data: {
-            alias,
-            summary: sanitizedSummary,
-            parentId,
-            assignedAgentNodeId: agentNodeId,
-          },
-        });
-        return { thread, wasCreated: true };
-      } catch (error) {
-        const isAliasConflict =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002' &&
-          Array.isArray(error.meta?.target) &&
-          error.meta.target.includes('alias');
-
-        if (!isAliasConflict) {
-          throw error;
-        }
-
-        const existing = await tx.thread.findUnique({ where: { alias } });
-        if (!existing) {
-          throw new Error('thread_alias_resolution_failed');
-        }
-
-        return { thread: existing, wasCreated: false };
-      }
+      return tx.thread.create({
+        data: {
+          alias,
+          summary: sanitizedSummary,
+          parentId,
+          assignedAgentNodeId: agentNodeId,
+        },
+      });
     });
 
-    if (wasCreated) {
-      this.eventsBus.emitThreadCreated({
-        id: thread.id,
-        alias: thread.alias,
-        summary: thread.summary ?? null,
-        status: thread.status,
-        createdAt: thread.createdAt,
-        parentId: thread.parentId ?? null,
-        channelNodeId: thread.channelNodeId ?? null,
-        assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
-      });
+    this.eventsBus.emitThreadCreated({
+      id: created.id,
+      alias: created.alias,
+      summary: created.summary ?? null,
+      status: created.status,
+      createdAt: created.createdAt,
+      parentId: created.parentId ?? null,
+      channelNodeId: created.channelNodeId ?? null,
+      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
+    });
 
-      if (thread.parentId) {
-        this.eventsBus.emitThreadMetricsAncestors({ threadId: thread.id });
-      }
+    if (created.parentId) {
+      this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
     }
 
     return {
-      id: thread.id,
-      alias: thread.alias,
-      summary: thread.summary ?? null,
-      status: thread.status,
-      createdAt: thread.createdAt,
-      parentId: thread.parentId ?? null,
-      channelNodeId: thread.channelNodeId ?? null,
-      assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
+      id: created.id,
+      alias: created.alias,
+      summary: created.summary ?? null,
+      status: created.status,
+      createdAt: created.createdAt,
+      parentId: created.parentId ?? null,
+      channelNodeId: created.channelNodeId ?? null,
+      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
     };
   }
 
