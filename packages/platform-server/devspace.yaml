@@ -4,19 +4,28 @@ vars:
   PLATFORM_NAMESPACE: platform
 
 deployments:
+  argocd-sync-off:
+    kubectl:
+      manifests:
+        - devspace/argocd-sync-off.yaml
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
     helm:
       releaseName: platform-server
       chart:
         path: ../../charts/platform-server
-      upgradeArgs:
-        - --reuse-values
       values:
         image:
           repository: ghcr.io/agynio/platform-server
           tag: dev
           pullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 500m
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
 
 dev:
   platform-server:
@@ -33,14 +42,26 @@ dev:
         args:
           - -c
           - |
+            set -eu
+            umask 0002
+            if [ -d /opt/app/data/workspace ] && [ ! -w /opt/app/data/workspace ]; then
+              rm -rf /opt/app/data/workspace
+            fi
             mkdir -p /opt/app/data/workspace
             cd /opt/app/data/workspace
             while [ ! -f package.json ]; do
               echo "Waiting for sources to sync..."
               sleep 1
             done
-            pnpm install
-            pnpm --filter @agyn/platform-server dev
+            if [ ! -f node_modules/.modules.yaml ]; then
+              export PNPM_WORKSPACE_CONCURRENCY=1
+              export NODE_OPTIONS="--max-old-space-size=256"
+              export PNPM_HOME=/tmp/.pnpm
+              mkdir -p "$PNPM_HOME"
+              corepack pnpm install --filter @agyn/platform-server... --frozen-lockfile --prefer-offline --child-concurrency=1 --ignore-scripts
+              corepack pnpm --filter @agyn/platform-server exec prisma generate
+            fi
+            corepack pnpm --filter @agyn/platform-server dev
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:

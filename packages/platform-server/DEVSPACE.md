@@ -39,6 +39,18 @@ context are provided by `bootstrap_v2`; DevSpace does not override them.
 Production images continue to be built by the existing CI pipeline and are
 separate from this workflow.
 
+At startup DevSpace applies an Argo CD `Application` manifest (no Argo CD CLI)
+that removes the `automated` sync policy for `platform-server` while pointing
+the application at the `noa/issue-1367` revision. This prevents the reconciler
+from reverting the dev Deployment/image while you are iterating locally and
+matches the branch tracked by this workflow.
+
+The helm release now requests 2 GiB of memory to keep `pnpm` installs from
+being OOM-killed. The dev entrypoint waits for the sync to finish, installs
+workspace dependencies with serialized `pnpm` (child concurrency `1`) when the
+install marker is missing, runs `prisma generate`, and finally starts
+`corepack pnpm --filter @agyn/platform-server dev` under `set -eu`.
+
 To confirm the deployment is ready, check the pod status:
 
 ```bash
