@@ -1,0 +1,150 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-server
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  destination:
+    namespace: platform
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://github.com/agynio/platform.git
+    targetRevision: noa/issue-1367
+    path: charts/platform-server
+    helm:
+      values: |
+        "env":
+        - "name": "NODE_ENV"
+          "value": "production"
+        - "name": "PORT"
+          "value": "3010"
+        - "name": "AGENTS_DATABASE_URL"
+          "value": "postgresql://agents:agents@platform-db:5432/agents"
+        - "name": "LLM_PROVIDER"
+          "value": "litellm"
+        - "name": "LITELLM_BASE_URL"
+          "value": "http://litellm:4000"
+        - "name": "LITELLM_MASTER_KEY"
+          "value": "sk-dev-master"
+        - "name": "LITELLM_SALT_KEY"
+          "value": "sk-dev-salt"
+        - "name": "OPENAI_BASE_URL"
+          "value": "http://litellm:4000/v1"
+        - "name": "OPENAI_API_KEY"
+          "value": "sk-dev-master"
+        - "name": "DOCKER_RUNNER_GRPC_HOST"
+          "value": "docker-runner"
+        - "name": "DOCKER_RUNNER_GRPC_PORT"
+          "value": "7071"
+        - "name": "DOCKER_RUNNER_SHARED_SECRET"
+          "value": "change-me"
+        - "name": "DOCKER_RUNNER_OPTIONAL"
+          "value": "true"
+        - "name": "DOCKER_RUNNER_TIMEOUT_MS"
+          "value": "60000"
+        - "name": "DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS"
+          "value": "1000"
+        - "name": "DOCKER_RUNNER_CONNECT_RETRY_MAX_DELAY_MS"
+          "value": "60000"
+        - "name": "DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS"
+          "value": "500"
+        - "name": "DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS"
+          "value": "10000"
+        - "name": "DOCKER_RUNNER_CONNECT_MAX_RETRIES"
+          "value": "120"
+        - "name": "VAULT_ENABLED"
+          "value": "true"
+        - "name": "VAULT_ADDR"
+          "value": "http://vault:8200"
+        - "name": "VAULT_TOKEN"
+          "value": "dev-root"
+        - "name": "GRAPH_BRANCH"
+          "value": "v0.10.1"
+        - "name": "GRAPH_AUTHOR_NAME"
+          "value": "Agyn Platform"
+        - "name": "GRAPH_AUTHOR_EMAIL"
+          "value": "rowan.stein@agyn.io"
+        "extraVolumeMounts":
+        - "mountPath": "/tmp"
+          "name": "tmp"
+        - "mountPath": "/opt/app/data"
+          "name": "data"
+        - "mountPath": "/opt/app/packages/platform-server/data"
+          "name": "data"
+        - "mountPath": "/data"
+          "name": "data"
+        "extraVolumes":
+        - "emptyDir": {}
+          "name": "tmp"
+        - "emptyDir": {}
+          "name": "data"
+        "fullnameOverride": "platform-server"
+        "image":
+          "pullPolicy": "IfNotPresent"
+          "repository": "ghcr.io/agynio/platform-server"
+          "tag": "0.15.2"
+        "ingress":
+          "enabled": false
+        "initContainers":
+        - "args":
+          - "pnpm"
+          - "--dir"
+          - "/opt/app/packages/platform-server"
+          - "exec"
+          - "prisma"
+          - "migrate"
+          - "deploy"
+          "command":
+          - "corepack"
+          "env":
+          - "name": "AGENTS_DATABASE_URL"
+            "value": "postgresql://agents:agents@platform-db:5432/agents"
+          - "name": "NODE_ENV"
+            "value": "production"
+          "image": "ghcr.io/agynio/platform-server:0.15.2"
+          "imagePullPolicy": "IfNotPresent"
+          "name": "platform-server-migrations"
+          "securityContext":
+            "runAsGroup": 1000
+            "runAsNonRoot": true
+            "runAsUser": 1000
+          "volumeMounts":
+          - "mountPath": "/tmp"
+            "name": "tmp"
+          - "mountPath": "/opt/app/data"
+            "name": "data"
+          - "mountPath": "/opt/app/packages/platform-server/data"
+            "name": "data"
+          - "mountPath": "/data"
+            "name": "data"
+        "livenessProbe":
+          "enabled": false
+        "podSecurityContext":
+          "enabled": true
+          "fsGroup": 1000
+        "readinessProbe":
+          "enabled": false
+        "replicaCount": 1
+        "securityContext":
+          "allowPrivilegeEscalation": false
+          "capabilities":
+            "drop":
+            - "ALL"
+          "enabled": true
+          "readOnlyRootFilesystem": true
+          "runAsGroup": 1000
+          "runAsNonRoot": true
+          "runAsUser": 1000
+          "seccompProfile":
+            "type": "RuntimeDefault"
+  revisionHistoryLimit: 10
+  syncPolicy:
+    automated: null
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    - ApplyOutOfSyncOnly=true
