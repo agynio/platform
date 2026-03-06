@@ -10,6 +10,7 @@ const emptySidebarProps: any[] = [];
 const canvasSpy = vi.hoisted(() => vi.fn());
 const listAllSecretPathsMock = vi
   .hoisted(() => vi.fn<[], Promise<string[]>>().mockResolvedValue([]));
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type GraphLayoutServiceMocks = {
   [K in keyof GraphLayoutServices]: vi.Mock<
@@ -1051,8 +1052,7 @@ describe('GraphLayout', () => {
       { template: string; config?: Record<string, unknown>; position?: { x: number; y: number } },
     ];
 
-    expect(typeof node.id).toBe('string');
-    expect(node.id.length).toBeGreaterThan(0);
+    expect(node.id).toMatch(uuidRegex);
     expect(node.template).toBe('agent-template');
     expect(node.kind).toBe('Agent');
     expect(node.title).toBe('New Agent');

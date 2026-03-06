@@ -25,6 +25,7 @@ import { buildGraphNodeFromTemplate } from '@/features/graph/mappers';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
 import type { TemplateSchema, NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
+import { getUuid } from '@/utils/getUuid';
 
 type FlowNode = Node<GraphNodeData>;
 
@@ -134,16 +135,7 @@ function buildEdgeId(
 }
 
 function generateGraphNodeId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // fall through to fallback
-  }
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).slice(2, 10);
-  return `node-${timestamp}-${random}`;
+  return getUuid();
 }
 
 function makeEdgeData(

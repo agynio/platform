@@ -1,6 +1,7 @@
 import type { PersistedGraph } from '@agyn/shared';
 import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import type { TemplateSchema } from '@/api/types/graph';
+import { getUuid } from '@/utils/getUuid';
 import {
   type EntityPortDefinition,
   type GraphEdgeFilter,
@@ -142,13 +143,6 @@ function cloneGraph(graph: PersistedGraph): PersistedGraph {
     return structuredClone(graph);
   }
   return JSON.parse(JSON.stringify(graph)) as PersistedGraph;
-}
-
-function randomSegment(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID().split('-')[0] ?? Math.random().toString(36).slice(2, 10);
-  }
-  return Math.random().toString(36).slice(2, 10);
 }
 
 export function resolveEntityKind(rawKind?: string | null): GraphEntityKind {
@@ -305,17 +299,11 @@ export function buildGraphPayload(graph: PersistedGraph): PersistedGraphUpsertRe
   return buildGraphPayloadInternal(graph);
 }
 
-function generateNodeId(template: string, graph: PersistedGraph): string {
+function generateNodeId(graph: PersistedGraph): string {
   const existing = new Set((graph.nodes ?? []).map((node) => node.id));
-  const normalizedBase = template
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '') || 'node';
-  let candidate = `${normalizedBase}-${randomSegment()}`;
+  let candidate = getUuid();
   while (existing.has(candidate)) {
-    candidate = `${normalizedBase}-${randomSegment()}`;
+    candidate = getUuid();
   }
   return candidate;
 }
@@ -377,7 +365,7 @@ function applyRelationEdges(
 
 export function applyCreateEntity(graph: PersistedGraph, input: GraphEntityUpsertInput): PersistedGraph {
   const base = cloneGraph(graph);
-  const nodeId = input.id && input.id.trim().length > 0 ? input.id.trim() : generateNodeId(input.template, base);
+  const nodeId = input.id && input.id.trim().length > 0 ? input.id.trim() : generateNodeId(base);
   const nodes = Array.isArray(base.nodes) ? [...base.nodes] : [];
   const config = sanitizeConfig(input.config, input.title);
   const newNode = {
