@@ -64,7 +64,14 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) };
     const runtimeStub = { subscribe: () => () => {} } as any;
     const eventsBusStub = {} as any;
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub, eventsBusStub);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metricsStub as any,
+      prismaStub,
+      eventsBusStub,
+      notificationsPublisher,
+    );
 
     const scheduled: string[] = [];
     // Spy/override scheduleThreadMetrics to capture scheduled ids
