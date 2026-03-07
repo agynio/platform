@@ -29,28 +29,31 @@ devspace dev
 ```
 
 DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
-which bundles the tooling needed for `pnpm dev` (corepack/pnpm, Git, file
-watchers) but no application sources. The repository is synced into the
-ephemeral workspace at `/opt/app/data/workspace` (backed by the `data`
-`emptyDir`), which is writable under the bootstrap-provisioned
-`securityContext`. The container process runs the same entrypoint as `pnpm
-dev` (`tsx src/index.ts`). Environment variables, volume mounts, and security
-context are provided by `bootstrap_v2`; DevSpace does not override them.
-Production images continue to be built by the existing CI pipeline and are
-separate from this workflow.
+which bundles the tooling needed for `pnpm` but no application sources. The
+repository is synced into `/opt/app/data/workspace` (an `emptyDir` exposed by
+the chart), and the container now runs a minimal startup script:
 
-Before Helm installs anything, DevSpace now runs a hook that patches the Argo CD
-`Application/platform-server` with `kubectl patch --type merge --field-manager
-devspace-argocd-sync-off --patch-file devspace/argocd-sync-off.yaml`. The patch
-is a minimal merge object that removes only `spec.syncPolicy.automated`, so Argo
-stops auto-syncing the release without disturbing the rest of the application
-spec.
+```sh
+corepack pnpm install
+corepack pnpm --filter @agyn/platform-server dev
+```
 
-The helm release now requests 2 GiB of memory to keep `pnpm` installs from
-being OOM-killed. The dev entrypoint waits for the sync to finish, installs
-workspace dependencies with serialized `pnpm` (child concurrency `1`) when the
-install marker is missing, runs `prisma generate`, and finally starts
-`corepack pnpm --filter @agyn/platform-server dev` under `set -eu`.
+Environment variables, volume mounts, and the pod security context are
+provided by `bootstrap_v2`; DevSpace leaves them as-is. Production images
+continue to be built by the existing CI pipeline and are separate from this
+workflow.
+
+Ahead of the Helm release, DevSpace applies a dev-only Kubernetes Job plus
+scoped RBAC inside the `argocd` namespace. The Job authenticates against the
+Kubernetes API using its service account token and issues a JSON merge-patch
+that sets `spec.syncPolicy.automated` to `null` on the
+`Application/platform-server` resource. No `kubectl` or Argo CD CLI calls run
+inside the container—the patch is fully in-cluster. The Job is tracked as a
+DevSpace deployment, so `devspace purge` removes the Job, Role, RoleBinding,
+and ServiceAccount along with the Helm release.
+
+The Helm release still requests 2 GiB of memory to keep `pnpm` installs from
+being OOM-killed.
 
 To confirm the deployment is ready, check the pod status:
 
