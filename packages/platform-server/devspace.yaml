@@ -3,7 +3,17 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
 
+pipelines:
+  dev: |-
+    create_deployments --sequential argocd-sync-off platform-server
+    start_dev platform-server
+
 deployments:
+  argocd-sync-off:
+    namespace: argocd
+    kubectl:
+      manifests:
+        - devspace/argocd-sync-off
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
     helm:
@@ -15,6 +25,18 @@ deployments:
           repository: ghcr.io/agynio/platform-server
           tag: dev
           pullPolicy: IfNotPresent
+        securityContext:
+          enabled: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
         resources:
           limits:
             cpu: 500m
@@ -24,19 +46,17 @@ deployments:
             memory: 128Mi
 
 hooks:
-  - name: argocd-sync-policy-off
+  - name: wait-for-argocd-sync-off
     command: kubectl
     args:
-      - patch
-      - application.argoproj.io/platform-server
+      - wait
       - --namespace
       - argocd
-      - --type=merge
-      - --field-manager=devspace-argocd-sync-off
-      - --patch-file
-      - devspace/argocd-sync-off.yaml
+      - --for=condition=complete
+      - --timeout=120s
+      - job/argocd-sync-off
     events:
-      - before:deploy:platform-server
+      - after:deploy:argocd-sync-off
 
 dev:
   platform-server:
@@ -49,29 +69,13 @@ dev:
         container: platform-server
         workingDir: /opt/app/data/workspace
         command:
-          - sh
+          - bash
         args:
           - -c
           - |
-            set -eu
-            umask 0002
-            if [ -d /opt/app/data/workspace ] && [ ! -w /opt/app/data/workspace ]; then
-              rm -rf /opt/app/data/workspace
-            fi
-            mkdir -p /opt/app/data/workspace
+            set -euo pipefail
             cd /opt/app/data/workspace
-            while [ ! -f package.json ]; do
-              echo "Waiting for sources to sync..."
-              sleep 1
-            done
-            if [ ! -f node_modules/.modules.yaml ]; then
-              export PNPM_WORKSPACE_CONCURRENCY=1
-              export NODE_OPTIONS="--max-old-space-size=256"
-              export PNPM_HOME=/tmp/.pnpm
-              mkdir -p "$PNPM_HOME"
-              corepack pnpm install --filter @agyn/platform-server... --frozen-lockfile --prefer-offline --child-concurrency=1 --ignore-scripts
-              corepack pnpm --filter @agyn/platform-server exec prisma generate
-            fi
+            corepack pnpm install
             corepack pnpm --filter @agyn/platform-server dev
         sync:
           - path: ../..:/opt/app/data/workspace
@@ -79,7 +83,5 @@ dev:
               - node_modules
               - dist
               - .git
-              - .devspace
               - packages/platform-server/node_modules
               - packages/platform-server/dist
-              - packages/platform-server/prisma/generated
