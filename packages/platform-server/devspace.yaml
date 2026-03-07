@@ -40,7 +40,7 @@ deployments:
         resources:
           limits:
             cpu: 500m
-            memory: 2Gi
+            memory: 4Gi
           requests:
             cpu: 100m
             memory: 128Mi
@@ -71,12 +71,61 @@ dev:
         command:
           - bash
         args:
-          - -c
+          - -lc
           - |
             set -euo pipefail
-            cd /opt/app/data/workspace
-            corepack pnpm install
-            corepack pnpm --filter @agyn/platform-server dev
+            set -x
+            base="/opt/app/data/workspace"
+            mkdir -p "$base"
+            chmod 2775 "$base" || true
+            cd "$base"
+            for i in $(seq 1 150); do
+              if [ -f "$base/pnpm-workspace.yaml" ]; then
+                break
+              fi
+              echo "Waiting for workspace files to sync..."
+              sleep 2
+            done
+            if [ ! -f "$base/pnpm-workspace.yaml" ]; then
+              echo "pnpm-workspace.yaml not found after waiting" >&2
+              exit 1
+            fi
+            mkdir -p "$base/.cache/pnpm" "$base/.cache/npm" "$base/tmp"
+            mkdir -p "$base/.pnpm-store" "$base/.corepack"
+            chown -R 1000:1000 "$base" || true
+            export TMPDIR="$base/tmp"
+            export HOME="$base"
+            export PNPM_HOME="$base/.cache/pnpm"
+            export NPM_CONFIG_CACHE="$base/.cache/npm"
+            export PNPM_STORE_PATH="$base/.pnpm-store"
+            export PNPM_TMPDIR="$base/tmp"
+            export NPM_CONFIG_TMP="$base/tmp"
+            export NPM_CONFIG_TMPDIR="$base/tmp"
+            export npm_config_tmp="$base/tmp"
+            export NPM_CONFIG_PREFIX="$base"
+            export npm_config_prefix="$base"
+            export COREPACK_HOME="$base/.corepack"
+            export PATH="$PNPM_HOME:$PATH"
+            export CI=true
+            export DEVSPACE_INJECT_SYNC_USE_INOTIFY=true
+            export DEVSPACE_USE_INOTIFY=1
+            export DEVSPACE_INJECT_USE_INOTIFY=1
+            export DEVSPACE_USEINOTIFY=1
+            export DEVSPACE_INJECT_USEINOTIFY=1
+            if ! npm install pnpm@10.5.0 --prefix "$base/.pnpm-dist"; then
+              rm -rf "$base/.pnpm-dist" "$base/.cache/npm"
+              npm install pnpm@10.5.0 --prefix "$base/.pnpm-dist"
+            fi
+            export PATH="$base/.pnpm-dist/node_modules/.bin:$PATH"
+            pnpm config set tmp "$base/tmp"
+            pnpm config set store-dir "$base/.pnpm-store"
+            pnpm config set cache-dir "$base/.cache/pnpm"
+            export NODE_OPTIONS="--max-old-space-size=1024"
+            if [ ! -f "$base/node_modules/.modules.yaml" ]; then
+              pnpm install --recursive --prefer-offline --filter @agyn/platform-server... --child-concurrency=1 --network-concurrency=1 \
+                || pnpm install --recursive --filter @agyn/platform-server... --child-concurrency=1 --network-concurrency=1
+            fi
+            pnpm --filter @agyn/platform-server dev
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:
@@ -85,3 +134,5 @@ dev:
               - .git
               - packages/platform-server/node_modules
               - packages/platform-server/dist
+              - .pnpm-store
+              - .cache
