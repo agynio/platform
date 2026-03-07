@@ -1,3 +1,4 @@
+import { getUuid } from '@/utils/getUuid';
 import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
@@ -88,14 +89,7 @@ function deepClone<T>(value: T): T {
 }
 
 function generateEnvId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // ignore and fall back to Math.random
-  }
-  return `env-${Math.random().toString(36).slice(2, 10)}`;
+  return getUuid();
 }
 
 function extractDisplayValue(source: EnvVar['source'], raw: unknown): string {

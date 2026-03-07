@@ -26,6 +26,7 @@ import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types
 import { useMcpNodeState } from '@/lib/graph/hooks';
 import { listTargetsByEdge, sanitizeConfigForPersistence } from '@/features/entities/api/graphEntities';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
+import { getUuid } from '@/utils/getUuid';
 
 type EntityFormValues = {
   template: string;
@@ -319,15 +320,8 @@ function buildSubmitConfig(base: Record<string, unknown>): Record<string, unknow
   return sanitized;
 }
 
-function randomIdSegment(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID().split('-')[0] ?? Math.random().toString(36).slice(2, 10);
-  }
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function generatePreviewNodeId(kind: GraphEntityKind): string {
-  return `entity-preview-${kind}-${randomIdSegment()}`;
+function generatePreviewNodeId(): string {
+  return getUuid();
 }
 
 function useSecretSuggestions() {
@@ -482,7 +476,7 @@ export function EntityUpsertForm({
       return;
     }
     if (!previewNodeIdRef.current) {
-      previewNodeIdRef.current = generatePreviewNodeId(kind);
+      previewNodeIdRef.current = generatePreviewNodeId();
     }
     return () => {
       previewNodeIdRef.current = '';
@@ -518,12 +512,12 @@ export function EntityUpsertForm({
     }
     if (mode === 'create') {
       if (!previewNodeIdRef.current) {
-        previewNodeIdRef.current = generatePreviewNodeId(kind);
+        previewNodeIdRef.current = generatePreviewNodeId();
       }
       return previewNodeIdRef.current;
     }
     return '';
-  }, [mode, entity?.id, kind]);
+  }, [mode, entity?.id]);
 
   const safeGraphNodes = useMemo(() => graphNodes ?? [], [graphNodes]);
   const safeGraphEdges = useMemo(() => graphEdges ?? [], [graphEdges]);

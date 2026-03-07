@@ -28,6 +28,7 @@ import type { TemplateSchema } from '@/api/types/graph';
 import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 import { clearDraft, readDraft, writeDraft, THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
+import { getUuid } from '@/utils/getUuid';
 import { useUser } from '@/user/user.runtime';
 import { cancelReminder as cancelReminderApi } from '@/features/reminders/api';
 
@@ -107,10 +108,7 @@ function isDraftThreadId(threadId: string | null | undefined): threadId is strin
 }
 
 function createDraftId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `draft:${crypto.randomUUID()}`;
-  }
-  return `draft:${Math.random().toString(36).slice(2, 10)}`;
+  return `draft:${getUuid()}`;
 }
 
 function mapDraftToThread(draft: ThreadDraft): Thread {

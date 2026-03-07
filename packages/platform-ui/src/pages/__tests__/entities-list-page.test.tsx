@@ -98,6 +98,8 @@ const templateSet = [
   },
 ];
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const baseGraph = {
   name: 'main',
   version: 2,
@@ -524,7 +526,11 @@ describe('Entity list pages', () => {
 
     await waitFor(() => expect(notifications.success).toHaveBeenCalledWith('Entity created'));
     expect(savedPayload.body).toBeDefined();
-    expect(savedPayload.body.nodes.some((node: any) => node.template === 'support-agent' && node.config?.title === 'Responder')).toBe(true);
+    const createdNode = savedPayload.body.nodes.find(
+      (node: any) => node.template === 'support-agent' && node.config?.title === 'Responder',
+    );
+    expect(createdNode).toBeDefined();
+    expect(createdNode.id).toMatch(uuidRegex);
     expect(savedPayload.body.edges).toEqual(baseGraph.edges);
   });
 
