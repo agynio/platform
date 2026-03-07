@@ -43,14 +43,12 @@ provided by `bootstrap_v2`; DevSpace leaves them as-is. Production images
 continue to be built by the existing CI pipeline and are separate from this
 workflow.
 
-Ahead of the Helm release, DevSpace applies a dev-only Kubernetes Job plus
-scoped RBAC inside the `argocd` namespace. The Job authenticates against the
-Kubernetes API using its service account token and issues a JSON merge-patch
-that sets `spec.syncPolicy.automated` to `null` on the
-`Application/platform-server` resource. No `kubectl` or Argo CD CLI calls run
-inside the container—the patch is fully in-cluster. The Job is tracked as a
-DevSpace deployment, so `devspace purge` removes the Job, Role, RoleBinding,
-and ServiceAccount along with the Helm release.
+Ahead of the Helm release, DevSpace runs a pre-deploy hook that executes
+`kubectl patch application platform-server -n argocd --type merge -p
+'{"spec":{"syncPolicy":{"automated":null}}}'`. The merge-patch simply
+removes `spec.syncPolicy.automated` so Argo CD leaves the dev release alone.
+If the `Application` resource is absent, the hook is a no-op. No Argo CD CLI
+invocations or extra Kubernetes workloads are involved.
 
 The Helm release still requests 2 GiB of memory to keep `pnpm` installs from
 being OOM-killed.
