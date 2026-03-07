@@ -20,7 +20,13 @@ cluster.
 Run `agynio/bootstrap_v2` according to its Quickstart to provision the cluster
 and supporting services. The bootstrap scripts configure kubectl with the
 `agyn-local` context (or provide the kubeconfig path). Ensure your shell has
-the appropriate kubeconfig exported before proceeding.
+the appropriate kubeconfig exported before proceeding. Confirm the Argo CD
+Application and deployment exist before attaching DevSpace:
+
+```bash
+kubectl get application platform-server -n argocd
+kubectl get deployment platform-server -n platform
+```
 
 ## 2. Start DevSpace
 
@@ -31,21 +37,23 @@ cd packages/platform-server
 devspace dev
 ```
 
-The `dev` pipeline attaches to the existing `platform-server-dev` pod, disables
-ArgoCD auto-sync for the `platform-server` application (via a pre-dev hook),
-and starts `pnpm dev` inside the container using the synced workspace at
-`/opt/app/data/workspace`. The hook only touches auto-sync; all runtime
-configuration continues to come from bootstrap.
+The `dev` pipeline selects the existing `platform-server` pod (matching
+`app.kubernetes.io/name=platform-server`), disables ArgoCD auto-sync for the
+application via a pre-dev hook, and runs a minimal bootstrap command inside the
+synced workspace:
 
-During startup the container waits for the repository files to sync, prepares a
-writeable workspace (`.cache`, `.pnpm-store`, `tmp`), pins cache-related
-environment variables, and uses Corepack to run scoped `pnpm install` followed
-by `pnpm dev` for `packages/platform-server`.
+```sh
+sh -lc 'corepack enable && corepack pnpm install && corepack pnpm --filter @agyn/platform-server dev'
+```
 
-To confirm the pod is ready, check its status:
+The workspace is synced two-way to `/opt/app/data/workspace`; no chart, env, or
+volume overrides are introduced.
+
+To confirm the pod is ready and the API is serving traffic:
 
 ```bash
 kubectl get pods -n platform -l app.kubernetes.io/name=platform-server
+curl -k https://api.agyn.dev:8080/healthz
 ```
 
 ### Re-enabling ArgoCD auto-sync

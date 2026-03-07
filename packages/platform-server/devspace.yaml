@@ -1,8 +1,5 @@
 version: v2beta1
 
-vars:
-  PLATFORM_NAMESPACE: platform
-
 pipelines:
   dev: |-
     start_dev platform-server
@@ -22,47 +19,19 @@ hooks:
 
 dev:
   platform-server:
-    namespace: ${PLATFORM_NAMESPACE}
+    namespace: platform
     labelSelector:
       app.kubernetes.io/name: platform-server
-      app.kubernetes.io/instance: platform-server-dev
+      app.kubernetes.io/instance: platform-server
     containers:
       platform-server:
         container: platform-server
+        workingDir: /opt/app/data/workspace
         command:
           - sh
         args:
           - -lc
-          - |
-            set -eu
-            base="/opt/app/data/workspace"
-            mkdir -p "$base"
-            mkdir -p "$base/.cache/pnpm" "$base/.cache/npm" "$base/tmp" "$base/.pnpm-store"
-            cd "$base"
-            for i in $(seq 1 150); do
-              if [ -f "$base/pnpm-workspace.yaml" ]; then
-                break
-              fi
-              echo "Waiting for workspace files to sync..."
-              sleep 2
-            done
-            if [ ! -f "$base/pnpm-workspace.yaml" ]; then
-              echo "pnpm-workspace.yaml not found after waiting" >&2
-              exit 1
-            fi
-            echo "Starting platform-server dev workspace"
-            export TMPDIR="$base/tmp"
-            export PNPM_HOME="$base/.cache/pnpm"
-            export NPM_CONFIG_CACHE="$base/.cache/npm"
-            export PNPM_STORE_PATH="$base/.pnpm-store"
-            export NODE_OPTIONS="--max-old-space-size=384"
-            export PATH="$PNPM_HOME:$PATH"
-            if [ ! -x "$PNPM_HOME/pnpm" ]; then
-              printf '#!/bin/sh\nexec corepack pnpm "$@"\n' > "$PNPM_HOME/pnpm"
-              chmod +x "$PNPM_HOME/pnpm"
-            fi
-            corepack pnpm --dir packages/platform-server install --prefer-offline --child-concurrency=1 --network-concurrency=1
-            corepack pnpm --dir packages/platform-server dev
+          - corepack enable && corepack pnpm install && corepack pnpm --filter @agyn/platform-server dev
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:
