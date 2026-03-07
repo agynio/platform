@@ -1,7 +1,10 @@
 # DevSpace workflow for platform-server
 
-This guide walks through launching `platform-server` inside the
-`bootstrap_v2` cluster with a single `devspace dev` invocation.
+This guide documents the lightweight DevSpace workflow for iterating on
+`platform-server` inside the `bootstrap_v2` cluster. The configuration reuses
+the bootstrap-provisioned deployment and only disables ArgoCD auto-sync while
+the session is active, keeping the runtime environment aligned with the dev
+cluster.
 
 ## Prerequisites
 
@@ -12,41 +15,51 @@ This guide walks through launching `platform-server` inside the
   Quickstart in its README; it provides the kubeconfig path—usually
   `bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`).
 
-## 1. Prepare the cluster
+## 1. Ensure the cluster is running
 
 Run `agynio/bootstrap_v2` according to its Quickstart to provision the cluster
-and supporting services. The Quickstart configures kubectl with the
-`agyn-local` context (or provides the kubeconfig path). Ensure your shell has
+and supporting services. The bootstrap scripts configure kubectl with the
+`agyn-local` context (or provide the kubeconfig path). Ensure your shell has
 the appropriate kubeconfig exported before proceeding.
 
 ## 2. Start DevSpace
 
-Change into `packages/platform-server` and run:
+Launch DevSpace from the repository root:
 
 ```bash
 cd packages/platform-server
 devspace dev
 ```
 
-DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
-which bundles the tooling needed for `pnpm dev` (corepack/pnpm, Git, file
-watchers) but no application sources. The repository is synced into `/opt/app`
-for live iteration, and the container process runs the same entrypoint as
-`pnpm dev` (`tsx src/index.ts`). Environment variables, volume mounts, and
-security context are provided by `bootstrap_v2`; DevSpace does not override
-them. Production images continue to be built by the existing CI pipeline and
-are separate from this workflow.
+The `dev` pipeline attaches to the existing `platform-server-dev` pod, disables
+ArgoCD auto-sync for the `platform-server` application (via a pre-dev hook),
+and starts `pnpm dev` inside the container using the synced workspace at
+`/opt/app/data/workspace`. The hook only touches auto-sync; all runtime
+configuration continues to come from bootstrap.
 
-To confirm the deployment is ready, check the pod status:
+During startup the container waits for the repository files to sync, prepares a
+writeable workspace (`.cache`, `.pnpm-store`, `tmp`), pins cache-related
+environment variables, and uses Corepack to run scoped `pnpm install` followed
+by `pnpm dev` for `packages/platform-server`.
+
+To confirm the pod is ready, check its status:
 
 ```bash
 kubectl get pods -n platform -l app.kubernetes.io/name=platform-server
 ```
 
-## 3. Cleanup
+### Re-enabling ArgoCD auto-sync
 
-1. Terminate DevSpace (`Ctrl+C`).
-2. Purge the dev release:
-   ```bash
-   devspace purge
-   ```
+When you finish your DevSpace session you can optionally re-enable auto-sync:
+
+```bash
+kubectl patch application platform-server -n argocd \
+  --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{}}}}'
+```
+
+## 3. End the session
+
+Terminate DevSpace with `Ctrl+C`. No additional purge step is required because
+the deployment is managed by bootstrap. If you re-enable auto-sync, ArgoCD will
+resume reconciling the deployment immediately.

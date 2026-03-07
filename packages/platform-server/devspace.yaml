@@ -3,44 +3,68 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
 
-deployments:
-  platform-server:
-    namespace: ${PLATFORM_NAMESPACE}
-    helm:
-      releaseName: platform-server
-      chart:
-        path: ../../charts/platform-server
-      values:
-        image:
-          repository: ghcr.io/agynio/platform-server
-          tag: dev
-          pullPolicy: IfNotPresent
+pipelines:
+  dev: |-
+    start_dev platform-server
+
+hooks:
+  - name: disable-argocd-auto-sync
+    command: sh
+    args:
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+        fi
+    events:
+      - before:dev:platform-server
 
 dev:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
     labelSelector:
       app.kubernetes.io/name: platform-server
-      app.kubernetes.io/instance: platform-server
+      app.kubernetes.io/instance: platform-server-dev
     containers:
       platform-server:
         container: platform-server
-        workingDir: /opt/app
         command:
           - sh
         args:
-          - -c
+          - -lc
           - |
-            while [ ! -f package.json ]; do
-              echo "Waiting for sources to sync..."
-              sleep 1
+            set -eu
+            base="/opt/app/data/workspace"
+            mkdir -p "$base"
+            mkdir -p "$base/.cache/pnpm" "$base/.cache/npm" "$base/tmp" "$base/.pnpm-store"
+            cd "$base"
+            for i in $(seq 1 150); do
+              if [ -f "$base/pnpm-workspace.yaml" ]; then
+                break
+              fi
+              echo "Waiting for workspace files to sync..."
+              sleep 2
             done
-            if [ ! -d node_modules ]; then
-              pnpm install --prefer-offline
+            if [ ! -f "$base/pnpm-workspace.yaml" ]; then
+              echo "pnpm-workspace.yaml not found after waiting" >&2
+              exit 1
             fi
-            pnpm --dir packages/platform-server dev
+            echo "Starting platform-server dev workspace"
+            export TMPDIR="$base/tmp"
+            export PNPM_HOME="$base/.cache/pnpm"
+            export NPM_CONFIG_CACHE="$base/.cache/npm"
+            export PNPM_STORE_PATH="$base/.pnpm-store"
+            export NODE_OPTIONS="--max-old-space-size=384"
+            export PATH="$PNPM_HOME:$PATH"
+            if [ ! -x "$PNPM_HOME/pnpm" ]; then
+              printf '#!/bin/sh\nexec corepack pnpm "$@"\n' > "$PNPM_HOME/pnpm"
+              chmod +x "$PNPM_HOME/pnpm"
+            fi
+            corepack pnpm --dir packages/platform-server install --prefer-offline --child-concurrency=1 --network-concurrency=1
+            corepack pnpm --dir packages/platform-server dev
         sync:
-          - path: ../..:/opt/app
+          - path: ../..:/opt/app/data/workspace
             excludePaths:
               - node_modules
               - dist
@@ -49,3 +73,5 @@ dev:
               - packages/platform-server/node_modules
               - packages/platform-server/dist
               - packages/platform-server/prisma/generated
+              - .pnpm-store
+              - .cache
