@@ -3,6 +3,37 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
 
+pipelines:
+  dev: |-
+    if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+      kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+    fi
+    start_dev platform-server --disable-pod-replace
+
+hooks:
+  - name: disable-argocd-auto-sync
+    command: sh
+    args:
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+        fi
+    events:
+      - before:dev:platform-server
+  - name: enable-argocd-auto-sync
+    command: sh
+    args:
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+        fi
+    events:
+      - after:dev:platform-server
+
 deployments:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
@@ -19,33 +50,23 @@ deployments:
 dev:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
+    container: platform-server
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
-    containers:
-      platform-server:
-        container: platform-server
-        workingDir: /opt/app
-        command:
-          - sh
-        args:
-          - -c
-          - |
-            while [ ! -f package.json ]; do
-              echo "Waiting for sources to sync..."
-              sleep 1
-            done
-            if [ ! -d node_modules ]; then
-              pnpm install --prefer-offline
-            fi
-            pnpm --dir packages/platform-server dev
-        sync:
-          - path: ../..:/opt/app
-            excludePaths:
-              - node_modules
-              - dist
-              - .git
-              - .devspace
-              - packages/platform-server/node_modules
-              - packages/platform-server/dist
-              - packages/platform-server/prisma/generated
+    workingDir: /opt/app/data/workspace
+    attach:
+      enabled: true
+      disableReplace: true
+    sync:
+      - path: ../..:/opt/app/data/workspace
+        excludePaths:
+          - node_modules
+          - dist
+          - .git
+          - .devspace
+          - packages/platform-server/node_modules
+          - packages/platform-server/dist
+          - packages/platform-server/prisma/generated
+          - .pnpm-store
+          - .cache
