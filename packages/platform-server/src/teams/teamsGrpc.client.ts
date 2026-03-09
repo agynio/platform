@@ -120,7 +120,7 @@ import {
   TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH,
   TEAMS_SERVICE_UPDATE_TOOL_PATH,
   TEAMS_SERVICE_UPDATE_WORKSPACE_CONFIGURATION_PATH,
-} from '../proto/grpc.js';
+} from '../proto/teams-grpc.js';
 
 type TeamsGrpcClientConfig = {
   address: string;

@@ -10,7 +10,7 @@ import { TeamsGrpcClient } from '../../src/teams/teamsGrpc.client';
 import {
   TEAMS_SERVICE_LIST_AGENTS_PATH,
   type TeamsServiceGrpcClientInstance,
-} from '../../src/proto/grpc.js';
+} from '../../src/proto/teams-grpc.js';
 
 const DEFAULT_ERROR_MESSAGE = 'Teams service request failed';
 
