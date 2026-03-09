@@ -23,6 +23,12 @@ dev:
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
+    patches:
+      - op: replace
+        path: spec.securityContext
+        value:
+          runAsUser: 1000
+          fsGroup: 1000
     containers:
       platform-server:
         container: platform-server
