@@ -5,134 +5,108 @@ vars:
 
 pipelines:
   dev: |-
-    create_deployments --sequential argocd-sync-off platform-server
+    if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+      kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+    fi
+    kubectl set resources deployment platform-server -n ${PLATFORM_NAMESPACE} --containers=platform-server --limits=cpu=2000m,memory=4Gi --requests=cpu=500m,memory=2Gi
     start_dev platform-server
 
-deployments:
-  argocd-sync-off:
-    namespace: argocd
-    kubectl:
-      manifests:
-        - devspace/argocd-sync-off
-  platform-server:
-    namespace: ${PLATFORM_NAMESPACE}
-    helm:
-      releaseName: platform-server
-      chart:
-        path: ../../charts/platform-server
-      values:
-        image:
-          repository: ghcr.io/agynio/platform-server
-          tag: dev
-          pullPolicy: IfNotPresent
-        securityContext:
-          enabled: true
-          runAsNonRoot: true
-          runAsUser: 1000
-          runAsGroup: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-          seccompProfile:
-            type: RuntimeDefault
-        resources:
-          limits:
-            cpu: 500m
-            memory: 4Gi
-          requests:
-            cpu: 100m
-            memory: 128Mi
-
 hooks:
-  - name: wait-for-argocd-sync-off
-    command: kubectl
+  - name: enable-argocd-auto-sync
+    command: sh
     args:
-      - wait
-      - --namespace
-      - argocd
-      - --for=condition=complete
-      - --timeout=120s
-      - job/argocd-sync-off
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+        fi
     events:
-      - after:deploy:argocd-sync-off
+      - after:dev:platform-server
 
 dev:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
+    container: platform-server
     labelSelector:
       app.kubernetes.io/name: platform-server
-      app.kubernetes.io/instance: platform-server
+    patches:
+      - op: replace
+        path: spec.template.spec.securityContext
+        value:
+          runAsUser: 1000
+          fsGroup: 1000
+      - op: replace
+        path: spec.template.spec.containers[0].resources.limits.cpu
+        value: "2000m"
+      - op: replace
+        path: spec.template.spec.containers[0].resources.limits.memory
+        value: "4Gi"
+      - op: replace
+        path: spec.template.spec.containers[0].resources.requests.cpu
+        value: "500m"
+      - op: replace
+        path: spec.template.spec.containers[0].resources.requests.memory
+        value: "2Gi"
     containers:
       platform-server:
-        container: platform-server
-        workingDir: /opt/app/data/workspace
+        devImage: ghcr.io/agynio/platform-server:dev
         command:
-          - bash
-        args:
+          - sh
           - -lc
           - |
-            set -euo pipefail
-            set -x
-            base="/opt/app/data/workspace"
-            mkdir -p "$base"
-            chmod 2775 "$base" || true
-            cd "$base"
-            for i in $(seq 1 150); do
-              if [ -f "$base/pnpm-workspace.yaml" ]; then
+            set -eu
+            workspace_dir=/opt/app/data/workspace
+            mkdir -p /tmp/devspace-bin
+            if [ ! -x /tmp/devspace-bin/corepack ]; then
+              cp /usr/local/bin/corepack /tmp/devspace-bin/corepack
+              if [ -d /usr/local/lib/node_modules/corepack/dist/lib ]; then
+                mkdir -p /tmp/devspace-bin/lib
+                cp -R /usr/local/lib/node_modules/corepack/dist/lib/* /tmp/devspace-bin/lib/
+              fi
+            fi
+            export PATH="/tmp/devspace-bin:${PATH}"
+            for _ in $(seq 1 120); do
+              if [ -f "${workspace_dir}/packages/platform-server/package.json" ]; then
                 break
               fi
-              echo "Waiting for workspace files to sync..."
-              sleep 2
+              sleep 1
             done
-            if [ ! -f "$base/pnpm-workspace.yaml" ]; then
-              echo "pnpm-workspace.yaml not found after waiting" >&2
+            if [ ! -f "${workspace_dir}/packages/platform-server/package.json" ]; then
+              echo "workspace packages not available after waiting" 1>&2
               exit 1
             fi
-            mkdir -p "$base/.cache/pnpm" "$base/.cache/npm" "$base/tmp"
-            mkdir -p "$base/.pnpm-store" "$base/.corepack"
-            chown -R 1000:1000 "$base" || true
-            export TMPDIR="$base/tmp"
-            export HOME="$base"
-            export PNPM_HOME="$base/.cache/pnpm"
-            export NPM_CONFIG_CACHE="$base/.cache/npm"
-            export PNPM_STORE_PATH="$base/.pnpm-store"
-            export PNPM_TMPDIR="$base/tmp"
-            export NPM_CONFIG_TMP="$base/tmp"
-            export NPM_CONFIG_TMPDIR="$base/tmp"
-            export npm_config_tmp="$base/tmp"
-            export NPM_CONFIG_PREFIX="$base"
-            export npm_config_prefix="$base"
-            export COREPACK_HOME="$base/.corepack"
-            export PATH="$PNPM_HOME:$PATH"
-            export CI=true
-            export DEVSPACE_INJECT_SYNC_USE_INOTIFY=true
-            export DEVSPACE_USE_INOTIFY=1
-            export DEVSPACE_INJECT_USE_INOTIFY=1
-            export DEVSPACE_USEINOTIFY=1
-            export DEVSPACE_INJECT_USEINOTIFY=1
-            if ! npm install pnpm@10.5.0 --prefix "$base/.pnpm-dist"; then
-              rm -rf "$base/.pnpm-dist" "$base/.cache/npm"
-              npm install pnpm@10.5.0 --prefix "$base/.pnpm-dist"
+            corepack enable || true
+            if [ ! -f "${workspace_dir}/package.json" ] && [ -f /opt/app/package.json ]; then
+              cp /opt/app/package.json "${workspace_dir}/package.json"
             fi
-            export PATH="$base/.pnpm-dist/node_modules/.bin:$PATH"
-            pnpm config set tmp "$base/tmp"
-            pnpm config set store-dir "$base/.pnpm-store"
-            pnpm config set cache-dir "$base/.cache/pnpm"
-            export NODE_OPTIONS="--max-old-space-size=1024"
-            if [ ! -f "$base/node_modules/.modules.yaml" ]; then
-              pnpm install --recursive --prefer-offline --filter @agyn/platform-server... --child-concurrency=1 --network-concurrency=1 \
-                || pnpm install --recursive --filter @agyn/platform-server... --child-concurrency=1 --network-concurrency=1
+            if [ ! -f "${workspace_dir}/package.json" ]; then
+              printf '%s\n' '{' \
+                '  "name": "agyn",' \
+                '  "version": "1.0.0",' \
+                '  "private": true,' \
+                '  "packageManager": "pnpm@10.5.0"' \
+                '}' > "${workspace_dir}/package.json"
             fi
-            pnpm --filter @agyn/platform-server dev
+            if [ ! -f "${workspace_dir}/pnpm-workspace.yaml" ]; then
+              printf '%s\n' "packages:" "  - 'packages/*'" "  - 'packages/**'" > "${workspace_dir}/pnpm-workspace.yaml"
+            fi
+            cd "${workspace_dir}"
+            corepack pnpm install
+            corepack pnpm --filter @agyn/platform-server dev
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:
-              - node_modules
-              - dist
-              - .git
-              - packages/platform-server/node_modules
-              - packages/platform-server/dist
-              - .pnpm-store
-              - .cache
+              - '.git/'
+              - 'node_modules/'
+              - '.pnpm-store/'
+              - 'devspace-dev.log'
+            uploadExcludePaths:
+              - '.git/'
+              - 'node_modules/'
+              - '.pnpm-store/'
+              - 'devspace-dev.log'
+            downloadExcludePaths:
+              - '.git/'
+              - 'node_modules/'
+              - '.pnpm-store/'
