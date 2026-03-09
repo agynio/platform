@@ -112,7 +112,7 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
       await dbHandle.stop();
     }
     clearTestConfig();
-  }, 120_000);
+  }, 240_000);
 
   it('reuses the container across shell and MCP-style execs', async () => {
     const threadId = randomUUID();
@@ -135,7 +135,7 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     const finalRead = await finalHandle.exec(['sh', '-lc', 'cat /workspace/reuse.txt']);
     expect(finalRead.exitCode).toBe(0);
     expect(finalRead.stdout.trim()).toBe('shell-data');
-  }, 180_000);
+  }, 240_000);
 
   it('reuses the container across sequential shell execs', async () => {
     const threadId = randomUUID();

@@ -1,4 +1,4 @@
-import { create } from '@bufbuild/protobuf';
+import { create, type DescMessage } from '@bufbuild/protobuf';
 import type { Empty } from '@bufbuild/protobuf/wkt';
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { credentials, Metadata, status, type CallOptions, type ServiceError } from '@grpc/grpc-js';
@@ -112,6 +112,16 @@ type TeamsGrpcClientConfig = {
   requestTimeoutMs?: number;
 };
 
+type UnaryRpcCall<Req, Res> = {
+  (request: Req, metadata: Metadata, callback: (err: ServiceError | null, response?: Res) => void): void;
+  (
+    request: Req,
+    metadata: Metadata,
+    options: CallOptions,
+    callback: (err: ServiceError | null, response?: Res) => void,
+  ): void;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_ERROR_MESSAGE = 'Teams service request failed';
 
@@ -148,430 +158,285 @@ export class TeamsGrpcClient {
   }
 
   async listAgents(request: ListAgentsRequest): Promise<PaginatedAgents> {
-    const message = create(ListAgentsRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_AGENTS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listAgents(req, metadata, options, callback);
-          return;
-        }
-        this.client.listAgents(req, metadata, callback);
-      },
+      ListAgentsRequestSchema,
+      request,
+      'listAgents',
     );
   }
 
   async createAgent(request: AgentCreateRequest): Promise<Agent> {
-    const message = create(AgentCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_AGENT_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createAgent(req, metadata, options, callback);
-          return;
-        }
-        this.client.createAgent(req, metadata, callback);
-      },
+      AgentCreateRequestSchema,
+      request,
+      'createAgent',
     );
   }
 
   async getAgent(request: GetAgentRequest): Promise<Agent> {
-    const message = create(GetAgentRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_GET_AGENT_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.getAgent(req, metadata, options, callback);
-          return;
-        }
-        this.client.getAgent(req, metadata, callback);
-      },
+      GetAgentRequestSchema,
+      request,
+      'getAgent',
     );
   }
 
   async updateAgent(request: AgentUpdateRequest): Promise<Agent> {
-    const message = create(AgentUpdateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_UPDATE_AGENT_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.updateAgent(req, metadata, options, callback);
-          return;
-        }
-        this.client.updateAgent(req, metadata, callback);
-      },
+      AgentUpdateRequestSchema,
+      request,
+      'updateAgent',
     );
   }
 
   async deleteAgent(request: DeleteAgentRequest): Promise<void> {
-    const message = create(DeleteAgentRequestSchema, request);
-    await this.unary<DeleteAgentRequest, Empty>(
+    await this.call<DeleteAgentRequest, Empty>(
       TEAMS_SERVICE_DELETE_AGENT_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.deleteAgent(req, metadata, options, callback);
-          return;
-        }
-        this.client.deleteAgent(req, metadata, callback);
-      },
+      DeleteAgentRequestSchema,
+      request,
+      'deleteAgent',
     );
   }
 
   async listTools(request: ListToolsRequest): Promise<PaginatedTools> {
-    const message = create(ListToolsRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_TOOLS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listTools(req, metadata, options, callback);
-          return;
-        }
-        this.client.listTools(req, metadata, callback);
-      },
+      ListToolsRequestSchema,
+      request,
+      'listTools',
     );
   }
 
   async createTool(request: ToolCreateRequest): Promise<Tool> {
-    const message = create(ToolCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_TOOL_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createTool(req, metadata, options, callback);
-          return;
-        }
-        this.client.createTool(req, metadata, callback);
-      },
+      ToolCreateRequestSchema,
+      request,
+      'createTool',
     );
   }
 
   async getTool(request: GetToolRequest): Promise<Tool> {
-    const message = create(GetToolRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_GET_TOOL_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.getTool(req, metadata, options, callback);
-          return;
-        }
-        this.client.getTool(req, metadata, callback);
-      },
+      GetToolRequestSchema,
+      request,
+      'getTool',
     );
   }
 
   async updateTool(request: ToolUpdateRequest): Promise<Tool> {
-    const message = create(ToolUpdateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_UPDATE_TOOL_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.updateTool(req, metadata, options, callback);
-          return;
-        }
-        this.client.updateTool(req, metadata, callback);
-      },
+      ToolUpdateRequestSchema,
+      request,
+      'updateTool',
     );
   }
 
   async deleteTool(request: DeleteToolRequest): Promise<void> {
-    const message = create(DeleteToolRequestSchema, request);
-    await this.unary<DeleteToolRequest, Empty>(
+    await this.call<DeleteToolRequest, Empty>(
       TEAMS_SERVICE_DELETE_TOOL_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.deleteTool(req, metadata, options, callback);
-          return;
-        }
-        this.client.deleteTool(req, metadata, callback);
-      },
+      DeleteToolRequestSchema,
+      request,
+      'deleteTool',
     );
   }
 
   async listMcpServers(request: ListMcpServersRequest): Promise<PaginatedMcpServers> {
-    const message = create(ListMcpServersRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_MCP_SERVERS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listMcpServers(req, metadata, options, callback);
-          return;
-        }
-        this.client.listMcpServers(req, metadata, callback);
-      },
+      ListMcpServersRequestSchema,
+      request,
+      'listMcpServers',
     );
   }
 
   async createMcpServer(request: McpServerCreateRequest): Promise<McpServer> {
-    const message = create(McpServerCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_MCP_SERVER_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createMcpServer(req, metadata, options, callback);
-          return;
-        }
-        this.client.createMcpServer(req, metadata, callback);
-      },
+      McpServerCreateRequestSchema,
+      request,
+      'createMcpServer',
     );
   }
 
   async getMcpServer(request: GetMcpServerRequest): Promise<McpServer> {
-    const message = create(GetMcpServerRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_GET_MCP_SERVER_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.getMcpServer(req, metadata, options, callback);
-          return;
-        }
-        this.client.getMcpServer(req, metadata, callback);
-      },
+      GetMcpServerRequestSchema,
+      request,
+      'getMcpServer',
     );
   }
 
   async updateMcpServer(request: McpServerUpdateRequest): Promise<McpServer> {
-    const message = create(McpServerUpdateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_UPDATE_MCP_SERVER_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.updateMcpServer(req, metadata, options, callback);
-          return;
-        }
-        this.client.updateMcpServer(req, metadata, callback);
-      },
+      McpServerUpdateRequestSchema,
+      request,
+      'updateMcpServer',
     );
   }
 
   async deleteMcpServer(request: DeleteMcpServerRequest): Promise<void> {
-    const message = create(DeleteMcpServerRequestSchema, request);
-    await this.unary<DeleteMcpServerRequest, Empty>(
+    await this.call<DeleteMcpServerRequest, Empty>(
       TEAMS_SERVICE_DELETE_MCP_SERVER_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.deleteMcpServer(req, metadata, options, callback);
-          return;
-        }
-        this.client.deleteMcpServer(req, metadata, callback);
-      },
+      DeleteMcpServerRequestSchema,
+      request,
+      'deleteMcpServer',
     );
   }
 
   async listWorkspaceConfigurations(
     request: ListWorkspaceConfigurationsRequest,
   ): Promise<PaginatedWorkspaceConfigurations> {
-    const message = create(ListWorkspaceConfigurationsRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_WORKSPACE_CONFIGURATIONS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listWorkspaceConfigurations(req, metadata, options, callback);
-          return;
-        }
-        this.client.listWorkspaceConfigurations(req, metadata, callback);
-      },
+      ListWorkspaceConfigurationsRequestSchema,
+      request,
+      'listWorkspaceConfigurations',
     );
   }
 
   async createWorkspaceConfiguration(
     request: WorkspaceConfigurationCreateRequest,
   ): Promise<WorkspaceConfiguration> {
-    const message = create(WorkspaceConfigurationCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_WORKSPACE_CONFIGURATION_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createWorkspaceConfiguration(req, metadata, options, callback);
-          return;
-        }
-        this.client.createWorkspaceConfiguration(req, metadata, callback);
-      },
+      WorkspaceConfigurationCreateRequestSchema,
+      request,
+      'createWorkspaceConfiguration',
     );
   }
 
   async getWorkspaceConfiguration(
     request: GetWorkspaceConfigurationRequest,
   ): Promise<WorkspaceConfiguration> {
-    const message = create(GetWorkspaceConfigurationRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_GET_WORKSPACE_CONFIGURATION_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.getWorkspaceConfiguration(req, metadata, options, callback);
-          return;
-        }
-        this.client.getWorkspaceConfiguration(req, metadata, callback);
-      },
+      GetWorkspaceConfigurationRequestSchema,
+      request,
+      'getWorkspaceConfiguration',
     );
   }
 
   async updateWorkspaceConfiguration(
     request: WorkspaceConfigurationUpdateRequest,
   ): Promise<WorkspaceConfiguration> {
-    const message = create(WorkspaceConfigurationUpdateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_UPDATE_WORKSPACE_CONFIGURATION_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.updateWorkspaceConfiguration(req, metadata, options, callback);
-          return;
-        }
-        this.client.updateWorkspaceConfiguration(req, metadata, callback);
-      },
+      WorkspaceConfigurationUpdateRequestSchema,
+      request,
+      'updateWorkspaceConfiguration',
     );
   }
 
   async deleteWorkspaceConfiguration(request: DeleteWorkspaceConfigurationRequest): Promise<void> {
-    const message = create(DeleteWorkspaceConfigurationRequestSchema, request);
-    await this.unary<DeleteWorkspaceConfigurationRequest, Empty>(
+    await this.call<DeleteWorkspaceConfigurationRequest, Empty>(
       TEAMS_SERVICE_DELETE_WORKSPACE_CONFIGURATION_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.deleteWorkspaceConfiguration(req, metadata, options, callback);
-          return;
-        }
-        this.client.deleteWorkspaceConfiguration(req, metadata, callback);
-      },
+      DeleteWorkspaceConfigurationRequestSchema,
+      request,
+      'deleteWorkspaceConfiguration',
     );
   }
 
   async listMemoryBuckets(request: ListMemoryBucketsRequest): Promise<PaginatedMemoryBuckets> {
-    const message = create(ListMemoryBucketsRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_MEMORY_BUCKETS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listMemoryBuckets(req, metadata, options, callback);
-          return;
-        }
-        this.client.listMemoryBuckets(req, metadata, callback);
-      },
+      ListMemoryBucketsRequestSchema,
+      request,
+      'listMemoryBuckets',
     );
   }
 
   async createMemoryBucket(request: MemoryBucketCreateRequest): Promise<MemoryBucket> {
-    const message = create(MemoryBucketCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_MEMORY_BUCKET_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createMemoryBucket(req, metadata, options, callback);
-          return;
-        }
-        this.client.createMemoryBucket(req, metadata, callback);
-      },
+      MemoryBucketCreateRequestSchema,
+      request,
+      'createMemoryBucket',
     );
   }
 
   async getMemoryBucket(request: GetMemoryBucketRequest): Promise<MemoryBucket> {
-    const message = create(GetMemoryBucketRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_GET_MEMORY_BUCKET_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.getMemoryBucket(req, metadata, options, callback);
-          return;
-        }
-        this.client.getMemoryBucket(req, metadata, callback);
-      },
+      GetMemoryBucketRequestSchema,
+      request,
+      'getMemoryBucket',
     );
   }
 
   async updateMemoryBucket(request: MemoryBucketUpdateRequest): Promise<MemoryBucket> {
-    const message = create(MemoryBucketUpdateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.updateMemoryBucket(req, metadata, options, callback);
-          return;
-        }
-        this.client.updateMemoryBucket(req, metadata, callback);
-      },
+      MemoryBucketUpdateRequestSchema,
+      request,
+      'updateMemoryBucket',
     );
   }
 
   async deleteMemoryBucket(request: DeleteMemoryBucketRequest): Promise<void> {
-    const message = create(DeleteMemoryBucketRequestSchema, request);
-    await this.unary<DeleteMemoryBucketRequest, Empty>(
+    await this.call<DeleteMemoryBucketRequest, Empty>(
       TEAMS_SERVICE_DELETE_MEMORY_BUCKET_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.deleteMemoryBucket(req, metadata, options, callback);
-          return;
-        }
-        this.client.deleteMemoryBucket(req, metadata, callback);
-      },
+      DeleteMemoryBucketRequestSchema,
+      request,
+      'deleteMemoryBucket',
     );
   }
 
   async listAttachments(request: ListAttachmentsRequest): Promise<PaginatedAttachments> {
-    const message = create(ListAttachmentsRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_LIST_ATTACHMENTS_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.listAttachments(req, metadata, options, callback);
-          return;
-        }
-        this.client.listAttachments(req, metadata, callback);
-      },
+      ListAttachmentsRequestSchema,
+      request,
+      'listAttachments',
     );
   }
 
   async createAttachment(request: AttachmentCreateRequest): Promise<Attachment> {
-    const message = create(AttachmentCreateRequestSchema, request);
-    return this.unary(
+    return this.call(
       TEAMS_SERVICE_CREATE_ATTACHMENT_PATH,
-      message,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.createAttachment(req, metadata, options, callback);
-          return;
-        }
-        this.client.createAttachment(req, metadata, callback);
-      },
+      AttachmentCreateRequestSchema,
+      request,
+      'createAttachment',
     );
   }
 
   async deleteAttachment(request: DeleteAttachmentRequest): Promise<void> {
-    const message = create(DeleteAttachmentRequestSchema, request);
-    await this.unary<DeleteAttachmentRequest, Empty>(
+    await this.call<DeleteAttachmentRequest, Empty>(
       TEAMS_SERVICE_DELETE_ATTACHMENT_PATH,
+      DeleteAttachmentRequestSchema,
+      request,
+      'deleteAttachment',
+    );
+  }
+
+  private call<Req, Res>(
+    path: string,
+    schema: DescMessage,
+    request: Req,
+    method: keyof TeamsServiceGrpcClientInstance,
+    timeoutMs?: number,
+  ): Promise<Res> {
+    const message = create(schema, request as never) as Req;
+    const fn = this.client[method] as unknown as UnaryRpcCall<Req, Res>;
+    return this.unary(
+      path,
       message,
       (req, metadata, options, callback) => {
         if (options) {
-          this.client.deleteAttachment(req, metadata, options, callback);
+          fn(req, metadata, options, callback);
           return;
         }
-        this.client.deleteAttachment(req, metadata, callback);
+        fn(req, metadata, callback);
       },
+      timeoutMs,
     );
   }
 
@@ -665,6 +530,8 @@ export class TeamsGrpcClient {
         return HttpStatus.GATEWAY_TIMEOUT;
       case status.OUT_OF_RANGE:
         return HttpStatus.BAD_REQUEST;
+      case status.CANCELLED:
+        return 499 as HttpStatus;
       default:
         return HttpStatus.BAD_GATEWAY;
     }
@@ -697,6 +564,8 @@ export class TeamsGrpcClient {
         return 'teams_unavailable';
       case status.DEADLINE_EXCEEDED:
         return 'teams_timeout';
+      case status.CANCELLED:
+        return 'teams_cancelled';
       default:
         return 'teams_grpc_error';
     }
