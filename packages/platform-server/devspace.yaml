@@ -54,8 +54,6 @@ dev:
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
-    attach:
-      enabled: true
     patches:
       - op: replace
         path: spec.securityContext
@@ -64,6 +62,8 @@ dev:
           fsGroup: 1000
     containers:
       platform-server:
+        attach:
+          enabled: true
         devImage: ghcr.io/agynio/platform-server:dev
         workingDir: /opt/app/data/workspace
         command:
