@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { ConfigService } from '../core/services/config.service';
 
 // Typed KV v2 response shapes
-type KvV2MountsResponse = Record<string, { type?: string; options?: { version?: string | number } }>;
+type KvV2MountsEnvelope = {
+  data?: Record<string, { type?: string; options?: { version?: string | number } }>;
+};
 type KvV2ListPathsResponse = { data?: { keys?: string[] } };
 type KvV2ReadResponse = { data?: { data?: Record<string, unknown> } };
 type KvV2WriteResponse = { data?: { metadata?: { version?: number | string } } };
@@ -74,9 +76,9 @@ export class VaultService {
   // List KV v2 mounts by inspecting sys/mounts
   async listKvV2Mounts(): Promise<string[]> {
     try {
-      const resp = await this.http<KvV2MountsResponse>('/v1/sys/mounts', { method: 'GET' });
+      const resp = await this.http<KvV2MountsEnvelope>('/v1/sys/mounts', { method: 'GET' });
       const items: string[] = [];
-      for (const [name, meta] of Object.entries(resp || {})) {
+      for (const [name, meta] of Object.entries(resp?.data || {})) {
         // name ends with '/'
         const n = name.replace(/\/$/, '');
         const type = meta?.type;
