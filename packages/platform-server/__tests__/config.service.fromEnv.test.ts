@@ -18,6 +18,7 @@ const trackedEnvKeys = [
   'DEPLOYMENT_ID',
   'TEAMS_SERVICE_ADDR',
   'DEPLOYMENT_ID',
+  'TEAMS_SERVICE_ADDR',
   'NODE_ENV',
   'HOSTNAME',
 ];
