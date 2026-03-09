@@ -3,6 +3,37 @@ version: v2beta1
 vars:
   PLATFORM_NAMESPACE: platform
 
+pipelines:
+  dev: |-
+    if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+      kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+    fi
+    start_dev platform-server
+
+hooks:
+  - name: disable-argocd-auto-sync
+    command: sh
+    args:
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+        fi
+    events:
+      - before:dev:platform-server
+  - name: enable-argocd-auto-sync
+    command: sh
+    args:
+      - -lc
+      - |
+        set -eu
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          kubectl patch application platform-server -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+        fi
+    events:
+      - after:dev:platform-server
+
 deployments:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
@@ -19,28 +50,70 @@ deployments:
 dev:
   platform-server:
     namespace: ${PLATFORM_NAMESPACE}
+    container: platform-server
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
+    patches:
+      - op: replace
+        path: spec.securityContext
+        value:
+          runAsUser: 1000
+          fsGroup: 1000
     containers:
       platform-server:
-        container: platform-server
-        workingDir: /opt/app
+        attach:
+          enabled: true
+        devImage: ghcr.io/agynio/platform-server:dev
+        workingDir: /opt/app/data/workspace
         command:
           - sh
+          - -lc
         args:
-          - -c
           - |
-            while [ ! -f package.json ]; do
-              echo "Waiting for sources to sync..."
+            set -eu
+            workspace_dir=/opt/app/data/workspace
+            if [ -d "${workspace_dir}" ]; then
+              current_owner="$(stat -c '%u:%g' "${workspace_dir}")"
+              if [ "${current_owner}" != "1000:1000" ]; then
+                rm -rf "${workspace_dir}"
+              else
+                chmod 2775 "${workspace_dir}"
+              fi
+            fi
+            install -d -m 2775 "${workspace_dir}"
+            pnpm_home=/opt/app/data/.pnpm-home
+            pnpm_store=/opt/app/data/.pnpm-store
+            install -d -m 2775 "${pnpm_home}"
+            install -d -m 2775 "${pnpm_store}"
+            export PNPM_HOME="${pnpm_home}"
+            export PNPM_STORE_DIR="${pnpm_store}"
+            export TMPDIR=/tmp
+            export PATH="${PNPM_HOME}/bin:${PATH}"
+            export CI=true
+            cd "${workspace_dir}"
+            for _ in $(seq 1 120); do
+              if [ -f pnpm-workspace.yaml ]; then
+                break
+              fi
               sleep 1
             done
-            if [ ! -d node_modules ]; then
-              pnpm install --prefer-offline
+            if [ ! -f pnpm-workspace.yaml ]; then
+              echo "pnpm-workspace.yaml did not arrive after waiting" 1>&2
+              exit 1
             fi
-            pnpm --dir packages/platform-server dev
+            if [ ! -x "${PNPM_HOME}/bin/pnpm" ]; then
+              npm install -g pnpm@10.5.0 --prefix "${PNPM_HOME}"
+            fi
+            pnpm install --filter @agyn/platform-server... --frozen-lockfile --child-concurrency=1 --network-concurrency=1
+            pnpm --filter @agyn/platform-server dev
+        resources:
+          limits:
+            memory: 3072Mi
+          requests:
+            memory: 256Mi
         sync:
-          - path: ../..:/opt/app
+          - path: ../..:/opt/app/data/workspace
             excludePaths:
               - node_modules
               - dist
@@ -49,3 +122,5 @@ dev:
               - packages/platform-server/node_modules
               - packages/platform-server/dist
               - packages/platform-server/prisma/generated
+              - .pnpm-store
+              - .cache
