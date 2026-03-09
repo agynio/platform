@@ -11,6 +11,7 @@ import { LLMSettingsModule } from '../settings/llm/llmSettings.module';
 import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { OnboardingModule } from '../onboarding/onboarding.module';
+import { TeamsModule } from '../teams/teams.module';
 import { UserProfileModule } from '../user-profile/user-profile.module';
 
 type PinoLoggerModule = {
@@ -60,6 +61,7 @@ const createLoggerModule = (): DynamicModule => {
     GraphApiModule,
     NodesModule,
     GatewayModule,
+    TeamsModule,
     UserProfileModule,
     OnboardingModule,
     LLMSettingsModule,

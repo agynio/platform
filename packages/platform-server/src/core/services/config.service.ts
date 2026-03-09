@@ -54,6 +54,10 @@ export const configSchema = z.object({
       const n = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(n) ? n : 5000;
     }),
+  teamsServiceAddr: z
+    .string()
+    .min(1, 'TEAMS_SERVICE_ADDR is required')
+    .transform((value) => value.trim()),
   // Optional Vault flags (disabled by default)
   vaultEnabled: z
     .union([z.boolean(), z.string()])
@@ -366,6 +370,10 @@ export class ConfigService implements Config {
     return this.params.graphLockTimeoutMs;
   }
 
+  get teamsServiceAddr(): string {
+    return this.params.teamsServiceAddr;
+  }
+
   // Vault getters (optional)
   get vaultEnabled(): boolean {
     return !!this.params.vaultEnabled;
@@ -576,6 +584,7 @@ export class ConfigService implements Config {
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
+      teamsServiceAddr: process.env.TEAMS_SERVICE_ADDR,
       vaultEnabled: process.env.VAULT_ENABLED,
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,

@@ -7,6 +7,7 @@ export const runnerConfigDefaults = {
   litellmKeyAlias: 'agents/test/local',
   litellmKeyDuration: '30d',
   litellmModels: ['all-team-models'],
+  teamsServiceAddr: 'teams:9090',
 } as const;
 
 const defaultConfigInput = {

@@ -30,6 +30,7 @@ const baseConfigEnv = {
   litellmKeyAlias: 'agents/test/fs',
   litellmKeyDuration: '30d',
   litellmModels: ['all-team-models'],
+  teamsServiceAddr: 'teams:9090',
   dockerMirrorUrl: 'http://registry-mirror:5000',
   nixAllowedChannels: 'nixpkgs-unstable',
   ...runnerConfigDefaults,
