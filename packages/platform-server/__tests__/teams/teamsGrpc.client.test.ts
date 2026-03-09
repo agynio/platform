@@ -4,7 +4,7 @@ import { HttpStatus } from '@nestjs/common';
 import {
   ListAgentsRequestSchema,
   type ListAgentsRequest,
-  type PaginatedAgents,
+  type ListAgentsResponse,
 } from '../../src/proto/gen/agynio/api/teams/v1/teams_pb.js';
 import { TeamsGrpcClient } from '../../src/teams/teamsGrpc.client';
 import {
@@ -100,13 +100,13 @@ describe('TeamsGrpcClient', () => {
         (
           _req: ListAgentsRequest,
           _metadata: Metadata,
-          optionsOrCallback?: CallOptions | ((err: ServiceError | null, response?: PaginatedAgents) => void),
-          maybeCallback?: (err: ServiceError | null, response?: PaginatedAgents) => void,
+          optionsOrCallback?: CallOptions | ((err: ServiceError | null, response?: ListAgentsResponse) => void),
+          maybeCallback?: (err: ServiceError | null, response?: ListAgentsResponse) => void,
         ) => {
           const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
           const options = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
           captured.options = options;
-          callback?.(null, { items: [], page: 1, per_page: 1, total: 0 } as PaginatedAgents);
+          callback?.(null, { agents: [], nextPageToken: '' } as ListAgentsResponse);
         },
       );
 
@@ -136,13 +136,13 @@ describe('TeamsGrpcClient', () => {
         (
           _req: ListAgentsRequest,
           _metadata: Metadata,
-          optionsOrCallback?: CallOptions | ((err: ServiceError | null, response?: PaginatedAgents) => void),
-          maybeCallback?: (err: ServiceError | null, response?: PaginatedAgents) => void,
+          optionsOrCallback?: CallOptions | ((err: ServiceError | null, response?: ListAgentsResponse) => void),
+          maybeCallback?: (err: ServiceError | null, response?: ListAgentsResponse) => void,
         ) => {
           const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
           const options = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
           captured.options = options;
-          callback?.(null, { items: [], page: 1, per_page: 1, total: 0 } as PaginatedAgents);
+          callback?.(null, { agents: [], nextPageToken: '' } as ListAgentsResponse);
         },
       );
 

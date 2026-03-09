@@ -1,11 +1,13 @@
 import { create, type DescMessage } from '@bufbuild/protobuf';
-import type { Empty } from '@bufbuild/protobuf/wkt';
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { credentials, Metadata, status, type CallOptions, type ServiceError } from '@grpc/grpc-js';
 import {
-  AgentCreateRequestSchema,
-  AgentUpdateRequestSchema,
-  AttachmentCreateRequestSchema,
+  CreateAgentRequestSchema,
+  CreateAttachmentRequestSchema,
+  CreateMcpServerRequestSchema,
+  CreateMemoryBucketRequestSchema,
+  CreateToolRequestSchema,
+  CreateWorkspaceConfigurationRequestSchema,
   DeleteAgentRequestSchema,
   DeleteAttachmentRequestSchema,
   DeleteMcpServerRequestSchema,
@@ -23,56 +25,69 @@ import {
   ListMemoryBucketsRequestSchema,
   ListToolsRequestSchema,
   ListWorkspaceConfigurationsRequestSchema,
-  McpServerCreateRequestSchema,
-  McpServerUpdateRequestSchema,
-  MemoryBucketCreateRequestSchema,
-  MemoryBucketUpdateRequestSchema,
-  ToolCreateRequestSchema,
-  ToolUpdateRequestSchema,
-  WorkspaceConfigurationCreateRequestSchema,
-  WorkspaceConfigurationUpdateRequestSchema,
+  UpdateAgentRequestSchema,
+  UpdateMcpServerRequestSchema,
+  UpdateMemoryBucketRequestSchema,
+  UpdateToolRequestSchema,
+  UpdateWorkspaceConfigurationRequestSchema,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb.js';
 import type {
-  Agent,
-  AgentCreateRequest,
-  AgentUpdateRequest,
-  Attachment,
-  AttachmentCreateRequest,
+  CreateAgentRequest,
+  CreateAgentResponse,
+  CreateAttachmentRequest,
+  CreateAttachmentResponse,
+  CreateMcpServerRequest,
+  CreateMcpServerResponse,
+  CreateMemoryBucketRequest,
+  CreateMemoryBucketResponse,
+  CreateToolRequest,
+  CreateToolResponse,
+  CreateWorkspaceConfigurationRequest,
+  CreateWorkspaceConfigurationResponse,
   DeleteAgentRequest,
+  DeleteAgentResponse,
   DeleteAttachmentRequest,
+  DeleteAttachmentResponse,
   DeleteMcpServerRequest,
+  DeleteMcpServerResponse,
   DeleteMemoryBucketRequest,
+  DeleteMemoryBucketResponse,
   DeleteToolRequest,
+  DeleteToolResponse,
   DeleteWorkspaceConfigurationRequest,
+  DeleteWorkspaceConfigurationResponse,
   GetAgentRequest,
+  GetAgentResponse,
   GetMcpServerRequest,
+  GetMcpServerResponse,
   GetMemoryBucketRequest,
+  GetMemoryBucketResponse,
   GetToolRequest,
+  GetToolResponse,
   GetWorkspaceConfigurationRequest,
+  GetWorkspaceConfigurationResponse,
   ListAgentsRequest,
+  ListAgentsResponse,
   ListAttachmentsRequest,
+  ListAttachmentsResponse,
   ListMcpServersRequest,
+  ListMcpServersResponse,
   ListMemoryBucketsRequest,
+  ListMemoryBucketsResponse,
   ListToolsRequest,
+  ListToolsResponse,
   ListWorkspaceConfigurationsRequest,
-  McpServer,
-  McpServerCreateRequest,
-  McpServerUpdateRequest,
-  MemoryBucket,
-  MemoryBucketCreateRequest,
-  MemoryBucketUpdateRequest,
-  PaginatedAgents,
-  PaginatedAttachments,
-  PaginatedMcpServers,
-  PaginatedMemoryBuckets,
-  PaginatedTools,
-  PaginatedWorkspaceConfigurations,
-  Tool,
-  ToolCreateRequest,
-  ToolUpdateRequest,
-  WorkspaceConfiguration,
-  WorkspaceConfigurationCreateRequest,
-  WorkspaceConfigurationUpdateRequest,
+  ListWorkspaceConfigurationsResponse,
+  UpdateAgentRequest,
+  UpdateAgentResponse,
+  UpdateMcpServerRequest,
+  UpdateMcpServerResponse,
+  UpdateMemoryBucketRequest,
+  UpdateMemoryBucketResponse,
+  UpdateToolRequest,
+  UpdateToolResponse,
+  UpdateWorkspaceConfigurationRequest,
+  UpdateWorkspaceConfigurationResponse,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb.js';
 import {
   TeamsServiceGrpcClient,
@@ -157,7 +172,7 @@ export class TeamsGrpcClient {
     return this.endpoint;
   }
 
-  async listAgents(request: ListAgentsRequest): Promise<PaginatedAgents> {
+  async listAgents(request: ListAgentsRequest): Promise<ListAgentsResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_AGENTS_PATH,
       ListAgentsRequestSchema,
@@ -166,16 +181,16 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createAgent(request: AgentCreateRequest): Promise<Agent> {
+  async createAgent(request: CreateAgentRequest): Promise<CreateAgentResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_AGENT_PATH,
-      AgentCreateRequestSchema,
+      CreateAgentRequestSchema,
       request,
       'createAgent',
     );
   }
 
-  async getAgent(request: GetAgentRequest): Promise<Agent> {
+  async getAgent(request: GetAgentRequest): Promise<GetAgentResponse> {
     return this.call(
       TEAMS_SERVICE_GET_AGENT_PATH,
       GetAgentRequestSchema,
@@ -184,17 +199,17 @@ export class TeamsGrpcClient {
     );
   }
 
-  async updateAgent(request: AgentUpdateRequest): Promise<Agent> {
+  async updateAgent(request: UpdateAgentRequest): Promise<UpdateAgentResponse> {
     return this.call(
       TEAMS_SERVICE_UPDATE_AGENT_PATH,
-      AgentUpdateRequestSchema,
+      UpdateAgentRequestSchema,
       request,
       'updateAgent',
     );
   }
 
   async deleteAgent(request: DeleteAgentRequest): Promise<void> {
-    await this.call<DeleteAgentRequest, Empty>(
+    await this.call<DeleteAgentRequest, DeleteAgentResponse>(
       TEAMS_SERVICE_DELETE_AGENT_PATH,
       DeleteAgentRequestSchema,
       request,
@@ -202,7 +217,7 @@ export class TeamsGrpcClient {
     );
   }
 
-  async listTools(request: ListToolsRequest): Promise<PaginatedTools> {
+  async listTools(request: ListToolsRequest): Promise<ListToolsResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_TOOLS_PATH,
       ListToolsRequestSchema,
@@ -211,16 +226,16 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createTool(request: ToolCreateRequest): Promise<Tool> {
+  async createTool(request: CreateToolRequest): Promise<CreateToolResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_TOOL_PATH,
-      ToolCreateRequestSchema,
+      CreateToolRequestSchema,
       request,
       'createTool',
     );
   }
 
-  async getTool(request: GetToolRequest): Promise<Tool> {
+  async getTool(request: GetToolRequest): Promise<GetToolResponse> {
     return this.call(
       TEAMS_SERVICE_GET_TOOL_PATH,
       GetToolRequestSchema,
@@ -229,17 +244,17 @@ export class TeamsGrpcClient {
     );
   }
 
-  async updateTool(request: ToolUpdateRequest): Promise<Tool> {
+  async updateTool(request: UpdateToolRequest): Promise<UpdateToolResponse> {
     return this.call(
       TEAMS_SERVICE_UPDATE_TOOL_PATH,
-      ToolUpdateRequestSchema,
+      UpdateToolRequestSchema,
       request,
       'updateTool',
     );
   }
 
   async deleteTool(request: DeleteToolRequest): Promise<void> {
-    await this.call<DeleteToolRequest, Empty>(
+    await this.call<DeleteToolRequest, DeleteToolResponse>(
       TEAMS_SERVICE_DELETE_TOOL_PATH,
       DeleteToolRequestSchema,
       request,
@@ -247,7 +262,7 @@ export class TeamsGrpcClient {
     );
   }
 
-  async listMcpServers(request: ListMcpServersRequest): Promise<PaginatedMcpServers> {
+  async listMcpServers(request: ListMcpServersRequest): Promise<ListMcpServersResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_MCP_SERVERS_PATH,
       ListMcpServersRequestSchema,
@@ -256,16 +271,16 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createMcpServer(request: McpServerCreateRequest): Promise<McpServer> {
+  async createMcpServer(request: CreateMcpServerRequest): Promise<CreateMcpServerResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_MCP_SERVER_PATH,
-      McpServerCreateRequestSchema,
+      CreateMcpServerRequestSchema,
       request,
       'createMcpServer',
     );
   }
 
-  async getMcpServer(request: GetMcpServerRequest): Promise<McpServer> {
+  async getMcpServer(request: GetMcpServerRequest): Promise<GetMcpServerResponse> {
     return this.call(
       TEAMS_SERVICE_GET_MCP_SERVER_PATH,
       GetMcpServerRequestSchema,
@@ -274,17 +289,17 @@ export class TeamsGrpcClient {
     );
   }
 
-  async updateMcpServer(request: McpServerUpdateRequest): Promise<McpServer> {
+  async updateMcpServer(request: UpdateMcpServerRequest): Promise<UpdateMcpServerResponse> {
     return this.call(
       TEAMS_SERVICE_UPDATE_MCP_SERVER_PATH,
-      McpServerUpdateRequestSchema,
+      UpdateMcpServerRequestSchema,
       request,
       'updateMcpServer',
     );
   }
 
   async deleteMcpServer(request: DeleteMcpServerRequest): Promise<void> {
-    await this.call<DeleteMcpServerRequest, Empty>(
+    await this.call<DeleteMcpServerRequest, DeleteMcpServerResponse>(
       TEAMS_SERVICE_DELETE_MCP_SERVER_PATH,
       DeleteMcpServerRequestSchema,
       request,
@@ -294,7 +309,7 @@ export class TeamsGrpcClient {
 
   async listWorkspaceConfigurations(
     request: ListWorkspaceConfigurationsRequest,
-  ): Promise<PaginatedWorkspaceConfigurations> {
+  ): Promise<ListWorkspaceConfigurationsResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_WORKSPACE_CONFIGURATIONS_PATH,
       ListWorkspaceConfigurationsRequestSchema,
@@ -304,11 +319,11 @@ export class TeamsGrpcClient {
   }
 
   async createWorkspaceConfiguration(
-    request: WorkspaceConfigurationCreateRequest,
-  ): Promise<WorkspaceConfiguration> {
+    request: CreateWorkspaceConfigurationRequest,
+  ): Promise<CreateWorkspaceConfigurationResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_WORKSPACE_CONFIGURATION_PATH,
-      WorkspaceConfigurationCreateRequestSchema,
+      CreateWorkspaceConfigurationRequestSchema,
       request,
       'createWorkspaceConfiguration',
     );
@@ -316,7 +331,7 @@ export class TeamsGrpcClient {
 
   async getWorkspaceConfiguration(
     request: GetWorkspaceConfigurationRequest,
-  ): Promise<WorkspaceConfiguration> {
+  ): Promise<GetWorkspaceConfigurationResponse> {
     return this.call(
       TEAMS_SERVICE_GET_WORKSPACE_CONFIGURATION_PATH,
       GetWorkspaceConfigurationRequestSchema,
@@ -326,18 +341,18 @@ export class TeamsGrpcClient {
   }
 
   async updateWorkspaceConfiguration(
-    request: WorkspaceConfigurationUpdateRequest,
-  ): Promise<WorkspaceConfiguration> {
+    request: UpdateWorkspaceConfigurationRequest,
+  ): Promise<UpdateWorkspaceConfigurationResponse> {
     return this.call(
       TEAMS_SERVICE_UPDATE_WORKSPACE_CONFIGURATION_PATH,
-      WorkspaceConfigurationUpdateRequestSchema,
+      UpdateWorkspaceConfigurationRequestSchema,
       request,
       'updateWorkspaceConfiguration',
     );
   }
 
   async deleteWorkspaceConfiguration(request: DeleteWorkspaceConfigurationRequest): Promise<void> {
-    await this.call<DeleteWorkspaceConfigurationRequest, Empty>(
+    await this.call<DeleteWorkspaceConfigurationRequest, DeleteWorkspaceConfigurationResponse>(
       TEAMS_SERVICE_DELETE_WORKSPACE_CONFIGURATION_PATH,
       DeleteWorkspaceConfigurationRequestSchema,
       request,
@@ -345,7 +360,7 @@ export class TeamsGrpcClient {
     );
   }
 
-  async listMemoryBuckets(request: ListMemoryBucketsRequest): Promise<PaginatedMemoryBuckets> {
+  async listMemoryBuckets(request: ListMemoryBucketsRequest): Promise<ListMemoryBucketsResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_MEMORY_BUCKETS_PATH,
       ListMemoryBucketsRequestSchema,
@@ -354,16 +369,16 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createMemoryBucket(request: MemoryBucketCreateRequest): Promise<MemoryBucket> {
+  async createMemoryBucket(request: CreateMemoryBucketRequest): Promise<CreateMemoryBucketResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_MEMORY_BUCKET_PATH,
-      MemoryBucketCreateRequestSchema,
+      CreateMemoryBucketRequestSchema,
       request,
       'createMemoryBucket',
     );
   }
 
-  async getMemoryBucket(request: GetMemoryBucketRequest): Promise<MemoryBucket> {
+  async getMemoryBucket(request: GetMemoryBucketRequest): Promise<GetMemoryBucketResponse> {
     return this.call(
       TEAMS_SERVICE_GET_MEMORY_BUCKET_PATH,
       GetMemoryBucketRequestSchema,
@@ -372,17 +387,17 @@ export class TeamsGrpcClient {
     );
   }
 
-  async updateMemoryBucket(request: MemoryBucketUpdateRequest): Promise<MemoryBucket> {
+  async updateMemoryBucket(request: UpdateMemoryBucketRequest): Promise<UpdateMemoryBucketResponse> {
     return this.call(
       TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH,
-      MemoryBucketUpdateRequestSchema,
+      UpdateMemoryBucketRequestSchema,
       request,
       'updateMemoryBucket',
     );
   }
 
   async deleteMemoryBucket(request: DeleteMemoryBucketRequest): Promise<void> {
-    await this.call<DeleteMemoryBucketRequest, Empty>(
+    await this.call<DeleteMemoryBucketRequest, DeleteMemoryBucketResponse>(
       TEAMS_SERVICE_DELETE_MEMORY_BUCKET_PATH,
       DeleteMemoryBucketRequestSchema,
       request,
@@ -390,7 +405,7 @@ export class TeamsGrpcClient {
     );
   }
 
-  async listAttachments(request: ListAttachmentsRequest): Promise<PaginatedAttachments> {
+  async listAttachments(request: ListAttachmentsRequest): Promise<ListAttachmentsResponse> {
     return this.call(
       TEAMS_SERVICE_LIST_ATTACHMENTS_PATH,
       ListAttachmentsRequestSchema,
@@ -399,17 +414,17 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createAttachment(request: AttachmentCreateRequest): Promise<Attachment> {
+  async createAttachment(request: CreateAttachmentRequest): Promise<CreateAttachmentResponse> {
     return this.call(
       TEAMS_SERVICE_CREATE_ATTACHMENT_PATH,
-      AttachmentCreateRequestSchema,
+      CreateAttachmentRequestSchema,
       request,
       'createAttachment',
     );
   }
 
   async deleteAttachment(request: DeleteAttachmentRequest): Promise<void> {
-    await this.call<DeleteAttachmentRequest, Empty>(
+    await this.call<DeleteAttachmentRequest, DeleteAttachmentResponse>(
       TEAMS_SERVICE_DELETE_ATTACHMENT_PATH,
       DeleteAttachmentRequestSchema,
       request,
