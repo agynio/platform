@@ -27,7 +27,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: packages/platform-server/Dockerfile
+          context: packages/platform-server
+          file: packages/platform-server/Dockerfile.dev
           push: true
           tags: ghcr.io/agynio/platform-server:dev

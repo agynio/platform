@@ -2,19 +2,19 @@ version: v2beta1
 
 vars:
   PLATFORM_NAMESPACE: platform
+  ARGOCD_NAMESPACE: argocd
+  ARGOCD_APPLICATION: platform-server
 
-deployments:
-  platform-server:
-    namespace: ${PLATFORM_NAMESPACE}
-    helm:
-      releaseName: platform-server
-      chart:
-        path: ../../charts/platform-server
-      values:
-        image:
-          repository: ghcr.io/agynio/platform-server
-          tag: dev
-          pullPolicy: IfNotPresent
+pipelines:
+  dev:
+    run: |-
+      run "kubectl -n ${ARGOCD_NAMESPACE} patch application ${ARGOCD_APPLICATION} --type merge -p '{\"spec\":{\"syncPolicy\":{\"automated\":null}}}'"
+      start_dev
+
+hooks:
+  - command: kubectl -n ${ARGOCD_NAMESPACE} patch application ${ARGOCD_APPLICATION} --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true,"allowEmpty":false}}}}'
+    events:
+      - after:dev
 
 dev:
   platform-server:
@@ -22,25 +22,36 @@ dev:
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
+    patches:
+      - op: replace
+        path: spec.containers[0].securityContext.readOnlyRootFilesystem
+        value: false
+      - op: replace
+        path: spec.containers[0].resources.limits.memory
+        value: 4Gi
     containers:
       platform-server:
         container: platform-server
-        workingDir: /opt/app
+        devImage: ghcr.io/agynio/platform-server:dev
+        workingDir: /opt/app/data/workspace
         command:
           - sh
         args:
           - -c
-          - |
-            while [ ! -f package.json ]; do
+          - |-
+            while [ ! -f /opt/app/data/workspace/package.json ]; do
               echo "Waiting for sources to sync..."
               sleep 1
             done
-            if [ ! -d node_modules ]; then
-              pnpm install --prefer-offline
-            fi
-            pnpm --dir packages/platform-server dev
+            cd /opt/app/data/workspace
+            pnpm proto:generate
+            pnpm approve-builds @prisma/client prisma esbuild @nestjs/core
+            pnpm install --filter @agyn/platform-server... --frozen-lockfile
+            cd /opt/app/data/workspace/packages/platform-server
+            pnpm exec prisma generate
+            pnpm dev
         sync:
-          - path: ../..:/opt/app
+          - path: ../..:/opt/app/data/workspace
             excludePaths:
               - node_modules
               - dist
@@ -49,3 +60,5 @@ dev:
               - packages/platform-server/node_modules
               - packages/platform-server/dist
               - packages/platform-server/prisma/generated
+        ports:
+          - port: 3010
