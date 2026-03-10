@@ -3,7 +3,7 @@ import { ConfigService, configSchema } from '../../src/core/services/config.serv
 export const runnerConfigDefaults = {
   dockerRunnerSharedSecret: 'test-shared-secret',
   dockerRunnerGrpcHost: '127.0.0.1',
-  dockerRunnerGrpcPort: 7171,
+  dockerRunnerGrpcPort: 50051,
   litellmKeyAlias: 'agents/test/local',
   litellmKeyDuration: '30d',
   litellmModels: ['all-team-models'],

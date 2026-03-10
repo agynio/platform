@@ -15,7 +15,7 @@ const RUNNER_HOST = process.env.DOCKER_RUNNER_GRPC_HOST;
 const RUNNER_PORT = process.env.DOCKER_RUNNER_GRPC_PORT;
 
 const DEFAULT_RUNNER_HOST = 'docker-runner';
-const DEFAULT_RUNNER_PORT = '7171';
+const DEFAULT_RUNNER_PORT = '50051';
 
 const resolvedRunnerAddress =
   RUNNER_ADDRESS_OVERRIDE ??

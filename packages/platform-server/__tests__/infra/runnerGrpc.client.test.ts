@@ -60,9 +60,9 @@ describe('RunnerGrpcClient', () => {
 
   it('sanitizes infra details from gRPC errors', async () => {
     const client = new RunnerGrpcClient({ address: 'grpc://runner', sharedSecret: 'secret' });
-    const error = Object.assign(new Error('Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071'), {
+    const error = Object.assign(new Error('Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:50051'), {
       code: status.DEADLINE_EXCEEDED,
-      details: 'Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:7071',
+      details: 'Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:50051',
     });
 
     const translated = (client as unknown as {
@@ -95,9 +95,9 @@ describe('RunnerGrpcExecClient', () => {
 
     const execPromise = execClient.exec('container-1', ['echo', 'hi'], { timeoutMs: 1_500 });
 
-    const error = Object.assign(new Error('Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071'), {
+    const error = Object.assign(new Error('Deadline exceeded after 1500ms,remote_addr=10.0.0.2:50051'), {
       code: status.DEADLINE_EXCEEDED,
-      details: 'Deadline exceeded after 1500ms,remote_addr=10.0.0.2:7071',
+      details: 'Deadline exceeded after 1500ms,remote_addr=10.0.0.2:50051',
     });
 
     queueMicrotask(() => {

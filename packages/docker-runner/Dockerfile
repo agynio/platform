@@ -42,7 +42,7 @@ FROM node:20-slim AS runtime
 
 ENV NODE_ENV=production \
     DOCKER_RUNNER_GRPC_HOST=0.0.0.0 \
-    DOCKER_RUNNER_PORT=7171
+    DOCKER_RUNNER_PORT=50051
 
 WORKDIR /opt/app/packages/docker-runner
 
@@ -59,6 +59,6 @@ COPY --from=build --chown=node:node /workspace/packages/docker-runner/tsconfig.j
 
 USER node
 
-EXPOSE 7171
+EXPOSE 50051
 
 CMD ["tsx", "src/service/main.ts"]

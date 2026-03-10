@@ -195,7 +195,7 @@ describe('DELETE /api/containers/:id integration', () => {
         {
           provide: ConfigService,
           useValue: {
-            getDockerRunnerGrpcAddress: () => '127.0.0.1:7171',
+            getDockerRunnerGrpcAddress: () => '127.0.0.1:50051',
           } as ConfigService,
         },
         {

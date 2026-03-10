@@ -288,7 +288,7 @@ describe('ContainersController routes', () => {
       deleteContainer: vi.fn().mockResolvedValue(undefined),
     } as Pick<ContainerAdminService, 'deleteContainer'>;
     configService = {
-      getDockerRunnerGrpcAddress: () => 'grpc://runner.local:9090',
+      getDockerRunnerGrpcAddress: () => 'grpc://runner.local:50051',
     } as ConfigService;
     controller = new ContainersController(prismaSvc, containerAdmin as ContainerAdminService, configService as ConfigService);
     // Typed query adapter to avoid any/double assertions
@@ -649,7 +649,7 @@ describe('ContainersController routes', () => {
       containerId: 'cid-1',
       requestId: 'req-log-1',
       runnerCalled: true,
-      runnerEndpoint: 'grpc://runner.local:9090',
+      runnerEndpoint: 'grpc://runner.local:50051',
       failureKind: 'runner_unreachable',
       runnerStatusCode: 0,
       runnerErrorCode: 'runner_connection_refused',
@@ -690,7 +690,7 @@ describe('ContainersController routes', () => {
       containerId: 'cid-1',
       requestId: 'req-log-2',
       runnerCalled: true,
-      runnerEndpoint: 'grpc://runner.local:9090',
+      runnerEndpoint: 'grpc://runner.local:50051',
       failureKind: 'unknown',
       errorMessage: 'tcp connection reset',
       errorStack: deleteError.stack,

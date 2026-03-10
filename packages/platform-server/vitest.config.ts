@@ -8,7 +8,7 @@ export default defineConfig({
     setupFiles: ["./__tests__/vitest.setup.ts"],
     env: {
       DOCKER_RUNNER_GRPC_HOST: "docker-runner",
-      DOCKER_RUNNER_GRPC_PORT: "7171",
+      DOCKER_RUNNER_GRPC_PORT: "50051",
       DOCKER_RUNNER_SHARED_SECRET: "test-shared-secret",
     },
     fileParallelism: false,

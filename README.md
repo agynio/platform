@@ -118,7 +118,7 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (7071)
+# litellm (127.0.0.1:4000), docker-runner (50051)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
@@ -186,7 +186,7 @@ Key environment variables (server) from packages/platform-server/.env.example an
 - Workspace/Docker:
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_GRPC_HOST (default docker-runner)
-  - DOCKER_RUNNER_GRPC_PORT (default 7171; DOCKER_RUNNER_PORT is accepted as an alias)
+  - DOCKER_RUNNER_GRPC_PORT (default 50051; DOCKER_RUNNER_PORT is accepted as an alias)
   - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
   - DOCKER_RUNNER_OPTIONAL (default true; set to false to keep fail-fast bootstrap)
@@ -233,7 +233,7 @@ UI variables (packages/platform-ui/.env.example):
   - vault — HashiCorp Vault (8200), auto-init helper vault-auto-init
   - ncps — Nix cache proxy (8501)
   - litellm + litellm-db — LLM proxy with UI (4000 loopback)
-  - docker-runner — authenticated Docker API proxy (7071, mounts /var/run/docker.sock)
+  - docker-runner — authenticated Docker API proxy (50051, mounts /var/run/docker.sock)
   - Optional monitoring overlay (docker-compose.monitoring.yml) adds prometheus (9090) and grafana (3000) without mounting the Docker socket; provide your own scrape targets via configuration.
 
 To start services:
