@@ -55,13 +55,13 @@ service:
   labels: {}
   ports:
     - name: http
-      port: 7071
+      port: 50051
       targetPort: http
       protocol: TCP
 
 containerPorts:
   - name: http
-    containerPort: 7071
+    containerPort: 50051
     protocol: TCP
 
 command: []
@@ -70,7 +70,7 @@ env:
   - name: DOCKER_RUNNER_HOST
     value: 0.0.0.0
   - name: DOCKER_RUNNER_PORT
-    value: "7071"
+    value: "50051"
   - name: DOCKER_RUNNER_SIGNATURE_TTL_MS
     value: "60000"
   - name: DOCKER_RUNNER_LOG_LEVEL

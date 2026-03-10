@@ -78,10 +78,10 @@ export const configSchema = z.object({
   dockerRunnerGrpcHost: z.string().default('127.0.0.1'),
   dockerRunnerGrpcPort: z
     .union([z.string(), z.number()])
-    .default('7171')
+    .default('50051')
     .transform((v) => {
       const num = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(num) ? num : 7171;
+      return Number.isFinite(num) ? num : 50051;
     }),
   dockerRunnerOptional: z
     .union([z.boolean(), z.string()])

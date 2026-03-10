@@ -3,10 +3,10 @@ import { z } from 'zod';
 const runnerConfigSchema = z.object({
   grpcPort: z
     .union([z.string(), z.number()])
-    .default('7171')
+    .default('50051')
     .transform((value) => {
       const num = typeof value === 'number' ? value : Number(value);
-      return Number.isFinite(num) ? num : 7171;
+      return Number.isFinite(num) ? num : 50051;
     }),
   grpcHost: z.string().default('0.0.0.0'),
   sharedSecret: z.string().min(1, 'DOCKER_RUNNER_SHARED_SECRET is required'),
