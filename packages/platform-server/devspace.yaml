@@ -52,38 +52,49 @@ dev:
       platform-server:
         devImage: ghcr.io/agynio/platform-server:dev
         command:
-          - sh
+          - bash
           - -lc
           - |
-            set -eu
-            workspace_dir=/opt/app/data/workspace
-            mkdir -p /tmp/devspace-bin
-            if [ ! -x /tmp/devspace-bin/corepack ]; then
-              cp /usr/local/bin/corepack /tmp/devspace-bin/corepack
-              if [ -d /usr/local/lib/node_modules/corepack/dist/lib ]; then
-                mkdir -p /tmp/devspace-bin/lib
-                cp -R /usr/local/lib/node_modules/corepack/dist/lib/* /tmp/devspace-bin/lib/
-              fi
+            set -euo pipefail
+            export HOME=/opt/app/data/workspace/home
+            export NPM_CONFIG_PREFIX="$HOME/.npm-global"
+            export NPM_CONFIG_CACHE="$HOME/.npm"
+            export NPM_CONFIG_USERCONFIG="$HOME/.npmrc"
+            export npm_config_prefix="$HOME/.npm-global"
+            export npm_config_cache="$HOME/.npm"
+            export npm_config_userconfig="$HOME/.npmrc"
+            export PNPM_HOME="$HOME/.pnpm"
+            export PNPM_STORE_DIR="$HOME/.pnpm-store"
+            export TMPDIR="$HOME/tmp"
+            export PATH="$NPM_CONFIG_PREFIX/bin:$PNPM_HOME:$PATH"
+            mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_HOME" "$PNPM_STORE_DIR" "$TMPDIR"
+            chown -R 1000:1000 "$HOME" >/dev/null 2>&1 || true
+
+            # Fail fast if any /Users path leaks in env/npm config
+            bad="$( (printenv; npm config list -l 2>/dev/null) | grep -E "(^|: )/Users(/|$)" || true )"
+            if [ -n "$bad" ]; then
+              echo "Refusing to run: npm config/environment contains /Users:"
+              echo "$bad"
+              exit 1
             fi
-            export PATH="/tmp/devspace-bin:${PATH}"
-            while [ ! -f "${workspace_dir}/pnpm-workspace.yaml" ] || [ ! -f "${workspace_dir}/packages/platform-server/package.json" ]; do
-              echo "waiting for source sync..."
-              sleep 1
-            done
-            sandbox_home="${workspace_dir}/home"
-            unset HOME || true
-            export HOME="${sandbox_home}"
-            export NPM_CONFIG_CACHE="${sandbox_home}/.npm"
-            export PNPM_HOME="${sandbox_home}/.pnpm"
-            export TMPDIR="${sandbox_home}/tmp"
-            mkdir -p "${sandbox_home}/.npm" "${PNPM_HOME}" "${TMPDIR}"
-            chown -R 1000:1000 "${sandbox_home}" || true
-            cd "${workspace_dir}"
-            env HOME="${sandbox_home}" \
-              NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE}" \
-              PNPM_HOME="${PNPM_HOME}" \
-              TMPDIR="${TMPDIR}" \
-              sh -eu -c 'corepack enable && corepack pnpm install && corepack pnpm --filter @agyn/platform-server dev'
+
+            # Install pnpm@8 to user prefix (no corepack)
+            npm config set prefix "$NPM_CONFIG_PREFIX"
+            npm i -g pnpm@8
+            pnpm config set store-dir "$PNPM_STORE_DIR" --global
+
+            # Wait for sources to sync
+            while [ ! -f /opt/app/data/workspace/pnpm-workspace.yaml ] || [ ! -f /opt/app/data/workspace/packages/platform-server/package.json ]; do
+              echo "waiting for source sync..."; sleep 1; done
+
+            cd /opt/app/data/workspace
+            echo "== preflight =="
+            npm config get prefix
+            npm config get cache
+            which pnpm || true
+            pnpm -v || true
+            pnpm install
+            pnpm --filter @agyn/platform-server dev
         sync:
           - localSubPath: '../../'
             containerPath: /opt/app/data/workspace
