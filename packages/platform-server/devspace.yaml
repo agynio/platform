@@ -57,42 +57,56 @@ dev:
           - |
             set -euo pipefail
             export HOME=/opt/app/data/workspace/home
-            export NPM_CONFIG_PREFIX="$HOME/.npm-global"
-            export NPM_CONFIG_CACHE="$HOME/.npm"
-            export NPM_CONFIG_USERCONFIG="$HOME/.npmrc"
-            export npm_config_prefix="$HOME/.npm-global"
-            export npm_config_cache="$HOME/.npm"
-            export npm_config_userconfig="$HOME/.npmrc"
-            export PNPM_HOME="$HOME/.pnpm"
-            export PNPM_STORE_DIR="$HOME/.pnpm-store"
-            export TMPDIR="$HOME/tmp"
-            export PATH="$NPM_CONFIG_PREFIX/bin:$PNPM_HOME:$PATH"
-            mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_HOME" "$PNPM_STORE_DIR" "$TMPDIR"
+            export TMPDIR=/tmp
+            export PATH="$HOME/.local/bin:$PATH"
+            mkdir -p "$HOME" "$HOME/.local/bin"
             chown -R 1000:1000 "$HOME" >/dev/null 2>&1 || true
 
-            # Fail fast if any /Users path leaks in env/npm config
-            bad="$( (printenv; npm config list -l 2>/dev/null) | grep -E "(^|: )/Users(/|$)" || true )"
+            # Configure pnpm store: prefer /pnpm-store if available, otherwise fall back to HOME
+            if mkdir -p /pnpm-store 2>/dev/null; then
+              export PNPM_STORE_DIR=/pnpm-store
+            else
+              export PNPM_STORE_DIR="$HOME/.pnpm-store"
+              mkdir -p "$PNPM_STORE_DIR"
+            fi
+
+            # Fail fast if any /Users path leaks in environment or local npmrc
+            bad="$( printenv | grep -F "/Users" || true )"
+            if [ -z "$bad" ] && [ -f "$HOME/.npmrc" ]; then
+              bad="$( grep -F "/Users" "$HOME/.npmrc" || true )"
+            fi
             if [ -n "$bad" ]; then
               echo "Refusing to run: npm config/environment contains /Users:"
               echo "$bad"
               exit 1
             fi
 
-            # Install pnpm@8 to user prefix (no corepack)
-            npm config set prefix "$NPM_CONFIG_PREFIX"
-            npm i -g pnpm@8
-            pnpm config set store-dir "$PNPM_STORE_DIR" --global
+            # Ensure pnpm is available via corepack shim if not already in PATH
+            if ! command -v pnpm >/dev/null 2>&1; then
+              if [ -x /usr/local/lib/node_modules/corepack/dist/pnpm.js ]; then
+                ln -sf /usr/local/lib/node_modules/corepack/dist/pnpm.js "$HOME/.local/bin/pnpm"
+              else
+                echo "pnpm binary not found in image"
+                exit 1
+              fi
+            fi
+
+            # Make shim executable (corepack artifacts are already 755, but ensure)
+            chmod +x "$HOME/.local/bin/pnpm" 2>/dev/null || true
 
             # Wait for sources to sync
             while [ ! -f /opt/app/data/workspace/pnpm-workspace.yaml ] || [ ! -f /opt/app/data/workspace/packages/platform-server/package.json ]; do
-              echo "waiting for source sync..."; sleep 1; done
+              echo "waiting for source sync..."
+              sleep 1
+            done
 
             cd /opt/app/data/workspace
             echo "== preflight =="
-            npm config get prefix
-            npm config get cache
             which pnpm || true
-            pnpm -v || true
+            if ! pnpm -v; then
+              rm -rf "$HOME/.cache/node/corepack/v1/pnpm" 2>/dev/null || true
+              pnpm -v
+            fi
             pnpm install
             pnpm --filter @agyn/platform-server dev
         sync:
