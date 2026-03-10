@@ -66,16 +66,10 @@ dev:
               fi
             fi
             export PATH="/tmp/devspace-bin:${PATH}"
-            for _ in $(seq 1 120); do
-              if [ -f "${workspace_dir}/packages/platform-server/package.json" ]; then
-                break
-              fi
+            while [ ! -f "${workspace_dir}/pnpm-workspace.yaml" ] || [ ! -f "${workspace_dir}/packages/platform-server/package.json" ]; do
+              echo "waiting for source sync..."
               sleep 1
             done
-            if [ ! -f "${workspace_dir}/packages/platform-server/package.json" ]; then
-              echo "workspace packages not available after waiting" 1>&2
-              exit 1
-            fi
             sandbox_home="${workspace_dir}/home"
             unset HOME || true
             export HOME="${sandbox_home}"
@@ -84,20 +78,6 @@ dev:
             export TMPDIR="${sandbox_home}/tmp"
             mkdir -p "${sandbox_home}/.npm" "${PNPM_HOME}" "${TMPDIR}"
             chown -R 1000:1000 "${sandbox_home}" || true
-            if [ ! -f "${workspace_dir}/package.json" ] && [ -f /opt/app/package.json ]; then
-              cp /opt/app/package.json "${workspace_dir}/package.json"
-            fi
-            if [ ! -f "${workspace_dir}/package.json" ]; then
-              printf '%s\n' '{' \
-                '  "name": "agyn",' \
-                '  "version": "1.0.0",' \
-                '  "private": true,' \
-                '  "packageManager": "pnpm@10.5.0"' \
-                '}' > "${workspace_dir}/package.json"
-            fi
-            if [ ! -f "${workspace_dir}/pnpm-workspace.yaml" ]; then
-              printf '%s\n' "packages:" "  - 'packages/*'" "  - 'packages/**'" > "${workspace_dir}/pnpm-workspace.yaml"
-            fi
             cd "${workspace_dir}"
             env HOME="${sandbox_home}" \
               NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE}" \
@@ -105,7 +85,9 @@ dev:
               TMPDIR="${TMPDIR}" \
               sh -eu -c 'corepack enable && corepack pnpm install && corepack pnpm --filter @agyn/platform-server dev'
         sync:
-          - path: ../..:/opt/app/data/workspace
+          - localSubPath: '../../'
+            containerPath: /opt/app/data/workspace
+            twoWay: true
             excludePaths:
               - '.git/'
               - 'node_modules/'
