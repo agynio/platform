@@ -76,7 +76,14 @@ dev:
               echo "workspace packages not available after waiting" 1>&2
               exit 1
             fi
-            corepack enable || true
+            sandbox_home="${workspace_dir}/home"
+            unset HOME || true
+            export HOME="${sandbox_home}"
+            export NPM_CONFIG_CACHE="${sandbox_home}/.npm"
+            export PNPM_HOME="${sandbox_home}/.pnpm"
+            export TMPDIR="${sandbox_home}/tmp"
+            mkdir -p "${sandbox_home}/.npm" "${PNPM_HOME}" "${TMPDIR}"
+            chown -R 1000:1000 "${sandbox_home}" || true
             if [ ! -f "${workspace_dir}/package.json" ] && [ -f /opt/app/package.json ]; then
               cp /opt/app/package.json "${workspace_dir}/package.json"
             fi
@@ -92,8 +99,11 @@ dev:
               printf '%s\n' "packages:" "  - 'packages/*'" "  - 'packages/**'" > "${workspace_dir}/pnpm-workspace.yaml"
             fi
             cd "${workspace_dir}"
-            corepack pnpm install
-            corepack pnpm --filter @agyn/platform-server dev
+            env HOME="${sandbox_home}" \
+              NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE}" \
+              PNPM_HOME="${PNPM_HOME}" \
+              TMPDIR="${TMPDIR}" \
+              sh -eu -c 'corepack enable && corepack pnpm install && corepack pnpm --filter @agyn/platform-server dev'
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:
