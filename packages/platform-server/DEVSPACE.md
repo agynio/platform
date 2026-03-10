@@ -12,6 +12,24 @@ the `bootstrap_v2` cluster and run the development image with live sync.
   kubeconfig path from the Quickstart (for example:
   `export KUBECONFIG=bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`).
 
+## How it works
+
+DevSpace uses the ArgoCD-managed deployment as the base, then overlays the dev
+container and sync behavior:
+
+1. If the `platform-server` ArgoCD Application exists in the `argocd`
+   namespace, DevSpace disables auto-sync to prevent ArgoCD from reverting the
+   dev container changes.
+2. DevSpace clones the deployment into a dev pod with the
+   `ghcr.io/agynio/platform-server:dev` image.
+3. The repo is synced into `/opt/app/data/workspace` and the startup script
+   installs dependencies, generates protobuf and Prisma clients, and launches
+   the dev server.
+4. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
+
+Port `3010` is forwarded locally, so the API should be reachable at
+`http://localhost:3010` once the server reports ready.
+
 ## Start DevSpace
 
 From the repository root:
@@ -21,21 +39,45 @@ cd packages/platform-server
 devspace dev
 ```
 
-DevSpace temporarily disables ArgoCD auto-sync for the `platform-server`
-application before starting the dev session and restores it when you exit. It
-uses the `ghcr.io/agynio/platform-server:dev` image, syncs the repository into
-`/opt/app/data/workspace`, and runs the following startup flow:
+Startup steps in the dev container:
 
 1. `pnpm proto:generate`
 2. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
 3. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
-4. `prisma generate`
-5. `pnpm dev`
+4. `pnpm --filter @agyn/platform-server run prisma:generate`
+5. `pnpm --filter @agyn/platform-server dev`
 
-Port `3010` is forwarded locally, so the API should be reachable at
-`http://localhost:3010` once the server reports ready.
+## Prisma migrations
+
+DevSpace generates Prisma client code but does not run migrations. If your
+database schema is out of date, run migrations manually from your local
+workstation (configure `AGENTS_DATABASE_URL` or `DATABASE_URL` as needed):
+
+```bash
+pnpm --filter @agyn/platform-server exec prisma migrate deploy
+```
+
+## Troubleshooting
+
+- **EACCES from corepack enable**: Ensure you are using the
+  `ghcr.io/agynio/platform-server:dev` image and that the container has a
+  writable root filesystem (the DevSpace patch sets
+  `readOnlyRootFilesystem: false`). Re-run `devspace dev` or reset the pod.
+- **Sync timeout waiting for `pnpm-workspace.yaml`**: DevSpace could not sync
+  the repo in time. Check `devspace logs`, confirm your kubeconfig context, and
+  run `devspace reset pods` before starting again.
+- **ArgoCD keeps reverting changes**: Verify the ArgoCD Application exists in
+  the `argocd` namespace and that auto-sync was disabled. Run
+  `kubectl get application platform-server -n argocd` and restart the session
+  if needed.
+- **OOM kills**: The dev container is limited to 4Gi. Reduce memory usage or
+  increase limits in the cluster if you consistently hit OOMs.
 
 ## Cleanup
 
-Stop DevSpace with `Ctrl+C`. The ArgoCD auto-sync hook will restore automated
-syncing for the `platform-server` application.
+Stop DevSpace with `Ctrl+C`. The ArgoCD hook restores automated syncing for the
+`platform-server` application. If the dev pod sticks around, clean it up with:
+
+```bash
+devspace reset pods
+```

@@ -2,19 +2,35 @@ version: v2beta1
 
 vars:
   PLATFORM_NAMESPACE: platform
-  ARGOCD_NAMESPACE: argocd
-  ARGOCD_APPLICATION: platform-server
 
 pipelines:
-  dev:
-    run: |-
-      run "kubectl -n ${ARGOCD_NAMESPACE} patch application ${ARGOCD_APPLICATION} --type merge -p '{\"spec\":{\"syncPolicy\":{\"automated\":null}}}'"
-      start_dev
+  dev: |-
+    if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+      echo "Disabling ArgoCD auto-sync for platform-server..."
+      kubectl patch application platform-server -n argocd \
+        --type merge \
+        -p '{"spec":{"syncPolicy":{"automated":null}}}'
+      echo "ArgoCD auto-sync disabled."
+    else
+      echo "WARNING: ArgoCD Application 'platform-server' not found in argocd namespace."
+    fi
+    start_dev platform-server
 
 hooks:
-  - command: kubectl -n ${ARGOCD_NAMESPACE} patch application ${ARGOCD_APPLICATION} --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true,"allowEmpty":false}}}}'
+  - name: restore-argocd-auto-sync
     events:
-      - after:dev
+      - after:dev:platform-server
+    command: sh
+    args:
+      - -c
+      - |
+        if kubectl get application platform-server -n argocd >/dev/null 2>&1; then
+          echo "Re-enabling ArgoCD auto-sync for platform-server..."
+          kubectl patch application platform-server -n argocd \
+            --type merge \
+            -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+          echo "ArgoCD auto-sync restored."
+        fi
 
 dev:
   platform-server:
@@ -24,11 +40,33 @@ dev:
       app.kubernetes.io/instance: platform-server
     patches:
       - op: replace
-        path: spec.containers[0].securityContext.readOnlyRootFilesystem
-        value: false
+        path: spec.containers.name=platform-server.securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
       - op: replace
-        path: spec.containers[0].resources.limits.memory
-        value: 4Gi
+        path: spec.securityContext
+        value:
+          runAsUser: 1000
+          fsGroup: 1000
+      - op: remove
+        path: spec.initContainers
+      - op: replace
+        path: spec.containers.name=platform-server.resources
+        value:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
     containers:
       platform-server:
         container: platform-server
@@ -36,29 +74,68 @@ dev:
         workingDir: /opt/app/data/workspace
         command:
           - sh
-        args:
           - -c
-          - |-
-            while [ ! -f /opt/app/data/workspace/package.json ]; do
-              echo "Waiting for sources to sync..."
+          - |
+            set -eu
+
+            echo "=== DevSpace startup ==="
+            echo "Waiting for file sync..."
+
+            elapsed=0
+            while [ ! -f /opt/app/data/workspace/pnpm-workspace.yaml ]; do
               sleep 1
+              elapsed=$((elapsed + 1))
+              if [ "$elapsed" -ge 120 ]; then
+                echo "ERROR: pnpm-workspace.yaml not found after 120s" >&2
+                exit 1
+              fi
             done
+            echo "Sync ready (${elapsed}s)."
+
             cd /opt/app/data/workspace
+
+            echo "Generating protobuf types..."
             pnpm proto:generate
+
+            echo "Approving build scripts..."
             pnpm approve-builds @prisma/client prisma esbuild @nestjs/core
+
+            echo "Installing dependencies..."
             pnpm install --filter @agyn/platform-server... --frozen-lockfile
-            cd /opt/app/data/workspace/packages/platform-server
-            pnpm exec prisma generate
-            pnpm dev
+
+            echo "Generating Prisma client..."
+            pnpm --filter @agyn/platform-server run prisma:generate
+
+            echo "Starting dev server (tsx watch)..."
+            pnpm --filter @agyn/platform-server dev
+        env:
+          - name: NODE_ENV
+            value: development
         sync:
           - path: ../..:/opt/app/data/workspace
             excludePaths:
-              - node_modules
-              - dist
-              - .git
-              - .devspace
-              - packages/platform-server/node_modules
-              - packages/platform-server/dist
-              - packages/platform-server/prisma/generated
+              - .git/
+              - node_modules/
+              - dist/
+              - .devspace/
+              - .pnpm-store/
+              - packages/platform-server/prisma/generated/
+              - packages/platform-server/data/
+              - "packages/**/src/proto/gen/"
+            uploadExcludePaths:
+              - .git/
+              - node_modules/
+              - dist/
+              - .pnpm-store/
+              - packages/platform-server/prisma/generated/
+              - "packages/**/src/proto/gen/"
+            downloadExcludePaths:
+              - .git/
+              - node_modules/
+              - dist/
+              - .pnpm-store/
         ports:
           - port: 3010
+        logs:
+          enabled: true
+          lastLines: 200
