@@ -58,9 +58,9 @@ dev:
             set -euo pipefail
             export HOME=/opt/app/data/workspace/home
             export TMPDIR=/tmp
-            export PATH="$HOME/.local/bin:$PATH"
             mkdir -p "$HOME" "$HOME/.local/bin"
             chown -R 1000:1000 "$HOME" >/dev/null 2>&1 || true
+            export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
             # Configure pnpm store: prefer /pnpm-store if available, otherwise fall back to HOME
             if mkdir -p /pnpm-store 2>/dev/null; then
@@ -70,28 +70,23 @@ dev:
               mkdir -p "$PNPM_STORE_DIR"
             fi
 
-            # Fail fast if any /Users path leaks in environment or local npmrc
-            bad="$( printenv | grep -F "/Users" || true )"
-            if [ -z "$bad" ] && [ -f "$HOME/.npmrc" ]; then
-              bad="$( grep -F "/Users" "$HOME/.npmrc" || true )"
-            fi
+            # Fail fast if any /Users path leaks via env or npm config
+            bad="$( (printenv; npm config list -l 2>/dev/null) | grep -E '(^|: )/Users(/|$)' || true )"
             if [ -n "$bad" ]; then
-              echo "Refusing to run: npm config/environment contains /Users:"
+              echo "Refusing to run due to /Users leak:"
               echo "$bad"
               exit 1
             fi
 
-            # Ensure pnpm is available via corepack shim if not already in PATH
+            # Ensure pnpm shim from corepack is available without npm install
             if ! command -v pnpm >/dev/null 2>&1; then
               if [ -x /usr/local/lib/node_modules/corepack/dist/pnpm.js ]; then
                 ln -sf /usr/local/lib/node_modules/corepack/dist/pnpm.js "$HOME/.local/bin/pnpm"
               else
-                echo "pnpm binary not found in image"
+                echo "pnpm shim missing from corepack distribution"
                 exit 1
               fi
             fi
-
-            # Make shim executable (corepack artifacts are already 755, but ensure)
             chmod +x "$HOME/.local/bin/pnpm" 2>/dev/null || true
 
             # Wait for sources to sync
@@ -103,10 +98,7 @@ dev:
             cd /opt/app/data/workspace
             echo "== preflight =="
             which pnpm || true
-            if ! pnpm -v; then
-              rm -rf "$HOME/.cache/node/corepack/v1/pnpm" 2>/dev/null || true
-              pnpm -v
-            fi
+            pnpm -v
             pnpm install
             pnpm --filter @agyn/platform-server dev
         sync:
