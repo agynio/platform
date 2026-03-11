@@ -15,13 +15,14 @@ describe('files api', () => {
     hoisted.asDataMock.mockReset();
   });
 
-  it('posts files to /api/files with multipart body', async () => {
+  it('posts files to /apiv2/files/v1/files with multipart body', async () => {
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
     const record = {
       id: 'file-123',
       filename: file.name,
       contentType: file.type,
       sizeBytes: file.size,
+      createdAt: '2024-01-01T00:00:00Z',
     };
     hoisted.postMock.mockReturnValue(Promise.resolve(record));
     hoisted.asDataMock.mockImplementation(async (promise: Promise<unknown>) => promise);
@@ -32,7 +33,7 @@ describe('files api', () => {
 
     expect(hoisted.postMock).toHaveBeenCalledTimes(1);
     const [url, body, config] = hoisted.postMock.mock.calls[0] ?? [];
-    expect(url).toBe('/api/files');
+    expect(url).toBe('/apiv2/files/v1/files');
     expect(body).toBeInstanceOf(FormData);
     expect((body as FormData).get('file')).toBe(file);
     expect(config).toEqual({

@@ -13,7 +13,7 @@ export function uploadFile(
   formData.append('file', file);
 
   return asData<FileRecord>(
-    http.post<FileRecord>('/api/files', formData, {
+    http.post<FileRecord>('/apiv2/files/v1/files', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress,
       signal,

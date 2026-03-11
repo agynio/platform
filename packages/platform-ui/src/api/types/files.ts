@@ -3,4 +3,5 @@ export type FileRecord = {
   filename: string;
   contentType: string;
   sizeBytes: number;
+  createdAt: string;
 };

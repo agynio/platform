@@ -14,6 +14,7 @@ const createFileRecord = (file: File, overrides: Partial<FileRecord> = {}): File
   filename: file.name,
   contentType: file.type,
   sizeBytes: file.size,
+  createdAt: '2024-01-01T00:00:00Z',
   ...overrides,
 });
 
