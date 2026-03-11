@@ -11,6 +11,7 @@ import React, { useState } from 'react';
 import { MarkdownComposer, type MarkdownComposerProps } from '../MarkdownComposer';
 import { MarkdownContent } from '../MarkdownContent';
 import { $getRoot, $getSelection, $isRangeSelection, type LexicalEditor } from 'lexical';
+import type { Attachment } from '@/hooks/useFileAttachments';
 
 interface ComposerHarnessProps {
   initialValue?: string;
@@ -655,5 +656,55 @@ describe('MarkdownComposer markdown parity', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(preview.querySelector('strong')).not.toBeNull();
     expect(preview.querySelector('u')).not.toBeNull();
+  });
+});
+
+describe('MarkdownComposer attachments', () => {
+  it('handles attachments controls and previews', () => {
+    const handleAttach = vi.fn();
+    const handleRemove = vi.fn();
+    const handleRetry = vi.fn();
+    const file = new File(['data'], 'report.pdf', { type: 'application/pdf' });
+    const attachments: Attachment[] = [
+      {
+        clientId: 'attachment-1',
+        file,
+        status: 'completed',
+        progress: 100,
+        fileRecord: {
+          id: 'file-1',
+          filename: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+        },
+        error: null,
+      },
+    ];
+
+    render(
+      <MarkdownComposer
+        value=""
+        onChange={() => undefined}
+        attachments={attachments}
+        onAttachFiles={handleAttach}
+        onRemoveAttachment={handleRemove}
+        onRetryAttachment={handleRetry}
+      />,
+    );
+
+    expect(screen.getByTestId('file-attachment-button')).toBeInTheDocument();
+    const input = screen.getByTestId('file-attachment-input') as HTMLInputElement;
+    const previewStrip = screen.getByTestId('attachment-preview-strip');
+    expect(previewStrip).toBeInTheDocument();
+    expect(screen.getByText('report.pdf')).toBeInTheDocument();
+
+    const nextFile = new File(['next'], 'next.txt', { type: 'text/plain' });
+    fireEvent.change(input, { target: { files: [nextFile] } });
+    const filesArg = handleAttach.mock.calls[0]?.[0];
+    expect(Array.from(filesArg)).toEqual([nextFile]);
+
+    fireEvent.click(screen.getByTestId('attachment-remove'));
+    expect(handleRemove).toHaveBeenCalledWith('attachment-1');
+    expect(handleRetry).not.toHaveBeenCalled();
   });
 });

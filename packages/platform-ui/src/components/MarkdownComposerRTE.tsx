@@ -5,6 +5,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -17,6 +19,7 @@ import {
   ListOrdered,
   Loader2,
   Maximize2,
+  Paperclip,
   Quote,
   Send,
   Underline,
@@ -45,6 +48,7 @@ import {
   FORMAT_TEXT_COMMAND,
   KEY_DOWN_COMMAND,
   LineBreakNode,
+  PASTE_COMMAND,
   type LexicalEditor,
   type ElementNode,
   SELECTION_CHANGE_COMMAND,
@@ -83,6 +87,8 @@ import { IconButton } from './IconButton';
 import { Dropdown } from './Dropdown';
 import { FullscreenMarkdownEditor } from './FullscreenMarkdownEditor';
 import { MARKDOWN_COMPOSER_THEME } from '@/lib/markdown/composerTheme';
+import { AttachmentPreviewStrip } from './AttachmentPreviewStrip';
+import type { Attachment } from '@/hooks/useFileAttachments';
 
 import { AutosizeTextarea, type AutosizeTextareaProps } from './AutosizeTextarea';
 
@@ -167,6 +173,21 @@ const MARKDOWN_COMPOSER_TRANSFORMERS: Transformer[] = [
   ...BASE_TRANSFORMERS,
   UNDERLINE_TRANSFORMER,
 ];
+
+const extractFilesFromItems = (items: DataTransferItemList | null | undefined) => {
+  if (!items) return [];
+  return Array.from(items)
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+};
+
+const extractFilesFromDataTransfer = (dataTransfer: DataTransfer | null | undefined) => {
+  if (!dataTransfer) return [];
+  const files = dataTransfer.files ? Array.from(dataTransfer.files) : [];
+  if (files.length > 0) return files;
+  return extractFilesFromItems(dataTransfer.items);
+};
 
 type Formatter = () => void;
 
@@ -521,6 +542,10 @@ export interface MarkdownComposerRTEProps {
   className?: string;
   textareaAriaLabel?: string;
   textareaProps?: Omit<AutosizeTextareaProps, 'value' | 'onChange' | 'ref' | 'minLines' | 'maxLines' | 'disabled' | 'placeholder'>;
+  attachments?: Attachment[];
+  onAttachFiles?: (files: FileList | File[]) => void;
+  onRemoveAttachment?: (clientId: string) => void;
+  onRetryAttachment?: (clientId: string) => void;
 }
 
 const MATCHED_MAC_PLATFORM = /Mac|iPad|iPhone|iPod/;
@@ -592,6 +617,7 @@ function MarkdownComposerEditable({
   ariaLabelledBy,
   id,
   disabled,
+  rightPaddingClass = 'pr-12',
 }: {
   placeholder: string;
   minHeight: number;
@@ -601,6 +627,7 @@ function MarkdownComposerEditable({
   ariaLabelledBy?: string;
   id?: string;
   disabled: boolean;
+  rightPaddingClass?: string;
 }) {
   const style: HTMLAttributes<HTMLDivElement>['style'] = {
     minHeight,
@@ -626,7 +653,7 @@ function MarkdownComposerEditable({
             placeholder={<></>}
             role="textbox"
             spellCheck
-            className="min-h-full w-full resize-none whitespace-pre-wrap break-words rounded-[10px] border border-transparent bg-transparent px-3 py-2 pr-12 text-sm leading-relaxed text-[var(--agyn-dark)] focus:outline-none focus-visible:outline-none"
+            className={`min-h-full w-full resize-none whitespace-pre-wrap break-words rounded-[10px] border border-transparent bg-transparent px-3 py-2 ${rightPaddingClass} text-sm leading-relaxed text-[var(--agyn-dark)] focus:outline-none focus-visible:outline-none`}
             data-testid="markdown-composer-editor"
             style={style}
           />
@@ -740,6 +767,36 @@ function MarkdownComposerMarkdownPlugin({
 
     return unregister;
   }, [editor, maxLength, onMarkdownChange]);
+
+  return null;
+}
+
+function MarkdownComposerPasteFilePlugin({
+  onAttachFiles,
+}: {
+  onAttachFiles?: (files: FileList | File[]) => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    if (!onAttachFiles) {
+      return undefined;
+    }
+
+    return editor.registerCommand<ClipboardEvent | null>(
+      PASTE_COMMAND,
+      (event) => {
+        const files = extractFilesFromDataTransfer(event?.clipboardData ?? null);
+        if (files.length === 0) {
+          return false;
+        }
+        event?.preventDefault();
+        onAttachFiles(files);
+        return true;
+      },
+      COMMAND_PRIORITY_NORMAL,
+    );
+  }, [editor, onAttachFiles]);
 
   return null;
 }
@@ -1472,12 +1529,17 @@ export function MarkdownComposerRTE({
   className = '',
   textareaAriaLabel,
   textareaProps,
+  attachments = [],
+  onAttachFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
 }: MarkdownComposerRTEProps) {
   const {
     maxLength,
     id: editorId,
     className: textareaClassName,
     size: textareaSize,
+    onPaste: textareaOnPaste,
     'aria-describedby': ariaDescribedBy,
     'aria-labelledby': ariaLabelledBy,
     'aria-label': ariaLabelProp,
@@ -1486,11 +1548,14 @@ export function MarkdownComposerRTE({
 
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [mode, setMode] = useState<ComposerMode>('rendered');
+  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sendButtonDisabled = disabled || Boolean(sendDisabled) || Boolean(isSending);
   const ariaLabel = textareaAriaLabel ?? ariaLabelProp ?? placeholder;
+  const actionPaddingClass = onAttachFiles ? 'pr-20' : 'pr-12';
   const sourceTextareaClassName = [
-    '!border-none !outline-none !ring-0 bg-transparent px-3 py-2 pr-12 text-sm leading-relaxed text-[var(--agyn-dark)]',
+    `!border-none !outline-none !ring-0 bg-transparent px-3 py-2 ${actionPaddingClass} text-sm leading-relaxed text-[var(--agyn-dark)]`,
     'placeholder:text-[var(--agyn-gray)] focus:!ring-0 focus:!outline-none focus:!border-transparent focus-visible:!ring-0 focus-visible:!outline-none',
     textareaClassName,
   ]
@@ -1542,6 +1607,24 @@ export function MarkdownComposerRTE({
     }
     onChange(nextValue);
   }, [maxLength, onChange]);
+
+  const handleFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    if (!onAttachFiles) {
+      return;
+    }
+    const { files } = event.target;
+    if (files && files.length > 0) {
+      onAttachFiles(files);
+    }
+    event.target.value = '';
+  }, [onAttachFiles]);
+
+  const handleAttachClick = useCallback(() => {
+    if (!onAttachFiles || disabled) {
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [disabled, onAttachFiles]);
 
   const handleSourceAction = useCallback((action: SourceAction) => {
     if (mode !== 'source') {
@@ -1656,8 +1739,76 @@ export function MarkdownComposerRTE({
     }
   }, [disabled, handleSend, handleSourceAction, mode, onSend, sendButtonDisabled]);
 
+  const handleSourcePaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onAttachFiles || disabled) {
+      textareaOnPaste?.(event);
+      return;
+    }
+    const files = extractFilesFromDataTransfer(event.clipboardData);
+    if (files.length === 0) {
+      textareaOnPaste?.(event);
+      return;
+    }
+    event.preventDefault();
+    onAttachFiles(files);
+  }, [disabled, onAttachFiles, textareaOnPaste]);
+
+  const handleDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!onAttachFiles || disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsDragging(true);
+  }, [disabled, onAttachFiles]);
+
+  const handleDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!onAttachFiles || disabled) {
+      return;
+    }
+    const relatedTarget = event.relatedTarget as Node | null;
+    if (relatedTarget && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+    setIsDragging(false);
+  }, [disabled, onAttachFiles]);
+
+  const handleDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!onAttachFiles || disabled) {
+      return;
+    }
+    event.preventDefault();
+    setIsDragging(false);
+    const files = extractFilesFromDataTransfer(event.dataTransfer);
+    if (files.length === 0) {
+      return;
+    }
+    onAttachFiles(files);
+  }, [disabled, onAttachFiles]);
+
+  useEffect(() => {
+    if (!onAttachFiles || disabled) {
+      setIsDragging(false);
+    }
+  }, [disabled, onAttachFiles]);
+
+  const wrapperClassName = [
+    'rounded-[10px] border',
+    isDragging
+      ? 'border-[var(--agyn-blue)] bg-[var(--agyn-bg-blue)]'
+      : 'border-[var(--agyn-border-subtle)] bg-white',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className={`rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white ${className}`}>
+    <div
+      className={wrapperClassName}
+      onDragOver={onAttachFiles ? handleDragOver : undefined}
+      onDragLeave={onAttachFiles ? handleDragLeave : undefined}
+      onDrop={onAttachFiles ? handleDrop : undefined}
+    >
       <LexicalComposer initialConfig={initialConfig}>
         <MarkdownComposerToolbar
           disabled={disabled}
@@ -1677,6 +1828,7 @@ export function MarkdownComposerRTE({
               ariaLabelledBy={ariaLabelledBy}
               id={editorId}
               disabled={disabled}
+              rightPaddingClass={actionPaddingClass}
             />
           ) : (
             <AutosizeTextarea
@@ -1684,6 +1836,7 @@ export function MarkdownComposerRTE({
               value={value}
               onChange={handleTextareaChange}
               onKeyDown={handleTextareaKeyDown}
+              onPaste={handleSourcePaste}
               id={editorId}
               placeholder={placeholder}
               aria-label={ariaLabel}
@@ -1699,20 +1852,56 @@ export function MarkdownComposerRTE({
               {...restTextareaProps}
             />
           )}
-          {onSend ? (
-            <IconButton
-              icon={isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              variant="primary"
-              size="sm"
-              className="absolute bottom-2 right-2"
-              onClick={handleSend}
-              disabled={sendButtonDisabled}
-              aria-label="Send message"
-              title="Send message"
-              aria-busy={isSending || undefined}
+          {onAttachFiles ? (
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+              aria-hidden="true"
+              tabIndex={-1}
+              data-testid="file-attachment-input"
             />
           ) : null}
+          {onSend || onAttachFiles ? (
+            <div className="absolute bottom-2 right-2 flex items-center gap-2">
+              {onAttachFiles ? (
+                <IconButton
+                  icon={<Paperclip className="h-4 w-4" />}
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAttachClick}
+                  disabled={disabled}
+                  aria-label="Attach files"
+                  title="Attach files"
+                  data-testid="file-attachment-button"
+                />
+              ) : null}
+              {onSend ? (
+                <IconButton
+                  icon={isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSend}
+                  disabled={sendButtonDisabled}
+                  aria-label="Send message"
+                  title="Send message"
+                  aria-busy={isSending || undefined}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
+        {attachments.length > 0 ? (
+          <div className="px-2 pb-2">
+            <AttachmentPreviewStrip
+              attachments={attachments}
+              onRemoveAttachment={onRemoveAttachment}
+              onRetryAttachment={onRetryAttachment}
+            />
+          </div>
+        ) : null}
         <MarkdownComposerEditableStatePlugin editable={!disabled && mode === 'rendered'} />
         <MarkdownComposerCodeHighlightPlugin />
         <MarkdownComposerMarkdownPlugin
@@ -1720,6 +1909,7 @@ export function MarkdownComposerRTE({
           onMarkdownChange={onChange}
           maxLength={maxLength}
         />
+        <MarkdownComposerPasteFilePlugin onAttachFiles={onAttachFiles} />
         <MarkdownComposerFormatPlugin />
         <MarkdownComposerKeymapPlugin
           disabled={disabled}

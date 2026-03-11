@@ -29,6 +29,7 @@ import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 import { clearDraft, readDraft, writeDraft, THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { getUuid } from '@/utils/getUuid';
+import { useFileAttachments } from '@/hooks/useFileAttachments';
 import { useUser } from '@/user/user.runtime';
 import { cancelReminder as cancelReminderApi } from '@/features/reminders/api';
 
@@ -528,6 +529,14 @@ export function AgentsThreads() {
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [detailPreloaderVisible, setDetailPreloaderVisible] = useState(false);
   const [initialMessagesLoaded, setInitialMessagesLoaded] = useState(false);
+  const {
+    attachments,
+    isUploading: isAttachmentsUploading,
+    addFiles,
+    removeAttachment,
+    retryAttachment,
+    clearAll: clearAttachments,
+  } = useFileAttachments();
 
   const pendingMessagesRef = useRef<Map<string, ConversationMessageWithMeta[]>>(new Map());
   const seenMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
@@ -578,6 +587,10 @@ export function AgentsThreads() {
   useEffect(() => {
     activeThreadIdRef.current = selectedThreadId ?? null;
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    clearAttachments();
+  }, [clearAttachments, selectedThreadId]);
 
   useEffect(() => {
     if (params.threadId) {
@@ -2021,6 +2034,7 @@ export function AgentsThreads() {
           notifyError(MESSAGE_LENGTH_LIMIT_NOTIFICATION);
           return;
         }
+        clearAttachments();
         createThread({ draftId: draft.id, agentNodeId, text: trimmed });
         return;
       }
@@ -2035,11 +2049,20 @@ export function AgentsThreads() {
         notifyError(MESSAGE_LENGTH_LIMIT_NOTIFICATION);
         return;
       }
+      clearAttachments();
       cancelDraftSave();
       persistDraftNow(threadId, value);
       sendThreadMessage({ threadId, text: trimmed });
     },
-    [cancelDraftSave, createThread, isCreateThreadPending, isSendMessagePending, persistDraftNow, sendThreadMessage],
+    [
+      cancelDraftSave,
+      clearAttachments,
+      createThread,
+      isCreateThreadPending,
+      isSendMessagePending,
+      persistDraftNow,
+      sendThreadMessage,
+    ],
   );
 
   const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
@@ -2110,6 +2133,11 @@ export function AgentsThreads() {
           onCancelReminder={handleCancelReminder}
           isCancelQueuedMessagesPending={cancelQueuedMessagesMutation.isPending}
           cancellingReminderIds={cancellingReminderIds}
+          attachments={attachments}
+          onAttachFiles={addFiles}
+          onRemoveAttachment={removeAttachment}
+          onRetryAttachment={retryAttachment}
+          isUploading={isAttachmentsUploading}
         />
       </div>
       <ContainerTerminalDialog
