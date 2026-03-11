@@ -14,7 +14,55 @@ pipelines:
     else
       echo "WARNING: ArgoCD Application 'platform-server' not found in argocd namespace."
     fi
-    start_dev platform-server
+    echo "Patching platform-server deployment for DevSpace..."
+    kubectl patch deployment platform-server -n ${PLATFORM_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
+    spec:
+      template:
+        spec:
+          securityContext:
+            runAsUser: 1000
+            fsGroup: 1000
+          initContainers: []
+          containers:
+            - name: platform-server
+              image: ghcr.io/agynio/devcontainer-node:1
+              workingDir: /opt/app/data
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  elapsed=0
+                  while [ ! -f /opt/app/data/pnpm-workspace.yaml ]; do
+                    sleep 1; elapsed=$((elapsed + 1))
+                    [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
+                  done
+                  exec /opt/app/data/packages/platform-server/scripts/devspace-startup.sh
+              env:
+                - name: NODE_ENV
+                  value: development
+                - name: GRAPH_REPO_PATH
+                  value: /opt/app/data/graph
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: "2"
+                  memory: 4Gi
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                readOnlyRootFilesystem: false
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                seccompProfile:
+                  type: RuntimeDefault
+EOF
+)"
+    start_dev --disable-pod-replace platform-server
 
 hooks:
   - name: restore-argocd-auto-sync
@@ -38,56 +86,9 @@ dev:
     labelSelector:
       app.kubernetes.io/name: platform-server
       app.kubernetes.io/instance: platform-server
-    patches:
-      - op: replace
-        path: spec.containers.name=platform-server.securityContext
-        value:
-          runAsNonRoot: true
-          runAsUser: 1000
-          runAsGroup: 1000
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-          seccompProfile:
-            type: RuntimeDefault
-      - op: replace
-        path: spec.securityContext
-        value:
-          runAsUser: 1000
-          fsGroup: 1000
-      - op: remove
-        path: spec.initContainers
-      - op: replace
-        path: spec.containers.name=platform-server.resources
-        value:
-          requests:
-            cpu: 500m
-            memory: 1Gi
-          limits:
-            cpu: "2"
-            memory: 4Gi
     containers:
       platform-server:
         container: platform-server
-        devImage: ghcr.io/agynio/devcontainer-node:1
-        workingDir: /opt/app/data
-        command:
-          - sh
-          - -c
-          - |
-            set -eu
-            elapsed=0
-            while [ ! -f /opt/app/data/pnpm-workspace.yaml ]; do
-              sleep 1; elapsed=$((elapsed + 1))
-              [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
-            done
-            exec /opt/app/data/packages/platform-server/scripts/devspace-startup.sh
-        env:
-          - name: NODE_ENV
-            value: development
-          - name: GRAPH_REPO_PATH
-            value: /opt/app/data/graph
         sync:
           - path: ../..:/opt/app/data
             excludePaths:

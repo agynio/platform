@@ -13,22 +13,23 @@ the `bootstrap_v2` cluster and run the development image with live sync.
 
 ## How it works
 
-DevSpace uses the ArgoCD-managed deployment as the base, then overlays the dev
-container and sync behavior:
+DevSpace uses the ArgoCD-managed deployment as the base, patches it in place,
+and then attaches sync/ports/logs:
 
 1. If the `platform-server` ArgoCD Application exists in the `argocd`
    namespace, DevSpace disables auto-sync to prevent ArgoCD from reverting the
    dev container changes.
-2. DevSpace clones the deployment into a dev pod with the
-   `ghcr.io/agynio/devcontainer-node:1` image (maintained in
-   [`agynio/devcontainer-node`](https://github.com/agynio/devcontainer-node)).
-3. The repo is synced into `/opt/app/data` (not a subdirectory, since the CRI
+2. The pipeline patches the existing `platform-server` Deployment in place
+   (image, security context, resources, command, env) so no clone is created.
+3. DevSpace attaches to the patched deployment with
+   `start_dev --disable-pod-replace` and only configures sync/ports/logs.
+4. The repo is synced into `/opt/app/data` (not a subdirectory, since the CRI
    creates subdirectories as root-owned `755`) and the startup script installs
    dependencies, generates protobuf and Prisma clients, and launches the dev
    server.
-4. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
+5. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
    graph repository lives on the writable emptyDir mount.
-5. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
+6. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
 
 Port `3010` is forwarded locally, so the API should be reachable at
 `http://localhost:3010` once the server reports ready.
@@ -70,6 +71,9 @@ pnpm --filter @agyn/platform-server exec prisma migrate deploy
   the `argocd` namespace and that auto-sync was disabled. Run
   `kubectl get application platform-server -n argocd` and restart the session
   if needed.
+- **Old devspace clone still running**: If `platform-server-devspace` exists
+  from the previous workflow, delete it with
+  `kubectl delete deployment platform-server-devspace -n platform`.
 - **OOM kills**: The dev container is limited to 4Gi. Reduce memory usage or
   increase limits in the cluster if you consistently hit OOMs.
 
