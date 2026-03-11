@@ -21,6 +21,7 @@ import {
 } from './types';
 
 const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
+const EXEC_INSPECT_POLL_INTERVAL_MS = 2000;
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
@@ -409,11 +410,53 @@ export class ContainerService implements DockerClientPort {
       }
     };
 
-    hijackStream.once('end', closeOutputs);
-    hijackStream.once('close', closeOutputs);
+    let outputsClosed = false;
+    let pollTimer: NodeJS.Timeout | null = null;
+    let pollInspectErrorLogged = false;
+    const closeOutputsOnce = () => {
+      if (outputsClosed) return;
+      outputsClosed = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      closeOutputs();
+    };
+
+    const pollExec = async () => {
+      if (outputsClosed) return;
+      let details: Awaited<ReturnType<Exec['inspect']>> | undefined;
+      try {
+        details = await exec.inspect();
+      } catch (error) {
+        if (!pollInspectErrorLogged) {
+          pollInspectErrorLogged = true;
+          this.warn('Interactive exec inspect failed during completion poll', { error: this.errorContext(error) });
+        }
+        schedulePoll();
+        return;
+      }
+
+      const running = details.Running === true;
+      const hasExitCode = typeof details.ExitCode === 'number';
+      if (!running || hasExitCode) {
+        closeOutputsOnce();
+        return;
+      }
+      schedulePoll();
+    };
+
+    const schedulePoll = () => {
+      if (outputsClosed) return;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(() => {
+        void pollExec();
+      }, EXEC_INSPECT_POLL_INTERVAL_MS);
+    };
+
+    hijackStream.once('end', closeOutputsOnce);
+    hijackStream.once('close', closeOutputsOnce);
 
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
+    schedulePoll();
 
     const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
       await this.terminateExecProcess(exec, { containerId: inspectData.Id, reason });
@@ -526,6 +569,12 @@ export class ContainerService implements DockerClientPort {
     await exec.resize({ w: size.cols, h: size.rows });
   }
 
+  async inspectExec(execId: string) {
+    const exec = this.docker.getExec(execId);
+    if (!exec) throw new Error('exec_not_found');
+    return exec.inspect();
+  }
+
   private buildLogToPid1Command(command: string[] | string): string[] {
     const script = 'set -o pipefail; { "$@" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1';
     const placeholder = '__hautech_exec__';
@@ -564,6 +613,8 @@ export class ContainerService implements DockerClientPort {
       const onAbort = () => {
         if (finished) return;
         finished = true;
+        clearAll(execTimer, idleTimer, pollTimer);
+        removeAbortListener();
         // Tear down underlying stream on abort if available
         destroyIfPossible(streamRef);
         try {
@@ -577,6 +628,14 @@ export class ContainerService implements DockerClientPort {
         abortErr.name = 'AbortError';
         reject(abortErr);
       };
+      const removeAbortListener = () => {
+        if (!signal) return;
+        try {
+          signal.removeEventListener('abort', onAbort);
+        } catch {
+          // ignore listener removal errors
+        }
+      };
       if (signal) {
         if (signal.aborted) return onAbort();
         signal.addEventListener('abort', onAbort, { once: true });
@@ -586,6 +645,8 @@ export class ContainerService implements DockerClientPort {
           ? setTimeout(() => {
               if (finished) return;
               finished = true;
+              clearAll(execTimer, idleTimer, pollTimer);
+              removeAbortListener();
               // Ensure underlying stream is torn down to avoid further data/timers
               destroyIfPossible(streamRef);
               try {
@@ -598,6 +659,7 @@ export class ContainerService implements DockerClientPort {
             }, timeoutMs)
           : null;
       let idleTimer: NodeJS.Timeout | null = null;
+      let pollTimer: NodeJS.Timeout | null = null;
       const armIdle = () => {
         if (finished) return; // do not arm after completion
         if (!idleTimeoutMs || idleTimeoutMs <= 0) return;
@@ -605,6 +667,8 @@ export class ContainerService implements DockerClientPort {
         idleTimer = setTimeout(() => {
           if (finished) return;
           finished = true;
+          clearAll(execTimer, idleTimer, pollTimer);
+          removeAbortListener();
           // Ensure underlying stream is torn down to avoid further data/timers
           destroyIfPossible(streamRef);
           try {
@@ -617,25 +681,88 @@ export class ContainerService implements DockerClientPort {
         }, idleTimeoutMs);
       };
 
+      const finalizeFromInspect = async (
+        origin: 'end' | 'close' | 'poll',
+        inspectData?: Awaited<ReturnType<Exec['inspect']>>,
+      ): Promise<void> => {
+        if (finished) return;
+        finished = true;
+        clearAll(execTimer, idleTimer, pollTimer);
+        removeAbortListener();
+        if (origin === 'poll') {
+          destroyIfPossible(streamRef);
+        }
+
+        let details = inspectData;
+        if (!details) {
+          try {
+            details = await exec.inspect();
+          } catch (error) {
+            try {
+              stdoutCollector.flush();
+              stderrCollector.flush();
+            } catch {
+              // ignore collector flush errors
+            }
+            reject(error);
+            return;
+          }
+        }
+
+        try {
+          stdoutCollector.flush();
+          stderrCollector.flush();
+        } catch {
+          // ignore collector flush errors
+        }
+        resolve({
+          stdout: stdoutCollector.getText(),
+          stderr: stderrCollector.getText(),
+          exitCode: details.ExitCode ?? -1,
+        });
+      };
+
+      let pollInspectErrorLogged = false;
+      const pollExec = async () => {
+        if (finished) return;
+        let details: Awaited<ReturnType<Exec['inspect']>> | undefined;
+        try {
+          details = await exec.inspect();
+        } catch (error) {
+          if (!pollInspectErrorLogged) {
+            pollInspectErrorLogged = true;
+            this.warn('Exec inspect failed during completion poll', { error: this.errorContext(error) });
+          }
+          schedulePoll();
+          return;
+        }
+
+        const running = details.Running === true;
+        const hasExitCode = typeof details.ExitCode === 'number';
+        if (!running || hasExitCode) {
+          void finalizeFromInspect('poll', details);
+          return;
+        }
+        schedulePoll();
+      };
+
+      const schedulePoll = () => {
+        if (finished) return;
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = setTimeout(() => {
+          void pollExec();
+        }, EXEC_INSPECT_POLL_INTERVAL_MS);
+      };
+
       exec.start({ hijack: true, stdin: false }, (err, stream) => {
         if (err) {
-          clearAll(execTimer, idleTimer);
-          if (signal)
-            try {
-              signal.removeEventListener('abort', onAbort);
-            } catch {
-              // ignore listener removal errors
-            }
+          clearAll(execTimer, idleTimer, pollTimer);
+          removeAbortListener();
           return reject(err);
         }
         if (!stream) {
-          clearAll(execTimer, idleTimer);
-          if (signal)
-            try {
-              signal.removeEventListener('abort', onAbort);
-            } catch {
-              // ignore listener removal errors
-            }
+          clearAll(execTimer, idleTimer, pollTimer);
+          removeAbortListener();
           return reject(new Error('No stream returned from exec.start'));
         }
 
@@ -739,50 +866,13 @@ export class ContainerService implements DockerClientPort {
           }
         })();
 
-        stream.on('end', async () => {
-          if (finished) return; // already timed out
-          try {
-            const inspectData = await exec.inspect();
-            clearAll(execTimer, idleTimer);
-            if (signal)
-              try {
-                signal.removeEventListener('abort', onAbort);
-              } catch {
-                // ignore listener removal errors
-              }
-            finished = true;
-            try {
-              stdoutCollector.flush();
-              stderrCollector.flush();
-            } catch {
-              // ignore collector flush errors
-            }
-            resolve({
-              stdout: stdoutCollector.getText(),
-              stderr: stderrCollector.getText(),
-              exitCode: inspectData.ExitCode ?? -1,
-            });
-          } catch (e) {
-            clearAll(execTimer, idleTimer);
-            if (signal)
-              try {
-                signal.removeEventListener('abort', onAbort);
-              } catch {
-                // ignore listener removal errors
-              }
-            finished = true;
-            reject(e);
-          }
+        stream.on('end', () => {
+          void finalizeFromInspect('end');
         });
         stream.on('error', (e) => {
           if (finished) return;
-          clearAll(execTimer, idleTimer);
-          if (signal)
-            try {
-              signal.removeEventListener('abort', onAbort);
-            } catch {
-              // ignore listener removal errors
-            }
+          clearAll(execTimer, idleTimer, pollTimer);
+          removeAbortListener();
           // Flush decoders to avoid dropping partial code units
           try {
             stdoutCollector.flush();
@@ -793,16 +883,10 @@ export class ContainerService implements DockerClientPort {
           finished = true;
           reject(e);
         });
-        // Extra safety: clear timers on close as well
         stream.on('close', () => {
-          clearAll(execTimer, idleTimer);
-          if (signal)
-            try {
-              signal.removeEventListener('abort', onAbort);
-            } catch {
-              // ignore listener removal errors
-            }
+          void finalizeFromInspect('close');
         });
+        schedulePoll();
       });
     });
   }

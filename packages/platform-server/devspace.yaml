@@ -60,8 +60,8 @@ pipelines:
                   drop: ["ALL"]
                 seccompProfile:
                   type: RuntimeDefault
-EOF
-)"
+    EOF
+    )"
     start_dev --disable-pod-replace platform-server
 
 hooks:
