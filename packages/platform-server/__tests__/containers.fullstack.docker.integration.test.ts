@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { Http2SessionManager } from '@connectrpc/connect-node';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Body, Controller, Post } from '@nestjs/common';
@@ -24,7 +25,7 @@ import {
   runnerAddressMissing,
   runnerSecretMissing,
   socketMissing,
-  startDockerRunner,
+  startDockerRunnerProcess,
   startPostgres,
   runPrismaMigrations,
   waitFor,
@@ -75,6 +76,7 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
   let runner: RunnerHandle;
   let dbHandle: PostgresHandle;
   let dockerClient: RunnerGrpcClient;
+  let sessionManager: Http2SessionManager | undefined;
   let configService: ConfigService;
   const createdThreads = new Set<string>();
   const createdContainers = new Set<string>();
@@ -83,8 +85,11 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
-    runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunnerProcess(socketPath);
+    const baseUrl = runner.grpcAddress.startsWith('http') ? runner.grpcAddress : `http://${runner.grpcAddress}`;
+    sessionManager = new Http2SessionManager(baseUrl);
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET, sessionManager });
 
     clearTestConfig();
     const [grpcHost, grpcPort] = runner.grpcAddress.split(':');
@@ -146,6 +151,8 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
   });
 
   afterAll(async () => {
+    sessionManager?.abort();
+    sessionManager = undefined;
     if (app) {
       await app.close();
     }

@@ -81,6 +81,13 @@ type ExecutionContext = {
 
 const activeExecutions = new Map<string, ExecutionContext>();
 
+const shouldDebugExec = process.env.DEBUG_RUNNER_EXEC === '1';
+
+const logExec = (message: string, details: Record<string, unknown> = {}) => {
+  if (!shouldDebugExec) return;
+  console.info(`[runner exec] ${message}`, details);
+};
+
 const runnerServicePath = (method: keyof typeof RunnerService.method): string =>
   `/${RunnerService.typeName}/${RunnerService.method[method].name}`;
 
@@ -861,6 +868,11 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Http2Server {
 
       const closeResponses = () => {
         if (closed) return;
+        logExec('closeResponses', {
+          executionId: ctx?.executionId,
+          requestId: ctx?.requestId,
+          finished: ctx?.finished,
+        });
         closed = true;
         responseQueue.end();
       };
@@ -871,6 +883,12 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Http2Server {
 
       const finish = async (target: ExecutionContext, reason: ExecExitReason, killed = false) => {
         if (!target || target.finished) return;
+        logExec('finish', {
+          executionId: target.executionId,
+          requestId: target.requestId,
+          reason,
+          killed,
+        });
         target.finished = true;
         target.reason = reason;
         target.killed = killed;
@@ -1167,18 +1185,32 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Http2Server {
             await handleRequest(req);
             if (closed || ctx?.finished) break;
           }
+          logExec('handleRequests completed', {
+            executionId: ctx?.executionId,
+            requestId: ctx?.requestId,
+            finished: ctx?.finished,
+            closed,
+          });
           if (!ctx || closed) {
             closeResponses();
             return;
           }
           if (ctx.finished) {
-            closeResponses();
             return;
           }
           return;
         } catch {
-          if (!ctx || ctx.finished || closed) {
+          logExec('handleRequests error', {
+            executionId: ctx?.executionId,
+            requestId: ctx?.requestId,
+            finished: ctx?.finished,
+            closed,
+          });
+          if (!ctx || closed) {
             closeResponses();
+            return;
+          }
+          if (ctx.finished) {
             return;
           }
           clearExecutionTimers(ctx);
@@ -1187,6 +1219,12 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Http2Server {
       })();
 
       const onAbort = () => {
+        logExec('context aborted', {
+          executionId: ctx?.executionId,
+          requestId: ctx?.requestId,
+          finished: ctx?.finished,
+          closed,
+        });
         if (!ctx || ctx.finished || closed) return;
         ctx.cancelRequested = true;
         clearExecutionTimers(ctx);
@@ -1199,6 +1237,12 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Http2Server {
           yield response;
         }
       } finally {
+        logExec('response loop closing', {
+          executionId: ctx?.executionId,
+          requestId: ctx?.requestId,
+          finished: ctx?.finished,
+          closed,
+        });
         context.signal.removeEventListener('abort', onAbort);
         closeResponses();
         await handleRequests.catch(() => undefined);
