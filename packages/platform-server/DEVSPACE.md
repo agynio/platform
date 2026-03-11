@@ -20,7 +20,8 @@ container and sync behavior:
    namespace, DevSpace disables auto-sync to prevent ArgoCD from reverting the
    dev container changes.
 2. DevSpace clones the deployment into a dev pod with the
-   `ghcr.io/agynio/platform-server:dev` image.
+   `ghcr.io/agynio/devcontainer-node:1` image (maintained in
+   [`agynio/devcontainer-node`](https://github.com/agynio/devcontainer-node)).
 3. The repo is synced into `/opt/app/data` (not a subdirectory, since the CRI
    creates subdirectories as root-owned `755`) and the startup script installs
    dependencies, generates protobuf and Prisma clients, and launches the dev
