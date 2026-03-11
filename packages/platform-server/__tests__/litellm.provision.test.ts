@@ -39,6 +39,25 @@ const respondJson = (payload: unknown, init?: ResponseInit) =>
 
 const respondStatus = (status: number, body = '') => new Response(body, { status });
 
+const parseJsonBody = (init?: RequestInit): Record<string, unknown> | null => {
+  if (!init?.body) return null;
+  try {
+    return JSON.parse(String(init.body)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const respondDelete = (init: RequestInit | undefined, deleteResponses: Response[]) => {
+  const body = parseJsonBody(init);
+  if (body && Array.isArray(body.key_aliases)) {
+    return respondJson({ deleted_aliases: body.key_aliases });
+  }
+  const next = deleteResponses.shift();
+  if (!next) throw new Error('Missing delete response');
+  return next;
+};
+
 const baseConfig = (overrides: Partial<Config> = {}): ConfigService => {
   const params: Partial<Config> = {
     llmProvider: 'litellm',
@@ -71,7 +90,7 @@ describe('LiteLLMProvisioner', () => {
   it('revokes persisted key on startup and stores newly issued key', async () => {
     const store = new InMemoryKeyStore({ alias: 'agents/unit-test', key: 'sk-old', expiresAt: null });
     const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       if (url.endsWith('/key/delete')) {
         return respondJson({ deleted_keys: ['sk-old'] });
@@ -99,7 +118,7 @@ describe('LiteLLMProvisioner', () => {
   it('passes configured alias, duration, and models when generating keys', async () => {
     const store = new InMemoryKeyStore();
     const expires = new Date(Date.now() + 45 * 60 * 1000).toISOString();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       if (url.endsWith('/key/generate')) {
         return respondJson({ key: 'sk-config', expires });
@@ -143,7 +162,7 @@ describe('LiteLLMProvisioner', () => {
       respondJson({ key: 'sk-two', expires: new Date(now.getTime() + 20 * 60 * 1000).toISOString() }),
     ];
     const deleteResponses = [respondJson({ deleted_keys: ['sk-one'] })];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       if (url.endsWith('/key/generate')) {
         const next = generateResponses.shift();
@@ -151,9 +170,7 @@ describe('LiteLLMProvisioner', () => {
         return next;
       }
       if (url.endsWith('/key/delete')) {
-        const next = deleteResponses.shift();
-        if (!next) throw new Error('Missing delete response');
-        return next;
+        return respondDelete(init, deleteResponses);
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -169,7 +186,10 @@ describe('LiteLLMProvisioner', () => {
     );
     expect(generateCalls.length).toBe(2);
 
-    const deleteCall = fetchMock.mock.calls.find(([arg]) => getUrl(arg as RequestInfo | URL).endsWith('/key/delete'));
+    const deleteCall = fetchMock.mock.calls.find(([, init]) => {
+      const body = parseJsonBody(init as RequestInit | undefined);
+      return Array.isArray(body?.keys);
+    });
     expect(deleteCall?.[1]).toMatchObject({ body: JSON.stringify({ keys: ['sk-one'] }) });
     expect(store.current?.key).toBe('sk-two');
 
@@ -201,7 +221,7 @@ describe('LiteLLMProvisioner', () => {
     ];
     const deleteResponses = [respondJson({ deleted_keys: ['sk-initial'] })];
     let llmRequestCount = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       if (url.endsWith('/key/generate')) {
         const next = generateResponses.shift();
@@ -209,9 +229,7 @@ describe('LiteLLMProvisioner', () => {
         return next;
       }
       if (url.endsWith('/key/delete')) {
-        const next = deleteResponses.shift();
-        if (!next) throw new Error('Missing delete response');
-        return next;
+        return respondDelete(init, deleteResponses);
       }
       if (url.endsWith('/v1/responses')) {
         llmRequestCount += 1;
@@ -249,7 +267,7 @@ describe('LiteLLMProvisioner', () => {
     ];
     const deleteResponses = [respondJson({ deleted_keys: ['sk-first'] })];
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       if (url.endsWith('/key/generate')) {
         const next = generateResponses.shift();
@@ -257,9 +275,7 @@ describe('LiteLLMProvisioner', () => {
         return next;
       }
       if (url.endsWith('/key/delete')) {
-        const next = deleteResponses.shift();
-        if (!next) throw new Error('Missing delete response');
-        return next;
+        return respondDelete(init, deleteResponses);
       }
       throw new Error(`Unexpected fetch ${url}`);
     });

@@ -14,6 +14,7 @@ const trackedEnvKeys = [
   'AGENTS_DATABASE_URL',
   'AGENTS_ENV',
   'AGENTS_DEPLOYMENT',
+  'DEPLOYMENT_ID',
   'NODE_ENV',
   'HOSTNAME',
 ];
@@ -67,7 +68,7 @@ describe('ConfigService.fromEnv', () => {
     const config = ConfigService.fromEnv();
 
     expect(config.llmProvider).toBe('litellm');
-    expect(config.litellmKeyAlias).toBe('agents/staging/web-1');
+    expect(config.litellmKeyAlias).toBe('agents/staging/platform-server');
   });
 
   it('throws when LLM_PROVIDER is not recognized', () => {

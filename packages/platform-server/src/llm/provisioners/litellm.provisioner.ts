@@ -80,6 +80,8 @@ export class LiteLLMProvisioner extends LLMProvisioner {
       await this.revokeKey(persisted.key, 'startup');
     }
 
+    await this.revokeKeyByAlias(this.keyAlias, 'startup:alias_cleanup');
+
     const state = await this.generateAndPersistKey('startup');
     this.applyKeyState(state);
     this.ensureOpenAIClient();
@@ -242,17 +244,17 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const response = await this.fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body) });
-        if (!response.ok) {
-          await this.handleProvisionNonOk(response, attempt, maxAttempts, baseDelayMs);
-          continue;
+        if (response.ok) {
+          return await this.parseProvisionResponse(response);
         }
 
-        const data = (await this.safeReadJson(response)) as { key?: string; expires?: string } | undefined;
-        if (!data?.key || typeof data.key !== 'string') {
-          throw new Error('litellm_provision_invalid_response');
+        const rawBody = await this.safeReadText(response);
+        const aliasCleared = await this.handleAliasConflict(response.status, rawBody, attempt);
+        if (aliasCleared) {
+          continue;
         }
-        const expiresAt = this.parseExpiry(data.expires);
-        return { key: data.key, expiresAt };
+        await this.handleProvisionNonOk(response, attempt, maxAttempts, baseDelayMs, rawBody);
+        continue;
       } catch (error) {
         if (attempt >= maxAttempts) {
           this.logger.error('LiteLLM provisioning failed after retries', error);
@@ -272,8 +274,9 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     attempt: number,
     maxAttempts: number,
     baseDelayMs: number,
+    rawBody?: string,
   ): Promise<void> {
-    const text = await this.safeReadText(resp);
+    const text = rawBody ?? (await this.safeReadText(resp));
     this.logger.error(
       `LiteLLM provisioning failed ${JSON.stringify({ status: String(resp.status), body: this.redact(text) })}`,
     );
@@ -282,6 +285,33 @@ export class LiteLLMProvisioner extends LLMProvisioner {
       return;
     }
     throw new Error(`litellm_provision_failed_${resp.status}`);
+  }
+
+  private async handleAliasConflict(status: number, rawBody: string, attempt: number): Promise<boolean> {
+    if (status !== 400 || !this.isAliasConflict(rawBody)) {
+      return false;
+    }
+    this.logger.warn(
+      `LiteLLM alias conflict detected, clearing alias ${JSON.stringify({
+        alias: this.keyAlias,
+        attempt,
+      })}`,
+    );
+    await this.revokeKeyByAlias(this.keyAlias, `generate:${attempt}`);
+    return true;
+  }
+
+  private async parseProvisionResponse(response: Response): Promise<VirtualKeyState> {
+    const data = (await this.safeReadJson(response)) as { key?: string; expires?: string } | undefined;
+    if (!data?.key || typeof data.key !== 'string') {
+      throw new Error('litellm_provision_invalid_response');
+    }
+    return { key: data.key, expiresAt: this.parseExpiry(data.expires) };
+  }
+
+  private isAliasConflict(rawBody: string): boolean {
+    const normalized = rawBody.toLowerCase();
+    return normalized.includes('alias') && normalized.includes('already exists');
   }
 
   private parseExpiry(candidate: string | undefined): Date | null {
@@ -313,6 +343,47 @@ export class LiteLLMProvisioner extends LLMProvisioner {
       }
     } catch (error) {
       this.logger.warn(`LiteLLM key revoke error ${JSON.stringify({ context, error: this.describeError(error) })}`);
+    }
+  }
+
+  private async revokeKeyByAlias(alias: string, context: string): Promise<void> {
+    if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) return;
+    const base = this.cfg.litellmBaseUrl.replace(/\/$/, '');
+    const url = `${base}/key/delete`;
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      authorization: `Bearer ${this.cfg.litellmMasterKey}`,
+    };
+
+    try {
+      const resp = await this.fetchImpl(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ key_aliases: [alias] }),
+      });
+      if (resp.status === 404) {
+        this.logger.debug(`LiteLLM key alias already revoked ${JSON.stringify({ alias, context })}`);
+        return;
+      }
+      if (!resp.ok) {
+        const text = await this.safeReadText(resp);
+        this.logger.warn(
+          `LiteLLM key alias revoke failed ${JSON.stringify({
+            alias,
+            context,
+            status: resp.status,
+            body: this.redact(text),
+          })}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `LiteLLM key alias revoke error ${JSON.stringify({
+          alias,
+          context,
+          error: this.describeError(error),
+        })}`,
+      );
     }
   }
 

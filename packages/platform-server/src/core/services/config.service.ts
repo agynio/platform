@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
-import os from 'node:os';
 dotenv.config();
 
 export const configSchema = z.object({
@@ -673,9 +672,7 @@ export class ConfigService implements Config {
     const deployment =
       ConfigService.coerceString(env.AGENTS_DEPLOYMENT) ??
       ConfigService.coerceString(env.DEPLOYMENT_ID) ??
-      ConfigService.coerceString(env.HOSTNAME) ??
-      os.hostname() ??
-      'unknown';
+      'platform-server';
     return `agents/${envName}/${deployment.replace(/\s+/g, '-')}`;
   }
 
