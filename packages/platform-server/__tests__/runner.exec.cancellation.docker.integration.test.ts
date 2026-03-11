@@ -5,16 +5,15 @@ import { Http2SessionManager } from '@connectrpc/connect-node';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
 import {
+  DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
-  runnerAddressMissing,
-  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   type RunnerHandle,
 } from './helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
+const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 
 describeOrSkip('runner gRPC exec cancellation integration', () => {
