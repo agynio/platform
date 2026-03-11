@@ -71,7 +71,7 @@ dev:
       platform-server:
         container: platform-server
         devImage: ghcr.io/agynio/platform-server:dev
-        workingDir: /opt/app/data/workspace
+        workingDir: /opt/app/data
         command:
           - sh
           - -c
@@ -82,7 +82,7 @@ dev:
             echo "Waiting for file sync..."
 
             elapsed=0
-            while [ ! -f /opt/app/data/workspace/pnpm-workspace.yaml ]; do
+            while [ ! -f /opt/app/data/pnpm-workspace.yaml ]; do
               sleep 1
               elapsed=$((elapsed + 1))
               if [ "$elapsed" -ge 120 ]; then
@@ -92,7 +92,7 @@ dev:
             done
             echo "Sync ready (${elapsed}s)."
 
-            cd /opt/app/data/workspace
+            cd /opt/app/data
 
             echo "Generating protobuf types..."
             pnpm proto:generate
@@ -112,7 +112,7 @@ dev:
           - name: NODE_ENV
             value: development
         sync:
-          - path: ../..:/opt/app/data/workspace
+          - path: ../..:/opt/app/data
             excludePaths:
               - .git/
               - node_modules/

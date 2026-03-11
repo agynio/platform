@@ -22,7 +22,7 @@ container and sync behavior:
    dev container changes.
 2. DevSpace clones the deployment into a dev pod with the
    `ghcr.io/agynio/platform-server:dev` image.
-3. The repo is synced into `/opt/app/data/workspace` and the startup script
+3. The repo is synced into `/opt/app/data` and the startup script
    installs dependencies, generates protobuf and Prisma clients, and launches
    the dev server.
 4. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
