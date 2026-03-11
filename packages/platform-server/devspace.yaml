@@ -134,8 +134,8 @@ dev:
               - node_modules/
               - dist/
               - .pnpm-store/
-        ports:
-          - port: 3010
         logs:
           enabled: true
           lastLines: 200
+    ports:
+      - port: "3010"
