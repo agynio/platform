@@ -17,7 +17,7 @@ export function formatFileSize(bytes: number): string {
     unitIndex += 1;
   }
 
-  const unit = FILE_SIZE_UNITS[unitIndex] ?? 'B';
+  const unit = FILE_SIZE_UNITS[unitIndex]!;
   const formatted = unitIndex === 0 ? Math.round(nextValue).toString() : formatNumber(nextValue);
   return `${formatted} ${unit}`;
 }

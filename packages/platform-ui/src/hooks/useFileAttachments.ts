@@ -40,9 +40,10 @@ const reducer = (state: Attachment[], action: AttachmentAction): Attachment[] =>
       return state.filter((attachment) => attachment.clientId !== action.clientId);
     case 'clear':
       return [];
-    default:
-      return state;
   }
+
+  const exhaustiveCheck: never = action;
+  throw new Error(`Unhandled attachment action: ${exhaustiveCheck}`);
 };
 
 const normalizeProgress = (loaded?: number, total?: number, progress?: number) => {
@@ -133,7 +134,7 @@ export function useFileAttachments(): UseFileAttachmentsReturn {
 
   const addFiles = useCallback(
     (files: FileList | File[]) => {
-      const items = Array.from(files ?? []);
+      const items = Array.from(files);
       if (items.length === 0) return;
 
       const nextAttachments = items.map((file) => {

@@ -98,4 +98,54 @@ describe('useFileAttachments', () => {
     expect(result.current.attachments[0]?.status).toBe('completed');
     expect(result.current.completedFileIds).toEqual(['file-2']);
   });
+
+  it('aborts uploads when removing attachments', () => {
+    const file = new File(['payload'], 'remove.txt', { type: 'text/plain' });
+
+    hoisted.uploadFileMock.mockImplementation(() => new Promise<FileRecord>(() => undefined));
+
+    const { result } = renderHook(() => useFileAttachments());
+
+    act(() => {
+      result.current.addFiles([file]);
+    });
+
+    expect(hoisted.uploadFileMock).toHaveBeenCalledTimes(1);
+    const signal = hoisted.uploadFileMock.mock.calls[0]?.[2] as AbortSignal;
+    const clientId = result.current.attachments[0]?.clientId;
+
+    act(() => {
+      result.current.removeAttachment(clientId!);
+    });
+
+    expect(signal.aborted).toBe(true);
+    expect(result.current.attachments).toHaveLength(0);
+  });
+
+  it('aborts all uploads when clearing attachments', () => {
+    const files = [
+      new File(['one'], 'one.txt', { type: 'text/plain' }),
+      new File(['two'], 'two.txt', { type: 'text/plain' }),
+    ];
+
+    hoisted.uploadFileMock.mockImplementation(() => new Promise<FileRecord>(() => undefined));
+
+    const { result } = renderHook(() => useFileAttachments());
+
+    act(() => {
+      result.current.addFiles(files);
+    });
+
+    expect(hoisted.uploadFileMock).toHaveBeenCalledTimes(2);
+    const signals = hoisted.uploadFileMock.mock.calls.map((call) => call[2] as AbortSignal);
+
+    act(() => {
+      result.current.clearAll();
+    });
+
+    signals.forEach((signal) => {
+      expect(signal.aborted).toBe(true);
+    });
+    expect(result.current.attachments).toHaveLength(0);
+  });
 });
