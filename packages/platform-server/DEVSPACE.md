@@ -41,11 +41,13 @@ devspace dev
 
 Startup steps in the dev container:
 
-1. `pnpm proto:generate`
-2. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
-3. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
-4. `pnpm --filter @agyn/platform-server run prisma:generate`
-5. `pnpm --filter @agyn/platform-server dev`
+1. `corepack enable --install-directory /opt/app/data/corepack`
+2. `corepack prepare pnpm@10.5.0 --activate`
+3. `pnpm proto:generate`
+4. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
+5. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
+6. `pnpm --filter @agyn/platform-server run prisma:generate`
+7. `pnpm --filter @agyn/platform-server dev`
 
 ## Prisma migrations
 

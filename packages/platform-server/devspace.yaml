@@ -92,6 +92,12 @@ dev:
             done
             echo "Sync ready (${elapsed}s)."
 
+            echo "Bootstrapping pnpm..."
+            mkdir -p /opt/app/data/corepack
+            corepack enable --install-directory /opt/app/data/corepack
+            export PATH="/opt/app/data/corepack:$PATH"
+            corepack prepare pnpm@10.5.0 --activate
+
             cd /opt/app/data
 
             echo "Generating protobuf types..."
