@@ -25,7 +25,9 @@ container and sync behavior:
 3. The repo is synced into `/opt/app/data` and the startup script
    installs dependencies, generates protobuf and Prisma clients, and launches
    the dev server.
-4. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
+4. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
+   graph repository lives on the writable emptyDir mount.
+5. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
 
 Port `3010` is forwarded locally, so the API should be reachable at
 `http://localhost:3010` once the server reports ready.
@@ -43,11 +45,13 @@ Startup steps in the dev container:
 
 1. `corepack enable --install-directory /opt/app/data/corepack`
 2. `corepack prepare pnpm@10.5.0 --activate`
-3. `pnpm proto:generate`
-4. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
-5. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
-6. `pnpm --filter @agyn/platform-server run prisma:generate`
-7. `pnpm --filter @agyn/platform-server dev`
+3. Install `buf` if missing (downloaded into `/opt/app/data/corepack`)
+4. Install a CA bundle (needed for `buf` registry TLS)
+5. `pnpm proto:generate`
+6. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
+7. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
+8. `pnpm --filter @agyn/platform-server run prisma:generate`
+9. `pnpm --filter @agyn/platform-server dev`
 
 ## Prisma migrations
 

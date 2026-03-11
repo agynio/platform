@@ -98,6 +98,17 @@ dev:
             export PATH="/opt/app/data/corepack:$PATH"
             corepack prepare pnpm@10.5.0 --activate
 
+            if ! command -v buf >/dev/null 2>&1; then
+              echo "Installing buf..."
+              node -e "const https=require('https');const fs=require('fs');const dest='/opt/app/data/corepack/buf';const download=(url)=>new Promise((resolve,reject)=>{https.get(url,res=>{if(res.statusCode&&res.statusCode>=300&&res.statusCode<400&&res.headers.location){res.resume();return resolve(download(res.headers.location));}if(res.statusCode!==200){return reject(new Error('Failed to download buf: '+res.statusCode));}const file=fs.createWriteStream(dest);res.pipe(file);file.on('finish',()=>file.close(resolve));file.on('error',reject);}).on('error',reject);});download('https://github.com/bufbuild/buf/releases/download/v1.45.0/buf-Linux-x86_64').then(()=>{fs.chmodSync(dest,0o755);}).catch(err=>{console.error(err.message);process.exit(1);});"
+            fi
+
+            export SSL_CERT_FILE="/opt/app/data/corepack/cacert.pem"
+            if [ ! -f "$SSL_CERT_FILE" ]; then
+              echo "Installing CA bundle..."
+              node -e "const https=require('https');const fs=require('fs');const dest='/opt/app/data/corepack/cacert.pem';const download=(url)=>new Promise((resolve,reject)=>{https.get(url,res=>{if(res.statusCode&&res.statusCode>=300&&res.statusCode<400&&res.headers.location){res.resume();return resolve(download(res.headers.location));}if(res.statusCode!==200){return reject(new Error('Failed to download CA bundle: '+res.statusCode));}const file=fs.createWriteStream(dest);res.pipe(file);file.on('finish',()=>file.close(resolve));file.on('error',reject);}).on('error',reject);});download('https://curl.se/ca/cacert.pem').then(()=>{fs.chmodSync(dest,0o644);}).catch(err=>{console.error(err.message);process.exit(1);});"
+            fi
+
             cd /opt/app/data
 
             echo "Generating protobuf types..."
@@ -117,6 +128,8 @@ dev:
         env:
           - name: NODE_ENV
             value: development
+          - name: GRAPH_REPO_PATH
+            value: /opt/app/data/graph
         sync:
           - path: ../..:/opt/app/data
             excludePaths:
