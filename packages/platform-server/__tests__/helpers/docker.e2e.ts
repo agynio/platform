@@ -7,7 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { create } from '@bufbuild/protobuf';
 import { createClient, type Client, type Interceptor } from '@connectrpc/connect';
 import { createGrpcTransport, Http2SessionManager } from '@connectrpc/connect-node';
-import type { Http2Server } from 'node:http2';
+import type { Http2Server, ServerHttp2Session } from 'node:http2';
 
 import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/server';
 import { ContainerService, NonceCache, buildAuthHeaders } from '../../../docker-runner/src';
@@ -29,6 +29,30 @@ export type PostgresHandle = {
 };
 
 type RunnerServiceClient = Client<typeof RunnerService>;
+const serverSessions = new WeakMap<Http2Server, Set<ServerHttp2Session>>();
+
+function registerRunnerServerSessions(server: Http2Server): void {
+  const sessions = new Set<ServerHttp2Session>();
+  serverSessions.set(server, sessions);
+  server.on('session', (session) => {
+    sessions.add(session);
+    session.once('close', () => sessions.delete(session));
+  });
+}
+
+function closeRunnerServerConnections(server: Http2Server): void {
+  const closeAllConnections = (server as { closeAllConnections?: () => void }).closeAllConnections;
+  if (typeof closeAllConnections === 'function') {
+    closeAllConnections.call(server);
+    return;
+  }
+  const sessions = serverSessions.get(server);
+  if (!sessions) return;
+  for (const session of sessions) {
+    session.destroy();
+  }
+  sessions.clear();
+}
 
 export async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
   const grpcPort = await getAvailablePort();
@@ -51,6 +75,7 @@ export async function startDockerRunner(socketPath: string): Promise<RunnerHandl
   const containers = new ContainerService();
   const nonceCache = new NonceCache({ ttlMs: config.signatureTtlMs });
   const server = createRunnerGrpcServer({ config, containers, nonceCache });
+  registerRunnerServerSessions(server);
   const grpcAddress = await bindRunnerServer(server, config.grpcHost, config.grpcPort);
   const { client, sessionManager } = createRunnerClient(grpcAddress, RUNNER_SECRET);
 
@@ -180,6 +205,7 @@ async function bindRunnerServer(server: Http2Server, host: string, port: number)
 async function shutdownRunnerServer(server: Http2Server): Promise<void> {
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
+    closeRunnerServerConnections(server);
   });
 }
 
