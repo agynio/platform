@@ -49,7 +49,7 @@ Startup steps in the dev container (see
 2. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
 3. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
 4. `pnpm --filter @agyn/platform-server run prisma:generate`
-5. `pnpm --filter @agyn/platform-server dev`
+5. `pnpm --filter @agyn/platform-server exec tsx watch src/index.ts`
 
 ## Prisma migrations
 
