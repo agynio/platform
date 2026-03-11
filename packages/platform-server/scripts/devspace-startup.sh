@@ -6,7 +6,8 @@ set -eu
 # dev image is rebuilt from the updated Dockerfile.dev.
 if ! command -v pnpm >/dev/null 2>&1; then
   echo "pnpm not on PATH, activating via corepack..."
-  corepack enable --install-directory /usr/local/bin
+  COREPACK_SHIMS_DIR="/usr/local/lib/node_modules/corepack/shims"
+  export PATH="$COREPACK_SHIMS_DIR:$PATH"
   corepack prepare pnpm@10.5.0 --activate
 fi
 
