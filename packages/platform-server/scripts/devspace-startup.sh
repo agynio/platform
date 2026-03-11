@@ -1,19 +1,7 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -eu
 
-# Ensure pnpm is available via corepack (handles stale dev images where
-# PNPM_HOME/PATH haven't been updated yet). Transitional shim until the
-# dev image is rebuilt from the updated Dockerfile.dev.
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "pnpm not on PATH, activating via corepack..."
-  COREPACK_SHIMS_DIR="/usr/local/lib/node_modules/corepack/shims"
-  export PATH="$COREPACK_SHIMS_DIR:$PATH"
-  corepack prepare pnpm@10.5.0 --activate
-fi
-
 echo "=== DevSpace startup ==="
-
-cd /opt/app/data
 
 echo "Generating protobuf types..."
 pnpm proto:generate
@@ -28,4 +16,4 @@ echo "Generating Prisma client..."
 pnpm --filter @agyn/platform-server run prisma:generate
 
 echo "Starting dev server (tsx watch)..."
-exec pnpm --filter @agyn/platform-server dev
+pnpm --filter @agyn/platform-server dev
