@@ -16,4 +16,4 @@ echo "Generating Prisma client..."
 pnpm --filter @agyn/platform-server run prisma:generate
 
 echo "Starting dev server (tsx watch)..."
-pnpm --filter @agyn/platform-server dev
+pnpm --filter @agyn/platform-server exec tsx watch src/index.ts
