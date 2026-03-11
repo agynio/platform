@@ -8,9 +8,8 @@ the `bootstrap_v2` cluster and run the development image with live sync.
 - macOS or Linux workstation with Docker and `kubectl` installed
 - [`devspace`](https://devspace.sh/docs/cli/installation)
 - Local cluster provisioned via
-  [`agynio/bootstrap_v2`](https://github.com/agynio/bootstrap_v2). Export the
-  kubeconfig path from the Quickstart (for example:
-  `export KUBECONFIG=bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`).
+  [`agynio/bootstrap_v2`](https://github.com/agynio/bootstrap_v2) (the
+  `apply.sh` script merges the kubeconfig into `~/.kube` automatically).
 
 ## How it works
 
