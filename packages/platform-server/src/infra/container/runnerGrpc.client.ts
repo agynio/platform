@@ -1,104 +1,110 @@
 import { randomUUID } from 'node:crypto';
 import { PassThrough, Writable } from 'node:stream';
 import {
-  credentials,
-  Metadata,
-  status,
+  Code,
+  ConnectError,
+  createClient,
   type CallOptions,
-  type ClientDuplexStream,
-  type ClientReadableStream,
-  type ServiceError,
-} from '@grpc/grpc-js';
+  type Client,
+  type Interceptor,
+  type Transport,
+} from '@connectrpc/connect';
+import { createGrpcTransport, type Http2SessionManager } from '@connectrpc/connect-node';
 import { create } from '@bufbuild/protobuf';
 import { Logger } from '@nestjs/common';
-import { buildAuthHeaders } from './auth';
-import { ContainerHandle } from './container.handle';
-import type {
-  ContainerInspectInfo,
-  ContainerOpts,
-  DockerEventFilters,
-  ExecOptions,
-  ExecResult,
-  InteractiveExecOptions,
-  InteractiveExecSession,
-  LogsStreamOptions,
-  LogsStreamSession,
-} from './dockerRunner.types';
+import {
+  buildAuthHeaders,
+  ContainerHandle,
+  containerOptsToStartWorkloadRequest,
+  type ContainerInspectInfo,
+  type ContainerOpts,
+  type DockerEventFilters,
+  type ExecInspectInfo,
+  type ExecOptions,
+  type ExecResult,
+  type InteractiveExecOptions,
+  type InteractiveExecSession,
+  type LogsStreamOptions,
+  type LogsStreamSession,
+} from '@agyn/docker-runner';
 import {
   CancelExecutionRequestSchema,
-  CancelExecutionResponse,
-  ExecError,
   ExecOptionsSchema,
-  ExecRequest,
   ExecRequestSchema,
-  ExecResponse,
   ExecStdinSchema,
   ExecStartRequestSchema,
   ExecResizeSchema,
   FindWorkloadsByLabelsRequestSchema,
-  FindWorkloadsByLabelsResponse,
   GetWorkloadLabelsRequestSchema,
-  GetWorkloadLabelsResponse,
   InspectWorkloadRequestSchema,
-  InspectWorkloadResponse,
   ListWorkloadsByVolumeRequestSchema,
-  ListWorkloadsByVolumeResponse,
   PutArchiveRequestSchema,
   ReadyRequestSchema,
-  ReadyResponse,
   RemoveVolumeRequestSchema,
   RemoveWorkloadRequestSchema,
-  RunnerError,
   ExecExitReason,
-  StartWorkloadResponse,
   StopWorkloadRequestSchema,
   StreamEventsRequestSchema,
-  StreamEventsResponse,
   StreamWorkloadLogsRequestSchema,
-  StreamWorkloadLogsResponse,
   TouchWorkloadRequestSchema,
   EventFilterSchema,
   WorkloadStatus,
-  type EventFilter,
-  type TargetMount,
-  type StartWorkloadRequest,
-  type StopWorkloadRequest,
-  type RemoveWorkloadRequest,
-  type FindWorkloadsByLabelsRequest,
-  type ListWorkloadsByVolumeRequest,
-  type PutArchiveRequest,
-  type ReadyRequest,
-  type RemoveVolumeRequest,
-  type TouchWorkloadRequest,
-  type GetWorkloadLabelsRequest,
-  type InspectWorkloadRequest,
+  RunnerService,
 } from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
-import {
-  RunnerServiceGrpcClient,
-  type RunnerServiceGrpcClientInstance,
-  RUNNER_SERVICE_CANCEL_EXEC_PATH,
-  RUNNER_SERVICE_EXEC_PATH,
-  RUNNER_SERVICE_FIND_WORKLOADS_BY_LABELS_PATH,
-  RUNNER_SERVICE_GET_WORKLOAD_LABELS_PATH,
-  RUNNER_SERVICE_INSPECT_WORKLOAD_PATH,
-  RUNNER_SERVICE_LIST_WORKLOADS_BY_VOLUME_PATH,
-  RUNNER_SERVICE_PUT_ARCHIVE_PATH,
-  RUNNER_SERVICE_READY_PATH,
-  RUNNER_SERVICE_REMOVE_VOLUME_PATH,
-  RUNNER_SERVICE_REMOVE_WORKLOAD_PATH,
-  RUNNER_SERVICE_START_WORKLOAD_PATH,
-  RUNNER_SERVICE_STOP_WORKLOAD_PATH,
-  RUNNER_SERVICE_STREAM_EVENTS_PATH,
-  RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
-  RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
-} from '../../proto/grpc.js';
-import { containerOptsToStartWorkloadRequest } from './workload.grpc';
+import type {
+  ExecError,
+  ExecExit,
+  ExecRequest,
+  ExecResponse,
+  FindWorkloadsByLabelsResponse,
+  GetWorkloadLabelsResponse,
+  InspectWorkloadResponse,
+  ListWorkloadsByVolumeResponse,
+  ReadyResponse,
+  RunnerError,
+  StartWorkloadResponse,
+  StreamEventsResponse,
+  StreamWorkloadLogsResponse,
+  EventFilter,
+  TargetMount,
+  StartWorkloadRequest,
+  StopWorkloadRequest,
+  RemoveWorkloadRequest,
+  FindWorkloadsByLabelsRequest,
+  ListWorkloadsByVolumeRequest,
+  PutArchiveRequest,
+  ReadyRequest,
+  RemoveVolumeRequest,
+  TouchWorkloadRequest,
+  GetWorkloadLabelsRequest,
+  InspectWorkloadRequest,
+} from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 
 export const EXEC_REQUEST_TIMEOUT_SLACK_MS = 5_000;
 
 const RUNNER_ERROR_MESSAGE_FALLBACK = 'Runner request failed';
+
+const normalizeBaseUrl = (address: string): string => {
+  const trimmed = address.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^grpc:\/\//i.test(trimmed)) return `http://${trimmed.slice('grpc://'.length)}`;
+  return `http://${trimmed}`;
+};
+
+const runnerServicePath = (method: keyof typeof RunnerService.method): string =>
+  `/${RunnerService.typeName}/${RunnerService.method[method].name}`;
+
+const createRunnerAuthInterceptor = (sharedSecret: string): Interceptor => (next) => async (req) => {
+  const path = new URL(req.url, 'http://localhost').pathname;
+  const headers = buildAuthHeaders({ method: req.requestMethod, path, body: '', secret: sharedSecret });
+  for (const [key, value] of Object.entries(headers)) {
+    req.header.set(key, value);
+  }
+  return next(req);
+};
 
 const INFRA_DETAIL_PATTERNS = [
   /remote_addr\s*=[^,]+/gi,
@@ -122,9 +128,9 @@ const sanitizeInfraMessage = (message: string): string => {
   return sanitized.replace(/\s{2,}/g, ' ').trim();
 };
 
-const extractSanitizedServiceErrorMessage = (error: ServiceError): { sanitized: string; raw: string } => {
-  const rawDetails = typeof error.details === 'string' ? error.details : '';
-  const rawMessage = typeof error.message === 'string' ? error.message : '';
+const extractSanitizedServiceErrorMessage = (error: ConnectError): { sanitized: string; raw: string } => {
+  const rawDetails = typeof error.rawMessage === 'string' ? error.rawMessage.trim() : '';
+  const rawMessage = typeof error.message === 'string' ? error.message.replace(/^\[[^\]]+\]\s*/, '').trim() : '';
   const raw = rawDetails || rawMessage || '';
   const sanitizedText = sanitizeInfraMessage(raw);
   const sanitized = sanitizedText.length > 0 ? sanitizedText : RUNNER_ERROR_MESSAGE_FALLBACK;
@@ -150,10 +156,14 @@ type RunnerClientConfig = {
   address: string;
   sharedSecret: string;
   requestTimeoutMs?: number;
+  transport?: Transport;
+  sessionManager?: Http2SessionManager;
 };
 
+type RunnerServiceClient = Client<typeof RunnerService>;
+
 export class RunnerGrpcClient implements DockerClient {
-  private readonly client: RunnerServiceGrpcClientInstance;
+  private readonly client: RunnerServiceClient;
   private readonly execClient: RunnerGrpcExecClient;
   private readonly sharedSecret: string;
   private readonly requestTimeoutMs: number;
@@ -166,7 +176,15 @@ export class RunnerGrpcClient implements DockerClient {
     this.sharedSecret = config.sharedSecret;
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.endpoint = config.address;
-    this.client = new RunnerServiceGrpcClient(config.address, credentials.createInsecure());
+    const baseUrl = normalizeBaseUrl(config.address);
+    const transport =
+      config.transport ??
+      createGrpcTransport({
+        baseUrl,
+        sessionManager: config.sessionManager,
+        interceptors: [this.createAuthInterceptor()],
+      });
+    this.client = createClient(RunnerService, transport);
     this.execClient = new RunnerGrpcExecClient({
       client: this.client,
       address: config.address,
@@ -174,6 +192,7 @@ export class RunnerGrpcClient implements DockerClient {
       defaultDeadlineMs: this.requestTimeoutMs,
       resolveTimeout: (options) => this.resolveExecRequestTimeout(options),
       logger: this.logger,
+      transport,
     });
   }
 
@@ -184,12 +203,9 @@ export class RunnerGrpcClient implements DockerClient {
   async checkConnectivity(): Promise<{ status: string }> {
     const request = create(ReadyRequestSchema, {});
     const response = await this.unary<ReadyRequest, ReadyResponse>(
-      RUNNER_SERVICE_READY_PATH,
+      runnerServicePath('ready'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) this.client.ready(req, metadata, options, callback);
-        else this.client.ready(req, metadata, callback);
-      },
+      (req, options) => this.client.ready(req, options),
     );
     return { status: response?.status ?? 'unknown' };
   }
@@ -197,15 +213,9 @@ export class RunnerGrpcClient implements DockerClient {
   async touchLastUsed(containerId: string): Promise<void> {
     const request = create(TouchWorkloadRequestSchema, { workloadId: containerId });
     await this.unary<TouchWorkloadRequest, unknown>(
-      RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
+      runnerServicePath('touchWorkload'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.touchWorkload(req, metadata, options, (err: ServiceError | null) => callback(err));
-        } else {
-          this.client.touchWorkload(req, metadata, (err: ServiceError | null) => callback(err));
-        }
-      },
+      (req, options) => this.client.touchWorkload(req, options),
     );
   }
 
@@ -216,12 +226,9 @@ export class RunnerGrpcClient implements DockerClient {
   async start(opts?: ContainerOpts): Promise<ContainerHandle> {
     const request = containerOptsToStartWorkloadRequest(opts ?? {}) as StartWorkloadRequest;
     const response = await this.unary<StartWorkloadRequest, StartWorkloadResponse>(
-      RUNNER_SERVICE_START_WORKLOAD_PATH,
+      runnerServicePath('startWorkload'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) this.client.startWorkload(req, metadata, options, callback);
-        else this.client.startWorkload(req, metadata, callback);
-      },
+      (req, options) => this.client.startWorkload(req, options),
     );
     if (response.status === WorkloadStatus.FAILED) {
       const failure = response.failure;
@@ -269,41 +276,54 @@ export class RunnerGrpcClient implements DockerClient {
       stderr: options?.stderr ?? true,
       timestamps: options?.timestamps ?? false,
     });
-    const metadata = this.createMetadata(RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH);
-    const call = this.client.streamWorkloadLogs(request, metadata) as unknown as ClientReadableStream<StreamWorkloadLogsResponse>;
     const stream = new PassThrough();
+    const abortController = new AbortController();
+    const path = runnerServicePath('streamWorkloadLogs');
+    const callOptions = this.buildCallOptions(undefined, abortController.signal, false);
+    const responses: AsyncIterable<StreamWorkloadLogsResponse> = this.client.streamWorkloadLogs(request, callOptions);
 
-    call.on('data', (response: StreamWorkloadLogsResponse) => {
+    const handleLogEvent = (response: StreamWorkloadLogsResponse) => {
       const event = response.event;
       if (!event?.case) return;
-      if (event.case === 'chunk') {
-        const chunk = Buffer.from(event.value.data ?? new Uint8Array());
-        if (chunk.length > 0) stream.write(chunk);
-        return;
+      switch (event.case) {
+        case 'chunk': {
+          const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+          if (chunk.length > 0) stream.write(chunk);
+          return;
+        }
+        case 'end': {
+          stream.end();
+          return;
+        }
+        case 'error': {
+          stream.emit('error', this.runnerErrorToException(event.value, 'runner_logs_error'));
+          return;
+        }
       }
-      if (event.case === 'end') {
+    };
+
+    const pump = async () => {
+      try {
+        for await (const response of responses) {
+          handleLogEvent(response);
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          stream.emit('error', this.translateServiceError(error, { path }));
+        }
+      } finally {
         stream.end();
-        return;
       }
-      if (event.case === 'error') {
-        stream.emit('error', this.runnerErrorToException(event.value, 'runner_logs_error'));
-      }
-    });
+    };
 
-    call.on('error', (err: ServiceError) => {
-      stream.emit('error', this.translateServiceError(err, { path: RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH }));
-    });
-
-    call.on('end', () => {
-      stream.end();
-    });
+    void pump();
 
     stream.on('close', () => {
-      call.cancel();
+      abortController.abort();
     });
 
     const close = async (): Promise<void> => {
-      call.cancel();
+      abortController.abort();
     };
 
     return { stream, close };
@@ -316,15 +336,9 @@ export class RunnerGrpcClient implements DockerClient {
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
     const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSec });
     await this.unary<StopWorkloadRequest, unknown>(
-      RUNNER_SERVICE_STOP_WORKLOAD_PATH,
+      runnerServicePath('stopWorkload'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) {
-          this.client.stopWorkload(req, metadata, options, (err: ServiceError | null) => callback(err));
-        } else {
-          this.client.stopWorkload(req, metadata, (err: ServiceError | null) => callback(err));
-        }
-      },
+      (req, options) => this.client.stopWorkload(req, options),
     );
   }
 
@@ -338,27 +352,18 @@ export class RunnerGrpcClient implements DockerClient {
       removeVolumes: typeof options === 'boolean' ? options : options?.removeVolumes ?? false,
     });
     await this.unary<RemoveWorkloadRequest, unknown>(
-      RUNNER_SERVICE_REMOVE_WORKLOAD_PATH,
+      runnerServicePath('removeWorkload'),
       request,
-      (req, metadata, callOptions, callback) => {
-        if (callOptions) {
-          this.client.removeWorkload(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
-        } else {
-          this.client.removeWorkload(req, metadata, (err: ServiceError | null) => callback(err));
-        }
-      },
+      (req, options) => this.client.removeWorkload(req, options),
     );
   }
 
   async getContainerLabels(containerId: string): Promise<Record<string, string> | undefined> {
     const request = create(GetWorkloadLabelsRequestSchema, { workloadId: containerId });
     const response = await this.unary<GetWorkloadLabelsRequest, GetWorkloadLabelsResponse>(
-      RUNNER_SERVICE_GET_WORKLOAD_LABELS_PATH,
+      runnerServicePath('getWorkloadLabels'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) this.client.getWorkloadLabels(req, metadata, options, callback);
-        else this.client.getWorkloadLabels(req, metadata, callback);
-      },
+      (req, options) => this.client.getWorkloadLabels(req, options),
     );
     return response?.labels;
   }
@@ -379,12 +384,9 @@ export class RunnerGrpcClient implements DockerClient {
       all: options?.all ?? false,
     });
     const response = await this.unary<FindWorkloadsByLabelsRequest, FindWorkloadsByLabelsResponse>(
-      RUNNER_SERVICE_FIND_WORKLOADS_BY_LABELS_PATH,
+      runnerServicePath('findWorkloadsByLabels'),
       request,
-      (req, metadata, callOptions, callback) => {
-        if (callOptions) this.client.findWorkloadsByLabels(req, metadata, callOptions, callback);
-        else this.client.findWorkloadsByLabels(req, metadata, callback);
-      },
+      (req, options) => this.client.findWorkloadsByLabels(req, options),
     );
     const ids = response?.targetIds ?? [];
     return ids.map((id: string) => new ContainerHandle(this, id));
@@ -393,12 +395,9 @@ export class RunnerGrpcClient implements DockerClient {
   async listContainersByVolume(volumeName: string): Promise<string[]> {
     const request = create(ListWorkloadsByVolumeRequestSchema, { volumeName });
     const response = await this.unary<ListWorkloadsByVolumeRequest, ListWorkloadsByVolumeResponse>(
-      RUNNER_SERVICE_LIST_WORKLOADS_BY_VOLUME_PATH,
+      runnerServicePath('listWorkloadsByVolume'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) this.client.listWorkloadsByVolume(req, metadata, options, callback);
-        else this.client.listWorkloadsByVolume(req, metadata, callback);
-      },
+      (req, options) => this.client.listWorkloadsByVolume(req, options),
     );
     return response?.targetIds ?? [];
   }
@@ -409,15 +408,9 @@ export class RunnerGrpcClient implements DockerClient {
       force: options?.force ?? false,
     });
     await this.unary<RemoveVolumeRequest, unknown>(
-      RUNNER_SERVICE_REMOVE_VOLUME_PATH,
+      runnerServicePath('removeVolume'),
       request,
-      (req, metadata, callOptions, callback) => {
-        if (callOptions) {
-          this.client.removeVolume(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
-        } else {
-          this.client.removeVolume(req, metadata, (err: ServiceError | null) => callback(err));
-        }
-      },
+      (req, options) => this.client.removeVolume(req, options),
     );
   }
 
@@ -441,15 +434,9 @@ export class RunnerGrpcClient implements DockerClient {
       tarPayload: payload,
     });
     await this.unary<PutArchiveRequest, unknown>(
-      RUNNER_SERVICE_PUT_ARCHIVE_PATH,
+      runnerServicePath('putArchive'),
       request,
-      (req, metadata, callOptions, callback) => {
-        if (callOptions) {
-          this.client.putArchive(req, metadata, callOptions, (err: ServiceError | null) => callback(err));
-        } else {
-          this.client.putArchive(req, metadata, (err: ServiceError | null) => callback(err));
-        }
-      },
+      (req, options) => this.client.putArchive(req, options),
       this.requestTimeoutMs,
     );
   }
@@ -457,12 +444,9 @@ export class RunnerGrpcClient implements DockerClient {
   async inspectContainer(containerId: string): Promise<ContainerInspectInfo> {
     const request = create(InspectWorkloadRequestSchema, { workloadId: containerId });
     const response = await this.unary<InspectWorkloadRequest, InspectWorkloadResponse>(
-      RUNNER_SERVICE_INSPECT_WORKLOAD_PATH,
+      runnerServicePath('inspectWorkload'),
       request,
-      (req, metadata, options, callback) => {
-        if (options) this.client.inspectWorkload(req, metadata, options, callback);
-        else this.client.inspectWorkload(req, metadata, callback);
-      },
+      (req, options) => this.client.inspectWorkload(req, options),
     );
     return this.toInspectInfo(response);
   }
@@ -472,33 +456,39 @@ export class RunnerGrpcClient implements DockerClient {
       since: this.normalizeSince(options?.since),
       filters: this.toEventFilters(options?.filters),
     });
-    const metadata = this.createMetadata(RUNNER_SERVICE_STREAM_EVENTS_PATH);
-    const call = this.client.streamEvents(request, metadata) as unknown as ClientReadableStream<StreamEventsResponse>;
     const stream = new PassThrough();
+    const abortController = new AbortController();
+    const path = runnerServicePath('streamEvents');
+    const callOptions = this.buildCallOptions(undefined, abortController.signal, false);
+    const responses: AsyncIterable<StreamEventsResponse> = this.client.streamEvents(request, callOptions);
 
-    call.on('data', (response: StreamEventsResponse) => {
-      const event = response.event;
-      if (!event?.case) return;
-      if (event.case === 'data') {
-        const json = event.value.json || '{}';
-        stream.write(`${json}\n`);
-        return;
+    const pump = async () => {
+      try {
+        for await (const response of responses) {
+          const event = response.event;
+          if (!event?.case) continue;
+          if (event.case === 'data') {
+            const json = event.value.json || '{}';
+            stream.write(`${json}\n`);
+            continue;
+          }
+          if (event.case === 'error') {
+            stream.emit('error', this.runnerErrorToException(event.value, 'runner_events_error'));
+          }
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          stream.emit('error', this.translateServiceError(error, { path }));
+        }
+      } finally {
+        stream.end();
       }
-      if (event.case === 'error') {
-        stream.emit('error', this.runnerErrorToException(event.value, 'runner_events_error'));
-      }
-    });
+    };
 
-    call.on('error', (err: ServiceError) => {
-      stream.emit('error', this.translateServiceError(err, { path: RUNNER_SERVICE_STREAM_EVENTS_PATH }));
-    });
-
-    call.on('end', () => {
-      stream.end();
-    });
+    void pump();
 
     stream.on('close', () => {
-      call.cancel();
+      abortController.abort();
     });
 
     return stream;
@@ -544,54 +534,41 @@ export class RunnerGrpcClient implements DockerClient {
   private unary<Request, Response>(
     path: string,
     request: Request,
-    invoke: (
-      request: Request,
-      metadata: Metadata,
-      options: CallOptions | undefined,
-      callback: (err: ServiceError | null, response?: Response) => void,
-    ) => void,
+    invoke: (request: Request, options?: CallOptions) => Promise<Response>,
     timeoutMs?: number,
   ): Promise<Response> {
-    const metadata = this.createMetadata(path);
     const callOptions = this.buildCallOptions(timeoutMs);
-    return new Promise((resolve, reject) => {
-      const callback = (err: ServiceError | null, response?: Response) => {
-        if (err) {
-          reject(this.translateServiceError(err, { path }));
-          return;
-        }
-        resolve(response as Response);
-      };
-      invoke(request, metadata, callOptions, callback);
+    return invoke(request, callOptions).catch((error) => {
+      throw this.translateServiceError(error, { path });
     });
   }
 
-  private buildCallOptions(timeoutMs?: number): CallOptions | undefined {
-    const timeout = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : this.requestTimeoutMs;
-    if (!timeout || timeout <= 0) return undefined;
-    return { deadline: new Date(Date.now() + timeout) };
+  private buildCallOptions(
+    timeoutMs?: number,
+    signal?: AbortSignal,
+    useDefaultTimeout: boolean = true,
+  ): CallOptions | undefined {
+    const fallbackTimeout = useDefaultTimeout ? this.requestTimeoutMs : undefined;
+    const timeout = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : fallbackTimeout;
+    if ((!timeout || timeout <= 0) && !signal) return undefined;
+    const options: CallOptions = {};
+    if (timeout && timeout > 0) options.timeoutMs = timeout;
+    if (signal) options.signal = signal;
+    return options;
   }
 
-  private createMetadata(path: string): Metadata {
-    const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret: this.sharedSecret });
-    const metadata = new Metadata();
-    for (const [key, value] of Object.entries(headers)) {
-      metadata.set(key, value);
-    }
-    return metadata;
-  }
-
-  private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
-    const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
-    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(error);
-    if (grpcCode === status.CANCELLED) {
+  private translateServiceError(error: unknown, context?: { path?: string }): DockerRunnerRequestError {
+    const connectError = ConnectError.from(error);
+    const grpcCode = connectError.code ?? Code.Unknown;
+    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(connectError);
+    if (grpcCode === Code.Canceled) {
       return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, sanitizedMessage);
     }
     const statusCode = this.grpcStatusToHttpStatus(grpcCode);
     const errorCode = this.grpcStatusToErrorCode(grpcCode);
-    const statusName = (status as unknown as Record<number, string>)[grpcCode] ?? 'UNKNOWN';
+    const statusName = Code[grpcCode] ?? 'UNKNOWN';
     const path = context?.path ?? 'unknown';
-    if (grpcCode === status.UNIMPLEMENTED) {
+    if (grpcCode === Code.Unimplemented) {
       this.logger.error(`Runner gRPC call returned UNIMPLEMENTED`, {
         path,
         grpcStatus: statusName,
@@ -611,67 +588,65 @@ export class RunnerGrpcClient implements DockerClient {
       });
     }
     const retryable =
-      grpcCode === status.UNAVAILABLE ||
-      grpcCode === status.RESOURCE_EXHAUSTED ||
-      grpcCode === status.DEADLINE_EXCEEDED;
+      grpcCode === Code.Unavailable || grpcCode === Code.ResourceExhausted || grpcCode === Code.DeadlineExceeded;
     return new DockerRunnerRequestError(statusCode, errorCode, retryable, sanitizedMessage);
   }
 
-  private grpcStatusToHttpStatus(grpcCode: status): number {
+  private grpcStatusToHttpStatus(grpcCode: Code): number {
     switch (grpcCode) {
-      case status.INVALID_ARGUMENT:
+      case Code.InvalidArgument:
         return 400;
-      case status.UNAUTHENTICATED:
+      case Code.Unauthenticated:
         return 401;
-      case status.PERMISSION_DENIED:
+      case Code.PermissionDenied:
         return 403;
-      case status.NOT_FOUND:
+      case Code.NotFound:
         return 404;
-      case status.ABORTED:
+      case Code.Aborted:
         return 409;
-      case status.FAILED_PRECONDITION:
+      case Code.FailedPrecondition:
         return 412;
-      case status.RESOURCE_EXHAUSTED:
+      case Code.ResourceExhausted:
         return 429;
-      case status.UNIMPLEMENTED:
+      case Code.Unimplemented:
         return 501;
-      case status.INTERNAL:
-      case status.DATA_LOSS:
+      case Code.Internal:
+      case Code.DataLoss:
         return 500;
-      case status.UNAVAILABLE:
+      case Code.Unavailable:
         return 503;
-      case status.DEADLINE_EXCEEDED:
+      case Code.DeadlineExceeded:
         return 504;
       default:
         return 502;
     }
   }
 
-  private grpcStatusToErrorCode(grpcCode: status): string {
+  private grpcStatusToErrorCode(grpcCode: Code): string {
     switch (grpcCode) {
-      case status.INVALID_ARGUMENT:
+      case Code.InvalidArgument:
         return 'runner_invalid_argument';
-      case status.UNAUTHENTICATED:
+      case Code.Unauthenticated:
         return 'runner_unauthenticated';
-      case status.PERMISSION_DENIED:
+      case Code.PermissionDenied:
         return 'runner_forbidden';
-      case status.NOT_FOUND:
+      case Code.NotFound:
         return 'runner_not_found';
-      case status.ABORTED:
+      case Code.Aborted:
         return 'runner_conflict';
-      case status.FAILED_PRECONDITION:
+      case Code.FailedPrecondition:
         return 'runner_failed_precondition';
-      case status.RESOURCE_EXHAUSTED:
+      case Code.ResourceExhausted:
         return 'runner_resource_exhausted';
-      case status.UNIMPLEMENTED:
+      case Code.Unimplemented:
         return 'runner_unimplemented';
-      case status.INTERNAL:
+      case Code.Internal:
         return 'runner_internal_error';
-      case status.DATA_LOSS:
+      case Code.DataLoss:
         return 'runner_data_loss';
-      case status.UNAVAILABLE:
+      case Code.Unavailable:
         return 'runner_unavailable';
-      case status.DEADLINE_EXCEEDED:
+      case Code.DeadlineExceeded:
         return 'runner_timeout';
       default:
         return 'runner_grpc_error';
@@ -688,6 +663,10 @@ export class RunnerGrpcClient implements DockerClient {
       error.retryable ?? false,
       error.message || 'Runner error',
     );
+  }
+
+  private createAuthInterceptor(): Interceptor {
+    return createRunnerAuthInterceptor(this.sharedSecret);
   }
 
   private resolveExecRequestTimeout(options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>): number | undefined {
@@ -735,12 +714,58 @@ export class RunnerGrpcClient implements DockerClient {
 
 type ExecTimeoutResolver = (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeoutMs'>) => number | undefined;
 
+type ExecRequestStreamHandle = {
+  push: (request: ExecRequest) => void;
+  end: () => void;
+  abort: () => void;
+};
+
+const createAsyncQueue = <T>() => {
+  const queue: T[] = [];
+  let resolve: (() => void) | undefined;
+  let ended = false;
+
+  const notify = () => {
+    if (resolve) {
+      resolve();
+      resolve = undefined;
+    }
+  };
+
+  const push = (value: T) => {
+    if (ended) return;
+    queue.push(value);
+    notify();
+  };
+
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    notify();
+  };
+
+  const iterate = async function* () {
+    while (true) {
+      if (queue.length > 0) {
+        yield queue.shift() as T;
+        continue;
+      }
+      if (ended) return;
+      await new Promise<void>((resolveWait) => {
+        resolve = resolveWait;
+      });
+    }
+  };
+
+  return { push, end, iterate };
+};
+
 export class RunnerGrpcExecClient {
-  private readonly client: RunnerServiceGrpcClientInstance;
+  private readonly client: RunnerServiceClient;
   private readonly sharedSecret: string;
-  private readonly defaultDeadlineMs?: number;
+  private readonly defaultTimeoutMs?: number;
   private readonly resolveTimeout?: ExecTimeoutResolver;
-  private readonly interactiveStreams = new Map<string, ClientDuplexStream<ExecRequest, ExecResponse>>();
+  private readonly interactiveStreams = new Map<string, ExecRequestStreamHandle>();
   private readonly logger?: Logger;
 
   constructor(options: {
@@ -748,96 +773,74 @@ export class RunnerGrpcExecClient {
     sharedSecret: string;
     defaultDeadlineMs?: number;
     resolveTimeout?: ExecTimeoutResolver;
-    client?: RunnerServiceGrpcClientInstance;
+    client?: RunnerServiceClient;
+    transport?: Transport;
     logger?: Logger;
   }) {
-    this.client = options.client ?? new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
+    const transport =
+      options.transport ??
+      createGrpcTransport({
+        baseUrl: normalizeBaseUrl(options.address),
+        interceptors: [createRunnerAuthInterceptor(options.sharedSecret)],
+      });
+    this.client = options.client ?? createClient(RunnerService, transport);
     this.sharedSecret = options.sharedSecret;
-    this.defaultDeadlineMs = options.defaultDeadlineMs;
+    this.defaultTimeoutMs = options.defaultDeadlineMs;
     this.resolveTimeout = options.resolveTimeout;
     this.logger = options.logger;
   }
 
   async exec(containerId: string, command: string[] | string, options?: ExecOptions): Promise<ExecResult> {
-    const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
-    const deadlineMs = this.resolveTimeout?.(options);
-    const callOptions: CallOptions | undefined =
-      typeof deadlineMs === 'number' && deadlineMs > 0
-        ? { deadline: new Date(Date.now() + deadlineMs) }
-        : undefined;
-    const call = (callOptions ? this.client.exec(metadata, callOptions) : this.client.exec(metadata)) as ClientDuplexStream<
-      ExecRequest,
-      ExecResponse
-    >;
+    const requestStream = createAsyncQueue<ExecRequest>();
     const execIdRef: { current?: string } = {};
-    const endStream = () => {
-      try {
-        call.end();
-      } catch {
-        // ignore end errors
-      }
-    };
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
-    let finished = false;
-    let requestedTimeoutMs: number | undefined;
-    let requestedIdleTimeoutMs: number | undefined;
-    const isAborted = this.attachAbortSignal(call, options?.signal, () => execIdRef.current);
     let stdinClosed = false;
     const sendStdinEof = () => {
       if (stdinClosed) return;
       stdinClosed = true;
-      try {
-        call.write(
-          create(ExecRequestSchema, {
-            msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
-          }),
-        );
-      } catch {
-        // ignore eof errors
-      }
+      requestStream.push(
+        create(ExecRequestSchema, {
+          msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
+        }),
+      );
     };
 
-    return new Promise<ExecResult>((resolve, reject) => {
-      const finalize = (result: ExecResult) => {
-        if (finished) return;
-        finished = true;
-        endStream();
-        resolve(result);
-      };
+    const start = this.createStartRequest({ containerId, command, execOptions: options });
+    const { timeoutMs: requestedTimeoutMs, idleTimeoutMs: requestedIdleTimeoutMs } = this.extractRequestedTimeouts(start);
+    requestStream.push(start);
 
-      const fail = (error: Error) => {
-        if (finished) return;
-        finished = true;
-        endStream();
-        reject(error);
-      };
+    const deadlineMs = this.resolveTimeout?.(options);
+    const callAbortController = new AbortController();
+    const isAborted = this.attachAbortSignal(callAbortController, options?.signal, () => execIdRef.current);
+    const callOptions = this.buildCallOptions(deadlineMs, callAbortController.signal);
+    const responses: AsyncIterable<ExecResponse> = this.client.exec(requestStream.iterate(), callOptions);
 
-      call.on('data', (response: ExecResponse) => {
-        const event = response.event;
-        if (!event?.case) return;
-        if (event.case === 'started') {
+    const handleExecResponse = (response: ExecResponse): ExecResult | undefined => {
+      const event = response.event;
+      if (!event?.case) return undefined;
+      switch (event.case) {
+        case 'started':
           execIdRef.current = event.value.executionId;
           sendStdinEof();
-          return;
-        }
-        if (event.case === 'stdout') {
+          return undefined;
+        case 'stdout': {
           const chunk = Buffer.from(event.value.data ?? new Uint8Array());
           if (chunk.length > 0) {
             stdoutChunks.push(chunk);
             options?.onOutput?.('stdout', chunk);
           }
-          return;
+          return undefined;
         }
-        if (event.case === 'stderr') {
+        case 'stderr': {
           const chunk = Buffer.from(event.value.data ?? new Uint8Array());
           if (chunk.length > 0) {
             stderrChunks.push(chunk);
             options?.onOutput?.('stderr', chunk);
           }
-          return;
+          return undefined;
         }
-        if (event.case === 'exit') {
+        case 'exit': {
           const stdout = this.composeOutput(stdoutChunks, event.value.stdoutTail);
           const stderr = this.composeOutput(stderrChunks, event.value.stderrTail);
           const timeoutError = this.mapExitReasonToError(event.value.reason, {
@@ -847,47 +850,43 @@ export class RunnerGrpcExecClient {
             idleTimeoutMs: requestedIdleTimeoutMs,
           });
           if (timeoutError) {
-            fail(timeoutError);
-            return;
+            throw timeoutError;
           }
-          finalize({ exitCode: event.value.exitCode, stdout, stderr });
-          return;
+          return { exitCode: event.value.exitCode, stdout, stderr };
         }
-        if (event.case === 'error') {
-          fail(this.translateExecError(event.value));
-        }
-      });
+        case 'error':
+          throw this.translateExecError(event.value);
+      }
+      return undefined;
+    };
 
-      call.on('error', (err: ServiceError) => {
-        if (finished) return;
-        if (isAborted() && err.code === status.CANCELLED) {
-          fail(new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, 'Execution aborted'));
-          return;
-        }
-        const timeoutError = this.mapGrpcDeadlineToTimeout(err, {
-          stdout: this.composeOutput(stdoutChunks),
-          stderr: this.composeOutput(stderrChunks),
-          timeoutMs: requestedTimeoutMs,
-          idleTimeoutMs: requestedIdleTimeoutMs,
-        });
-        if (timeoutError) {
-          fail(timeoutError);
-          return;
-        }
-        fail(this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH }));
+    try {
+      for await (const response of responses) {
+        const result = handleExecResponse(response);
+        if (result) return result;
+      }
+      throw new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event');
+    } catch (error) {
+      if (error instanceof DockerRunnerRequestError || error instanceof ExecTimeoutError || error instanceof ExecIdleTimeoutError) {
+        throw error;
+      }
+      const connectError = ConnectError.from(error);
+      if (isAborted() && connectError.code === Code.Canceled) {
+        throw new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, 'Execution aborted');
+      }
+      const timeoutError = this.mapGrpcDeadlineToTimeout(connectError, {
+        stdout: this.composeOutput(stdoutChunks),
+        stderr: this.composeOutput(stderrChunks),
+        timeoutMs: requestedTimeoutMs,
+        idleTimeoutMs: requestedIdleTimeoutMs,
       });
-
-      call.on('end', () => {
-        if (finished) return;
-        fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
-      });
-
-      const start = this.createStartRequest({ containerId, command, execOptions: options });
-      const extractedTimeouts = this.extractRequestedTimeouts(start);
-      requestedTimeoutMs = extractedTimeouts.timeoutMs;
-      requestedIdleTimeoutMs = extractedTimeouts.idleTimeoutMs;
-      call.write(start);
-    });
+      if (timeoutError) {
+        throw timeoutError;
+      }
+      throw this.translateServiceError(connectError, { path: runnerServicePath('exec') });
+    } finally {
+      requestStream.end();
+    }
   }
 
   async openInteractiveExec(
@@ -895,8 +894,10 @@ export class RunnerGrpcExecClient {
     command: string[] | string,
     options?: InteractiveExecOptions,
   ): Promise<InteractiveExecSession> {
-    const metadata = this.createMetadata(RUNNER_SERVICE_EXEC_PATH);
-    const call = this.client.exec(metadata) as ClientDuplexStream<ExecRequest, ExecResponse>;
+    const requestStream = createAsyncQueue<ExecRequest>();
+    const abortController = new AbortController();
+    const callOptions = this.buildCallOptions(undefined, abortController.signal);
+    const responses: AsyncIterable<ExecResponse> = this.client.exec(requestStream.iterate(), callOptions);
     const stdout = new PassThrough();
     const stderr = options?.demuxStderr === false ? undefined : new PassThrough();
     stdout.on('error', () => undefined);
@@ -913,6 +914,7 @@ export class RunnerGrpcExecClient {
       });
     });
     let execId: string | undefined;
+    const resolvedExecIdRef: { current?: string } = {};
     let finished = false;
     let finalResult: ExecResult | undefined;
     let cancelledLocally = false;
@@ -933,8 +935,15 @@ export class RunnerGrpcExecClient {
       closeReject = reject;
     });
 
+    const streamHandle: ExecRequestStreamHandle = {
+      push: requestStream.push,
+      end: requestStream.end,
+      abort: () => abortController.abort(),
+    };
+
     const cleanupStream = () => {
-      if (execId) this.interactiveStreams.delete(execId);
+      const key = execId ?? resolvedExecIdRef.current;
+      if (key) this.interactiveStreams.delete(key);
     };
 
     const finalize = (result: ExecResult) => {
@@ -965,109 +974,126 @@ export class RunnerGrpcExecClient {
       closeReject?.(error);
     };
 
-    call.on('data', (response: ExecResponse) => {
-      const event = response.event;
-      if (!event?.case) return;
-      if (event.case === 'started') {
-        execId = event.value.executionId;
-        if (execId) this.interactiveStreams.set(execId, call);
-        readyResolve?.();
-        readyResolve = undefined;
-        readyReject = undefined;
-        startedSignaled = true;
-        if (stdout.listenerCount('data') > 0) {
-          stdout.emit('data', Buffer.alloc(0));
-        } else {
-          syntheticReadyPending = true;
-        }
-        return;
-      }
-      if (event.case === 'stdout') {
-        const chunk = Buffer.from(event.value.data ?? new Uint8Array());
-        if (chunk.length > 0) stdout.write(chunk);
-        return;
-      }
-      if (event.case === 'stderr') {
-        const chunk = Buffer.from(event.value.data ?? new Uint8Array());
-        if (!chunk.length) return;
-        if (stderr) stderr.write(chunk);
-        else stdout.write(chunk);
-        return;
-      }
-      if (event.case === 'exit') {
-        const stdoutTail = Buffer.from(event.value.stdoutTail ?? new Uint8Array()).toString('utf8');
-        const stderrTail = Buffer.from(event.value.stderrTail ?? new Uint8Array()).toString('utf8');
-        if (
-          forcedTerminationReason &&
-          (event.value.reason === ExecExitReason.CANCELLED || event.value.reason === ExecExitReason.COMPLETED)
-        ) {
-          const timeoutMs =
-            forcedTerminationReason === 'timeout'
-              ? this.resolveTimeoutValue(requestedTimeoutMs, requestedIdleTimeoutMs)
-              : this.resolveTimeoutValue(requestedIdleTimeoutMs, requestedTimeoutMs);
-          const forcedError =
-            forcedTerminationReason === 'timeout'
-              ? new ExecTimeoutError(timeoutMs, stdoutTail, stderrTail)
-              : new ExecIdleTimeoutError(timeoutMs, stdoutTail, stderrTail);
-          forcedTerminationReason = undefined;
-          fail(forcedError);
-          return;
-        }
+    const handleForcedTermination = (exitEvent: ExecExit, stdoutTail: string, stderrTail: string): boolean => {
+      if (!forcedTerminationReason) return false;
+      const shouldTranslate =
+        exitEvent.reason === ExecExitReason.CANCELLED || exitEvent.reason === ExecExitReason.COMPLETED;
+      if (!shouldTranslate) {
         forcedTerminationReason = undefined;
-        const timeoutError = this.mapExitReasonToError(event.value.reason, {
-          stdout: stdoutTail,
-          stderr: stderrTail,
-          timeoutMs: requestedTimeoutMs,
-          idleTimeoutMs: requestedIdleTimeoutMs,
-        });
-        if (timeoutError) {
-          if (cancelledLocally && event.value.reason === ExecExitReason.IDLE_TIMEOUT) {
-            finalize({ exitCode: 0, stdout: stdoutTail, stderr: stderrTail });
-            return;
-          }
-          fail(timeoutError);
-          return;
-        }
-        finalize({ exitCode: event.value.exitCode, stdout: stdoutTail, stderr: stderrTail });
-        return;
+        return false;
       }
-      if (event.case === 'error') {
-        fail(this.translateExecError(event.value));
-      }
-    });
+      const timeoutMs =
+        forcedTerminationReason === 'timeout'
+          ? this.resolveTimeoutValue(requestedTimeoutMs, requestedIdleTimeoutMs)
+          : this.resolveTimeoutValue(requestedIdleTimeoutMs, requestedTimeoutMs);
+      const forcedError =
+        forcedTerminationReason === 'timeout'
+          ? new ExecTimeoutError(timeoutMs, stdoutTail, stderrTail)
+          : new ExecIdleTimeoutError(timeoutMs, stdoutTail, stderrTail);
+      forcedTerminationReason = undefined;
+      fail(forcedError);
+      return true;
+    };
 
-    call.on('error', (err: ServiceError) => {
-      if (finished) return;
-      const timeoutError = this.mapGrpcDeadlineToTimeout(err, {
-        stdout: finalResult?.stdout ?? '',
-        stderr: finalResult?.stderr ?? '',
+    const handleExit = (exitEvent: ExecExit): boolean => {
+      const stdoutTail = Buffer.from(exitEvent.stdoutTail ?? new Uint8Array()).toString('utf8');
+      const stderrTail = Buffer.from(exitEvent.stderrTail ?? new Uint8Array()).toString('utf8');
+      if (handleForcedTermination(exitEvent, stdoutTail, stderrTail)) return true;
+      const timeoutError = this.mapExitReasonToError(exitEvent.reason, {
+        stdout: stdoutTail,
+        stderr: stderrTail,
         timeoutMs: requestedTimeoutMs,
         idleTimeoutMs: requestedIdleTimeoutMs,
       });
       if (timeoutError) {
+        if (cancelledLocally && exitEvent.reason === ExecExitReason.IDLE_TIMEOUT) {
+          finalize({ exitCode: 0, stdout: stdoutTail, stderr: stderrTail });
+          return true;
+        }
         fail(timeoutError);
-        return;
+        return true;
       }
-      const translated = this.translateServiceError(err, { path: RUNNER_SERVICE_EXEC_PATH });
-      fail(translated);
-    });
+      finalize({ exitCode: exitEvent.exitCode, stdout: stdoutTail, stderr: stderrTail });
+      return true;
+    };
 
-    call.on('end', () => {
-      if (finished) return;
-      cleanupStream();
-      if (cancelledLocally) {
-        finalize({ exitCode: 0, stdout: '', stderr: '' });
-        return;
+    const handleInteractiveResponse = (response: ExecResponse): boolean => {
+      const event = response.event;
+      if (!event?.case) return false;
+      switch (event.case) {
+        case 'started': {
+          execId = event.value.executionId;
+          if (execId) this.interactiveStreams.set(execId, streamHandle);
+          readyResolve?.();
+          readyResolve = undefined;
+          readyReject = undefined;
+          startedSignaled = true;
+          if (stdout.listenerCount('data') > 0) {
+            stdout.emit('data', Buffer.alloc(0));
+          } else {
+            syntheticReadyPending = true;
+          }
+          return false;
+        }
+        case 'stdout': {
+          const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+          if (chunk.length > 0) stdout.write(chunk);
+          return false;
+        }
+        case 'stderr': {
+          const chunk = Buffer.from(event.value.data ?? new Uint8Array());
+          if (!chunk.length) return false;
+          if (stderr) stderr.write(chunk);
+          else stdout.write(chunk);
+          return false;
+        }
+        case 'exit':
+          return handleExit(event.value);
+        case 'error':
+          fail(this.translateExecError(event.value));
+          return true;
       }
-      fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
-    });
+      return false;
+    };
+
+    const pump = async () => {
+      try {
+        for await (const response of responses) {
+          if (handleInteractiveResponse(response)) return;
+        }
+        if (!finished) {
+          fail(new DockerRunnerRequestError(0, 'runner_stream_closed', true, 'Exec stream ended before exit event'));
+        }
+      } catch (error) {
+        if (finished) return;
+        if (error instanceof DockerRunnerRequestError || error instanceof ExecTimeoutError || error instanceof ExecIdleTimeoutError) {
+          fail(error);
+          return;
+        }
+        const connectError = ConnectError.from(error);
+        const timeoutError = this.mapGrpcDeadlineToTimeout(connectError, {
+          stdout: finalResult?.stdout ?? '',
+          stderr: finalResult?.stderr ?? '',
+          timeoutMs: requestedTimeoutMs,
+          idleTimeoutMs: requestedIdleTimeoutMs,
+        });
+        if (timeoutError) {
+          fail(timeoutError);
+          return;
+        }
+        const translated = this.translateServiceError(connectError, { path: runnerServicePath('exec') });
+        fail(translated);
+      } finally {
+        requestStream.end();
+      }
+    };
 
     const stdin = new Writable({
       write: (chunk: Buffer | string, encoding: BufferEncoding, callback: (error?: Error | null) => void) => {
         try {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding as BufferEncoding);
           if (buffer.length > 0) {
-            call.write(
+            requestStream.push(
               create(ExecRequestSchema, {
                 msg: { case: 'stdin', value: create(ExecStdinSchema, { data: buffer, eof: false }) },
               }),
@@ -1081,12 +1107,12 @@ export class RunnerGrpcExecClient {
       },
       final: (callback: (error?: Error | null) => void) => {
         try {
-          call.write(
+          requestStream.push(
             create(ExecRequestSchema, {
               msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
             }),
           );
-          call.end();
+          requestStream.end();
           callback();
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
@@ -1103,18 +1129,21 @@ export class RunnerGrpcExecClient {
       try {
         cancelledLocally = true;
         cleanupStream();
-        call.cancel();
+        abortController.abort();
       } catch {
         // ignore cancellation errors
       }
+      requestStream.end();
       return originalDestroy(error ?? undefined);
     }) as typeof stdin.destroy;
 
-    call.write(start);
+    requestStream.push(start);
+    void pump();
 
     await readyPromise;
     const resolvedExecId = execId ?? randomUUID();
-    if (!execId) this.interactiveStreams.set(resolvedExecId, call);
+    resolvedExecIdRef.current = resolvedExecId;
+    if (!execId) this.interactiveStreams.set(resolvedExecId, streamHandle);
 
     const close = async (): Promise<ExecResult> => {
       if (finalResult) return finalResult;
@@ -1131,16 +1160,8 @@ export class RunnerGrpcExecClient {
       } catch {
         // ignore
       }
-      try {
-        call.end();
-      } catch {
-        // ignore
-      }
-      try {
-        call.cancel();
-      } catch {
-        // ignore cancellation errors
-      }
+      requestStream.end();
+      abortController.abort();
       if (!finished) {
         const result: ExecResult = { exitCode: 0, stdout: '', stderr: '' };
         finalize(result);
@@ -1150,7 +1171,7 @@ export class RunnerGrpcExecClient {
     };
 
     const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
-      const targetExecId = execId ?? resolvedExecId;
+      const targetExecId = execId ?? resolvedExecIdRef.current;
       if (!targetExecId) {
         throw new DockerRunnerRequestError(404, 'runner_exec_not_found', false, 'Execution not active');
       }
@@ -1176,18 +1197,23 @@ export class RunnerGrpcExecClient {
       }
     };
 
-    return { stdin, stdout, stderr, close, execId: resolvedExecId, terminateProcessGroup };
+    const inspect = async (): Promise<ExecInspectInfo> => ({
+      Running: !finished,
+      ExitCode: finalResult?.exitCode ?? null,
+    });
+
+    return { stdin, stdout, stderr, close, inspect, execId: resolvedExecId, terminateProcessGroup };
   }
 
   async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {
-    const call = this.interactiveStreams.get(execId);
-    if (!call) {
+    const stream = this.interactiveStreams.get(execId);
+    if (!stream) {
       throw new DockerRunnerRequestError(404, 'runner_exec_not_found', false, `Execution ${execId} not active`);
     }
     const cols = Math.max(0, Math.floor(size.cols));
     const rows = Math.max(0, Math.floor(size.rows));
     try {
-      call.write(create(ExecRequestSchema, { msg: { case: 'resize', value: create(ExecResizeSchema, { cols, rows }) } }));
+      stream.push(create(ExecRequestSchema, { msg: { case: 'resize', value: create(ExecResizeSchema, { cols, rows }) } }));
     } catch (error) {
       throw new DockerRunnerRequestError(
         0,
@@ -1199,36 +1225,24 @@ export class RunnerGrpcExecClient {
   }
 
   async cancelExecution(executionId: string, force = false): Promise<boolean> {
-    const metadata = this.createMetadata(RUNNER_SERVICE_CANCEL_EXEC_PATH);
-    const deadlineMs = this.defaultDeadlineMs;
-    const callOptions: CallOptions | undefined =
-      typeof deadlineMs === 'number' && deadlineMs > 0
-        ? { deadline: new Date(Date.now() + deadlineMs) }
-        : undefined;
+    const deadlineMs = this.defaultTimeoutMs;
+    const callOptions = this.buildCallOptions(deadlineMs);
     const request = create(CancelExecutionRequestSchema, { executionId, force });
-    return new Promise<boolean>((resolve, reject) => {
-      const callback = (err: ServiceError | null, response?: CancelExecutionResponse) => {
-        if (err) {
-          reject(this.translateServiceError(err, { path: RUNNER_SERVICE_CANCEL_EXEC_PATH }));
-          return;
-        }
-        resolve(response?.cancelled ?? false);
-      };
-      if (callOptions) {
-        this.client.cancelExecution(request, metadata, callOptions, callback);
-      } else {
-        this.client.cancelExecution(request, metadata, callback);
-      }
-    });
+    try {
+      const response = await this.client.cancelExecution(request, callOptions);
+      return response?.cancelled ?? false;
+    } catch (error) {
+      throw this.translateServiceError(error, { path: runnerServicePath('cancelExecution') });
+    }
   }
 
-  private createMetadata(path: string): Metadata {
-    const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret: this.sharedSecret });
-    const metadata = new Metadata();
-    for (const [key, value] of Object.entries(headers)) {
-      metadata.set(key, value);
-    }
-    return metadata;
+  private buildCallOptions(timeoutMs?: number, signal?: AbortSignal): CallOptions | undefined {
+    const timeout = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : undefined;
+    if (!timeout && !signal) return undefined;
+    const options: CallOptions = {};
+    if (timeout) options.timeoutMs = timeout;
+    if (signal) options.signal = signal;
+    return options;
   }
 
   private createStartRequest(params: {
@@ -1334,12 +1348,12 @@ export class RunnerGrpcExecClient {
   }
 
   private mapGrpcDeadlineToTimeout(
-    error: ServiceError,
+    error: ConnectError,
     context: { stdout: string; stderr: string; timeoutMs?: number; idleTimeoutMs?: number },
   ): ExecTimeoutError | undefined {
-    if (error.code !== status.DEADLINE_EXCEEDED) return undefined;
+    if (error.code !== Code.DeadlineExceeded) return undefined;
     const resolved = this.resolveTimeoutValue(context.timeoutMs, context.idleTimeoutMs);
-    const effectiveTimeout = resolved > 0 ? resolved : this.defaultDeadlineMs ?? 0;
+    const effectiveTimeout = resolved > 0 ? resolved : this.defaultTimeoutMs ?? 0;
     return new ExecTimeoutError(effectiveTimeout, context.stdout, context.stderr);
   }
 
@@ -1349,15 +1363,16 @@ export class RunnerGrpcExecClient {
     return 0;
   }
 
-  private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
-    const grpcCode = typeof error.code === 'number' ? error.code : status.UNKNOWN;
-    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(error);
-    if (grpcCode === status.CANCELLED) {
+  private translateServiceError(error: unknown, context?: { path?: string }): DockerRunnerRequestError {
+    const connectError = ConnectError.from(error);
+    const grpcCode = connectError.code ?? Code.Unknown;
+    const { sanitized: sanitizedMessage, raw: rawMessage } = extractSanitizedServiceErrorMessage(connectError);
+    if (grpcCode === Code.Canceled) {
       return new DockerRunnerRequestError(499, 'runner_exec_cancelled', false, sanitizedMessage);
     }
-    const statusName = (status as unknown as Record<number, string>)[grpcCode] ?? 'UNKNOWN';
-    const path = context?.path ?? RUNNER_SERVICE_EXEC_PATH;
-    if (grpcCode === status.UNIMPLEMENTED) {
+    const statusName = Code[grpcCode] ?? 'UNKNOWN';
+    const path = context?.path ?? runnerServicePath('exec');
+    if (grpcCode === Code.Unimplemented) {
       this.logger?.error(`Runner exec gRPC call returned UNIMPLEMENTED`, {
         path,
         grpcStatus: statusName,
@@ -1375,28 +1390,22 @@ export class RunnerGrpcExecClient {
       });
     }
     const retryable =
-      grpcCode === status.UNAVAILABLE ||
-      grpcCode === status.RESOURCE_EXHAUSTED ||
-      grpcCode === status.DEADLINE_EXCEEDED;
+      grpcCode === Code.Unavailable || grpcCode === Code.ResourceExhausted || grpcCode === Code.DeadlineExceeded;
     return new DockerRunnerRequestError(0, 'runner_grpc_error', retryable, sanitizedMessage);
   }
 
   private attachAbortSignal(
-    call: ClientDuplexStream<ExecRequest, ExecResponse>,
+    controller: AbortController,
     signal: AbortSignal | undefined,
     resolveExecId: () => string | undefined,
   ): () => boolean {
-    if (!signal) return () => false;
+    if (!signal) return () => controller.signal.aborted;
     const abortHandler = () => {
       const execId = resolveExecId();
       if (execId) {
         void this.cancelExecution(execId).catch(() => undefined);
       }
-      try {
-        call.cancel();
-      } catch {
-        // ignore cancellation errors
-      }
+      controller.abort();
     };
     if (signal.aborted) {
       abortHandler();

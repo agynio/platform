@@ -4,24 +4,19 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { credentials, Metadata } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
+import { createClient, type Client, type Interceptor } from '@connectrpc/connect';
+import { createGrpcTransport, Http2SessionManager } from '@connectrpc/connect-node';
+import type { Http2Server } from 'node:http2';
 
-import { NonceCache, buildAuthHeaders } from '../../src/infra/container/auth';
-import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '../../src/proto/grpc.js';
-import { ReadyRequestSchema } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
+import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/server';
+import { ContainerService, NonceCache, buildAuthHeaders } from '../../../docker-runner/src';
+import { ReadyRequestSchema, RunnerService } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
-export const RUNNER_SECRET = process.env.DOCKER_RUNNER_SHARED_SECRET ?? '';
+export const RUNNER_SECRET = 'docker-e2e-secret';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
 export const hasTcpDocker = Boolean(process.env.DOCKER_HOST);
 export const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
-const runnerHost = process.env.DOCKER_RUNNER_GRPC_HOST ?? process.env.DOCKER_RUNNER_HOST;
-const runnerPort = process.env.DOCKER_RUNNER_GRPC_PORT ?? process.env.DOCKER_RUNNER_PORT;
-export const runnerAddress =
-  process.env.DOCKER_RUNNER_GRPC_ADDRESS ?? (runnerHost && runnerPort ? `${runnerHost}:${runnerPort}` : undefined);
-export const runnerAddressMissing = !runnerAddress;
-export const runnerSecretMissing = !RUNNER_SECRET;
-const readinessNonceCache = new NonceCache();
 
 export type RunnerHandle = {
   grpcAddress: string;
@@ -33,21 +28,165 @@ export type PostgresHandle = {
   stop: () => Promise<void>;
 };
 
-export async function startDockerRunner(): Promise<RunnerHandle> {
-  if (!runnerAddress || !RUNNER_SECRET) {
-    throw new Error('DOCKER_RUNNER_GRPC_ADDRESS and DOCKER_RUNNER_SHARED_SECRET are required to run docker e2e tests.');
+type RunnerServiceClient = Client<typeof RunnerService>;
+
+export async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
+  const grpcPort = await getAvailablePort();
+  const config = {
+    grpcHost: '127.0.0.1',
+    grpcPort,
+    sharedSecret: RUNNER_SECRET,
+    signatureTtlMs: 60_000,
+    dockerSocket: socketPath,
+    logLevel: 'error',
+  } as const;
+
+  const previousSocket = process.env.DOCKER_SOCKET;
+  if (socketPath) {
+    process.env.DOCKER_SOCKET = socketPath;
+  } else {
+    delete process.env.DOCKER_SOCKET;
   }
-  await waitForRunnerReadyOnAddress(runnerAddress, RUNNER_SECRET);
+
+  const containers = new ContainerService();
+  const nonceCache = new NonceCache({ ttlMs: config.signatureTtlMs });
+  const server = createRunnerGrpcServer({ config, containers, nonceCache });
+  const grpcAddress = await bindRunnerServer(server, config.grpcHost, config.grpcPort);
+  const { client, sessionManager } = createRunnerClient(grpcAddress, RUNNER_SECRET);
+
+  try {
+    await waitForRunnerReady(client);
+  } catch (error) {
+    sessionManager.abort();
+    await shutdownRunnerServer(server);
+    if (previousSocket !== undefined) process.env.DOCKER_SOCKET = previousSocket;
+    else delete process.env.DOCKER_SOCKET;
+    throw error;
+  } finally {
+    sessionManager.abort();
+  }
+
   return {
-    grpcAddress: runnerAddress,
-    close: async () => undefined,
+    grpcAddress,
+    close: async () => {
+      await shutdownRunnerServer(server);
+      if (previousSocket !== undefined) process.env.DOCKER_SOCKET = previousSocket;
+      else delete process.env.DOCKER_SOCKET;
+    },
   };
 }
 
-async function waitForRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promise<void> {
+export async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
+  const grpcPort = await getAvailablePort();
+  const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+  const runnerEntry = path.resolve(repoRoot, 'packages', 'docker-runner', 'src', 'service', 'main.ts');
+  const tsxBin = path.resolve(repoRoot, 'node_modules', '.bin', 'tsx');
+  if (!fs.existsSync(tsxBin)) {
+    throw new Error(`tsx binary not found at ${tsxBin}`);
+  }
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
+    DOCKER_RUNNER_PORT: String(grpcPort),
+    DOCKER_RUNNER_SHARED_SECRET: RUNNER_SECRET,
+    DOCKER_RUNNER_LOG_LEVEL: 'error',
+  };
+  delete env.DOCKER_RUNNER_GRPC_PORT;
+  if (socketPath) {
+    env.DOCKER_SOCKET = socketPath;
+  } else {
+    delete env.DOCKER_SOCKET;
+  }
+
+  const child = spawn(tsxBin, [runnerEntry], {
+    cwd: repoRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk) => {
+    process.stdout.write(`[docker-runner] ${chunk}`);
+  });
+  child.stderr?.on('data', (chunk) => {
+    process.stderr.write(`[docker-runner] ${chunk}`);
+  });
+
+  let exitHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | null = null;
+  let errorHandler: ((err: Error) => void) | null = null;
+  const exitPromise = new Promise<never>((_, reject) => {
+    exitHandler = (code, signal) => {
+      reject(new Error(`docker-runner exited before readiness (code=${code ?? 0}, signal=${signal ?? 'none'})`));
+    };
+    errorHandler = (err) => reject(err);
+    child.once('exit', exitHandler);
+    child.once('error', errorHandler);
+  });
+
+  try {
+    await Promise.race([
+      waitForRunnerReadyOnAddress(`127.0.0.1:${grpcPort}`, RUNNER_SECRET),
+      exitPromise,
+    ]);
+  } catch (error) {
+    child.kill('SIGTERM');
+    throw error;
+  } finally {
+    if (exitHandler) child.off('exit', exitHandler);
+    if (errorHandler) child.off('error', errorHandler);
+  }
+
+  return {
+    grpcAddress: `127.0.0.1:${grpcPort}`,
+    close: async () => {
+      if (child.exitCode !== null || child.signalCode) return;
+      await new Promise<void>((resolve) => {
+        child.once('exit', () => resolve());
+        child.kill('SIGTERM');
+      });
+    },
+  };
+}
+
+function createRunnerClient(address: string, secret: string): { client: RunnerServiceClient; sessionManager: Http2SessionManager } {
+  const baseUrl = normalizeRunnerBaseUrl(address);
+  const sessionManager = new Http2SessionManager(baseUrl);
+  const transport = createGrpcTransport({
+    baseUrl,
+    interceptors: [createRunnerAuthInterceptor(secret)],
+    sessionManager,
+  });
+  return { client: createClient(RunnerService, transport), sessionManager };
+}
+
+async function bindRunnerServer(server: Http2Server, host: string, port: number): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const onError = (err: Error) => {
+      server.off('error', onError);
+      reject(err);
+    };
+    server.once('error', onError);
+    server.listen(port, host, () => {
+      server.off('error', onError);
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Failed to bind docker-runner server'));
+        return;
+      }
+      resolve(`${host}:${address.port}`);
+    });
+  });
+}
+
+async function shutdownRunnerServer(server: Http2Server): Promise<void> {
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
+}
+
+async function waitForRunnerReady(client: RunnerServiceClient): Promise<void> {
   await waitFor(async () => {
     try {
-      await callRunnerReady(client, secret);
+      await callRunnerReady(client);
       return true;
     } catch {
       return false;
@@ -56,37 +195,34 @@ async function waitForRunnerReady(client: RunnerServiceGrpcClient, secret: strin
 }
 
 async function waitForRunnerReadyOnAddress(address: string, secret: string): Promise<void> {
-  const client = new RunnerServiceGrpcClient(address, credentials.createInsecure());
+  const { client, sessionManager } = createRunnerClient(address, secret);
   try {
-    await waitForRunnerReady(client, secret);
+    await waitForRunnerReady(client);
   } finally {
-    client.close();
+    sessionManager.abort();
   }
 }
 
-function callRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promise<void> {
+function callRunnerReady(client: RunnerServiceClient): Promise<void> {
   const request = create(ReadyRequestSchema, {});
-  const metadata = authMetadata(secret, RUNNER_SERVICE_READY_PATH);
-  return new Promise<void>((resolve, reject) => {
-    client.ready(request, metadata, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
+  return client.ready(request);
 }
 
-function authMetadata(secret: string, path: string): Metadata {
-  const nonce = randomUUID();
-  readinessNonceCache.add(nonce);
-  const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret, nonce });
-  const metadata = new Metadata();
-  for (const [key, value] of Object.entries(headers)) {
-    metadata.set(key, value);
-  }
-  return metadata;
+function createRunnerAuthInterceptor(secret: string): Interceptor {
+  return (next) => async (req) => {
+    const path = new URL(req.url).pathname;
+    const headers = buildAuthHeaders({ method: req.requestMethod, path, body: '', secret });
+    for (const [key, value] of Object.entries(headers)) {
+      req.header.set(key, value);
+    }
+    return next(req);
+  };
+}
+
+function normalizeRunnerBaseUrl(address: string): string {
+  if (/^https?:\/\//i.test(address)) return address;
+  if (/^grpc:\/\//i.test(address)) return `http://${address.slice('grpc://'.length)}`;
+  return `http://${address}`;
 }
 
 export async function startPostgres(): Promise<PostgresHandle> {
