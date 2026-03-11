@@ -77,54 +77,12 @@ dev:
           - -c
           - |
             set -eu
-
-            echo "=== DevSpace startup ==="
-            echo "Waiting for file sync..."
-
             elapsed=0
             while [ ! -f /opt/app/data/pnpm-workspace.yaml ]; do
-              sleep 1
-              elapsed=$((elapsed + 1))
-              if [ "$elapsed" -ge 120 ]; then
-                echo "ERROR: pnpm-workspace.yaml not found after 120s" >&2
-                exit 1
-              fi
+              sleep 1; elapsed=$((elapsed + 1))
+              [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
             done
-            echo "Sync ready (${elapsed}s)."
-
-            echo "Bootstrapping pnpm..."
-            mkdir -p /opt/app/data/corepack
-            corepack enable --install-directory /opt/app/data/corepack
-            export PATH="/opt/app/data/corepack:$PATH"
-            corepack prepare pnpm@10.5.0 --activate
-
-            if ! command -v buf >/dev/null 2>&1; then
-              echo "Installing buf..."
-              node -e "const https=require('https');const fs=require('fs');const dest='/opt/app/data/corepack/buf';const download=(url)=>new Promise((resolve,reject)=>{https.get(url,res=>{if(res.statusCode&&res.statusCode>=300&&res.statusCode<400&&res.headers.location){res.resume();return resolve(download(res.headers.location));}if(res.statusCode!==200){return reject(new Error('Failed to download buf: '+res.statusCode));}const file=fs.createWriteStream(dest);res.pipe(file);file.on('finish',()=>file.close(resolve));file.on('error',reject);}).on('error',reject);});download('https://github.com/bufbuild/buf/releases/download/v1.45.0/buf-Linux-x86_64').then(()=>{fs.chmodSync(dest,0o755);}).catch(err=>{console.error(err.message);process.exit(1);});"
-            fi
-
-            export SSL_CERT_FILE="/opt/app/data/corepack/cacert.pem"
-            if [ ! -f "$SSL_CERT_FILE" ]; then
-              echo "Installing CA bundle..."
-              node -e "const https=require('https');const fs=require('fs');const dest='/opt/app/data/corepack/cacert.pem';const download=(url)=>new Promise((resolve,reject)=>{https.get(url,res=>{if(res.statusCode&&res.statusCode>=300&&res.statusCode<400&&res.headers.location){res.resume();return resolve(download(res.headers.location));}if(res.statusCode!==200){return reject(new Error('Failed to download CA bundle: '+res.statusCode));}const file=fs.createWriteStream(dest);res.pipe(file);file.on('finish',()=>file.close(resolve));file.on('error',reject);}).on('error',reject);});download('https://curl.se/ca/cacert.pem').then(()=>{fs.chmodSync(dest,0o644);}).catch(err=>{console.error(err.message);process.exit(1);});"
-            fi
-
-            cd /opt/app/data
-
-            echo "Generating protobuf types..."
-            pnpm proto:generate
-
-            echo "Approving build scripts..."
-            pnpm approve-builds @prisma/client prisma esbuild @nestjs/core
-
-            echo "Installing dependencies..."
-            pnpm install --filter @agyn/platform-server... --frozen-lockfile
-
-            echo "Generating Prisma client..."
-            pnpm --filter @agyn/platform-server run prisma:generate
-
-            echo "Starting dev server (tsx watch)..."
-            pnpm --filter @agyn/platform-server dev
+            exec /opt/app/data/packages/platform-server/scripts/devspace-startup.sh
         env:
           - name: NODE_ENV
             value: development

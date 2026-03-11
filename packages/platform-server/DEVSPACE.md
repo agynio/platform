@@ -22,9 +22,10 @@ container and sync behavior:
    dev container changes.
 2. DevSpace clones the deployment into a dev pod with the
    `ghcr.io/agynio/platform-server:dev` image.
-3. The repo is synced into `/opt/app/data` and the startup script
-   installs dependencies, generates protobuf and Prisma clients, and launches
-   the dev server.
+3. The repo is synced into `/opt/app/data` (not a subdirectory, since the CRI
+   creates subdirectories as root-owned `755`) and the startup script installs
+   dependencies, generates protobuf and Prisma clients, and launches the dev
+   server.
 4. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
    graph repository lives on the writable emptyDir mount.
 5. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
@@ -41,17 +42,14 @@ cd packages/platform-server
 devspace dev
 ```
 
-Startup steps in the dev container:
+Startup steps in the dev container (see
+`packages/platform-server/scripts/devspace-startup.sh`):
 
-1. `corepack enable --install-directory /opt/app/data/corepack`
-2. `corepack prepare pnpm@10.5.0 --activate`
-3. Install `buf` if missing (downloaded into `/opt/app/data/corepack`)
-4. Install a CA bundle (needed for `buf` registry TLS)
-5. `pnpm proto:generate`
-6. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
-7. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
-8. `pnpm --filter @agyn/platform-server run prisma:generate`
-9. `pnpm --filter @agyn/platform-server dev`
+1. `pnpm proto:generate`
+2. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
+3. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
+4. `pnpm --filter @agyn/platform-server run prisma:generate`
+5. `pnpm --filter @agyn/platform-server dev`
 
 ## Prisma migrations
 
@@ -65,10 +63,6 @@ pnpm --filter @agyn/platform-server exec prisma migrate deploy
 
 ## Troubleshooting
 
-- **EACCES from corepack enable**: Ensure you are using the
-  `ghcr.io/agynio/platform-server:dev` image and that the container has a
-  writable root filesystem (the DevSpace patch sets
-  `readOnlyRootFilesystem: false`). Re-run `devspace dev` or reset the pod.
 - **Sync timeout waiting for `pnpm-workspace.yaml`**: DevSpace could not sync
   the repo in time. Check `devspace logs`, confirm your kubeconfig context, and
   run `devspace reset pods` before starting again.
