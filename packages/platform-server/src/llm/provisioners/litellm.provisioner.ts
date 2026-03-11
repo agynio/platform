@@ -320,17 +320,21 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     return Number.isFinite(ts) ? new Date(ts) : null;
   }
 
-  private async revokeKey(key: string, context: string): Promise<void> {
-    if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) return;
+  private async deleteKeyRequest(body: Record<string, unknown>): Promise<Response | null> {
+    if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) return null;
     const base = this.cfg.litellmBaseUrl.replace(/\/$/, '');
     const url = `${base}/key/delete`;
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       authorization: `Bearer ${this.cfg.litellmMasterKey}`,
     };
+    return this.fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  }
 
+  private async revokeKey(key: string, context: string): Promise<void> {
     try {
-      const resp = await this.fetchImpl(url, { method: 'POST', headers, body: JSON.stringify({ keys: [key] }) });
+      const resp = await this.deleteKeyRequest({ keys: [key] });
+      if (!resp) return;
       if (resp.status === 404) {
         this.logger.debug(`LiteLLM key already revoked ${JSON.stringify({ context })}`);
         return;
@@ -347,20 +351,9 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   private async revokeKeyByAlias(alias: string, context: string): Promise<void> {
-    if (!this.cfg.litellmBaseUrl || !this.cfg.litellmMasterKey) return;
-    const base = this.cfg.litellmBaseUrl.replace(/\/$/, '');
-    const url = `${base}/key/delete`;
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      authorization: `Bearer ${this.cfg.litellmMasterKey}`,
-    };
-
     try {
-      const resp = await this.fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ key_aliases: [alias] }),
-      });
+      const resp = await this.deleteKeyRequest({ key_aliases: [alias] });
+      if (!resp) return;
       if (resp.status === 404) {
         this.logger.debug(`LiteLLM key alias already revoked ${JSON.stringify({ alias, context })}`);
         return;

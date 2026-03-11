@@ -152,6 +152,50 @@ describe('LiteLLMProvisioner', () => {
     await provisioner.teardown();
   });
 
+  it('clears alias conflicts and provisions a new key', async () => {
+    const store = new InMemoryKeyStore();
+    const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    let generateCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = getUrl(input);
+      if (url.endsWith('/key/generate')) {
+        generateCount += 1;
+        if (generateCount === 1) {
+          return respondStatus(400, 'Alias already exists');
+        }
+        return respondJson({ key: 'sk-recovered', expires });
+      }
+      if (url.endsWith('/key/delete')) {
+        return respondDelete(init, [respondJson({ deleted_aliases: ['agents/unit-test'] })]);
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    const provisioner = new LiteLLMProvisioner(baseConfig(), store, fetchMock as unknown as typeof fetch);
+    await provisioner.init();
+
+    const requestUrls = fetchMock.mock.calls.map(([arg]) => getUrl(arg as RequestInfo | URL));
+    const generateIndices = requestUrls
+      .map((url, index) => (url.endsWith('/key/generate') ? index : -1))
+      .filter((index) => index >= 0);
+    const deleteIndices = requestUrls
+      .map((url, index) => (url.endsWith('/key/delete') ? index : -1))
+      .filter((index) => index >= 0);
+
+    expect(generateIndices).toHaveLength(2);
+    expect(deleteIndices.length).toBeGreaterThanOrEqual(2);
+    const aliasCleanupIndex = deleteIndices[deleteIndices.length - 1] ?? -1;
+    expect(aliasCleanupIndex).toBeGreaterThan(generateIndices[0] ?? -1);
+    expect(aliasCleanupIndex).toBeLessThan(generateIndices[1] ?? Number.MAX_SAFE_INTEGER);
+
+    const deleteCall = fetchMock.mock.calls[aliasCleanupIndex];
+    const deleteBody = parseJsonBody(deleteCall?.[1] as RequestInit | undefined);
+    expect(deleteBody?.key_aliases).toEqual(['agents/unit-test']);
+    expect(store.current?.key).toBe('sk-recovered');
+
+    await provisioner.teardown();
+  });
+
   it('refreshes the virtual key before expiry and revokes the previous key', async () => {
     vi.useFakeTimers();
     const now = new Date('2025-01-01T00:00:00.000Z');

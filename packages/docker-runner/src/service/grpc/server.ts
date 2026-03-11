@@ -122,6 +122,7 @@ type ExecutionContext = {
   timers: {
     timeout?: NodeJS.Timeout;
     idle?: NodeJS.Timeout;
+    inspect?: NodeJS.Timeout;
   };
   reason: ExecExitReason;
   killed: boolean;
@@ -140,11 +141,17 @@ const clearExecutionTimers = (ctx?: ExecutionContext) => {
     clearTimeout(ctx.timers.idle);
     ctx.timers.idle = undefined;
   }
+  if (ctx.timers.inspect) {
+    clearTimeout(ctx.timers.inspect);
+    ctx.timers.inspect = undefined;
+  }
 };
 
 const utf8Encoder = new TextEncoder();
 const DEFAULT_EXIT_TAIL_BYTES = 64 * 1024;
 const MAX_EXIT_TAIL_BYTES = 256 * 1024;
+const EXEC_INSPECT_POLL_INTERVAL_MS = 2000;
+const EXEC_INSPECT_FAILURE_LIMIT = 3;
 const CONTAINER_STOP_TIMEOUT_SEC = 10;
 const SIDECAR_ROLE_LABEL = 'hautech.ai/role';
 const SIDECAR_ROLE_VALUE = 'sidecar';
@@ -1184,6 +1191,50 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               }
             };
 
+            let inspectFailures = 0;
+            const pollExecCompletion = async () => {
+              if (context.finished || context.cancelRequested) return;
+              try {
+                const details = await opts.containers.inspectExec(context.executionId);
+                inspectFailures = 0;
+                const running = details.Running === true;
+                const hasExitCode = typeof details.ExitCode === 'number';
+                if (!running || hasExitCode) {
+                  void finish(context, context.reason, context.killed);
+                  return;
+                }
+              } catch (error) {
+                inspectFailures += 1;
+                if (inspectFailures === 1) {
+                  console.warn('Exec inspect failed during completion poll', {
+                    executionId: context.executionId,
+                    containerId: context.targetId,
+                    error: error instanceof Error ? error.message : error,
+                  });
+                }
+                if (inspectFailures >= EXEC_INSPECT_FAILURE_LIMIT) {
+                  console.warn('Exec inspect failed repeatedly; finishing exec', {
+                    executionId: context.executionId,
+                    containerId: context.targetId,
+                    failures: inspectFailures,
+                  });
+                  void finish(context, ExecExitReason.RUNNER_ERROR, context.killed);
+                  return;
+                }
+              }
+              scheduleInspectPoll();
+            };
+
+            const scheduleInspectPoll = () => {
+              if (context.finished || context.cancelRequested) return;
+              if (context.timers.inspect) {
+                clearTimeout(context.timers.inspect);
+              }
+              context.timers.inspect = setTimeout(() => {
+                void pollExecCompletion();
+              }, EXEC_INSPECT_POLL_INTERVAL_MS);
+            };
+
             const armIdleTimer = () => {
               if (!context.idleTimeoutMs || context.idleTimeoutMs <= 0) return;
               if (context.finished || context.cancelRequested) return;
@@ -1207,6 +1258,8 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               startedAt: timestampFromDate(now),
             });
             writeResponse(call, create(ExecResponseSchema, { event: { case: 'started', value: started } }));
+
+            scheduleInspectPoll();
 
             if (context.idleTimeoutMs && context.idleTimeoutMs > 0) {
               armIdleTimer();

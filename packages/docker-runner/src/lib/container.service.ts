@@ -21,6 +21,7 @@ import {
 } from './types';
 
 const INTERACTIVE_EXEC_CLOSE_CAPTURE_LIMIT = 256 * 1024; // 256 KiB of characters (~512 KiB memory)
+const EXEC_INSPECT_POLL_INTERVAL_MS = 2000;
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
@@ -409,11 +410,53 @@ export class ContainerService implements DockerClientPort {
       }
     };
 
-    hijackStream.once('end', closeOutputs);
-    hijackStream.once('close', closeOutputs);
+    let outputsClosed = false;
+    let pollTimer: NodeJS.Timeout | null = null;
+    let pollInspectErrorLogged = false;
+    const closeOutputsOnce = () => {
+      if (outputsClosed) return;
+      outputsClosed = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      closeOutputs();
+    };
+
+    const pollExec = async () => {
+      if (outputsClosed) return;
+      let details: Awaited<ReturnType<Exec['inspect']>> | undefined;
+      try {
+        details = await exec.inspect();
+      } catch (error) {
+        if (!pollInspectErrorLogged) {
+          pollInspectErrorLogged = true;
+          this.warn('Interactive exec inspect failed during completion poll', { error: this.errorContext(error) });
+        }
+        schedulePoll();
+        return;
+      }
+
+      const running = details.Running === true;
+      const hasExitCode = typeof details.ExitCode === 'number';
+      if (!running || hasExitCode) {
+        closeOutputsOnce();
+        return;
+      }
+      schedulePoll();
+    };
+
+    const schedulePoll = () => {
+      if (outputsClosed) return;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(() => {
+        void pollExec();
+      }, EXEC_INSPECT_POLL_INTERVAL_MS);
+    };
+
+    hijackStream.once('end', closeOutputsOnce);
+    hijackStream.once('close', closeOutputsOnce);
 
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
+    schedulePoll();
 
     const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
       await this.terminateExecProcess(exec, { containerId: inspectData.Id, reason });
@@ -524,6 +567,12 @@ export class ContainerService implements DockerClientPort {
     const exec = this.docker.getExec(execId);
     if (!exec) throw new Error('exec_not_found');
     await exec.resize({ w: size.cols, h: size.rows });
+  }
+
+  async inspectExec(execId: string) {
+    const exec = this.docker.getExec(execId);
+    if (!exec) throw new Error('exec_not_found');
+    return exec.inspect();
   }
 
   private buildLogToPid1Command(command: string[] | string): string[] {
