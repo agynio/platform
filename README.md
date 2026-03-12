@@ -4,6 +4,10 @@
 # Agyn Platform
 A multi-service agents platform with a NestJS API, React UI, and filesystem-backed graph orchestration.
 
+# Product Demo
+
+[![Watch the demo](https://img.youtube.com/vi/i4vZQ9vRvfY/maxresdefault.jpg)](https://www.youtube.com/watch?v=i4vZQ9vRvfY)
+
 ## Results on SWE-bench Verified
 Using a coordinated multi-agent team, agyn achieved **72.2% fully automated issue resolution** on SWE-bench Verified, the highest result among GPT-5–based systems.
 
