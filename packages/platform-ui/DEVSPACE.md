@@ -60,7 +60,7 @@ Startup steps in the dev container (see
 - **Old devspace clone still running**: If `platform-ui-devspace` exists from
   the previous workflow, delete it with
   `kubectl delete deployment platform-ui-devspace -n platform`.
-- **OOM kills**: The dev container is limited to 2Gi. Reduce memory usage or
+- **OOM kills**: The dev container is limited to 4Gi. Reduce memory usage or
   increase limits in the cluster if you consistently hit OOMs.
 
 ## Cleanup
