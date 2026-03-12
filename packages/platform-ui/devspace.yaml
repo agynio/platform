@@ -52,10 +52,10 @@ pipelines:
               resources:
                 requests:
                   cpu: 500m
-                  memory: 512Mi
+                  memory: 1Gi
                 limits:
                   cpu: "2"
-                  memory: 2Gi
+                  memory: 4Gi
               securityContext:
                 runAsNonRoot: true
                 runAsUser: 1000
