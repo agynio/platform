@@ -6,6 +6,19 @@ import { defineConfig } from 'vite';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET || 'http://platform-server:3010',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: process.env.VITE_PROXY_TARGET || 'http://platform-server:3010',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

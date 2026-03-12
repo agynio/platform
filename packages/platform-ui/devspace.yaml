@@ -1,0 +1,117 @@
+version: v2beta1
+
+vars:
+  PLATFORM_NAMESPACE: platform
+
+pipelines:
+  dev: |-
+    if kubectl get application platform-ui -n argocd >/dev/null 2>&1; then
+      echo "Disabling ArgoCD auto-sync for platform-ui..."
+      kubectl patch application platform-ui -n argocd \
+        --type merge \
+        -p '{"spec":{"syncPolicy":{"automated":null}}}'
+      echo "ArgoCD auto-sync disabled."
+    else
+      echo "WARNING: ArgoCD Application 'platform-ui' not found in argocd namespace."
+    fi
+    echo "Patching platform-ui deployment for DevSpace..."
+    kubectl patch deployment platform-ui -n ${PLATFORM_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
+    spec:
+      template:
+        spec:
+          securityContext:
+            runAsUser: 1000
+            fsGroup: 1000
+          initContainers: []
+          containers:
+            - name: platform-ui
+              image: ghcr.io/agynio/devcontainer-node:1
+              workingDir: /opt/app/data
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  elapsed=0
+                  while [ ! -f /opt/app/data/pnpm-workspace.yaml ]; do
+                    sleep 1; elapsed=$((elapsed + 1))
+                    [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
+                  done
+                  exec /opt/app/data/packages/platform-ui/scripts/devspace-startup.sh
+              env:
+                - name: NODE_ENV
+                  value: development
+                - name: VITE_API_BASE_URL
+                  value: ""
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                readOnlyRootFilesystem: false
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                seccompProfile:
+                  type: RuntimeDefault
+    EOF
+    )"
+    start_dev --disable-pod-replace platform-ui
+
+hooks:
+  - name: restore-argocd-auto-sync
+    events:
+      - after:dev:platform-ui
+    command: sh
+    args:
+      - -c
+      - |
+        if kubectl get application platform-ui -n argocd >/dev/null 2>&1; then
+          echo "Re-enabling ArgoCD auto-sync for platform-ui..."
+          kubectl patch application platform-ui -n argocd \
+            --type merge \
+            -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+          echo "ArgoCD auto-sync restored."
+        fi
+
+dev:
+  platform-ui:
+    namespace: ${PLATFORM_NAMESPACE}
+    labelSelector:
+      app.kubernetes.io/name: platform-ui
+      app.kubernetes.io/instance: platform-ui
+    containers:
+      platform-ui:
+        container: platform-ui
+        sync:
+          - path: ../..:/opt/app/data
+            excludePaths:
+              - .git/
+              - node_modules/
+              - dist/
+              - .devspace/
+              - .pnpm-store/
+              - packages/platform-ui/storybook-static/
+            uploadExcludePaths:
+              - .git/
+              - node_modules/
+              - dist/
+              - .pnpm-store/
+              - packages/platform-ui/storybook-static/
+            downloadExcludePaths:
+              - .git/
+              - node_modules/
+              - dist/
+              - .pnpm-store/
+              - packages/platform-ui/storybook-static/
+        logs:
+          enabled: true
+          lastLines: 200
+    ports:
+      - port: "3000"
