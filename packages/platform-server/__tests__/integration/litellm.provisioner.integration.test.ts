@@ -26,6 +26,12 @@ class InMemoryKeyStore implements LiteLLMKeyStore {
   async save(key: PersistedLiteLLMKey): Promise<void> {
     this.current = key;
   }
+
+  async delete(alias: string): Promise<void> {
+    if (this.current?.alias === alias) {
+      this.current = undefined;
+    }
+  }
 }
 
 type KeyInfo = {
