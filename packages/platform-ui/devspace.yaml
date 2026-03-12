@@ -62,6 +62,10 @@ pipelines:
                   type: RuntimeDefault
     EOF
     )"
+    echo "Removing probes from platform-ui container..."
+    kubectl patch deployment platform-ui -n ${PLATFORM_NAMESPACE} --type=json \
+      -p='[{"op":"remove","path":"/spec/template/spec/containers/0/livenessProbe"},{"op":"remove","path":"/spec/template/spec/containers/0/readinessProbe"}]' \
+      2>/dev/null || echo "Note: probes already absent, skipping removal."
     start_dev --disable-pod-replace platform-ui
 
 hooks:
