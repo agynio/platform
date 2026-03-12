@@ -23,10 +23,16 @@ pipelines:
             runAsUser: 1000
             fsGroup: 1000
           initContainers: []
+          volumes:
+            - name: devspace-data
+              emptyDir: {}
           containers:
             - name: platform-ui
               image: ghcr.io/agynio/devcontainer-node:1
               workingDir: /opt/app/data
+              volumeMounts:
+                - name: devspace-data
+                  mountPath: /opt/app/data
               command:
                 - sh
                 - -c
