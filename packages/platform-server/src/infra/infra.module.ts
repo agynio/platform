@@ -109,9 +109,11 @@ import { HealthController } from './health/health.controller';
     },
     {
       provide: NcpsKeyService,
-      useFactory: async (config: ConfigService) => {
+      useFactory: (config: ConfigService) => {
         const svc = new NcpsKeyService(config);
-        await svc.init();
+        svc.init().catch(() => {
+          // Error is already logged internally by NcpsKeyService
+        });
 
         return svc;
       },
