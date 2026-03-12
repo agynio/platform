@@ -493,6 +493,9 @@ describe('EntityUpsertForm', () => {
           id: 'mcpServerWorkspace',
           selections: ['workspace-1'],
           attachmentKind: TEAM_ATTACHMENT_KIND.mcpServerWorkspaceConfiguration,
+=======
+          attachmentKind: 'agent_memoryBucket',
+>>>>>>> e9a06cd8 (fix(platform-ui): align team api contracts)
         }),
       ]),
     );

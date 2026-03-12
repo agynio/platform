@@ -70,11 +70,16 @@ function primeTeamHandlers() {
         items: [
           {
             id: 'agent-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
             title: 'Core Agent',
             description: 'Primary responder',
             config: { model: 'gpt-4' },
           },
         ],
+        page: 1,
+        perPage: 50,
+        total: 1,
       }),
     ),
     http.get(abs('/apiv2/team/v1/tools'), () =>
@@ -82,12 +87,17 @@ function primeTeamHandlers() {
         items: [
           {
             id: 'tool-1',
-            type: 'TOOL_TYPE_MANAGE',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
+            type: 'manage',
             name: 'manage_team',
             description: 'Manage tool',
             config: { name: 'manage_team' },
           },
         ],
+        page: 1,
+        perPage: 50,
+        total: 1,
       }),
     ),
     http.get(abs('/apiv2/team/v1/mcp-servers'), () =>
@@ -95,11 +105,16 @@ function primeTeamHandlers() {
         items: [
           {
             id: 'mcp-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
             title: 'Filesystem MCP',
             description: 'Local MCP',
             config: { namespace: 'fs', command: 'fs' },
           },
         ],
+        page: 1,
+        perPage: 50,
+        total: 1,
       }),
     ),
     http.get(abs('/apiv2/team/v1/workspace-configurations'), () =>
@@ -107,11 +122,16 @@ function primeTeamHandlers() {
         items: [
           {
             id: 'workspace-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
             title: 'Worker Pool',
             description: 'Default workspace',
             config: { image: 'docker.io/library/node:18' },
           },
         ],
+        page: 1,
+        perPage: 50,
+        total: 1,
       }),
     ),
     http.get(abs('/apiv2/team/v1/memory-buckets'), () =>
@@ -119,14 +139,26 @@ function primeTeamHandlers() {
         items: [
           {
             id: 'memory-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
             title: 'Global Memory',
             description: 'Shared',
-            config: { scope: 'MEMORY_BUCKET_SCOPE_GLOBAL' },
+            config: { scope: 'global' },
           },
         ],
+        page: 1,
+        perPage: 50,
+        total: 1,
       }),
     ),
-    http.get(abs('/apiv2/team/v1/attachments'), () => HttpResponse.json({ items: [] })),
+    http.get(abs('/apiv2/team/v1/attachments'), () =>
+      HttpResponse.json({
+        items: [],
+        page: 1,
+        perPage: 50,
+        total: 0,
+      }),
+    ),
   );
 }
 
