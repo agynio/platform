@@ -42,7 +42,7 @@ pipelines:
                 - name: NODE_ENV
                   value: development
                 - name: VITE_API_BASE_URL
-                  value: ""
+                  value: "/api"
               resources:
                 requests:
                   cpu: 500m

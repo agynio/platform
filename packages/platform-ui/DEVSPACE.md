@@ -25,7 +25,7 @@ and then attaches sync/ports/logs:
    `start_dev --disable-pod-replace` and only configures sync/ports/logs.
 4. The repo is synced into `/opt/app/data` and the startup script installs
    dependencies, then launches the Vite dev server on `0.0.0.0:3000`.
-5. The dev pod sets `VITE_API_BASE_URL` to an empty string to force same-origin
+5. The dev pod sets `VITE_API_BASE_URL` to `/api` so the UI makes same-origin
    requests; Vite proxies `/api` and `/socket.io` to
    `http://platform-server:3010` (or `VITE_PROXY_TARGET`).
 6. On exit, the ArgoCD hook restores auto-sync for `platform-ui`.
