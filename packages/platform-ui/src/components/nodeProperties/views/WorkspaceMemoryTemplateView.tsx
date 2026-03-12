@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, type ChangeEvent } from 'react';
 
 import { Dropdown } from '../../Dropdown';
+import { Input } from '../../Input';
 import { FieldLabel } from '../FieldLabel';
 import type { NodePropertiesViewProps } from '../viewTypes';
 import { isRecord } from '../utils';
@@ -20,6 +21,12 @@ export function MemoryWorkspaceTemplateView({ config, onConfigChange }: MemoryTe
     : undefined;
   const rawScope = typeof configRecord.scope === 'string' ? (configRecord.scope as string) : undefined;
   const staticScope = typeof staticConfig?.scope === 'string' ? (staticConfig.scope as string) : undefined;
+  const rawCollectionPrefix =
+    typeof configRecord.collectionPrefix === 'string'
+      ? (configRecord.collectionPrefix as string)
+      : typeof configRecord.collection_prefix === 'string'
+      ? (configRecord.collection_prefix as string)
+      : '';
   const scope: MemoryScopeOption =
     rawScope === 'perThread'
       ? 'perThread'
@@ -37,6 +44,14 @@ export function MemoryWorkspaceTemplateView({ config, onConfigChange }: MemoryTe
     [onConfigChange],
   );
 
+  const handleCollectionPrefixChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      onConfigChange?.({ collectionPrefix: value.trim().length > 0 ? value : undefined });
+    },
+    [onConfigChange],
+  );
+
   return (
     <section className="space-y-4">
       <div>
@@ -49,6 +64,17 @@ export function MemoryWorkspaceTemplateView({ config, onConfigChange }: MemoryTe
           value={scope}
           onValueChange={handleScopeChange}
           options={SCOPE_OPTIONS}
+        />
+      </div>
+      <div>
+        <FieldLabel
+          label="Collection prefix"
+          hint="Optional prefix applied to collection names for stored memories."
+        />
+        <Input
+          value={rawCollectionPrefix}
+          onChange={handleCollectionPrefixChange}
+          placeholder="e.g. team-memory"
         />
       </div>
     </section>

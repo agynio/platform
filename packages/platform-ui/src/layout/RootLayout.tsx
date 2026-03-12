@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Network,
-  GitBranch,
   MessageSquare,
   Bell,
   Brain,
@@ -15,7 +14,6 @@ import {
   Bot,
   Users,
   Layers,
-  Zap,
   Hammer,
   Server,
   Building2,
@@ -26,11 +24,9 @@ import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
-  agentsTeam: '/agents/graph',
   agentsThreads: '/agents/threads',
   agentsReminders: '/agents/reminders',
   agentsMemory: '/agents/memory',
-  entitiesTriggers: '/triggers',
   entitiesAgents: '/agents',
   entitiesTools: '/tools',
   entitiesMcp: '/mcp',
@@ -53,7 +49,6 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Agents',
     icon: <Network className="w-5 h-5" />,
     items: [
-      { id: 'agentsTeam', label: 'Team', icon: <GitBranch className="w-4 h-4" /> },
       { id: 'agentsThreads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
       { id: 'agentsReminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
       { id: 'agentsMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
@@ -64,7 +59,6 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Entities',
     icon: <Layers className="w-5 h-5" />,
     items: [
-      { id: 'entitiesTriggers', label: 'Triggers', icon: <Zap className="w-4 h-4" /> },
       { id: 'entitiesAgents', label: 'Agents', icon: <Users className="w-4 h-4" /> },
       { id: 'entitiesTools', label: 'Tools', icon: <Hammer className="w-4 h-4" /> },
       { id: 'entitiesMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" /> },

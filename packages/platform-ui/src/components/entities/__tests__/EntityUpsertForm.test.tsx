@@ -39,6 +39,7 @@ import type { GraphEntityKind, GraphEntitySummary, TemplateOption } from '@/feat
 import type { PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
+import { TEAM_ATTACHMENT_KIND } from '@/features/entities/api/teamEntities';
 
 function createTemplate(name: string, kind: GraphEntityKind = 'workspace'): TemplateOption {
   const schema: TemplateSchema = {
@@ -72,6 +73,7 @@ function createEntitySummary(overrides: Partial<GraphEntitySummary> = {}): Graph
 
   return {
     id: 'node-1',
+    entityKind: 'workspace',
     node,
     title: 'Node 1',
     templateName: 'template-1',
@@ -112,58 +114,7 @@ function createGraphEdge(overrides: Partial<GraphPersistedEdge> & { source: stri
   } satisfies GraphPersistedEdge;
 }
 
-interface RelationDialogRenderOptions {
-  kind: GraphEntityKind;
-  templateName: string;
-  graphNodes: GraphNodeConfig[];
-  graphEdges: GraphPersistedEdge[];
-  entity?: GraphEntitySummary;
-  mode?: 'create' | 'edit';
-  templates?: TemplateOption[];
-}
-
-function renderRelationDialog(options: RelationDialogRenderOptions) {
-  const {
-    kind,
-    templateName,
-    graphNodes,
-    graphEdges,
-    entity,
-    mode = 'edit',
-    templates = [createTemplate(templateName, kind)],
-  } = options;
-  const resolvedEntity =
-    entity ??
-    createEntitySummary({
-      id: `${templateName}-entity`,
-      templateName,
-      templateKind: kind,
-      rawTemplateKind: kind,
-      title: `${templateName} entity`,
-    });
-  const onSubmit = vi.fn().mockResolvedValue(undefined);
-
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <EntityUpsertForm
-        mode={mode}
-        kind={kind}
-        templates={templates}
-        entity={mode === 'edit' ? resolvedEntity : undefined}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        graphNodes={graphNodes}
-        graphEdges={graphEdges}
-        onCancel={vi.fn()}
-      />
-    </QueryClientProvider>,
-  );
-
-  return { onSubmit };
-}
-
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
-
 describe('EntityUpsertForm', () => {
   it('embeds workspace config fields and submits updated values', async () => {
     const templates = [createTemplate('workspace-template', 'workspace')];
@@ -205,6 +156,7 @@ describe('EntityUpsertForm', () => {
 
     const payload = onSubmit.mock.calls[0][0];
     expect(payload).toMatchObject({
+      entityKind: 'workspace',
       template: 'workspace-template',
       title: 'My Workspace',
     });
@@ -220,12 +172,56 @@ describe('EntityUpsertForm', () => {
     const templates = [createTemplate('agent-template', 'agent')];
     const entity = createEntitySummary({
       id: 'agent-1',
+      entityKind: 'agent',
       templateName: 'agent-template',
       templateKind: 'agent',
       rawTemplateKind: 'agent',
-      title: 'Existing Agent',
-      config: { title: 'Existing Agent', template: 'agent-template', kind: 'Agent' },
+      title: 'Agent 1',
     });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityUpsertForm
+          mode="edit"
+          kind="agent"
+          templates={templates}
+          entity={entity}
+          onSubmit={vi.fn()}
+          isSubmitting={false}
+          onCancel={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const templateSelect = await screen.findByLabelText('Template');
+    expect(templateSelect).toBeDisabled();
+    expect(templateSelect).toHaveTextContent('agent-template-title');
+
+    await screen.findByText('Profile');
+  });
+
+  it('includes attachment relations for agent selections', async () => {
+    const templates = [createTemplate('agent-template', 'agent')];
+    const entity = createEntitySummary({
+      id: 'agent-1',
+      entityKind: 'agent',
+      templateName: 'agent-template',
+      templateKind: 'agent',
+      rawTemplateKind: 'agent',
+      title: 'Agent 1',
+    });
+    const graphNodes = [
+      createGraphNode({ id: 'tool-1', kind: 'Tool', template: 'manageTool', title: 'Manage tool' }),
+      createGraphNode({ id: 'mcp-1', kind: 'MCP', template: 'mcpServer', title: 'Filesystem MCP' }),
+      createGraphNode({ id: 'workspace-1', kind: 'Workspace', template: 'workspace', title: 'Worker Pool' }),
+      createGraphNode({ id: 'memory-1', kind: 'Workspace', template: 'memory', title: 'Global Memory' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'tools', target: 'tool-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'mcp', target: 'mcp-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'workspace', target: 'workspace-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'memory', target: 'memory-1' }),
+    ];
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const user = setupUser();
 
@@ -238,6 +234,8 @@ describe('EntityUpsertForm', () => {
           entity={entity}
           onSubmit={onSubmit}
           isSubmitting={false}
+          graphNodes={graphNodes}
+          graphEdges={graphEdges}
           onCancel={vi.fn()}
         />
       </QueryClientProvider>,
@@ -260,12 +258,34 @@ describe('EntityUpsertForm', () => {
     });
 
     const payload = onSubmit.mock.calls[0][0];
+    expect(payload.entityKind).toBe('agent');
     expect(payload.template).toBe('agent-template');
-    expect(payload.title).toBe('Existing Agent');
+    expect(payload.title).toBe(entity.title);
     expect(payload.config).toMatchObject({ model: 'claude-3' });
     expect(payload.config).not.toHaveProperty('title');
     expect(payload.config).not.toHaveProperty('template');
     expect(payload.config).not.toHaveProperty('kind');
+    const relations = payload.relations ?? [];
+    expect(relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'agentTools', selections: ['tool-1'], attachmentKind: 'agent_tool' }),
+        expect.objectContaining({
+          id: 'agentMcpServers',
+          selections: ['mcp-1'],
+          attachmentKind: 'agent_mcpServer',
+        }),
+        expect.objectContaining({
+          id: 'agentWorkspaceConfiguration',
+          selections: ['workspace-1'],
+          attachmentKind: 'agent_workspaceConfiguration',
+        }),
+        expect.objectContaining({
+          id: 'agentMemoryBuckets',
+          selections: ['memory-1'],
+          attachmentKind: 'agent_memoryBucket',
+        }),
+      ]),
+    );
 
     await user.clear(modelInput);
     await user.type(modelInput, 'qwen-plus');
@@ -276,11 +296,88 @@ describe('EntityUpsertForm', () => {
     });
 
     const secondPayload = onSubmit.mock.calls[1][0];
-    expect(secondPayload.title).toBe('Existing Agent');
+    expect(secondPayload.title).toBe(entity.title);
     expect(secondPayload.config).toMatchObject({ model: 'qwen-plus' });
     expect(secondPayload.config).not.toHaveProperty('title');
     expect(secondPayload.config).not.toHaveProperty('template');
     expect(secondPayload.config).not.toHaveProperty('kind');
+  });
+
+  it('includes attachment relations for agent selections', async () => {
+    const templates = [createTemplate('agent-template', 'agent')];
+    const entity = createEntitySummary({
+      id: 'agent-1',
+      entityKind: 'agent',
+      templateName: 'agent-template',
+      templateKind: 'agent',
+      rawTemplateKind: 'agent',
+      title: 'Agent 1',
+    });
+    const graphNodes = [
+      createGraphNode({ id: 'tool-1', kind: 'Tool', template: 'manageTool', title: 'Manage tool' }),
+      createGraphNode({ id: 'mcp-1', kind: 'MCP', template: 'mcpServer', title: 'Filesystem MCP' }),
+      createGraphNode({ id: 'workspace-1', kind: 'Workspace', template: 'workspace', title: 'Worker Pool' }),
+      createGraphNode({ id: 'memory-1', kind: 'Workspace', template: 'memory', title: 'Global Memory' }),
+    ];
+    const graphEdges = [
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'tools', target: 'tool-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'mcp', target: 'mcp-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'workspace', target: 'workspace-1' }),
+      createGraphEdge({ source: 'agent-1', sourceHandle: 'memory', target: 'memory-1' }),
+    ];
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const user = setupUser();
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityUpsertForm
+          mode="edit"
+          kind="agent"
+          templates={templates}
+          entity={entity}
+          onSubmit={onSubmit}
+          isSubmitting={false}
+          graphNodes={graphNodes}
+          graphEdges={graphEdges}
+          onCancel={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const submitButton = await screen.findByRole('button', { name: /save changes/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = onSubmit.mock.calls[0][0];
+    const relations = payload.relations ?? [];
+    expect(relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'agentTools',
+          selections: ['tool-1'],
+          attachmentKind: TEAM_ATTACHMENT_KIND.agentTool,
+        }),
+        expect.objectContaining({
+          id: 'agentMcpServers',
+          selections: ['mcp-1'],
+          attachmentKind: TEAM_ATTACHMENT_KIND.agentMcpServer,
+        }),
+        expect.objectContaining({
+          id: 'agentWorkspaceConfiguration',
+          selections: ['workspace-1'],
+          attachmentKind: TEAM_ATTACHMENT_KIND.agentWorkspaceConfiguration,
+        }),
+        expect.objectContaining({
+          id: 'agentMemoryBuckets',
+          selections: ['memory-1'],
+          attachmentKind: TEAM_ATTACHMENT_KIND.agentMemoryBucket,
+          attachmentKind: TEAM_ATTACHMENT_KIND.agentMemoryBucket,
+        }),
+      ]),
+    );
   });
 
   it('falls back to config title and strips env sources before submit', async () => {
@@ -344,422 +441,60 @@ describe('EntityUpsertForm', () => {
       expect(entry).not.toHaveProperty('source');
     });
   });
-});
 
-describe('EntityUpsertForm relations', () => {
-  it('prefills Slack trigger agent relation and persists edits', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'trigger-1', template: 'slackTrigger', kind: 'Trigger', title: 'Slack Trigger' }),
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'trigger-1', sourceHandle: 'subscribe', target: 'agent-1', targetHandle: '$self' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'trigger-1',
-      templateName: 'slackTrigger',
-      templateKind: 'trigger',
-      rawTemplateKind: 'trigger',
-      title: 'Slack Trigger',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'trigger',
-      templateName: 'slackTrigger',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const relationSelect = await screen.findByLabelText('Agent destination');
-    await user.click(relationSelect);
-    await screen.findByRole('option', { name: 'Agent One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Agent One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'slackTriggerAgent');
-    expect(relation).toMatchObject({
-      ownerRole: 'source',
-      ownerHandle: 'subscribe',
-      peerHandle: '$self',
-      selections: ['agent-2'],
-    });
-  });
-
-  it('updates agent tool relations via multi-select', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'tool-1', template: 'shellTool', kind: 'Tool', title: 'Tool One' }),
-      createGraphNode({ id: 'tool-2', template: 'githubCloneRepoTool', kind: 'Tool', title: 'Tool Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'agent-1', sourceHandle: 'tools', target: 'tool-1', targetHandle: '$self' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'agent-1',
-      templateName: 'support-agent',
-      templateKind: 'agent',
-      rawTemplateKind: 'agent',
-      title: 'Agent One',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'agent',
-      templateName: 'support-agent',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const toolsDropdown = await screen.findByRole('combobox', { name: 'Tools' });
-    expect(screen.getByLabelText('Remove Tool One')).toBeInTheDocument();
-    await user.click(toolsDropdown);
-    const toolsListbox = await screen.findByRole('listbox');
-    expect(toolsListbox).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Tool Two' }));
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    expect(screen.getByText('Tool Two')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const toolsRelation = payload.relations?.find((item) => item.id === 'agentTools');
-    expect(toolsRelation).toMatchObject({
-      ownerRole: 'source',
-      ownerHandle: 'tools',
-      selections: expect.arrayContaining(['tool-1', 'tool-2']),
-    });
-  });
-
-  it('updates agent MCP server relations via multi-select', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'mcp-1', template: 'mcpServer', kind: 'MCP', title: 'MCP One' }),
-      createGraphNode({ id: 'mcp-2', template: 'mcpServer', kind: 'MCP', title: 'MCP Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'agent-1', sourceHandle: 'mcp', target: 'mcp-1', targetHandle: '$self' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'agent-1',
-      templateName: 'support-agent',
-      templateKind: 'agent',
-      rawTemplateKind: 'agent',
-      title: 'Agent One',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'agent',
-      templateName: 'support-agent',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const mcpDropdown = await screen.findByRole('combobox', { name: 'MCP servers' });
-    expect(screen.getByLabelText('Remove MCP One')).toBeInTheDocument();
-    await user.click(mcpDropdown);
-    await user.click(screen.getByRole('button', { name: 'MCP Two' }));
-    expect(screen.getByLabelText('Remove MCP Two')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'agentMcpServers');
-    expect(relation).toMatchObject({ selections: expect.arrayContaining(['mcp-1', 'mcp-2']) });
-  });
-
-  it('updates agent memory connector relation', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'mc-1', template: 'memoryConnector', kind: 'Workspace', title: 'Connector One' }),
-      createGraphNode({ id: 'mc-2', template: 'memoryConnector', kind: 'Workspace', title: 'Connector Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'mc-1', sourceHandle: '$self', target: 'agent-1', targetHandle: 'memory' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'agent-1',
-      templateName: 'support-agent',
-      templateKind: 'agent',
-      rawTemplateKind: 'agent',
-      title: 'Agent One',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'agent',
-      templateName: 'support-agent',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const select = await screen.findByLabelText('Memory connector');
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Connector One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Connector One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Connector Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'agentMemoryConnector');
-    expect(relation).toMatchObject({
-      ownerRole: 'target',
-      ownerHandle: 'memory',
-      peerHandle: '$self',
-      selections: ['mc-2'],
-    });
-  });
-
-  it('updates shell tool workspace relation', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'shell-1', template: 'shellTool', kind: 'Tool', title: 'Shell Tool' }),
-      createGraphNode({ id: 'workspace-1', template: 'workspace-default', kind: 'Workspace', title: 'Workspace One' }),
-      createGraphNode({ id: 'workspace-2', template: 'workspace-other', kind: 'Workspace', title: 'Workspace Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'workspace-1', sourceHandle: '$self', target: 'shell-1', targetHandle: 'workspace' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'shell-1',
-      templateName: 'shellTool',
-      templateKind: 'tool',
-      rawTemplateKind: 'tool',
-      title: 'Shell Tool',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'tool',
-      templateName: 'shellTool',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const select = await screen.findByLabelText('Workspace');
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Workspace One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Workspace One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'shellToolWorkspace');
-    expect(relation).toMatchObject({ selections: ['workspace-2'] });
-  });
-
-  it('updates manage tool agent selections', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'manage-1', template: 'manageTool', kind: 'Tool', title: 'Manage Tool' }),
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
-      createGraphNode({ id: 'agent-3', template: 'support-agent', kind: 'Agent', title: 'Agent Three' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'manage-1', sourceHandle: 'agent', target: 'agent-1', targetHandle: '$self' }),
-      createGraphEdge({ source: 'manage-1', sourceHandle: 'agent', target: 'agent-2', targetHandle: '$self' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'manage-1',
-      templateName: 'manageTool',
-      templateKind: 'tool',
-      rawTemplateKind: 'tool',
-      title: 'Manage Tool',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'tool',
-      templateName: 'manageTool',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const agentsDropdown = await screen.findByRole('combobox', { name: 'Managed agents' });
-    expect(screen.getByLabelText('Remove Agent One')).toBeInTheDocument();
-    expect(screen.getByLabelText('Remove Agent Two')).toBeInTheDocument();
-    await user.click(agentsDropdown);
-    await user.click(screen.getByRole('button', { name: 'Agent Three' }));
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'manageToolAgents');
-    expect(relation).toMatchObject({ selections: expect.arrayContaining(['agent-1', 'agent-2', 'agent-3']) });
-  });
-
-  it('updates call agent tool relation', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'call-tool-1', template: 'callAgentTool', kind: 'Tool', title: 'Call Agent Tool' }),
-      createGraphNode({ id: 'agent-1', template: 'support-agent', kind: 'Agent', title: 'Agent One' }),
-      createGraphNode({ id: 'agent-2', template: 'support-agent', kind: 'Agent', title: 'Agent Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'call-tool-1', sourceHandle: 'agent', target: 'agent-1', targetHandle: '$self' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'call-tool-1',
-      templateName: 'callAgentTool',
-      templateKind: 'tool',
-      rawTemplateKind: 'tool',
-      title: 'Call Agent Tool',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'tool',
-      templateName: 'callAgentTool',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const select = await screen.findByLabelText(/^Agent$/);
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Agent One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Agent One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'callAgentToolAgent');
-    expect(relation).toMatchObject({ selections: ['agent-2'] });
-  });
-
-  it('updates MCP server workspace relation', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'mcp-1', template: 'mcpServer', kind: 'MCP', title: 'MCP Server' }),
-      createGraphNode({ id: 'workspace-1', template: 'workspace-default', kind: 'Workspace', title: 'Workspace One' }),
-      createGraphNode({ id: 'workspace-2', template: 'workspace-other', kind: 'Workspace', title: 'Workspace Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'workspace-1', sourceHandle: '$self', target: 'mcp-1', targetHandle: 'workspace' }),
-    ];
+  it('includes workspace attachment for MCP servers', async () => {
+    const templates = [createTemplate('mcp-template', 'mcp')];
     const entity = createEntitySummary({
       id: 'mcp-1',
-      templateName: 'mcpServer',
+      entityKind: 'mcp',
+      templateName: 'mcp-template',
       templateKind: 'mcp',
       rawTemplateKind: 'mcp',
-      title: 'MCP Server',
+      title: 'Filesystem MCP',
     });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'mcp',
-      templateName: 'mcpServer',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const select = await screen.findByLabelText('Workspace');
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Workspace One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Workspace One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'mcpServerWorkspace');
-    expect(relation).toMatchObject({ selections: ['workspace-2'] });
-  });
-
-  it('updates memory tool memory relation', async () => {
     const graphNodes = [
-      createGraphNode({ id: 'memory-tool-1', template: 'memoryTool', kind: 'Tool', title: 'Memory Tool' }),
-      createGraphNode({ id: 'memory-1', template: 'memory', kind: 'Workspace', title: 'Memory One' }),
-      createGraphNode({ id: 'memory-2', template: 'memory', kind: 'Workspace', title: 'Memory Two' }),
+      createGraphNode({ id: 'workspace-1', kind: 'Workspace', template: 'workspace', title: 'Workspace One' }),
+      createGraphNode({ id: 'memory-1', kind: 'Workspace', template: 'memory', title: 'Memory Bucket' }),
     ];
     const graphEdges = [
-      createGraphEdge({ source: 'memory-1', sourceHandle: '$self', target: 'memory-tool-1', targetHandle: '$memory' }),
+      createGraphEdge({ source: 'mcp-1', sourceHandle: 'workspace', target: 'workspace-1' }),
     ];
-    const entity = createEntitySummary({
-      id: 'memory-tool-1',
-      templateName: 'memoryTool',
-      templateKind: 'tool',
-      rawTemplateKind: 'tool',
-      title: 'Memory Tool',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'tool',
-      templateName: 'memoryTool',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
     const user = setupUser();
 
-    const select = await screen.findByLabelText('Memory workspace');
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Memory One' });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityUpsertForm
+          mode="edit"
+          kind="mcp"
+          templates={templates}
+          entity={entity}
+          onSubmit={onSubmit}
+          isSubmitting={false}
+          graphNodes={graphNodes}
+          graphEdges={graphEdges}
+          onCancel={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const submitButton = await screen.findByRole('button', { name: /save changes/i });
+    await user.click(submitButton);
+
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Memory One' })).toHaveAttribute('data-state', 'checked');
+      expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'memoryToolMemory');
-    expect(relation).toMatchObject({ selections: ['memory-2'] });
-  });
-
-  it('updates memory connector memory relation', async () => {
-    const graphNodes = [
-      createGraphNode({ id: 'memory-connector-1', template: 'memoryConnector', kind: 'Workspace', title: 'Memory Connector' }),
-      createGraphNode({ id: 'memory-1', template: 'memory', kind: 'Workspace', title: 'Memory One' }),
-      createGraphNode({ id: 'memory-2', template: 'memory', kind: 'Workspace', title: 'Memory Two' }),
-    ];
-    const graphEdges = [
-      createGraphEdge({ source: 'memory-1', sourceHandle: '$self', target: 'memory-connector-1', targetHandle: '$memory' }),
-    ];
-    const entity = createEntitySummary({
-      id: 'memory-connector-1',
-      templateName: 'memoryConnector',
-      templateKind: 'workspace',
-      rawTemplateKind: 'workspace',
-      title: 'Memory Connector',
-    });
-    const { onSubmit } = renderRelationDialog({
-      kind: 'workspace',
-      templateName: 'memoryConnector',
-      graphNodes,
-      graphEdges,
-      entity,
-    });
-    const user = setupUser();
-
-    const select = await screen.findByLabelText('Memory workspace');
-    await user.click(select);
-    await screen.findByRole('option', { name: 'Memory One' });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Memory One' })).toHaveAttribute('data-state', 'checked');
-    });
-    await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const payload = onSubmit.mock.calls[0][0];
-    const relation = payload.relations?.find((item) => item.id === 'memoryConnectorMemory');
-    expect(relation).toMatchObject({ selections: ['memory-2'] });
+    const relations = payload.relations ?? [];
+    expect(relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'mcpServerWorkspace',
+          selections: ['workspace-1'],
+          attachmentKind: TEAM_ATTACHMENT_KIND.mcpServerWorkspaceConfiguration,
+        }),
+      ]),
+    );
   });
 });

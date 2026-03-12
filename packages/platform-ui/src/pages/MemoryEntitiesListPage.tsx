@@ -1,16 +1,16 @@
 import { EntityListPage } from './entities/EntityListPage';
-import { INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from '@/features/entities/api/graphEntities';
+import { INCLUDED_MEMORY_TEMPLATES } from '@/features/entities/api/teamEntities';
 
 export function MemoryEntitiesListPage() {
   return (
     <EntityListPage
-      kind="workspace"
+      kind="memory"
       title="Memory"
-      description="Manage memory stores and connectors available to agents."
+      description="Manage memory buckets available to agents."
       listPath="/memory"
-      createLabel="New memory workspace"
-      emptyLabel="No memory workspaces configured yet."
-      templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+      createLabel="New memory bucket"
+      emptyLabel="No memory buckets configured yet."
+      templateIncludeNames={INCLUDED_MEMORY_TEMPLATES}
     />
   );
 }

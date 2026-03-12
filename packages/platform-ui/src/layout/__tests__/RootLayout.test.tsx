@@ -33,7 +33,6 @@ describe('RootLayout navigation', () => {
     const props = renderAt('/agents/memory');
     const agentsSection = props.menuItems.find((item: any) => item.id === 'agents');
     expect(agentsSection?.items?.map((item: any) => item.id)).toEqual([
-      'agentsTeam',
       'agentsThreads',
       'agentsReminders',
       'agentsMemory',
@@ -45,7 +44,6 @@ describe('RootLayout navigation', () => {
     const props = renderAt('/agents');
     const entitiesSection = props.menuItems.find((item: any) => item.id === 'entities');
     expect(entitiesSection?.items?.map((item: any) => item.id)).toEqual([
-      'entitiesTriggers',
       'entitiesAgents',
       'entitiesTools',
       'entitiesMcp',
