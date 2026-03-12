@@ -4,7 +4,7 @@ import { HttpStatus } from '@nestjs/common';
 import {
   ListAgentsRequestSchema,
   type ListAgentsRequest,
-  type ListAgentsResponse,
+  type PaginatedAgents,
   TeamsService,
 } from '../../src/proto/gen/agynio/api/teams/v1/teams_pb.js';
 import { TeamsGrpcClient } from '../../src/teams/teamsGrpc.client';
@@ -89,7 +89,7 @@ describe('TeamsGrpcClient', () => {
 
     const listAgentsStub = vi.fn(async (_req: ListAgentsRequest, options?: CallOptions) => {
       captured.options = options;
-      return { agents: [], nextPageToken: '' } as ListAgentsResponse;
+      return { items: [], page: 0, perPage: 0, total: 0n } as PaginatedAgents;
     });
 
     (client as unknown as { client: { listAgents: typeof listAgentsStub } }).client = {
@@ -108,7 +108,7 @@ describe('TeamsGrpcClient', () => {
 
     const listAgentsStub = vi.fn(async (_req: ListAgentsRequest, options?: CallOptions) => {
       captured.options = options;
-      return { agents: [], nextPageToken: '' } as ListAgentsResponse;
+      return { items: [], page: 0, perPage: 0, total: 0n } as PaginatedAgents;
     });
 
     (client as unknown as { client: { listAgents: typeof listAgentsStub } }).client = {
