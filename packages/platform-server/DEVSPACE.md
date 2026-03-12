@@ -1,52 +1,87 @@
 # DevSpace workflow for platform-server
 
-This guide walks through launching `platform-server` inside the
-`bootstrap_v2` cluster with a single `devspace dev` invocation.
+Use DevSpace to attach to the ArgoCD-managed `platform-server` deployment in
+the `bootstrap_v2` cluster and run the development image with live sync.
 
 ## Prerequisites
 
-- macOS or Linux workstation with Docker (or k3d) installed
+- macOS or Linux workstation with Docker and `kubectl` installed
 - [`devspace`](https://devspace.sh/docs/cli/installation)
 - Local cluster provisioned via
-  [`agynio/bootstrap_v2`](https://github.com/agynio/bootstrap_v2) (follow the
-  Quickstart in its README; it provides the kubeconfig path—usually
-  `bootstrap_v2/k8s/.kube/agyn-local-kubeconfig.yaml`).
+  [`agynio/bootstrap_v2`](https://github.com/agynio/bootstrap_v2) (the
+  `apply.sh` script merges the kubeconfig into `~/.kube` automatically).
 
-## 1. Prepare the cluster
+## How it works
 
-Run `agynio/bootstrap_v2` according to its Quickstart to provision the cluster
-and supporting services. The Quickstart configures kubectl with the
-`agyn-local` context (or provides the kubeconfig path). Ensure your shell has
-the appropriate kubeconfig exported before proceeding.
+DevSpace uses the ArgoCD-managed deployment as the base, patches it in place,
+and then attaches sync/ports/logs:
 
-## 2. Start DevSpace
+1. If the `platform-server` ArgoCD Application exists in the `argocd`
+   namespace, DevSpace disables auto-sync to prevent ArgoCD from reverting the
+   dev container changes.
+2. The pipeline patches the existing `platform-server` Deployment in place
+   (image, security context, resources, command, env) so no clone is created.
+3. DevSpace attaches to the patched deployment with
+   `start_dev --disable-pod-replace` and only configures sync/ports/logs.
+4. The repo is synced into `/opt/app/data` (not a subdirectory, since the CRI
+   creates subdirectories as root-owned `755`) and the startup script installs
+   dependencies, generates protobuf and Prisma clients, and launches the dev
+   server.
+5. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
+   graph repository lives on the writable emptyDir mount.
+6. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
 
-Change into `packages/platform-server` and run:
+Port `3010` is forwarded locally, so the API should be reachable at
+`http://localhost:3010` once the server reports ready.
+
+## Start DevSpace
+
+From the repository root:
 
 ```bash
 cd packages/platform-server
 devspace dev
 ```
 
-DevSpace deploys the prebuilt dev image `ghcr.io/agynio/platform-server:dev`,
-which bundles the tooling needed for `pnpm dev` (corepack/pnpm, Git, file
-watchers) but no application sources. The repository is synced into `/opt/app`
-for live iteration, and the container process runs the same entrypoint as
-`pnpm dev` (`tsx src/index.ts`). Environment variables, volume mounts, and
-security context are provided by `bootstrap_v2`; DevSpace does not override
-them. Production images continue to be built by the existing CI pipeline and
-are separate from this workflow.
+Startup steps in the dev container (see
+`packages/platform-server/scripts/devspace-startup.sh`):
 
-To confirm the deployment is ready, check the pod status:
+1. `pnpm proto:generate`
+2. `pnpm approve-builds @prisma/client prisma esbuild @nestjs/core`
+3. `pnpm install --filter @agyn/platform-server... --frozen-lockfile`
+4. `pnpm --filter @agyn/platform-server run prisma:generate`
+5. `pnpm --filter @agyn/platform-server exec tsx watch src/index.ts`
+
+## Prisma migrations
+
+DevSpace generates Prisma client code but does not run migrations. If your
+database schema is out of date, run migrations manually from your local
+workstation (configure `AGENTS_DATABASE_URL` or `DATABASE_URL` as needed):
 
 ```bash
-kubectl get pods -n platform -l app.kubernetes.io/name=platform-server
+pnpm --filter @agyn/platform-server exec prisma migrate deploy
 ```
 
-## 3. Cleanup
+## Troubleshooting
 
-1. Terminate DevSpace (`Ctrl+C`).
-2. Purge the dev release:
-   ```bash
-   devspace purge
-   ```
+- **Sync timeout waiting for `pnpm-workspace.yaml`**: DevSpace could not sync
+  the repo in time. Check `devspace logs`, confirm your kubeconfig context, and
+  run `devspace reset pods` before starting again.
+- **ArgoCD keeps reverting changes**: Verify the ArgoCD Application exists in
+  the `argocd` namespace and that auto-sync was disabled. Run
+  `kubectl get application platform-server -n argocd` and restart the session
+  if needed.
+- **Old devspace clone still running**: If `platform-server-devspace` exists
+  from the previous workflow, delete it with
+  `kubectl delete deployment platform-server-devspace -n platform`.
+- **OOM kills**: The dev container is limited to 4Gi. Reduce memory usage or
+  increase limits in the cluster if you consistently hit OOMs.
+
+## Cleanup
+
+Stop DevSpace with `Ctrl+C`. The ArgoCD hook restores automated syncing for the
+`platform-server` application. If the dev pod sticks around, clean it up with:
+
+```bash
+devspace reset pods
+```

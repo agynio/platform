@@ -112,7 +112,6 @@ import { HealthController } from './health/health.controller';
       useFactory: async (config: ConfigService) => {
         const svc = new NcpsKeyService(config);
         await svc.init();
-
         return svc;
       },
       inject: [ConfigService],
