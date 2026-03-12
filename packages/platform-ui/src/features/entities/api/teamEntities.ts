@@ -1,26 +1,20 @@
 import type { TemplateSchema } from '@/api/types/graph';
 import type {
   TeamAgent,
-  TeamAgentCreateRequest,
   TeamAttachment,
   TeamAttachmentKind,
   TeamMemoryBucket,
-  TeamMemoryBucketCreateRequest,
   TeamMemoryBucketScope,
   TeamMcpServer,
-  TeamMcpServerCreateRequest,
   TeamTool,
-  TeamToolCreateRequest,
   TeamToolType,
   TeamWorkspaceConfiguration,
-  TeamWorkspaceConfigurationCreateRequest,
   TeamWorkspacePlatform,
 } from '@/api/types/team';
 import type { AgentQueueConfig, NodeConfig } from '@/components/nodeProperties/types';
 import { readEnvList, readQueueConfig, readSummarizationConfig } from '@/components/nodeProperties/utils';
 import { buildGraphNodeFromTemplate } from '@/features/graph/mappers';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
-import { isRecord, readNumber, readString } from '@/utils/typeGuards';
 import type {
   GraphEdgeFilter,
   GraphEntityKind,
@@ -34,33 +28,34 @@ export const EXCLUDED_WORKSPACE_TEMPLATES = new Set(['memory', 'memoryConnector'
 export const INCLUDED_MEMORY_TEMPLATES = new Set(['memory']);
 
 export const TEAM_ATTACHMENT_KIND = {
-  agentTool: 'agent_tool',
-  agentMemoryBucket: 'agent_memoryBucket',
-  agentWorkspaceConfiguration: 'agent_workspaceConfiguration',
-  agentMcpServer: 'agent_mcpServer',
-  mcpServerWorkspaceConfiguration: 'mcpServer_workspaceConfiguration',
+  agentTool: 'ATTACHMENT_KIND_AGENT_TOOL',
+  agentMemoryBucket: 'ATTACHMENT_KIND_AGENT_MEMORY_BUCKET',
+  agentWorkspaceConfiguration: 'ATTACHMENT_KIND_AGENT_WORKSPACE_CONFIGURATION',
+  agentMcpServer: 'ATTACHMENT_KIND_AGENT_MCP_SERVER',
+  mcpServerWorkspaceConfiguration: 'ATTACHMENT_KIND_MCP_SERVER_WORKSPACE_CONFIGURATION',
 } as const satisfies Record<string, TeamAttachmentKind>;
 
 export const TEAM_TOOL_TYPE = {
-  manage: 'manage',
-  memory: 'memory',
-  shellCommand: 'shell_command',
-  sendMessage: 'send_message',
-  sendSlackMessage: 'send_slack_message',
-  remindMe: 'remind_me',
-  githubCloneRepo: 'github_clone_repo',
-  callAgent: 'call_agent',
+  manage: 'TOOL_TYPE_MANAGE',
+  memory: 'TOOL_TYPE_MEMORY',
+  shellCommand: 'TOOL_TYPE_SHELL_COMMAND',
+  sendMessage: 'TOOL_TYPE_SEND_MESSAGE',
+  sendSlackMessage: 'TOOL_TYPE_SEND_SLACK_MESSAGE',
+  remindMe: 'TOOL_TYPE_REMIND_ME',
+  githubCloneRepo: 'TOOL_TYPE_GITHUB_CLONE_REPO',
+  callAgent: 'TOOL_TYPE_CALL_AGENT',
 } as const satisfies Record<string, TeamToolType>;
 
 const TOOL_TYPE_TO_TEMPLATE: Record<TeamToolType, string> = {
-  manage: 'manageTool',
-  memory: 'memoryTool',
-  shell_command: 'shellTool',
-  send_message: 'sendMessageTool',
-  send_slack_message: 'sendSlackMessageTool',
-  remind_me: 'remindMeTool',
-  github_clone_repo: 'githubCloneRepoTool',
-  call_agent: 'callAgentTool',
+  TOOL_TYPE_UNSPECIFIED: 'tool',
+  TOOL_TYPE_MANAGE: 'manageTool',
+  TOOL_TYPE_MEMORY: 'memoryTool',
+  TOOL_TYPE_SHELL_COMMAND: 'shellTool',
+  TOOL_TYPE_SEND_MESSAGE: 'sendMessageTool',
+  TOOL_TYPE_SEND_SLACK_MESSAGE: 'sendSlackMessageTool',
+  TOOL_TYPE_REMIND_ME: 'remindMeTool',
+  TOOL_TYPE_GITHUB_CLONE_REPO: 'githubCloneRepoTool',
+  TOOL_TYPE_CALL_AGENT: 'callAgentTool',
 };
 
 const TEMPLATE_TO_TOOL_TYPE: Record<string, TeamToolType> = Object.entries(TOOL_TYPE_TO_TEMPLATE).reduce(
@@ -81,11 +76,12 @@ const ENTITY_KIND_TO_NODE_KIND: Record<GraphEntityKind, GraphNodeConfig['kind']>
 };
 
 const ATTACHMENT_KIND_HANDLES: Record<TeamAttachmentKind, { sourceHandle: string; targetHandle: string }> = {
-  agent_tool: { sourceHandle: 'tools', targetHandle: '$self' },
-  agent_memoryBucket: { sourceHandle: 'memory', targetHandle: '$self' },
-  agent_workspaceConfiguration: { sourceHandle: 'workspace', targetHandle: '$self' },
-  agent_mcpServer: { sourceHandle: 'mcp', targetHandle: '$self' },
-  mcpServer_workspaceConfiguration: { sourceHandle: 'workspace', targetHandle: '$self' },
+  ATTACHMENT_KIND_UNSPECIFIED: { sourceHandle: '$self', targetHandle: '$self' },
+  ATTACHMENT_KIND_AGENT_TOOL: { sourceHandle: 'tools', targetHandle: '$self' },
+  ATTACHMENT_KIND_AGENT_MEMORY_BUCKET: { sourceHandle: 'memory', targetHandle: '$self' },
+  ATTACHMENT_KIND_AGENT_WORKSPACE_CONFIGURATION: { sourceHandle: 'workspace', targetHandle: '$self' },
+  ATTACHMENT_KIND_AGENT_MCP_SERVER: { sourceHandle: 'mcp', targetHandle: '$self' },
+  ATTACHMENT_KIND_MCP_SERVER_WORKSPACE_CONFIGURATION: { sourceHandle: 'workspace', targetHandle: '$self' },
 };
 
 export type TeamAttachmentInput = {
@@ -94,9 +90,29 @@ export type TeamAttachmentInput = {
   targetId: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim();
+  }
+  return undefined;
+}
+
 function readOptionalString(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value;
+  }
+  return undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
 }
@@ -110,51 +126,256 @@ function readBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function readField<T>(record: Record<string, unknown>, keys: string[], reader: (value: unknown) => T | undefined): T | undefined {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+    const value = reader(record[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function normalizeEnumName(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string') {
+    return value.trim().toUpperCase().replace(/[^A-Z0-9_]+/g, '_');
+  }
+  return '';
+}
+
+function normalizeTeamToolType(value: unknown): TeamToolType | undefined {
+  if (typeof value === 'number') {
+    switch (value) {
+      case 1:
+        return TEAM_TOOL_TYPE.manage;
+      case 2:
+        return TEAM_TOOL_TYPE.memory;
+      case 3:
+        return TEAM_TOOL_TYPE.shellCommand;
+      case 4:
+        return TEAM_TOOL_TYPE.sendMessage;
+      case 5:
+        return TEAM_TOOL_TYPE.sendSlackMessage;
+      case 6:
+        return TEAM_TOOL_TYPE.remindMe;
+      case 7:
+        return TEAM_TOOL_TYPE.githubCloneRepo;
+      case 8:
+        return TEAM_TOOL_TYPE.callAgent;
+      default:
+        return undefined;
+    }
+  }
+  const normalized = normalizeEnumName(value);
+  if (normalized.startsWith('TOOL_TYPE_')) {
+    return normalized as TeamToolType;
+  }
+  switch (normalized) {
+    case 'MANAGE':
+      return TEAM_TOOL_TYPE.manage;
+    case 'MEMORY':
+      return TEAM_TOOL_TYPE.memory;
+    case 'SHELL_COMMAND':
+    case 'SHELL':
+      return TEAM_TOOL_TYPE.shellCommand;
+    case 'SEND_MESSAGE':
+      return TEAM_TOOL_TYPE.sendMessage;
+    case 'SEND_SLACK_MESSAGE':
+      return TEAM_TOOL_TYPE.sendSlackMessage;
+    case 'REMIND_ME':
+      return TEAM_TOOL_TYPE.remindMe;
+    case 'GITHUB_CLONE_REPO':
+      return TEAM_TOOL_TYPE.githubCloneRepo;
+    case 'CALL_AGENT':
+      return TEAM_TOOL_TYPE.callAgent;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeAttachmentKind(value: unknown): TeamAttachmentKind | undefined {
+  if (typeof value === 'number') {
+    switch (value) {
+      case 1:
+        return TEAM_ATTACHMENT_KIND.agentTool;
+      case 2:
+        return TEAM_ATTACHMENT_KIND.agentMemoryBucket;
+      case 3:
+        return TEAM_ATTACHMENT_KIND.agentWorkspaceConfiguration;
+      case 4:
+        return TEAM_ATTACHMENT_KIND.agentMcpServer;
+      case 5:
+        return TEAM_ATTACHMENT_KIND.mcpServerWorkspaceConfiguration;
+      default:
+        return undefined;
+    }
+  }
+  const normalized = normalizeEnumName(value);
+  if (normalized.startsWith('ATTACHMENT_KIND_')) {
+    if (normalized === 'ATTACHMENT_KIND_UNSPECIFIED') return undefined;
+    return normalized as TeamAttachmentKind;
+  }
+  switch (normalized) {
+    case 'AGENT_TOOL':
+      return TEAM_ATTACHMENT_KIND.agentTool;
+    case 'AGENT_MEMORY_BUCKET':
+      return TEAM_ATTACHMENT_KIND.agentMemoryBucket;
+    case 'AGENT_WORKSPACE_CONFIGURATION':
+      return TEAM_ATTACHMENT_KIND.agentWorkspaceConfiguration;
+    case 'AGENT_MCP_SERVER':
+      return TEAM_ATTACHMENT_KIND.agentMcpServer;
+    case 'MCP_SERVER_WORKSPACE_CONFIGURATION':
+      return TEAM_ATTACHMENT_KIND.mcpServerWorkspaceConfiguration;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeWorkspacePlatform(value: unknown): TeamWorkspacePlatform | undefined {
+  if (typeof value === 'number') {
+    switch (value) {
+      case 1:
+        return 'WORKSPACE_PLATFORM_LINUX_AMD64';
+      case 2:
+        return 'WORKSPACE_PLATFORM_LINUX_ARM64';
+      case 3:
+        return 'WORKSPACE_PLATFORM_AUTO';
+      default:
+        return undefined;
+    }
+  }
+  const normalized = normalizeEnumName(value);
+  if (normalized.startsWith('WORKSPACE_PLATFORM_')) {
+    return normalized as TeamWorkspacePlatform;
+  }
+  switch (normalized) {
+    case 'LINUX_AMD64':
+    case 'LINUX_AMD_64':
+    case 'LINUX/AMD64':
+      return 'WORKSPACE_PLATFORM_LINUX_AMD64';
+    case 'LINUX_ARM64':
+    case 'LINUX_ARM_64':
+    case 'LINUX/ARM64':
+      return 'WORKSPACE_PLATFORM_LINUX_ARM64';
+    case 'AUTO':
+      return 'WORKSPACE_PLATFORM_AUTO';
+    default:
+      return undefined;
+  }
+}
+
+function normalizeMemoryScope(value: unknown): TeamMemoryBucketScope | undefined {
+  if (typeof value === 'number') {
+    switch (value) {
+      case 1:
+        return 'MEMORY_BUCKET_SCOPE_GLOBAL';
+      case 2:
+        return 'MEMORY_BUCKET_SCOPE_PER_THREAD';
+      default:
+        return undefined;
+    }
+  }
+  const normalized = normalizeEnumName(value);
+  if (normalized.startsWith('MEMORY_BUCKET_SCOPE_')) {
+    return normalized as TeamMemoryBucketScope;
+  }
+  switch (normalized) {
+    case 'GLOBAL':
+      return 'MEMORY_BUCKET_SCOPE_GLOBAL';
+    case 'PER_THREAD':
+    case 'PERTHREAD':
+      return 'MEMORY_BUCKET_SCOPE_PER_THREAD';
+    default:
+      return undefined;
+  }
+}
+
 type AgentQueueWhenBusy = NonNullable<AgentQueueConfig['whenBusy']>;
 type AgentQueueProcessBuffer = NonNullable<AgentQueueConfig['processBuffer']>;
-const QUEUE_WHEN_BUSY_VALUES: AgentQueueWhenBusy[] = ['wait', 'injectAfterTools'];
-const QUEUE_PROCESS_BUFFER_VALUES: AgentQueueProcessBuffer[] = ['allTogether', 'oneByOne'];
-const WORKSPACE_PLATFORM_VALUES: TeamWorkspacePlatform[] = ['linux/amd64', 'linux/arm64', 'auto'];
-const MEMORY_SCOPE_VALUES: TeamMemoryBucketScope[] = ['global', 'perThread'];
 
-function readEnumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string') {
-    throw new Error(`Unexpected ${label} value`);
+function parseWhenBusy(value: unknown): AgentQueueWhenBusy | undefined {
+  if (typeof value === 'number') {
+    if (value === 1) return 'wait';
+    if (value === 2) return 'injectAfterTools';
   }
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (!allowed.includes(trimmed as T)) {
-    throw new Error(`Unexpected ${label} value`);
+  const normalized = normalizeEnumName(value);
+  if (normalized.includes('WAIT')) return 'wait';
+  if (normalized.includes('INJECT_AFTER_TOOLS')) return 'injectAfterTools';
+  return undefined;
+}
+
+function parseProcessBuffer(value: unknown): AgentQueueProcessBuffer | undefined {
+  if (typeof value === 'number') {
+    if (value === 1) return 'allTogether';
+    if (value === 2) return 'oneByOne';
   }
-  return trimmed as T;
+  const normalized = normalizeEnumName(value);
+  if (normalized.includes('ALL_TOGETHER')) return 'allTogether';
+  if (normalized.includes('ONE_BY_ONE')) return 'oneByOne';
+  return undefined;
 }
 
-function readQueueWhenBusy(value: unknown): AgentQueueWhenBusy | undefined {
-  return readEnumValue(value, QUEUE_WHEN_BUSY_VALUES, 'agent whenBusy');
+function mapWorkspacePlatformToUi(value: unknown): string | undefined {
+  const normalized = normalizeWorkspacePlatform(value);
+  switch (normalized) {
+    case 'WORKSPACE_PLATFORM_LINUX_AMD64':
+      return 'linux/amd64';
+    case 'WORKSPACE_PLATFORM_LINUX_ARM64':
+      return 'linux/arm64';
+    case 'WORKSPACE_PLATFORM_AUTO':
+      return 'auto';
+    default:
+      return undefined;
+  }
 }
 
-function readQueueProcessBuffer(value: unknown): AgentQueueProcessBuffer | undefined {
-  return readEnumValue(value, QUEUE_PROCESS_BUFFER_VALUES, 'agent processBuffer');
+function mapWorkspacePlatformToTeam(value: unknown): TeamWorkspacePlatform | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'linux/amd64') return 'WORKSPACE_PLATFORM_LINUX_AMD64';
+    if (trimmed === 'linux/arm64') return 'WORKSPACE_PLATFORM_LINUX_ARM64';
+    if (trimmed === 'auto') return 'WORKSPACE_PLATFORM_AUTO';
+  }
+  return normalizeWorkspacePlatform(value);
 }
 
-function readWorkspacePlatform(value: unknown): TeamWorkspacePlatform | undefined {
-  return readEnumValue(value, WORKSPACE_PLATFORM_VALUES, 'workspace platform');
+function mapMemoryScopeToUi(value: unknown): string | undefined {
+  const normalized = normalizeMemoryScope(value);
+  if (normalized === 'MEMORY_BUCKET_SCOPE_GLOBAL') return 'global';
+  if (normalized === 'MEMORY_BUCKET_SCOPE_PER_THREAD') return 'perThread';
+  return undefined;
 }
 
-function readMemoryScope(value: unknown): TeamMemoryBucketScope | undefined {
-  return readEnumValue(value, MEMORY_SCOPE_VALUES, 'memory bucket scope');
+function mapMemoryScopeToTeam(value: unknown): TeamMemoryBucketScope | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'global') return 'MEMORY_BUCKET_SCOPE_GLOBAL';
+    if (trimmed === 'perthread' || trimmed === 'per_thread') return 'MEMORY_BUCKET_SCOPE_PER_THREAD';
+  }
+  return normalizeMemoryScope(value);
+}
+
+function mapWhenBusyToTeam(value: unknown): string | undefined {
+  if (value === 'wait') return 'AGENT_WHEN_BUSY_WAIT';
+  if (value === 'injectAfterTools') return 'AGENT_WHEN_BUSY_INJECT_AFTER_TOOLS';
+  return undefined;
+}
+
+function mapProcessBufferToTeam(value: unknown): string | undefined {
+  if (value === 'allTogether') return 'AGENT_PROCESS_BUFFER_ALL_TOGETHER';
+  if (value === 'oneByOne') return 'AGENT_PROCESS_BUFFER_ONE_BY_ONE';
+  return undefined;
 }
 
 function mapAgentConfigFromTeam(raw: Record<string, unknown>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  const model = readString(raw.model);
+  const model = readField(raw, ['model'], readString);
   if (model) config.model = model;
-  const systemPrompt = readOptionalString(raw.systemPrompt);
+  const systemPrompt = readField(raw, ['systemPrompt', 'system_prompt'], readString);
   if (systemPrompt !== undefined) config.systemPrompt = systemPrompt;
-  const debounceMs = readNumber(raw.debounceMs);
-  const whenBusy = readQueueWhenBusy(raw.whenBusy);
-  const processBuffer = readQueueProcessBuffer(raw.processBuffer);
+  const debounceMs = readField(raw, ['debounceMs', 'debounce_ms'], readNumber);
+  const whenBusy = parseWhenBusy(readField(raw, ['whenBusy', 'when_busy'], (value) => value));
+  const processBuffer = parseProcessBuffer(readField(raw, ['processBuffer', 'process_buffer'], (value) => value));
   if (debounceMs !== undefined || whenBusy || processBuffer) {
     const queue: Record<string, unknown> = {};
     if (debounceMs !== undefined) queue.debounceMs = debounceMs;
@@ -162,27 +383,43 @@ function mapAgentConfigFromTeam(raw: Record<string, unknown>): Record<string, un
     if (processBuffer) queue.processBuffer = processBuffer;
     config.queue = queue;
   }
-  const sendFinalResponseToThread = readBoolean(raw.sendFinalResponseToThread);
+  const sendFinalResponseToThread = readField(
+    raw,
+    ['sendFinalResponseToThread', 'send_final_response_to_thread'],
+    readBoolean,
+  );
   if (sendFinalResponseToThread !== undefined) {
     config.sendFinalResponseToThread = sendFinalResponseToThread;
   }
-  const summarizationKeepTokens = readNumber(raw.summarizationKeepTokens);
-  const summarizationMaxTokens = readNumber(raw.summarizationMaxTokens);
+  const summarizationKeepTokens = readField(
+    raw,
+    ['summarizationKeepTokens', 'summarization_keep_tokens'],
+    readNumber,
+  );
+  const summarizationMaxTokens = readField(
+    raw,
+    ['summarizationMaxTokens', 'summarization_max_tokens'],
+    readNumber,
+  );
   if (summarizationKeepTokens !== undefined || summarizationMaxTokens !== undefined) {
     const summarization: Record<string, unknown> = {};
     if (summarizationKeepTokens !== undefined) summarization.keepTokens = summarizationKeepTokens;
     if (summarizationMaxTokens !== undefined) summarization.maxTokens = summarizationMaxTokens;
     config.summarization = summarization;
   }
-  const restrictOutput = readBoolean(raw.restrictOutput);
+  const restrictOutput = readField(raw, ['restrictOutput', 'restrict_output'], readBoolean);
   if (restrictOutput !== undefined) config.restrictOutput = restrictOutput;
-  const restrictionMessage = readOptionalString(raw.restrictionMessage);
+  const restrictionMessage = readField(raw, ['restrictionMessage', 'restriction_message'], readString);
   if (restrictionMessage !== undefined) config.restrictionMessage = restrictionMessage;
-  const restrictionMaxInjections = readNumber(raw.restrictionMaxInjections);
+  const restrictionMaxInjections = readField(
+    raw,
+    ['restrictionMaxInjections', 'restriction_max_injections'],
+    readNumber,
+  );
   if (restrictionMaxInjections !== undefined) config.restrictionMaxInjections = restrictionMaxInjections;
-  const name = readString(raw.name);
+  const name = readField(raw, ['name'], readString);
   if (name) config.name = name;
-  const role = readString(raw.role);
+  const role = readField(raw, ['role'], readString);
   if (role) config.role = role;
   return config;
 }
@@ -198,27 +435,27 @@ function mapToolConfigFromTeam(raw: Record<string, unknown>, tool: TeamTool): Re
 
 function mapMcpConfigFromTeam(raw: Record<string, unknown>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  const namespace = readString(raw.namespace);
+  const namespace = readField(raw, ['namespace'], readString);
   if (namespace) config.namespace = namespace;
-  const command = readString(raw.command);
+  const command = readField(raw, ['command'], readString);
   if (command) config.command = command;
-  const workdir = readString(raw.workdir);
+  const workdir = readField(raw, ['workdir'], readString);
   if (workdir) config.workdir = workdir;
-  const env = Array.isArray(raw.env) ? raw.env : undefined;
+  const env = readField(raw, ['env'], (value) => (Array.isArray(value) ? value : undefined));
   if (env) config.env = env;
-  const requestTimeoutMs = readNumber(raw.requestTimeoutMs);
+  const requestTimeoutMs = readField(raw, ['requestTimeoutMs', 'request_timeout_ms'], readNumber);
   if (requestTimeoutMs !== undefined) config.requestTimeoutMs = requestTimeoutMs;
-  const startupTimeoutMs = readNumber(raw.startupTimeoutMs);
+  const startupTimeoutMs = readField(raw, ['startupTimeoutMs', 'startup_timeout_ms'], readNumber);
   if (startupTimeoutMs !== undefined) config.startupTimeoutMs = startupTimeoutMs;
-  const heartbeatIntervalMs = readNumber(raw.heartbeatIntervalMs);
+  const heartbeatIntervalMs = readField(raw, ['heartbeatIntervalMs', 'heartbeat_interval_ms'], readNumber);
   if (heartbeatIntervalMs !== undefined) config.heartbeatIntervalMs = heartbeatIntervalMs;
-  const staleTimeoutMs = readNumber(raw.staleTimeoutMs);
+  const staleTimeoutMs = readField(raw, ['staleTimeoutMs', 'stale_timeout_ms'], readNumber);
   if (staleTimeoutMs !== undefined) config.staleTimeoutMs = staleTimeoutMs;
-  const restart = isRecord(raw.restart) ? raw.restart : undefined;
+  const restart = readField(raw, ['restart'], (value) => (isRecord(value) ? value : undefined));
   if (restart) {
     const restartConfig: Record<string, unknown> = {};
-    const maxAttempts = readNumber(restart.maxAttempts);
-    const backoffMs = readNumber(restart.backoffMs);
+    const maxAttempts = readField(restart, ['maxAttempts', 'max_attempts'], readNumber);
+    const backoffMs = readField(restart, ['backoffMs', 'backoff_ms'], readNumber);
     if (maxAttempts !== undefined) restartConfig.maxAttempts = maxAttempts;
     if (backoffMs !== undefined) restartConfig.backoffMs = backoffMs;
     config.restart = restartConfig;
@@ -228,32 +465,31 @@ function mapMcpConfigFromTeam(raw: Record<string, unknown>): Record<string, unkn
 
 function mapWorkspaceConfigFromTeam(raw: Record<string, unknown>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  const image = readString(raw.image);
+  const image = readField(raw, ['image'], readString);
   if (image) config.image = image;
-  const env = Array.isArray(raw.env) ? raw.env : undefined;
+  const env = readField(raw, ['env'], (value) => (Array.isArray(value) ? value : undefined));
   if (env) config.env = env;
-  const initialScript = readOptionalString(raw.initialScript);
+  const initialScript = readField(raw, ['initialScript', 'initial_script'], readOptionalString);
   if (initialScript !== undefined) config.initialScript = initialScript;
-  if (typeof raw.cpuLimit === 'string' || typeof raw.cpuLimit === 'number') {
-    config.cpu_limit = raw.cpuLimit;
-  }
-  if (typeof raw.memoryLimit === 'string' || typeof raw.memoryLimit === 'number') {
-    config.memory_limit = raw.memoryLimit;
-  }
-  const platform = readWorkspacePlatform(raw.platform);
-  if (platform) config.platform = platform;
-  const enableDinD = readBoolean(raw.enableDinD);
+  const cpuLimit = readField(raw, ['cpu_limit', 'cpuLimit'], (value) => value as unknown);
+  if (cpuLimit !== undefined) config.cpu_limit = cpuLimit;
+  const memoryLimit = readField(raw, ['memory_limit', 'memoryLimit'], (value) => value as unknown);
+  if (memoryLimit !== undefined) config.memory_limit = memoryLimit;
+  const platform = readField(raw, ['platform'], (value) => value as unknown);
+  const platformValue = mapWorkspacePlatformToUi(platform);
+  if (platformValue) config.platform = platformValue;
+  const enableDinD = readField(raw, ['enableDinD', 'enable_dind', 'enableDind'], readBoolean);
   if (enableDinD !== undefined) config.enableDinD = enableDinD;
-  const ttlSeconds = readNumber(raw.ttlSeconds);
+  const ttlSeconds = readField(raw, ['ttlSeconds', 'ttl_seconds'], readNumber);
   if (ttlSeconds !== undefined) config.ttlSeconds = ttlSeconds;
-  const nix = isRecord(raw.nix) ? raw.nix : undefined;
+  const nix = readField(raw, ['nix'], (value) => (isRecord(value) ? value : undefined));
   if (nix) config.nix = nix;
-  const volumes = isRecord(raw.volumes) ? raw.volumes : undefined;
+  const volumes = readField(raw, ['volumes'], (value) => (isRecord(value) ? value : undefined));
   if (volumes) {
     const volumeConfig: Record<string, unknown> = {};
-    const enabled = readBoolean(volumes.enabled);
+    const enabled = readField(volumes, ['enabled'], readBoolean);
     if (enabled !== undefined) volumeConfig.enabled = enabled;
-    const mountPath = readOptionalString(volumes.mountPath);
+    const mountPath = readField(volumes, ['mountPath', 'mount_path'], readOptionalString);
     if (mountPath !== undefined) volumeConfig.mountPath = mountPath;
     config.volumes = volumeConfig;
   }
@@ -262,9 +498,10 @@ function mapWorkspaceConfigFromTeam(raw: Record<string, unknown>): Record<string
 
 function mapMemoryBucketConfigFromTeam(raw: Record<string, unknown>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  const scopeValue = readMemoryScope(raw.scope);
+  const scope = readField(raw, ['scope'], (value) => value as unknown);
+  const scopeValue = mapMemoryScopeToUi(scope);
   if (scopeValue) config.scope = scopeValue;
-  const collectionPrefix = readOptionalString(raw.collectionPrefix);
+  const collectionPrefix = readField(raw, ['collectionPrefix', 'collection_prefix'], readOptionalString);
   if (collectionPrefix !== undefined) config.collectionPrefix = collectionPrefix;
   return config;
 }
@@ -412,10 +649,11 @@ export function mapTeamEntities(
 
   for (const agent of sources.agents ?? []) {
     if (!agent) continue;
-    const id = agent.id;
+    const id = readString(agent.id ?? agent.meta?.id);
+    if (!id) continue;
     const template = selectTemplate(templates, 'agent', { preferredNames: ['agent'] });
     const templateName = template?.name ?? 'agent';
-    const config = mapAgentConfigFromTeam(agent.config);
+    const config = mapAgentConfigFromTeam(isRecord(agent.config) ? agent.config : {});
     const title = resolveEntityTitle(readString(agent.title) ?? template?.title ?? templateName) || templateName;
     addSummary({
       id,
@@ -434,12 +672,13 @@ export function mapTeamEntities(
 
   for (const tool of sources.tools ?? []) {
     if (!tool) continue;
-    const id = tool.id;
-    const toolType = tool.type;
-    const templateName = TOOL_TYPE_TO_TEMPLATE[toolType] ?? 'tool';
+    const id = readString(tool.id ?? tool.meta?.id);
+    if (!id) continue;
+    const toolType = normalizeTeamToolType(tool.type);
+    const templateName = (toolType && TOOL_TYPE_TO_TEMPLATE[toolType]) || 'tool';
     const template = templates.find((entry) => entry.name === templateName) ??
       selectTemplate(templates, 'tool');
-    const config = mapToolConfigFromTeam(tool.config, tool);
+    const config = mapToolConfigFromTeam(isRecord(tool.config) ? tool.config : {}, tool);
     const titleCandidate = readString(tool.description) ?? readString(tool.name) ?? template?.title ?? templateName;
     const title = resolveEntityTitle(titleCandidate) || templateName;
     addSummary({
@@ -461,10 +700,11 @@ export function mapTeamEntities(
 
   for (const mcpServer of sources.mcpServers ?? []) {
     if (!mcpServer) continue;
-    const id = mcpServer.id;
+    const id = readString(mcpServer.id ?? mcpServer.meta?.id);
+    if (!id) continue;
     const template = selectTemplate(templates, 'mcp', { preferredNames: ['mcpServer', 'mcp'] });
     const templateName = template?.name ?? 'mcp';
-    const config = mapMcpConfigFromTeam(mcpServer.config);
+    const config = mapMcpConfigFromTeam(isRecord(mcpServer.config) ? mcpServer.config : {});
     const titleCandidate = readString(mcpServer.title) ?? template?.title ?? templateName;
     const title = resolveEntityTitle(titleCandidate) || templateName;
     addSummary({
@@ -484,13 +724,14 @@ export function mapTeamEntities(
 
   for (const workspace of sources.workspaceConfigurations ?? []) {
     if (!workspace) continue;
-    const id = workspace.id;
+    const id = readString(workspace.id ?? workspace.meta?.id);
+    if (!id) continue;
     const template = selectTemplate(templates, 'workspace', {
       preferredNames: ['workspace'],
       excludeNames: EXCLUDED_WORKSPACE_TEMPLATES,
     });
     const templateName = template?.name ?? 'workspace';
-    const config = mapWorkspaceConfigFromTeam(workspace.config);
+    const config = mapWorkspaceConfigFromTeam(isRecord(workspace.config) ? workspace.config : {});
     const titleCandidate = readString(workspace.title) ?? template?.title ?? templateName;
     const title = resolveEntityTitle(titleCandidate) || templateName;
     addSummary({
@@ -510,13 +751,14 @@ export function mapTeamEntities(
 
   for (const memory of sources.memoryBuckets ?? []) {
     if (!memory) continue;
-    const id = memory.id;
+    const id = readString(memory.id ?? memory.meta?.id);
+    if (!id) continue;
     const template = selectTemplate(templates, 'memory', {
       preferredNames: ['memory'],
       includeNames: INCLUDED_MEMORY_TEMPLATES,
     });
     const templateName = template?.name ?? 'memory';
-    const config = mapMemoryBucketConfigFromTeam(memory.config);
+    const config = mapMemoryBucketConfigFromTeam(isRecord(memory.config) ? memory.config : {});
     const titleCandidate = readString(memory.title) ?? template?.title ?? templateName;
     const title = resolveEntityTitle(titleCandidate) || templateName;
     addSummary({
@@ -563,9 +805,12 @@ export function mapTeamAttachmentsToEdges(attachments: TeamAttachment[] | undefi
   const edges: GraphPersistedEdge[] = [];
   for (const attachment of attachments) {
     if (!attachment) continue;
-    const handles = ATTACHMENT_KIND_HANDLES[attachment.kind];
-    const sourceId = attachment.sourceId;
-    const targetId = attachment.targetId;
+    const kind = normalizeAttachmentKind(attachment.kind);
+    if (!kind) continue;
+    const sourceId = readString((attachment as Record<string, unknown>).sourceId ?? (attachment as Record<string, unknown>).source_id);
+    const targetId = readString((attachment as Record<string, unknown>).targetId ?? (attachment as Record<string, unknown>).target_id);
+    if (!sourceId || !targetId) continue;
+    const handles = ATTACHMENT_KIND_HANDLES[kind];
     const id = buildEdgeId(sourceId, handles.sourceHandle, targetId, handles.targetHandle);
     edges.push({
       id,
@@ -612,6 +857,10 @@ export function mapTeamEntitiesToGraphNodes(
   });
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 function isEnvEntryRecord(value: Record<string, unknown>): boolean {
   return typeof value.name === 'string' && Object.prototype.hasOwnProperty.call(value, 'value');
 }
@@ -630,13 +879,13 @@ function sanitizeEnvEntry(entry: Record<string, unknown>): Record<string, unknow
 function sanitizeConfigValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => {
-      if (isRecord(item) && isEnvEntryRecord(item)) {
+      if (isPlainRecord(item) && isEnvEntryRecord(item)) {
         return sanitizeEnvEntry(item);
       }
       return sanitizeConfigValue(item);
     });
   }
-  if (isRecord(value)) {
+  if (isPlainRecord(value)) {
     if (isEnvEntryRecord(value)) {
       return sanitizeEnvEntry(value);
     }
@@ -650,7 +899,7 @@ function sanitizeConfigValue(value: unknown): unknown {
 }
 
 export function sanitizeConfigForPersistence(_templateName: string, config: Record<string, unknown> | undefined): Record<string, unknown> {
-  const base = isRecord(config) ? config : {};
+  const base = isPlainRecord(config) ? config : {};
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(base)) {
     if (key === 'title' || key === 'template' || key === 'kind') {
@@ -697,8 +946,13 @@ export function diffTeamAttachments(
 
   const normalizedCurrent: Array<{ key: string; attachment: TeamAttachment }> = [];
   for (const attachment of current ?? []) {
-    const key = `${attachment.kind}:${attachment.sourceId}:${attachment.targetId}`;
-    normalizedCurrent.push({ key, attachment });
+    const kind = normalizeAttachmentKind(attachment.kind);
+    if (!kind) continue;
+    const sourceId = readString((attachment as Record<string, unknown>).sourceId ?? (attachment as Record<string, unknown>).source_id);
+    const targetId = readString((attachment as Record<string, unknown>).targetId ?? (attachment as Record<string, unknown>).target_id);
+    if (!sourceId || !targetId) continue;
+    const key = `${kind}:${sourceId}:${targetId}`;
+    normalizedCurrent.push({ key, attachment: { ...attachment, kind } });
   }
 
   const currentKeys = new Set(normalizedCurrent.map((entry) => entry.key));
@@ -715,11 +969,11 @@ function mapEnvListForTeam(env: unknown): Array<{ name: string; value: string }>
     .filter((item) => item.name.length > 0);
 }
 
-export function buildAgentRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): TeamAgentCreateRequest {
+export function buildAgentRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): Record<string, unknown> {
   const configRecord = input.config as Record<string, unknown>;
   const queue = readQueueConfig(configRecord as NodeConfig);
   const summarization = readSummarizationConfig(configRecord as NodeConfig);
-  const payload: TeamAgentCreateRequest = {
+  const payload: Record<string, unknown> = {
     title: input.title,
     description: existing?.description ?? '',
     config: {},
@@ -728,20 +982,20 @@ export function buildAgentRequest(input: GraphEntityUpsertInput, existing?: Grap
   const model = readOptionalString(configRecord.model);
   if (model !== undefined) config.model = model;
   const systemPrompt = readOptionalString(configRecord.systemPrompt);
-  if (systemPrompt !== undefined) config.systemPrompt = systemPrompt;
-  if (queue.debounceMs !== undefined) config.debounceMs = queue.debounceMs;
-  if (queue.whenBusy) config.whenBusy = queue.whenBusy;
-  if (queue.processBuffer) config.processBuffer = queue.processBuffer;
+  if (systemPrompt !== undefined) config.system_prompt = systemPrompt;
+  if (queue.debounceMs !== undefined) config.debounce_ms = queue.debounceMs;
+  if (queue.whenBusy) config.when_busy = mapWhenBusyToTeam(queue.whenBusy);
+  if (queue.processBuffer) config.process_buffer = mapProcessBufferToTeam(queue.processBuffer);
   const sendFinal = readBoolean(configRecord.sendFinalResponseToThread);
-  if (sendFinal !== undefined) config.sendFinalResponseToThread = sendFinal;
-  if (summarization.keepTokens !== undefined) config.summarizationKeepTokens = summarization.keepTokens;
-  if (summarization.maxTokens !== undefined) config.summarizationMaxTokens = summarization.maxTokens;
+  if (sendFinal !== undefined) config.send_final_response_to_thread = sendFinal;
+  if (summarization.keepTokens !== undefined) config.summarization_keep_tokens = summarization.keepTokens;
+  if (summarization.maxTokens !== undefined) config.summarization_max_tokens = summarization.maxTokens;
   const restrictOutput = readBoolean(configRecord.restrictOutput);
-  if (restrictOutput !== undefined) config.restrictOutput = restrictOutput;
+  if (restrictOutput !== undefined) config.restrict_output = restrictOutput;
   const restrictionMessage = readOptionalString(configRecord.restrictionMessage);
-  if (restrictionMessage !== undefined) config.restrictionMessage = restrictionMessage;
+  if (restrictionMessage !== undefined) config.restriction_message = restrictionMessage;
   const restrictionMaxInjections = readNumber(configRecord.restrictionMaxInjections);
-  if (restrictionMaxInjections !== undefined) config.restrictionMaxInjections = restrictionMaxInjections;
+  if (restrictionMaxInjections !== undefined) config.restriction_max_injections = restrictionMaxInjections;
   const name = readOptionalString(configRecord.name);
   if (name !== undefined) config.name = name;
   const role = readOptionalString(configRecord.role);
@@ -750,7 +1004,7 @@ export function buildAgentRequest(input: GraphEntityUpsertInput, existing?: Grap
   return payload;
 }
 
-export function buildToolRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): TeamToolCreateRequest {
+export function buildToolRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): Record<string, unknown> {
   const configRecord = input.config as Record<string, unknown>;
   const toolType = TEMPLATE_TO_TOOL_TYPE[input.template] ?? existing?.toolType ?? TEAM_TOOL_TYPE.manage;
   const toolName = readOptionalString(configRecord.name) ?? existing?.toolName ?? input.title;
@@ -762,12 +1016,9 @@ export function buildToolRequest(input: GraphEntityUpsertInput, existing?: Graph
   };
 }
 
-export function buildMcpServerRequest(
-  input: GraphEntityUpsertInput,
-  existing?: GraphEntitySummary,
-): TeamMcpServerCreateRequest {
+export function buildMcpServerRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): Record<string, unknown> {
   const configRecord = input.config as Record<string, unknown>;
-  const payload: TeamMcpServerCreateRequest = {
+  const payload: Record<string, unknown> = {
     title: input.title,
     description: existing?.description ?? '',
     config: {},
@@ -782,32 +1033,29 @@ export function buildMcpServerRequest(
   const env = mapEnvListForTeam(configRecord.env);
   if (env.length > 0) config.env = env;
   const requestTimeoutMs = readNumber(configRecord.requestTimeoutMs);
-  if (requestTimeoutMs !== undefined) config.requestTimeoutMs = requestTimeoutMs;
+  if (requestTimeoutMs !== undefined) config.request_timeout_ms = requestTimeoutMs;
   const startupTimeoutMs = readNumber(configRecord.startupTimeoutMs);
-  if (startupTimeoutMs !== undefined) config.startupTimeoutMs = startupTimeoutMs;
+  if (startupTimeoutMs !== undefined) config.startup_timeout_ms = startupTimeoutMs;
   const heartbeatIntervalMs = readNumber(configRecord.heartbeatIntervalMs);
-  if (heartbeatIntervalMs !== undefined) config.heartbeatIntervalMs = heartbeatIntervalMs;
+  if (heartbeatIntervalMs !== undefined) config.heartbeat_interval_ms = heartbeatIntervalMs;
   const staleTimeoutMs = readNumber(configRecord.staleTimeoutMs);
-  if (staleTimeoutMs !== undefined) config.staleTimeoutMs = staleTimeoutMs;
+  if (staleTimeoutMs !== undefined) config.stale_timeout_ms = staleTimeoutMs;
   const restart = isRecord(configRecord.restart) ? configRecord.restart : {};
   const maxAttempts = readNumber(restart.maxAttempts);
   const backoffMs = readNumber(restart.backoffMs);
   if (maxAttempts !== undefined || backoffMs !== undefined) {
     const restartConfig: Record<string, unknown> = {};
-    if (maxAttempts !== undefined) restartConfig.maxAttempts = maxAttempts;
-    if (backoffMs !== undefined) restartConfig.backoffMs = backoffMs;
+    if (maxAttempts !== undefined) restartConfig.max_attempts = maxAttempts;
+    if (backoffMs !== undefined) restartConfig.backoff_ms = backoffMs;
     config.restart = restartConfig;
   }
   payload.config = config;
   return payload;
 }
 
-export function buildWorkspaceRequest(
-  input: GraphEntityUpsertInput,
-  existing?: GraphEntitySummary,
-): TeamWorkspaceConfigurationCreateRequest {
+export function buildWorkspaceRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): Record<string, unknown> {
   const configRecord = input.config as Record<string, unknown>;
-  const payload: TeamWorkspaceConfigurationCreateRequest = {
+  const payload: Record<string, unknown> = {
     title: input.title,
     description: existing?.description ?? '',
     config: {},
@@ -818,43 +1066,40 @@ export function buildWorkspaceRequest(
   const env = mapEnvListForTeam(configRecord.env);
   if (env.length > 0) config.env = env;
   const initialScript = readOptionalString(configRecord.initialScript);
-  if (initialScript !== undefined) config.initialScript = initialScript;
-  if (configRecord.cpu_limit !== undefined) config.cpuLimit = configRecord.cpu_limit;
-  if (configRecord.memory_limit !== undefined) config.memoryLimit = configRecord.memory_limit;
-  const platform = readWorkspacePlatform(configRecord.platform);
+  if (initialScript !== undefined) config.initial_script = initialScript;
+  if (configRecord.cpu_limit !== undefined) config.cpu_limit = configRecord.cpu_limit;
+  if (configRecord.memory_limit !== undefined) config.memory_limit = configRecord.memory_limit;
+  const platform = mapWorkspacePlatformToTeam(configRecord.platform);
   if (platform) config.platform = platform;
-  const enableDinD = readBoolean(configRecord.enableDinD);
-  if (enableDinD !== undefined) config.enableDinD = enableDinD;
+  const enableDinD = readBoolean(configRecord.enableDinD ?? configRecord.enable_dind ?? configRecord.enableDind);
+  if (enableDinD !== undefined) config.enable_dind = enableDinD;
   const ttlSeconds = readNumber(configRecord.ttlSeconds);
-  if (ttlSeconds !== undefined) config.ttlSeconds = ttlSeconds;
+  if (ttlSeconds !== undefined) config.ttl_seconds = ttlSeconds;
   if (isRecord(configRecord.nix)) config.nix = configRecord.nix;
   if (isRecord(configRecord.volumes)) {
     const volumeConfig: Record<string, unknown> = {};
     const enabled = readBoolean(configRecord.volumes.enabled);
     if (enabled !== undefined) volumeConfig.enabled = enabled;
-    const mountPath = readOptionalString(configRecord.volumes.mountPath);
-    if (mountPath !== undefined) volumeConfig.mountPath = mountPath;
+    const mountPath = readOptionalString(configRecord.volumes.mountPath ?? configRecord.volumes.mount_path);
+    if (mountPath !== undefined) volumeConfig.mount_path = mountPath;
     config.volumes = volumeConfig;
   }
   payload.config = config;
   return payload;
 }
 
-export function buildMemoryBucketRequest(
-  input: GraphEntityUpsertInput,
-  existing?: GraphEntitySummary,
-): TeamMemoryBucketCreateRequest {
+export function buildMemoryBucketRequest(input: GraphEntityUpsertInput, existing?: GraphEntitySummary): Record<string, unknown> {
   const configRecord = input.config as Record<string, unknown>;
-  const payload: TeamMemoryBucketCreateRequest = {
+  const payload: Record<string, unknown> = {
     title: input.title,
     description: existing?.description ?? '',
     config: {},
   };
   const config: Record<string, unknown> = {};
-  const scope = readMemoryScope(configRecord.scope);
+  const scope = mapMemoryScopeToTeam(configRecord.scope);
   if (scope) config.scope = scope;
-  const collectionPrefix = readOptionalString(configRecord.collectionPrefix);
-  if (collectionPrefix !== undefined) config.collectionPrefix = collectionPrefix;
+  const collectionPrefix = readOptionalString(configRecord.collectionPrefix ?? configRecord.collection_prefix);
+  if (collectionPrefix !== undefined) config.collection_prefix = collectionPrefix;
   payload.config = config;
   return payload;
 }
