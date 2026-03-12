@@ -30,3 +30,5 @@ charts/platform-server/charts/
 # Generated protobuf outputs
 packages/**/src/proto/gen/
 packages/runner-proto/src/gen/
+
+.devspace
