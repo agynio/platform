@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
-import { ContainerService, NonceCache } from '@agyn/docker-runner';
-import type { RunnerConfig } from '../../docker-runner/src/service/config';
-import { createRunnerGrpcServer } from '../../docker-runner/src/service/grpc/server';
+import { ContainerService, NonceCache, createRunnerGrpcServer, type RunnerConfig } from '@agyn/docker-runner';
 import { Server, ServerCredentials } from '@grpc/grpc-js';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { DockerWorkspaceRuntimeProvider } from '../src/workspace/providers/docker.workspace.provider';

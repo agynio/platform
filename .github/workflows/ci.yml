@@ -45,6 +45,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
@@ -53,6 +55,8 @@ jobs:
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -115,6 +119,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
@@ -123,6 +129,8 @@ jobs:
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -178,6 +186,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
@@ -186,6 +196,8 @@ jobs:
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -247,6 +259,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
@@ -255,6 +269,8 @@ jobs:
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -302,6 +318,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
@@ -310,6 +328,8 @@ jobs:
         run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -355,11 +375,15 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs
@@ -409,11 +433,15 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@agyn'
 
       - name: Setup Buf
         uses: bufbuild/buf-setup-action@v1
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Generate protobufs

@@ -7,8 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Server, ServerCredentials, credentials, Metadata } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
 
-import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/server';
-import { ContainerService, NonceCache, buildAuthHeaders } from '../../../docker-runner/src';
+import { buildAuthHeaders, ContainerService, createRunnerGrpcServer, NonceCache } from '@agyn/docker-runner';
 import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '../../src/proto/grpc.js';
 import { ReadyRequestSchema } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
@@ -74,8 +73,9 @@ export async function startDockerRunner(socketPath: string): Promise<RunnerHandl
 
 export async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
   const grpcPort = await getAvailablePort();
-  const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
-  const runnerEntry = path.resolve(repoRoot, 'packages', 'docker-runner', 'src', 'service', 'main.ts');
+  const serverRoot = path.resolve(__dirname, '..', '..');
+  const repoRoot = path.resolve(serverRoot, '..', '..');
+  const runnerEntry = path.resolve(serverRoot, 'node_modules', '@agyn', 'docker-runner', 'src', 'service', 'main.ts');
   const tsxBin = path.resolve(repoRoot, 'node_modules', '.bin', 'tsx');
   if (!fs.existsSync(tsxBin)) {
     throw new Error(`tsx binary not found at ${tsxBin}`);
