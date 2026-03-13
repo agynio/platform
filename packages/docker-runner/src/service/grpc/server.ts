@@ -1238,10 +1238,20 @@ export function createRunnerGrpcServer(opts: RunnerGrpcOptions): Server {
               if (ctx) void finish(ctx, ctx.reason, ctx.killed);
             };
 
+            const streamEnded = (stream?: NodeJS.ReadableStream): boolean => {
+              if (!stream) return false;
+              const candidate = stream as NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean };
+              return candidate.readableEnded === true || candidate.destroyed === true;
+            };
+
             session.stdout.once('end', finalize);
             session.stdout.once('close', finalize);
             session.stderr?.once('end', finalize);
             session.stderr?.once('close', finalize);
+
+            if (streamEnded(session.stdout) || streamEnded(session.stderr)) {
+              finalize();
+            }
           } catch (error) {
             writeResponse(
               call,
