@@ -25,7 +25,7 @@ import type {
 import { isRecord, readNumber, readString } from '@/utils/typeGuards';
 
 const TEAM_API_PREFIX = '/apiv2/team/v1';
-const DEFAULT_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 100;
 
 export type TeamListParams = {
   page?: number;
