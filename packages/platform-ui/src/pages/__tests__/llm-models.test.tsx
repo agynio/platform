@@ -143,7 +143,9 @@ describe('LLM models pages', () => {
     renderWithRoutes('/llm-models/new');
 
     await user.type(screen.getByLabelText('Name'), 'assistant-preview');
-    await user.selectOptions(screen.getByLabelText('Provider'), 'provider-1');
+    const providerSelect = screen.getByRole('combobox', { name: 'Provider' });
+    await user.click(providerSelect);
+    await user.click(await screen.findByRole('option', { name: 'https://api.alpha.com' }));
     await user.type(screen.getByLabelText('Remote name'), 'gpt-4o-mini-preview');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
@@ -160,6 +162,7 @@ describe('LLM models pages', () => {
   });
 
   it('loads existing model values on edit', async () => {
+    const user = userEvent.setup();
     const providers = [
       {
         id: 'provider-1',
@@ -188,7 +191,10 @@ describe('LLM models pages', () => {
     renderWithRoutes('/llm-models/model-1/edit');
 
     expect(await screen.findByLabelText('Name')).toHaveValue('assistant');
-    expect(screen.getByLabelText('Provider')).toHaveValue('provider-1');
+    const providerSelect = screen.getByRole('combobox', { name: 'Provider' });
+    await user.click(providerSelect);
+    const providerOption = await screen.findByRole('option', { name: 'https://api.alpha.com' });
+    await user.click(providerOption);
     expect(screen.getByLabelText('Remote name')).toHaveValue('gpt-4o-mini');
   });
 

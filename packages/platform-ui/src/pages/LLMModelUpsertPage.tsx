@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import { Input } from '@/components/Input';
-import { SelectInput } from '@/components/SelectInput';
+import { Dropdown } from '@/components/Dropdown';
 import { useLLMProviders } from '@/api/hooks/useLLMProviders';
 import { useCreateLLMModel, useLLMModel, useUpdateLLMModel } from '@/api/hooks/useLLMModels';
 import type { LLMProvider } from '@/api/modules/llmEntities';
@@ -64,6 +64,12 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
   const showNotFound = mode === 'edit' && !modelQuery.isLoading && !modelQuery.isError && !model;
   const showFormFields = mode === 'create' || Boolean(model);
   const providersReady = providers.length > 0;
+
+  useEffect(() => {
+    if (mode === 'edit' && model && providersReady) {
+      form.setValue('llmProviderId', model.llmProviderId, { shouldDirty: false, shouldTouch: false });
+    }
+  }, [form, mode, model, providersReady]);
 
   const handleCancel = () => {
     navigate(LIST_PATH);
@@ -188,13 +194,13 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                     <FormItem>
                       <FormLabel>Provider</FormLabel>
                       <FormControl>
-                        <SelectInput
-                          value={field.value ?? ''}
-                          onChange={(event) => field.onChange(event.target.value)}
+                        <Dropdown
+                          value={field.value || undefined}
+                          onValueChange={(value) => field.onChange(value)}
                           disabled={isSubmitting || !providersReady}
                           placeholder="Select a provider"
                           options={providerOptions}
-                          allowEmptyOption
+                          size="sm"
                         />
                       </FormControl>
                       <FormMessage />

@@ -13,7 +13,7 @@ import {
   FormMessage,
 } from '@/components/forms/Form';
 import { Input } from '@/components/Input';
-import { SelectInput } from '@/components/SelectInput';
+import { Dropdown } from '@/components/Dropdown';
 import { useCreateLLMProvider, useLLMProvider, useUpdateLLMProvider } from '@/api/hooks/useLLMProviders';
 import type { LLMAuthMethod } from '@/api/modules/llmEntities';
 
@@ -194,12 +194,13 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
                     <FormItem>
                       <FormLabel>Authentication method</FormLabel>
                       <FormControl>
-                        <SelectInput
-                          value={field.value ?? ''}
-                          onChange={(event) => field.onChange(event.target.value as LLMAuthMethod)}
+                        <Dropdown
+                          value={field.value || undefined}
+                          onValueChange={(value) => field.onChange(value as LLMAuthMethod)}
                           disabled={isSubmitting}
                           placeholder="Select a method"
                           options={AUTH_METHOD_OPTIONS}
+                          size="sm"
                         />
                       </FormControl>
                       <FormMessage />

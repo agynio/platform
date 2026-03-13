@@ -20,6 +20,26 @@ import type { PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
+const pointerProto = Element.prototype as typeof Element.prototype & {
+  hasPointerCapture?: (pointerId: number) => boolean;
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+  scrollIntoView?: (opts?: ScrollIntoViewOptions | boolean) => void;
+};
+
+if (!pointerProto.hasPointerCapture) {
+  pointerProto.hasPointerCapture = () => false;
+}
+if (!pointerProto.setPointerCapture) {
+  pointerProto.setPointerCapture = () => {};
+}
+if (!pointerProto.releasePointerCapture) {
+  pointerProto.releasePointerCapture = () => {};
+}
+if (!pointerProto.scrollIntoView) {
+  pointerProto.scrollIntoView = () => {};
+}
+
 function createTemplate(name: string, kind: GraphEntityKind = 'workspace'): TemplateOption {
   const schema: TemplateSchema = {
     name,
@@ -146,6 +166,7 @@ describe('EntityUpsertForm', () => {
   it('embeds workspace config fields and submits updated values', async () => {
     const templates = [createTemplate('workspace-template', 'workspace')];
     const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -160,20 +181,21 @@ describe('EntityUpsertForm', () => {
       </QueryClientProvider>,
     );
 
-    const templateSelect = screen.getByLabelText('Template');
-    await userEvent.selectOptions(templateSelect, 'workspace-template');
+    const templateSelect = screen.getByRole('combobox', { name: 'Template' });
+    await user.click(templateSelect);
+    await user.click(await screen.findByRole('option', { name: 'workspace-template-title' }));
 
     const titleInput = await screen.findByLabelText('Entity title');
-    await userEvent.clear(titleInput);
-    await userEvent.type(titleInput, '  My Workspace  ');
+    await user.clear(titleInput);
+    await user.type(titleInput, '  My Workspace  ');
 
     await screen.findByText('Container');
     const imageInput = screen.getByPlaceholderText('docker.io/library/ubuntu:latest');
-    await userEvent.clear(imageInput);
-    await userEvent.type(imageInput, 'docker.io/library/node:18');
+    await user.clear(imageInput);
+    await user.type(imageInput, 'docker.io/library/node:18');
 
     const submitButton = screen.getByRole('button', { name: /create/i });
-    await userEvent.click(submitButton);
+    await user.click(submitButton);
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -203,6 +225,7 @@ describe('EntityUpsertForm', () => {
       config: { title: 'Existing Agent', template: 'agent-template', kind: 'Agent' },
     });
     const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -218,17 +241,17 @@ describe('EntityUpsertForm', () => {
       </QueryClientProvider>,
     );
 
-    const templateSelect = screen.getByLabelText('Template');
+    const templateSelect = screen.getByRole('combobox', { name: 'Template' });
     expect(templateSelect).toBeDisabled();
 
     await screen.findByPlaceholderText('e.g., Casey Quinn');
 
     const modelInput = screen.getByPlaceholderText('gpt-4');
-    await userEvent.clear(modelInput);
-    await userEvent.type(modelInput, 'claude-3');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'claude-3');
 
     const saveButton = screen.getByRole('button', { name: /save changes/i });
-    await userEvent.click(saveButton);
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -242,9 +265,9 @@ describe('EntityUpsertForm', () => {
     expect(payload.config).not.toHaveProperty('template');
     expect(payload.config).not.toHaveProperty('kind');
 
-    await userEvent.clear(modelInput);
-    await userEvent.type(modelInput, 'qwen-plus');
-    await userEvent.click(saveButton);
+    await user.clear(modelInput);
+    await user.type(modelInput, 'qwen-plus');
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(2);
@@ -344,12 +367,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const relationSelect = await screen.findByLabelText('Agent destination');
-    expect(relationSelect).toHaveValue('agent-1');
+    const relationSelect = await screen.findByRole('combobox', { name: 'Agent destination' });
+    await waitFor(() => expect(relationSelect).toHaveTextContent('Agent One'));
 
-    await userEvent.selectOptions(relationSelect, 'agent-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(relationSelect);
+    await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -467,11 +492,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText('Memory connector');
-    expect(select).toHaveValue('mc-1');
-    await userEvent.selectOptions(select, 'mc-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: 'Memory connector' });
+    await waitFor(() => expect(select).toHaveTextContent('Connector One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Connector Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -507,11 +534,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText('Workspace');
-    expect(select).toHaveValue('workspace-1');
-    await userEvent.selectOptions(select, 'workspace-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: 'Workspace' });
+    await waitFor(() => expect(select).toHaveTextContent('Workspace One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -583,11 +612,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText(/^Agent$/);
-    expect(select).toHaveValue('agent-1');
-    await userEvent.selectOptions(select, 'agent-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: /^Agent$/ });
+    await waitFor(() => expect(select).toHaveTextContent('Agent One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -618,11 +649,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText('Workspace');
-    expect(select).toHaveValue('workspace-1');
-    await userEvent.selectOptions(select, 'workspace-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: 'Workspace' });
+    await waitFor(() => expect(select).toHaveTextContent('Workspace One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -653,11 +686,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText('Memory workspace');
-    expect(select).toHaveValue('memory-1');
-    await userEvent.selectOptions(select, 'memory-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: 'Memory workspace' });
+    await waitFor(() => expect(select).toHaveTextContent('Memory One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -688,11 +723,13 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = userEvent.setup();
 
-    const select = await screen.findByLabelText('Memory workspace');
-    expect(select).toHaveValue('memory-1');
-    await userEvent.selectOptions(select, 'memory-2');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const select = await screen.findByRole('combobox', { name: 'Memory workspace' });
+    await waitFor(() => expect(select).toHaveTextContent('Memory One'));
+    await user.click(select);
+    await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];

@@ -154,7 +154,7 @@ describe('LLM providers pages', () => {
     renderWithRoutes('/llm-providers/provider-1/edit');
 
     expect(await screen.findByLabelText('Endpoint')).toHaveValue('https://api.alpha.com');
-    expect(screen.getByLabelText('Authentication method')).toHaveValue('bearer');
+    expect(screen.getByRole('combobox', { name: 'Authentication method' })).toHaveTextContent('Bearer token');
   });
 
   it('deletes a provider after confirmation', async () => {
