@@ -11,10 +11,9 @@ import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 type MetricsPayload = { activity: 'working' | 'waiting' | 'idle'; remindersCount: number };
 
@@ -220,13 +219,10 @@ if (!shouldRunRealtimeTests) {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'initial' } });
     await subscribeRooms(threadClient, [`thread:${thread.id}`]);
 
-    const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
-    const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
       prismaService,
       metricsDouble.service,
-      templateRegistryStub,
-      graphRepositoryStub,
+      createTeamsClientStub(),
       runEvents,
       createLinkingStub(),
       eventsBus,
@@ -275,13 +271,10 @@ if (!shouldRunRealtimeTests) {
     const { port } = server.address() as AddressInfo;
     gateway.init({ server });
 
-    const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
-    const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
       prismaService,
       metricsDouble.service,
-      templateRegistryStub,
-      graphRepositoryStub,
+      createTeamsClientStub(),
       runEvents,
       createLinkingStub(),
       eventsBus,

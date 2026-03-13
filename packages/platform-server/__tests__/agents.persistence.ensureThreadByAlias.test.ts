@@ -4,12 +4,9 @@ import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
-const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
-const graphRepoStub = {
-  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
-} as any;
 
 const createLinkingStub = () =>
   ({
@@ -34,8 +31,7 @@ const createService = (stub: any) => {
   const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     metricsStub,
-    templateRegistryStub,
-    graphRepoStub,
+    createTeamsClientStub(),
     createRunEventsStub() as any,
     createLinkingStub(),
     eventsBusStub,

@@ -9,11 +9,7 @@ import { RemindersService } from '../src/agents/reminders.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
-
-const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
-const graphRepoStub = {
-  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
-} as any;
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const createLinkingStub = () =>
   ({
@@ -48,8 +44,7 @@ function createPersistenceWithTx(tx: { reminder: { findMany: any; count: any }; 
   return new AgentsPersistenceService(
     prismaStub as any,
     { getThreadsMetrics: async () => ({}) } as any,
-    templateRegistryStub,
-    graphRepoStub,
+    createTeamsClientStub(),
     createRunEventsStub() as any,
     createLinkingStub(),
     createEventsBusStub(),
@@ -222,8 +217,7 @@ describe('AgentsPersistenceService.listReminders', () => {
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       { getThreadsMetrics: async () => ({}) } as any,
-      templateRegistryStub,
-      graphRepoStub,
+      createTeamsClientStub(),
       createRunEventsStub() as any,
       createLinkingStub(),
       eventsBusStub,
@@ -259,8 +253,7 @@ describe('AgentsPersistenceService.listReminders', () => {
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       { getThreadsMetrics: async () => ({}) } as any,
-      templateRegistryStub,
-      graphRepoStub,
+      createTeamsClientStub(),
       createRunEventsStub() as any,
       createLinkingStub(),
       eventsBusStub,
