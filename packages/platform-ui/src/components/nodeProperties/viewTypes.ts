@@ -33,6 +33,8 @@ export type NodePropertiesViewPropsMap = {
   MCP: CommonViewProps<'MCP'> & EnvSupportProps & McpSupportProps;
   Trigger: CommonViewProps<'Trigger'> & EnvSupportProps;
   Workspace: CommonViewProps<'Workspace'> & EnvSupportProps & WorkspaceSupportProps;
+  SecretProvider: CommonViewProps<'SecretProvider'>;
+  Secret: CommonViewProps<'Secret'>;
 };
 
 export type NodePropertiesViewProps<K extends NodeKind> = NodePropertiesViewPropsMap[K];

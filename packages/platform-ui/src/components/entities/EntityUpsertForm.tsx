@@ -208,6 +208,18 @@ const RELATION_FIELD_DEFINITIONS: RelationFieldDefinition[] = [
     candidateFilter: { templateNames: ['memory'] },
     placeholder: 'Select a memory',
   },
+  {
+    id: 'secretProviderSecret',
+    label: 'Secret provider',
+    description: 'Select the secret provider for this secret.',
+    appliesTo: { templateKinds: ['secret'] },
+    ownerRole: 'target',
+    ownerHandle: 'provider',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['secret_provider'] },
+    placeholder: 'Select a secret provider',
+  },
 ];
 
 const NODE_KIND_TO_ENTITY_KIND: Record<NodeViewKind, GraphEntityKind> = {
@@ -216,6 +228,8 @@ const NODE_KIND_TO_ENTITY_KIND: Record<NodeViewKind, GraphEntityKind> = {
   Tool: 'tool',
   MCP: 'mcp',
   Workspace: 'workspace',
+  SecretProvider: 'secret_provider',
+  Secret: 'secret',
 };
 
 function matchesCandidateFilter(node: GraphNodeConfig, filter: RelationCandidateFilter): boolean {
@@ -291,6 +305,10 @@ function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeViewKind {
       return 'Tool';
     case 'mcp':
       return 'MCP';
+    case 'secret_provider':
+      return 'SecretProvider';
+    case 'secret':
+      return 'Secret';
     case 'workspace':
     case 'service':
     default:
@@ -793,6 +811,32 @@ export function EntityUpsertForm({
           graphEdges: safeGraphEdges,
         } satisfies NodePropertiesViewProps<'Trigger'>;
         return <View {...triggerProps} />;
+      }
+      case 'SecretProvider': {
+        const View = NODE_VIEW_REGISTRY.SecretProvider;
+        const secretProviderProps: NodePropertiesViewProps<'SecretProvider'> = {
+          config: viewConfig as NodePropertiesViewProps<'SecretProvider'>['config'],
+          state: viewState,
+          displayTitle,
+          onConfigChange: handleViewConfigChange,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
+        } satisfies NodePropertiesViewProps<'SecretProvider'>;
+        return <View {...secretProviderProps} />;
+      }
+      case 'Secret': {
+        const View = NODE_VIEW_REGISTRY.Secret;
+        const secretProps: NodePropertiesViewProps<'Secret'> = {
+          config: viewConfig as NodePropertiesViewProps<'Secret'>['config'],
+          state: viewState,
+          displayTitle,
+          onConfigChange: handleViewConfigChange,
+          nodeId: nodeIdForView,
+          graphNodes: safeGraphNodes,
+          graphEdges: safeGraphEdges,
+        } satisfies NodePropertiesViewProps<'Secret'>;
+        return <View {...secretProps} />;
       }
       default: {
         const unexpected: never = nodeKind;

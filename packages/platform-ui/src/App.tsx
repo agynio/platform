@@ -30,6 +30,8 @@ import { ToolsListPage } from './pages/ToolsListPage';
 import { WorkspacesListPage } from './pages/WorkspacesListPage';
 import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
 import { McpServersListPage } from './pages/McpServersListPage';
+import { SecretProvidersListPage } from './pages/SecretProvidersListPage';
+import { EntitySecretsListPage } from './pages/EntitySecretsListPage';
 import { EntityUpsertPage } from './pages/entities/EntityUpsertPage';
 import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from './features/entities/api/graphEntities';
 
@@ -113,6 +115,24 @@ function App() {
                       templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
                     />
                   )}
+                />
+                <Route path="/secret-providers" element={<SecretProvidersListPage />} />
+                <Route
+                  path="/secret-providers/new"
+                  element={<EntityUpsertPage kind="secret_provider" mode="create" listPath="/secret-providers" />}
+                />
+                <Route
+                  path="/secret-providers/:entityId/edit"
+                  element={<EntityUpsertPage kind="secret_provider" mode="edit" listPath="/secret-providers" />}
+                />
+                <Route path="/entity-secrets" element={<EntitySecretsListPage />} />
+                <Route
+                  path="/entity-secrets/new"
+                  element={<EntityUpsertPage kind="secret" mode="create" listPath="/entity-secrets" />}
+                />
+                <Route
+                  path="/entity-secrets/:entityId/edit"
+                  element={<EntityUpsertPage kind="secret" mode="edit" listPath="/entity-secrets" />}
                 />
                 <Route path="/llm-providers" element={<LLMProvidersListPage />} />
                 <Route path="/llm-providers/new" element={<LLMProviderUpsertPage mode="create" />} />

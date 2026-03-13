@@ -9,6 +9,8 @@ import { PostgresMemoryEntitiesRepository } from './memory/memory.repository';
 import { MemoryService } from './memory/memory.service';
 import { MemoryNode } from './memory/memory.node';
 import { MemoryConnectorNode } from './memoryConnector/memoryConnector.node';
+import { SecretProviderNode } from './secretProvider/secretProvider.node';
+import { SecretNode } from './secret/secret.node';
 import { AgentNode } from './agent/agent.node';
 import { SlackTrigger } from './slackTrigger/slackTrigger.node';
 import { SlackAdapter } from '../messaging/slack/slack.adapter';
@@ -52,6 +54,8 @@ class NodesTemplateRegistrar implements OnModuleInit {
     MemoryService,
     MemoryNode,
     MemoryConnectorNode,
+    SecretProviderNode,
+    SecretNode,
     AgentNode,
     SlackTrigger,
     LocalMCPServerNode,
@@ -83,6 +87,8 @@ class NodesTemplateRegistrar implements OnModuleInit {
     MemoryService,
     MemoryNode,
     MemoryConnectorNode,
+    SecretProviderNode,
+    SecretNode,
     AgentNode,
     SlackTrigger,
     LocalMCPServerNode,
