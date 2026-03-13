@@ -9,8 +9,7 @@ import {
   ScreenDialogTitle,
 } from '../../Dialog';
 import { Button } from '@/components/Button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
+import { Input } from '@/components/Input';
 
 type CreateDocumentDialogProps = {
   open: boolean;
@@ -67,8 +66,8 @@ export function CreateDocumentDialog({ open, parentPath, onCancel, onCreate, val
         </ScreenDialogHeader>
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor={inputId}>Name</Label>
             <Input
+              label="Name"
               id={inputId}
               value={name}
               onChange={(event) => {

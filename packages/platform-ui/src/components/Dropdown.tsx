@@ -55,6 +55,14 @@ export function Dropdown({
   triggerClassName = '',
   ...triggerProps
 }: DropdownProps) {
+  const resolvedValue = value ?? defaultValue;
+  const flatOptions = groups.length > 0
+    ? groups.flatMap((group) => group.options)
+    : options;
+  const selectedLabel = resolvedValue
+    ? flatOptions.find((option) => option.value === resolvedValue)?.label
+    : undefined;
+
   return (
     <div className={`w-full ${className}`}>
       {label && (
@@ -87,11 +95,11 @@ export function Dropdown({
                 ${size === 'sm' ? 'px-3 !h-10' : 'px-4 py-3'}
               `
             }
-          ${triggerClassName}
-          `}
+            ${triggerClassName}
+            `}
           {...triggerProps}
         >
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={placeholder}>{selectedLabel}</SelectValue>
         </SelectTrigger>
         
         <SelectContent

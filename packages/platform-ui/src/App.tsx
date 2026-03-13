@@ -17,6 +17,10 @@ import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
 import { SettingsLlm } from './pages/SettingsLlm';
+import { LLMProvidersListPage } from './pages/LLMProvidersListPage';
+import { LLMProviderUpsertPage } from './pages/LLMProviderUpsertPage';
+import { LLMModelsListPage } from './pages/LLMModelsListPage';
+import { LLMModelUpsertPage } from './pages/LLMModelUpsertPage';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
@@ -110,6 +114,12 @@ function App() {
                     />
                   )}
                 />
+                <Route path="/llm-providers" element={<LLMProvidersListPage />} />
+                <Route path="/llm-providers/new" element={<LLMProviderUpsertPage mode="create" />} />
+                <Route path="/llm-providers/:id/edit" element={<LLMProviderUpsertPage mode="edit" />} />
+                <Route path="/llm-models" element={<LLMModelsListPage />} />
+                <Route path="/llm-models/new" element={<LLMModelUpsertPage mode="create" />} />
+                <Route path="/llm-models/:id/edit" element={<LLMModelUpsertPage mode="edit" />} />
 
                 {/* Tracing */}
                 <Route path="/tracing/traces" element={<TracingTraces />} />

@@ -215,6 +215,7 @@ describe('Entity list pages', () => {
 
   it('excludes memory workspace templates from the workspace create page', async () => {
     primeGraphHandlers();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     renderWithEntityRoutes(
       ['/workspaces/new'],
@@ -232,9 +233,11 @@ describe('Entity list pages', () => {
     );
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    await within(templateSelect).findByRole('option', { name: 'Worker Service' });
-    expect(within(templateSelect).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
-    expect(within(templateSelect).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
+    await user.click(templateSelect);
+    const listbox = await screen.findByRole('listbox');
+    expect(await within(listbox).findByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
+    expect(within(listbox).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
+    expect(within(listbox).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
   });
 
   it('keeps MCP servers separate from tools, including template picker', async () => {
@@ -264,8 +267,10 @@ describe('Entity list pages', () => {
     await user.click(screen.getByRole('button', { name: /new tool/i }));
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    expect(within(templateSelect).getByRole('option', { name: 'Slack Tool' })).toBeInTheDocument();
-    expect(within(templateSelect).queryByRole('option', { name: 'Filesystem MCP' })).not.toBeInTheDocument();
+    await user.click(templateSelect);
+    const listbox = await screen.findByRole('listbox');
+    expect(await within(listbox).findByRole('option', { name: 'Slack Tool' })).toBeInTheDocument();
+    expect(within(listbox).queryByRole('option', { name: 'Filesystem MCP' })).not.toBeInTheDocument();
   });
 
   it('renders only memory entities on the memory page', async () => {
@@ -330,6 +335,7 @@ describe('Entity list pages', () => {
       edges: [],
     };
     primeGraphHandlers(graphOverride);
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     renderWithEntityRoutes(
       ['/memory/new'],
@@ -347,9 +353,11 @@ describe('Entity list pages', () => {
     );
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    await within(templateSelect).findByRole('option', { name: 'Memory Workspace' });
-    expect(within(templateSelect).getByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
-    expect(within(templateSelect).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
+    await user.click(templateSelect);
+    const listbox = await screen.findByRole('listbox');
+    expect(await within(listbox).findByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
+    expect(await within(listbox).findByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
+    expect(within(listbox).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
   });
 
   it('renders only MCP servers on the MCP page and limits templates accordingly', async () => {
@@ -379,8 +387,10 @@ describe('Entity list pages', () => {
     await user.click(screen.getByRole('button', { name: /new mcp server/i }));
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    await within(templateSelect).findByRole('option', { name: 'Filesystem MCP' });
-    expect(within(templateSelect).queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
+    await user.click(templateSelect);
+    const listbox = await screen.findByRole('listbox');
+    expect(await within(listbox).findByRole('option', { name: 'Filesystem MCP' })).toBeInTheDocument();
+    expect(within(listbox).queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
   });
 
   it('renders the MCP config view in the edit dialog', async () => {
@@ -515,8 +525,8 @@ describe('Entity list pages', () => {
     await user.click(screen.getByRole('button', { name: /new agent/i }));
 
     const templateSelect = screen.getByRole('combobox', { name: /template/i });
-    await within(templateSelect).findByRole('option', { name: 'Support Agent' });
-    await user.selectOptions(templateSelect, 'support-agent');
+    await user.click(templateSelect);
+    await user.click(await screen.findByRole('option', { name: 'Support Agent' }));
 
     const titleInput = await screen.findByLabelText('Entity title');
     await user.clear(titleInput);
@@ -591,9 +601,10 @@ describe('Entity list pages', () => {
     expect(createButton).toBeDisabled();
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
-    await within(templateSelect).findByRole('option', { name: 'Support Agent' });
+    await user.click(templateSelect);
+    await screen.findByRole('option', { name: 'Support Agent' });
     await waitFor(() => expect(templateSelect).not.toBeDisabled());
-    await user.selectOptions(templateSelect, 'support-agent');
+    await user.click(screen.getByRole('option', { name: 'Support Agent' }));
 
     await waitFor(() => expect(createButton).not.toBeDisabled());
   });

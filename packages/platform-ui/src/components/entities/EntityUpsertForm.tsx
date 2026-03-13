@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { SelectInput } from '@/components/SelectInput';
+import { Dropdown } from '@/components/Dropdown';
 import type { NodeConfig, NodeState } from '@/components/nodeProperties/types';
 import type { NodePropertiesViewProps } from '@/components/nodeProperties/viewTypes';
 import { NODE_TEMPLATE_KIND_MAP, isNodeTemplateName } from '@/components/nodeProperties/viewTypes';
@@ -952,10 +952,10 @@ export function EntityUpsertForm({
                 <FormItem>
                   <FormLabel>Template</FormLabel>
                   <FormControl>
-                    <SelectInput
-                      value={field.value ?? ''}
-                      onChange={(event) => {
-                        field.onChange(event.target.value);
+                    <Dropdown
+                      value={field.value || undefined}
+                      onValueChange={(value) => {
+                        field.onChange(value);
                         if (mode === 'create') {
                           setConfigState({});
                         }
@@ -963,7 +963,6 @@ export function EntityUpsertForm({
                       disabled={disableTemplateSelect || templates.length === 0 || isSubmitting}
                       placeholder="Select a template"
                       options={templates.map((tpl) => ({ value: tpl.name, label: tpl.title }))}
-                      allowEmptyOption
                     />
                   </FormControl>
                   <FormMessage />
@@ -978,7 +977,7 @@ export function EntityUpsertForm({
                   <div className="space-y-6">
                     {relationDefinitions.map((definition) => {
                       const options = relationOptionsMap[definition.id] ?? [];
-                      const selections = relationSelections[definition.id] ?? [];
+                      const selections = relationSelections[definition.id] ?? relationPrefillMap[definition.id] ?? [];
                       const helperText = options.length === 0
                         ? 'No eligible nodes available in this workspace.'
                         : definition.description ?? 'Select an option.';
@@ -989,13 +988,12 @@ export function EntityUpsertForm({
                             <label htmlFor={controlId} className="text-sm font-medium text-[var(--agyn-dark)]">
                               {definition.label}
                             </label>
-                            <SelectInput
+                            <Dropdown
                               id={controlId}
                               placeholder={definition.placeholder ?? 'Select an option'}
-                              value={selections[0] ?? ''}
-                              allowEmptyOption
+                              value={selections[0] || undefined}
                               disabled={isSubmitting || options.length === 0}
-                              onChange={(event) => handleSingleRelationChange(definition.id, event.target.value)}
+                              onValueChange={(value) => handleSingleRelationChange(definition.id, value)}
                               helperText={helperText}
                               options={options.map((option) => ({
                                 value: option.id,

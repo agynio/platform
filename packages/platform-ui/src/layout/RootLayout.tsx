@@ -34,6 +34,8 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   entitiesMcp: '/mcp',
   entitiesWorkspaces: '/workspaces',
   entitiesMemory: '/memory',
+  entitiesLlmProviders: '/llm-providers',
+  entitiesLlmModels: '/llm-models',
   containers: '/monitoring/containers',
   resources: '/monitoring/resources',
   llm: '/settings/llm',
@@ -64,6 +66,8 @@ const MENU_ITEMS: MenuItem[] = [
       { id: 'entitiesMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" /> },
       { id: 'entitiesWorkspaces', label: 'Workspaces', icon: <Building2 className="w-4 h-4" /> },
       { id: 'entitiesMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
+      { id: 'entitiesLlmProviders', label: 'LLM Providers', icon: <Server className="w-4 h-4" /> },
+      { id: 'entitiesLlmModels', label: 'LLM Models', icon: <Bot className="w-4 h-4" /> },
     ],
   },
   {
