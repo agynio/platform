@@ -3,8 +3,16 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/forms/Form';
+import { Input } from '@/components/Input';
 import { SelectInput } from '@/components/SelectInput';
 import { useCreateLLMProvider, useLLMProvider, useUpdateLLMProvider } from '@/api/hooks/useLLMProviders';
 import type { LLMAuthMethod } from '@/api/modules/llmEntities';
