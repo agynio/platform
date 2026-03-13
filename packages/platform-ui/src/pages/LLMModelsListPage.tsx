@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -7,6 +7,16 @@ import { useDeleteLLMModel, useLLMModels } from '@/api/hooks/useLLMModels';
 import type { LLMModel, LLMProvider } from '@/api/modules/llmEntities';
 
 const LIST_PATH = '/settings/llm/models';
+const MODEL_PAGE_SIZE = 20;
+const PROVIDER_PAGE_SIZE = 100;
+
+function formatCreatedAt(value: string): string {
+  return new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 
 interface ModelsTableProps {
   rows: LLMModel[];
@@ -30,18 +40,18 @@ function ModelsTable({ rows, providerMap, isLoading, emptyLabel, onEdit, onDelet
     <div className="flex-1 overflow-auto" data-testid="llm-models-table">
       <table className="w-full border-collapse table-fixed">
         <colgroup>
+          <col style={{ width: '22%' }} />
           <col style={{ width: '24%' }} />
-          <col style={{ width: '28%' }} />
           <col style={{ width: '24%' }} />
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '8%' }} />
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '12%' }} />
         </colgroup>
         <thead className="sticky top-0 z-10" data-testid="llm-models-table-header">
           <tr className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
             <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Name</th>
-            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Provider</th>
             <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Remote name</th>
-            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Model ID</th>
+            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Provider</th>
+            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Created</th>
             <th className="text-right px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Actions</th>
           </tr>
         </thead>
@@ -66,20 +76,20 @@ function ModelsTable({ rows, providerMap, isLoading, emptyLabel, onEdit, onDelet
                       {model.name}
                     </span>
                   </td>
-                  <td className="h-[60px] px-6">
-                    <span className="text-sm text-[var(--agyn-text-subtle)]" data-testid="llm-model-provider">
-                      {provider?.endpoint ?? model.llmProviderId}
-                    </span>
-                  </td>
-                  <td className="h-[60px] px-6">
+                <td className="h-[60px] px-6">
                     <span className="text-sm text-[var(--agyn-text-subtle)]" data-testid="llm-model-remote-name">
                       {model.remoteName}
                     </span>
                   </td>
                   <td className="h-[60px] px-6">
-                    <code className="rounded bg-[var(--agyn-bg-light)] px-2 py-1 text-xs text-[var(--agyn-dark)]">
-                      {model.id}
-                    </code>
+                    <span className="text-sm text-[var(--agyn-text-subtle)]" data-testid="llm-model-provider">
+                      {provider?.endpoint}
+                    </span>
+                  </td>
+                  <td className="h-[60px] px-6">
+                    <span className="text-sm text-[var(--agyn-text-subtle)]" data-testid="llm-model-created">
+                      {formatCreatedAt(model.createdAt)}
+                    </span>
                   </td>
                   <td className="h-[60px] px-6">
                     <div className="flex items-center justify-end gap-2">
@@ -111,18 +121,33 @@ function ModelsTable({ rows, providerMap, isLoading, emptyLabel, onEdit, onDelet
 
 export function LLMModelsListPage() {
   const navigate = useNavigate();
-  const modelsQuery = useLLMModels();
-  const providersQuery = useLLMProviders();
+  const [page, setPage] = useState(1);
+  const modelParams = useMemo(() => ({ page, perPage: MODEL_PAGE_SIZE }), [page]);
+  const providerParams = useMemo(() => ({ page: 1, perPage: PROVIDER_PAGE_SIZE }), []);
+  const modelsQuery = useLLMModels(modelParams);
+  const providersQuery = useLLMProviders(providerParams);
   const deleteModel = useDeleteLLMModel();
 
-  const providers = useMemo(() => providersQuery.data ?? [], [providersQuery.data]);
+  const providers = useMemo(() => providersQuery.data?.items ?? [], [providersQuery.data]);
   const providerMap = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
-  const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
+  const models = useMemo(() => modelsQuery.data?.items ?? [], [modelsQuery.data]);
   const sortedModels = useMemo(() => {
     if (models.length === 0) return models;
     const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     return [...models].sort((a, b) => collator.compare(a.name, b.name));
   }, [models]);
+  const totalModels = modelsQuery.data?.total ?? 0;
+  const resolvedPage = modelsQuery.data?.page ?? page;
+  const resolvedPerPage = modelsQuery.data?.perPage ?? MODEL_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(totalModels / resolvedPerPage));
+  const startIndex = totalModels === 0 ? 0 : (resolvedPage - 1) * resolvedPerPage + 1;
+  const endIndex = totalModels === 0 ? 0 : Math.min(totalModels, resolvedPage * resolvedPerPage);
+  const showPagination = pageCount > 1;
+
+  useEffect(() => {
+    if (!modelsQuery.data) return;
+    if (resolvedPage > pageCount) setPage(pageCount);
+  }, [modelsQuery.data, pageCount, resolvedPage]);
 
   const handleCreateClick = () => {
     navigate(`${LIST_PATH}/new`);
@@ -138,7 +163,15 @@ export function LLMModelsListPage() {
     deleteModel.mutate(model.id);
   };
 
-  const disableCreate = providers.length === 0 || providersQuery.isLoading;
+  const handlePreviousPage = () => {
+    setPage((current) => Math.max(1, current - 1));
+  };
+
+  const handleNextPage = () => {
+    setPage((current) => Math.min(pageCount, current + 1));
+  };
+
+  const disableCreate = providers.length === 0 || providersQuery.isLoading || providersQuery.isError;
   const errorMessage = modelsQuery.error?.message ?? providersQuery.error?.message;
 
   return (
@@ -185,6 +218,37 @@ export function LLMModelsListPage() {
           onEdit={handleEditClick}
           onDelete={handleDeleteClick}
         />
+
+        {showPagination && (
+          <div className="border-t border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm text-[var(--agyn-text-subtle)]">
+                Showing {startIndex} to {endIndex} of {totalModels} model{totalModels !== 1 ? 's' : ''}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePreviousPage}
+                  disabled={resolvedPage === 1 || modelsQuery.isLoading}
+                  className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <div className="text-sm text-[var(--agyn-text-subtle)]">
+                  Page {resolvedPage} of {pageCount}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextPage}
+                  disabled={resolvedPage >= pageCount || modelsQuery.isLoading}
+                  className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

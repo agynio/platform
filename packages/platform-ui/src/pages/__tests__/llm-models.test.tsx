@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import React from 'react';
 import userEvent from '@testing-library/user-event';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server, TestProviders, abs } from '../../../__tests__/integration/testUtils';
@@ -59,15 +59,32 @@ describe('LLM models pages', () => {
 
   it('renders model list rows with provider names', async () => {
     const providers = [
-      { id: 'provider-1', endpoint: 'https://api.alpha.com', authMethod: 'bearer' },
+      {
+        id: 'provider-1',
+        endpoint: 'https://api.alpha.com',
+        authMethod: 'bearer',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
     ];
     const models = [
-      { id: 'model-1', name: 'assistant', llmProviderId: 'provider-1', remoteName: 'gpt-4o-mini' },
+      {
+        id: 'model-1',
+        name: 'assistant',
+        llmProviderId: 'provider-1',
+        remoteName: 'gpt-4o-mini',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () => HttpResponse.json(providers)),
-      http.get(abs('/llm/v1/models'), () => HttpResponse.json(models)),
+      http.get(abs('/llm/v1/providers'), () =>
+        HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
+      ),
+      http.get(abs('/llm/v1/models'), () =>
+        HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
+      ),
     );
 
     renderWithRoutes('/settings/llm/models');
@@ -80,14 +97,33 @@ describe('LLM models pages', () => {
   it('creates a model from the form', async () => {
     const user = userEvent.setup();
     const providers = [
-      { id: 'provider-1', endpoint: 'https://api.alpha.com', authMethod: 'bearer' },
+      {
+        id: 'provider-1',
+        endpoint: 'https://api.alpha.com',
+        authMethod: 'bearer',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
     ];
-    let models = [{ id: 'model-1', name: 'assistant', llmProviderId: 'provider-1', remoteName: 'gpt-4o-mini' }];
+    let models = [
+      {
+        id: 'model-1',
+        name: 'assistant',
+        llmProviderId: 'provider-1',
+        remoteName: 'gpt-4o-mini',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
+    ];
     let createPayload: Record<string, string> | null = null;
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () => HttpResponse.json(providers)),
-      http.get(abs('/llm/v1/models'), () => HttpResponse.json(models)),
+      http.get(abs('/llm/v1/providers'), () =>
+        HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
+      ),
+      http.get(abs('/llm/v1/models'), () =>
+        HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
+      ),
       http.post(abs('/llm/v1/models'), async ({ request }) => {
         const payload = (await request.json()) as Record<string, string>;
         createPayload = payload;
@@ -96,6 +132,8 @@ describe('LLM models pages', () => {
           name: payload.name,
           llmProviderId: payload.llmProviderId,
           remoteName: payload.remoteName,
+          createdAt: '2024-02-03T00:00:00.000Z',
+          updatedAt: '2024-02-03T00:00:00.000Z',
         };
         models = [...models, created];
         return HttpResponse.json(created);
@@ -119,5 +157,125 @@ describe('LLM models pages', () => {
 
     expect(await screen.findByText('LLM Models')).toBeInTheDocument();
     expect(await screen.findByText('assistant-preview')).toBeInTheDocument();
+  });
+
+  it('loads existing model values on edit', async () => {
+    const providers = [
+      {
+        id: 'provider-1',
+        endpoint: 'https://api.alpha.com',
+        authMethod: 'bearer',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
+    ];
+    const model = {
+      id: 'model-1',
+      name: 'assistant',
+      llmProviderId: 'provider-1',
+      remoteName: 'gpt-4o-mini',
+      createdAt: '2024-02-01T00:00:00.000Z',
+      updatedAt: '2024-02-02T00:00:00.000Z',
+    };
+
+    server.use(
+      http.get(abs('/llm/v1/providers'), () =>
+        HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
+      ),
+      http.get(abs('/llm/v1/models/:modelId'), () => HttpResponse.json(model)),
+    );
+
+    renderWithRoutes('/settings/llm/models/model-1/edit');
+
+    expect(await screen.findByLabelText('Name')).toHaveValue('assistant');
+    expect(screen.getByLabelText('Provider')).toHaveValue('provider-1');
+    expect(screen.getByLabelText('Remote name')).toHaveValue('gpt-4o-mini');
+  });
+
+  it('deletes a model after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const providers = [
+      {
+        id: 'provider-1',
+        endpoint: 'https://api.alpha.com',
+        authMethod: 'bearer',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
+    ];
+    let models = [
+      {
+        id: 'model-1',
+        name: 'assistant',
+        llmProviderId: 'provider-1',
+        remoteName: 'gpt-4o-mini',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
+      {
+        id: 'model-2',
+        name: 'assistant-2',
+        llmProviderId: 'provider-1',
+        remoteName: 'gpt-4o-mini-2',
+        createdAt: '2024-02-03T00:00:00.000Z',
+        updatedAt: '2024-02-04T00:00:00.000Z',
+      },
+    ];
+
+    server.use(
+      http.get(abs('/llm/v1/providers'), () =>
+        HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
+      ),
+      http.get(abs('/llm/v1/models'), () =>
+        HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
+      ),
+      http.delete(abs('/llm/v1/models/:modelId'), ({ params }) => {
+        models = models.filter((model) => model.id !== params.modelId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderWithRoutes('/settings/llm/models');
+
+    const row = await screen.findByTestId('llm-model-row-model-1');
+    await user.click(within(row).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('llm-model-row-model-1')).not.toBeInTheDocument();
+    });
+
+    confirmSpy.mockRestore();
+  });
+
+  it('blocks empty submit with validation errors', async () => {
+    const user = userEvent.setup();
+    const providers = [
+      {
+        id: 'provider-1',
+        endpoint: 'https://api.alpha.com',
+        authMethod: 'bearer',
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-02T00:00:00.000Z',
+      },
+    ];
+
+    server.use(
+      http.get(abs('/llm/v1/providers'), () =>
+        HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
+      ),
+    );
+
+    renderWithRoutes('/settings/llm/models/new');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(await screen.findByText('Name is required.')).toBeInTheDocument();
+    expect(await screen.findByText('Select a provider.')).toBeInTheDocument();
+    expect(await screen.findByText('Remote name is required.')).toBeInTheDocument();
   });
 });

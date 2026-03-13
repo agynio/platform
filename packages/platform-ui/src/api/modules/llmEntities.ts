@@ -2,10 +2,19 @@ import { llmHttp } from '@/api/http';
 
 export type LLMAuthMethod = 'bearer';
 
+export type PaginatedResponse<T> = {
+  items: T[];
+  page: number;
+  perPage: number;
+  total: number;
+};
+
 export type LLMProvider = {
   id: string;
   endpoint: string;
   authMethod: LLMAuthMethod;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type LLMProviderCreateInput = {
@@ -25,6 +34,8 @@ export type LLMModel = {
   name: string;
   llmProviderId: string;
   remoteName: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type LLMModelCreateInput = {
@@ -39,26 +50,19 @@ export type LLMModelUpdateInput = {
   remoteName?: string;
 };
 
-type ProviderListResponse = LLMProvider[] | { items?: LLMProvider[] } | null | undefined;
-type ModelListResponse = LLMModel[] | { items?: LLMModel[] } | null | undefined;
+export type ListLLMProvidersParams = {
+  page?: number;
+  perPage?: number;
+};
 
-function normalizeProviderList(payload: ProviderListResponse): LLMProvider[] {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.items)) return payload.items;
-  return [];
-}
+export type ListLLMModelsParams = {
+  page?: number;
+  perPage?: number;
+  providerId?: string;
+};
 
-function normalizeModelList(payload: ModelListResponse): LLMModel[] {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.items)) return payload.items;
-  return [];
-}
-
-export async function listLLMProviders(): Promise<LLMProvider[]> {
-  const res = await llmHttp.get<ProviderListResponse>('/providers');
-  return normalizeProviderList(res);
+export function listLLMProviders(params: ListLLMProvidersParams = {}): Promise<PaginatedResponse<LLMProvider>> {
+  return llmHttp.get<PaginatedResponse<LLMProvider>>('/providers', { params });
 }
 
 export function getLLMProvider(id: string): Promise<LLMProvider> {
@@ -77,9 +81,8 @@ export function deleteLLMProvider(id: string): Promise<void> {
   return llmHttp.delete<void>(`/providers/${encodeURIComponent(id)}`);
 }
 
-export async function listLLMModels(): Promise<LLMModel[]> {
-  const res = await llmHttp.get<ModelListResponse>('/models');
-  return normalizeModelList(res);
+export function listLLMModels(params: ListLLMModelsParams = {}): Promise<PaginatedResponse<LLMModel>> {
+  return llmHttp.get<PaginatedResponse<LLMModel>>('/models', { params });
 }
 
 export function getLLMModel(id: string): Promise<LLMModel> {

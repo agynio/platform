@@ -1,16 +1,30 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDeleteLLMProvider, useLLMProviders } from '@/api/hooks/useLLMProviders';
-import type { LLMProvider } from '@/api/modules/llmEntities';
+import type { LLMAuthMethod, LLMProvider } from '@/api/modules/llmEntities';
 
 const LIST_PATH = '/settings/llm/providers';
+const PAGE_SIZE = 20;
 
-function formatAuthMethod(value: string) {
-  if (!value) return 'Unknown';
-  if (value === 'bearer') return 'Bearer';
-  return value;
+function formatAuthMethod(value: LLMAuthMethod): string {
+  switch (value) {
+    case 'bearer':
+      return 'Bearer';
+    default: {
+      const exhaustive: never = value;
+      throw new Error(`Unknown auth method: ${exhaustive}`);
+    }
+  }
+}
+
+function formatCreatedAt(value: string): string {
+  return new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 interface ProvidersTableProps {
@@ -45,7 +59,7 @@ function ProvidersTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: Provi
             <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">
               Auth method
             </th>
-            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Provider ID</th>
+            <th className="text-left px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Created</th>
             <th className="text-right px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)] bg-white">Actions</th>
           </tr>
         </thead>
@@ -74,9 +88,9 @@ function ProvidersTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: Provi
                   </span>
                 </td>
                 <td className="h-[60px] px-6">
-                  <code className="rounded bg-[var(--agyn-bg-light)] px-2 py-1 text-xs text-[var(--agyn-dark)]">
-                    {provider.id}
-                  </code>
+                  <span className="text-sm text-[var(--agyn-text-subtle)]" data-testid="llm-provider-created">
+                    {formatCreatedAt(provider.createdAt)}
+                  </span>
                 </td>
                 <td className="h-[60px] px-6">
                   <div className="flex items-center justify-end gap-2">
@@ -107,15 +121,29 @@ function ProvidersTable({ rows, isLoading, emptyLabel, onEdit, onDelete }: Provi
 
 export function LLMProvidersListPage() {
   const navigate = useNavigate();
-  const providersQuery = useLLMProviders();
+  const [page, setPage] = useState(1);
+  const paginationParams = useMemo(() => ({ page, perPage: PAGE_SIZE }), [page]);
+  const providersQuery = useLLMProviders(paginationParams);
   const deleteProvider = useDeleteLLMProvider();
 
-  const providers = useMemo(() => providersQuery.data ?? [], [providersQuery.data]);
+  const providers = useMemo(() => providersQuery.data?.items ?? [], [providersQuery.data]);
   const sortedProviders = useMemo(() => {
     if (providers.length === 0) return providers;
     const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     return [...providers].sort((a, b) => collator.compare(a.endpoint, b.endpoint));
   }, [providers]);
+  const totalProviders = providersQuery.data?.total ?? 0;
+  const resolvedPage = providersQuery.data?.page ?? page;
+  const resolvedPerPage = providersQuery.data?.perPage ?? PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(totalProviders / resolvedPerPage));
+  const startIndex = totalProviders === 0 ? 0 : (resolvedPage - 1) * resolvedPerPage + 1;
+  const endIndex = totalProviders === 0 ? 0 : Math.min(totalProviders, resolvedPage * resolvedPerPage);
+  const showPagination = pageCount > 1;
+
+  useEffect(() => {
+    if (!providersQuery.data) return;
+    if (resolvedPage > pageCount) setPage(pageCount);
+  }, [pageCount, providersQuery.data, resolvedPage]);
 
   const handleCreateClick = () => {
     navigate(`${LIST_PATH}/new`);
@@ -129,6 +157,14 @@ export function LLMProvidersListPage() {
     const confirmed = window.confirm(`Delete provider ${provider.endpoint}? This action cannot be undone.`);
     if (!confirmed) return;
     deleteProvider.mutate(provider.id);
+  };
+
+  const handlePreviousPage = () => {
+    setPage((current) => Math.max(1, current - 1));
+  };
+
+  const handleNextPage = () => {
+    setPage((current) => Math.min(pageCount, current + 1));
   };
 
   return (
@@ -169,6 +205,37 @@ export function LLMProvidersListPage() {
           onEdit={handleEditClick}
           onDelete={handleDeleteClick}
         />
+
+        {showPagination && (
+          <div className="border-t border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm text-[var(--agyn-text-subtle)]">
+                Showing {startIndex} to {endIndex} of {totalProviders} provider{totalProviders !== 1 ? 's' : ''}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePreviousPage}
+                  disabled={resolvedPage === 1 || providersQuery.isLoading}
+                  className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <div className="text-sm text-[var(--agyn-text-subtle)]">
+                  Page {resolvedPage} of {pageCount}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextPage}
+                  disabled={resolvedPage >= pageCount || providersQuery.isLoading}
+                  className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

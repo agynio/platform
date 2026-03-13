@@ -7,10 +7,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { SelectInput } from '@/components/SelectInput';
 import { useLLMProviders } from '@/api/hooks/useLLMProviders';
-import { useCreateLLMModel, useLLMModels, useUpdateLLMModel } from '@/api/hooks/useLLMModels';
-import type { LLMModel, LLMProvider } from '@/api/modules/llmEntities';
+import { useCreateLLMModel, useLLMModel, useUpdateLLMModel } from '@/api/hooks/useLLMModels';
+import type { LLMProvider } from '@/api/modules/llmEntities';
 
 const LIST_PATH = '/settings/llm/models';
+const PROVIDERS_PAGE_SIZE = 100;
 
 type ModelFormValues = {
   name: string;
@@ -22,11 +23,6 @@ export interface LLMModelUpsertPageProps {
   mode: 'create' | 'edit';
 }
 
-function resolveModelById(models: LLMModel[], modelId?: string | null) {
-  if (!modelId) return undefined;
-  return models.find((model) => model.id === modelId);
-}
-
 function resolveProviderOptions(providers: LLMProvider[]) {
   return providers.map((provider) => ({ value: provider.id, label: provider.endpoint }));
 }
@@ -35,15 +31,15 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
   const navigate = useNavigate();
   const params = useParams();
   const modelId = params.modelId ?? null;
-  const modelsQuery = useLLMModels();
-  const providersQuery = useLLMProviders();
+  const providerParams = useMemo(() => ({ page: 1, perPage: PROVIDERS_PAGE_SIZE }), []);
+  const providersQuery = useLLMProviders(providerParams);
+  const modelQuery = useLLMModel(mode === 'edit' ? modelId : null);
   const createModel = useCreateLLMModel();
   const updateModel = useUpdateLLMModel();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
-  const providers = useMemo(() => providersQuery.data ?? [], [providersQuery.data]);
-  const model = useMemo(() => resolveModelById(models, modelId), [models, modelId]);
+  const providers = useMemo(() => providersQuery.data?.items ?? [], [providersQuery.data]);
+  const model = modelQuery.data;
   const providerOptions = useMemo(() => resolveProviderOptions(providers), [providers]);
 
   const form = useForm<ModelFormValues>({
@@ -65,7 +61,7 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
   }, [form, mode, model]);
 
   const isSubmitting = createModel.isPending || updateModel.isPending;
-  const showNotFound = mode === 'edit' && !modelsQuery.isLoading && !model;
+  const showNotFound = mode === 'edit' && !modelQuery.isLoading && !modelQuery.isError && !model;
   const showFormFields = mode === 'create' || Boolean(model);
   const providersReady = providers.length > 0;
 
@@ -75,25 +71,9 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
 
   const handleSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
-
     const name = values.name.trim();
     const remoteName = values.remoteName.trim();
     const llmProviderId = values.llmProviderId;
-
-    if (!name) {
-      form.setError('name', { message: 'Name is required.' });
-      return;
-    }
-
-    if (!llmProviderId) {
-      form.setError('llmProviderId', { message: 'Select a provider.' });
-      return;
-    }
-
-    if (!remoteName) {
-      form.setError('remoteName', { message: 'Remote name is required.' });
-      return;
-    }
 
     try {
       if (mode === 'create') {
@@ -146,11 +126,11 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            {(modelsQuery.isError || providersQuery.isError) && (
+            {(modelQuery.isError || providersQuery.isError) && (
               <Alert variant="destructive">
                 <AlertTitle>Unable to load models</AlertTitle>
                 <AlertDescription>
-                  {modelsQuery.error?.message ?? providersQuery.error?.message ?? 'Check your connection and try again.'}
+                  {modelQuery.error?.message ?? providersQuery.error?.message ?? 'Check your connection and try again.'}
                 </AlertDescription>
               </Alert>
             )}
@@ -176,7 +156,7 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
               </Alert>
             )}
 
-            {mode === 'edit' && modelsQuery.isLoading && (
+            {mode === 'edit' && modelQuery.isLoading && (
               <p className="text-sm text-[var(--agyn-text-subtle)]">Loading model...</p>
             )}
 
@@ -185,7 +165,10 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                 <FormField
                   control={form.control}
                   name="name"
-                  rules={{ required: 'Name is required.' }}
+                  rules={{
+                    validate: (value: string) =>
+                      value.trim().length > 0 ? true : 'Name is required.',
+                  }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Name</FormLabel>
@@ -222,7 +205,10 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                 <FormField
                   control={form.control}
                   name="remoteName"
-                  rules={{ required: 'Remote name is required.' }}
+                  rules={{
+                    validate: (value: string) =>
+                      value.trim().length > 0 ? true : 'Remote name is required.',
+                  }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Remote name</FormLabel>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -6,8 +6,8 @@ import { Button } from '@/components/Button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { SelectInput } from '@/components/SelectInput';
-import { useCreateLLMProvider, useLLMProviders, useUpdateLLMProvider } from '@/api/hooks/useLLMProviders';
-import type { LLMAuthMethod, LLMProvider } from '@/api/modules/llmEntities';
+import { useCreateLLMProvider, useLLMProvider, useUpdateLLMProvider } from '@/api/hooks/useLLMProviders';
+import type { LLMAuthMethod } from '@/api/modules/llmEntities';
 
 const LIST_PATH = '/settings/llm/providers';
 
@@ -32,21 +32,14 @@ function isValidEndpoint(value: string): boolean {
   }
 }
 
-function resolveProviderById(providers: LLMProvider[], providerId?: string | null) {
-  if (!providerId) return undefined;
-  return providers.find((provider) => provider.id === providerId);
-}
-
 export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
   const navigate = useNavigate();
   const params = useParams();
   const providerId = params.providerId ?? null;
-  const providersQuery = useLLMProviders();
+  const providerQuery = useLLMProvider(mode === 'edit' ? providerId : null);
   const createProvider = useCreateLLMProvider();
   const updateProvider = useUpdateLLMProvider();
-
-  const providers = useMemo(() => providersQuery.data ?? [], [providersQuery.data]);
-  const provider = useMemo(() => resolveProviderById(providers, providerId), [providers, providerId]);
+  const provider = providerQuery.data;
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const form = useForm<ProviderFormValues>({
@@ -68,7 +61,7 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
   }, [form, mode, provider]);
 
   const isSubmitting = createProvider.isPending || updateProvider.isPending;
-  const showNotFound = mode === 'edit' && !providersQuery.isLoading && !provider;
+  const showNotFound = mode === 'edit' && !providerQuery.isLoading && !providerQuery.isError && !provider;
   const showFormFields = mode === 'create' || Boolean(provider);
 
   const handleCancel = () => {
@@ -79,26 +72,6 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
     setSubmitError(null);
     const endpoint = values.endpoint.trim();
     const token = values.token.trim();
-
-    if (!endpoint) {
-      form.setError('endpoint', { message: 'Endpoint is required.' });
-      return;
-    }
-
-    if (!isValidEndpoint(endpoint)) {
-      form.setError('endpoint', { message: 'Enter a valid http(s) URL.' });
-      return;
-    }
-
-    if (!values.authMethod) {
-      form.setError('authMethod', { message: 'Select an authentication method.' });
-      return;
-    }
-
-    if (mode === 'create' && !token) {
-      form.setError('token', { message: 'Token is required.' });
-      return;
-    }
 
     try {
       if (mode === 'create') {
@@ -151,10 +124,10 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            {providersQuery.isError && (
+            {providerQuery.isError && (
               <Alert variant="destructive">
-                <AlertTitle>Unable to load providers</AlertTitle>
-                <AlertDescription>{providersQuery.error?.message ?? 'Check your connection and try again.'}</AlertDescription>
+                <AlertTitle>Unable to load provider</AlertTitle>
+                <AlertDescription>{providerQuery.error?.message ?? 'Check your connection and try again.'}</AlertDescription>
               </Alert>
             )}
 
@@ -172,7 +145,7 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
               </Alert>
             )}
 
-            {mode === 'edit' && providersQuery.isLoading && (
+            {mode === 'edit' && providerQuery.isLoading && (
               <p className="text-sm text-[var(--agyn-text-subtle)]">Loading provider...</p>
             )}
 
@@ -181,7 +154,14 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
                 <FormField
                   control={form.control}
                   name="endpoint"
-                  rules={{ required: 'Endpoint is required.' }}
+                  rules={{
+                    validate: (value: string) => {
+                      const trimmed = value.trim();
+                      if (!trimmed) return 'Endpoint is required.';
+                      if (!isValidEndpoint(trimmed)) return 'Enter a valid http(s) URL.';
+                      return true;
+                    },
+                  }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Endpoint</FormLabel>
@@ -222,7 +202,14 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
                 <FormField
                   control={form.control}
                   name="token"
-                  rules={mode === 'create' ? { required: 'Token is required.' } : undefined}
+                  rules={
+                    mode === 'create'
+                      ? {
+                          validate: (value: string) =>
+                            value.trim().length > 0 ? true : 'Token is required.',
+                        }
+                      : undefined
+                  }
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Bearer token</FormLabel>
