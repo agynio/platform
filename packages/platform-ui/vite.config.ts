@@ -18,6 +18,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/llm': {
+        target: process.env.VITE_PROXY_TARGET || 'http://platform-server:3010',
+        changeOrigin: true,
+      },
     },
   },
   resolve: {

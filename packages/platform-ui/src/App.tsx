@@ -17,6 +17,10 @@ import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
 import { SettingsLlm } from './pages/SettingsLlm';
+import { LLMProvidersListPage } from './pages/LLMProvidersListPage';
+import { LLMProviderUpsertPage } from './pages/LLMProviderUpsertPage';
+import { LLMModelsListPage } from './pages/LLMModelsListPage';
+import { LLMModelUpsertPage } from './pages/LLMModelUpsertPage';
 import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
@@ -132,6 +136,12 @@ function App() {
                 <Route path="/monitoring/resources" element={<MonitoringResources />} />
                 {/* Settings */}
                 <Route path="/settings/llm" element={<SettingsLlm />} />
+                <Route path="/settings/llm/providers" element={<LLMProvidersListPage />} />
+                <Route path="/settings/llm/providers/new" element={<LLMProviderUpsertPage mode="create" />} />
+                <Route path="/settings/llm/providers/:providerId/edit" element={<LLMProviderUpsertPage mode="edit" />} />
+                <Route path="/settings/llm/models" element={<LLMModelsListPage />} />
+                <Route path="/settings/llm/models/new" element={<LLMModelUpsertPage mode="create" />} />
+                <Route path="/settings/llm/models/:modelId/edit" element={<LLMModelUpsertPage mode="edit" />} />
                 <Route path="/settings/secrets" element={<SettingsSecrets />} />
                 <Route path="/settings/variables" element={<SettingsVariables />} />
               </Route>

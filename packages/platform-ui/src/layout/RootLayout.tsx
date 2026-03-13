@@ -37,6 +37,8 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   containers: '/monitoring/containers',
   resources: '/monitoring/resources',
   llm: '/settings/llm',
+  llmProviders: '/settings/llm/providers',
+  llmModels: '/settings/llm/models',
   secrets: '/settings/secrets',
   variables: '/settings/variables',
 };
@@ -81,6 +83,8 @@ const MENU_ITEMS: MenuItem[] = [
     icon: <Settings className="w-5 h-5" />,
     items: [
       { id: 'llm', label: 'LLM', icon: <Bot className="w-4 h-4" /> },
+      { id: 'llmProviders', label: 'LLM Providers', icon: <Server className="w-4 h-4" /> },
+      { id: 'llmModels', label: 'LLM Models', icon: <Layers className="w-4 h-4" /> },
       { id: 'secrets', label: 'Secrets', icon: <Key className="w-4 h-4" /> },
       { id: 'variables', label: 'Variables', icon: <Variable className="w-4 h-4" /> },
     ],
