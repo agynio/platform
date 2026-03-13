@@ -20,26 +20,6 @@ import type { PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
-const pointerProto = Element.prototype as typeof Element.prototype & {
-  hasPointerCapture?: (pointerId: number) => boolean;
-  setPointerCapture?: (pointerId: number) => void;
-  releasePointerCapture?: (pointerId: number) => void;
-  scrollIntoView?: (opts?: ScrollIntoViewOptions | boolean) => void;
-};
-
-if (!pointerProto.hasPointerCapture) {
-  pointerProto.hasPointerCapture = () => false;
-}
-if (!pointerProto.setPointerCapture) {
-  pointerProto.setPointerCapture = () => {};
-}
-if (!pointerProto.releasePointerCapture) {
-  pointerProto.releasePointerCapture = () => {};
-}
-if (!pointerProto.scrollIntoView) {
-  pointerProto.scrollIntoView = () => {};
-}
-
 function createTemplate(name: string, kind: GraphEntityKind = 'workspace'): TemplateOption {
   const schema: TemplateSchema = {
     name,

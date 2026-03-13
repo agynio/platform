@@ -58,18 +58,20 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
         remoteName: model.remoteName,
       });
     }
+  }, [form, mode, model, providers]);
+
+  useEffect(() => {
+    if (mode !== 'edit' || !model) return;
+    const handle = setTimeout(() => {
+      form.setValue('llmProviderId', model.llmProviderId, { shouldDirty: false, shouldTouch: false });
+    }, 0);
+    return () => clearTimeout(handle);
   }, [form, mode, model]);
 
   const isSubmitting = createModel.isPending || updateModel.isPending;
   const showNotFound = mode === 'edit' && !modelQuery.isLoading && !modelQuery.isError && !model;
   const showFormFields = mode === 'create' || Boolean(model);
   const providersReady = providers.length > 0;
-
-  useEffect(() => {
-    if (mode === 'edit' && model && providersReady) {
-      form.setValue('llmProviderId', model.llmProviderId, { shouldDirty: false, shouldTouch: false });
-    }
-  }, [form, mode, model, providersReady]);
 
   const handleCancel = () => {
     navigate(LIST_PATH);
@@ -200,7 +202,7 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                       <FormLabel>Provider</FormLabel>
                       <FormControl>
                         <Dropdown
-                          value={field.value || undefined}
+                          value={field.value}
                           onValueChange={(value) => field.onChange(value)}
                           disabled={isSubmitting || !providersReady}
                           placeholder="Select a provider"

@@ -151,6 +151,28 @@ const applyBrowserMocks = () => {
     });
   }
 
+  const elementProto = g.Element?.prototype as (typeof Element.prototype & {
+    hasPointerCapture?: (pointerId: number) => boolean;
+    setPointerCapture?: (pointerId: number) => void;
+    releasePointerCapture?: (pointerId: number) => void;
+    scrollIntoView?: (opts?: ScrollIntoViewOptions | boolean) => void;
+  }) | undefined;
+
+  if (elementProto) {
+    if (!elementProto.hasPointerCapture) {
+      elementProto.hasPointerCapture = () => false;
+    }
+    if (!elementProto.setPointerCapture) {
+      elementProto.setPointerCapture = () => {};
+    }
+    if (!elementProto.releasePointerCapture) {
+      elementProto.releasePointerCapture = () => {};
+    }
+    if (!elementProto.scrollIntoView) {
+      elementProto.scrollIntoView = () => {};
+    }
+  }
+
   forceAxiosFetchAdapter();
 };
 

@@ -95,8 +95,8 @@ export function Dropdown({
                 ${size === 'sm' ? 'px-3 !h-10' : 'px-4 py-3'}
               `
             }
-          ${triggerClassName}
-          `}
+            ${triggerClassName}
+            `}
           {...triggerProps}
         >
           <SelectValue placeholder={placeholder}>{selectedLabel}</SelectValue>

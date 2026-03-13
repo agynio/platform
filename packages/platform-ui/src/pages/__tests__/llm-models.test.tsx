@@ -8,22 +8,6 @@ import { server, TestProviders, abs } from '../../../__tests__/integration/testU
 import { LLMModelsListPage } from '../LLMModelsListPage';
 import { LLMModelUpsertPage } from '../LLMModelUpsertPage';
 
-if (!HTMLElement.prototype.hasPointerCapture) {
-  HTMLElement.prototype.hasPointerCapture = () => false;
-}
-
-if (!HTMLElement.prototype.setPointerCapture) {
-  HTMLElement.prototype.setPointerCapture = () => {};
-}
-
-if (!HTMLElement.prototype.releasePointerCapture) {
-  HTMLElement.prototype.releasePointerCapture = () => {};
-}
-
-if (!HTMLElement.prototype.scrollIntoView) {
-  HTMLElement.prototype.scrollIntoView = () => {};
-}
-
 const notifyMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
@@ -162,7 +146,6 @@ describe('LLM models pages', () => {
   });
 
   it('loads existing model values on edit', async () => {
-    const user = userEvent.setup();
     const providers = [
       {
         id: 'provider-1',
@@ -192,9 +175,7 @@ describe('LLM models pages', () => {
 
     expect(await screen.findByLabelText('Name')).toHaveValue('assistant');
     const providerSelect = screen.getByRole('combobox', { name: 'Provider' });
-    await user.click(providerSelect);
-    const providerOption = await screen.findByRole('option', { name: 'https://api.alpha.com' });
-    await user.click(providerOption);
+    await waitFor(() => expect(providerSelect).toHaveTextContent('https://api.alpha.com'));
     expect(screen.getByLabelText('Remote name')).toHaveValue('gpt-4o-mini');
   });
 

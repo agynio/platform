@@ -8,22 +8,6 @@ import { server, TestProviders, abs } from '../../../__tests__/integration/testU
 import { LLMProvidersListPage } from '../LLMProvidersListPage';
 import { LLMProviderUpsertPage } from '../LLMProviderUpsertPage';
 
-if (!HTMLElement.prototype.hasPointerCapture) {
-  HTMLElement.prototype.hasPointerCapture = () => false;
-}
-
-if (!HTMLElement.prototype.setPointerCapture) {
-  HTMLElement.prototype.setPointerCapture = () => {};
-}
-
-if (!HTMLElement.prototype.releasePointerCapture) {
-  HTMLElement.prototype.releasePointerCapture = () => {};
-}
-
-if (!HTMLElement.prototype.scrollIntoView) {
-  HTMLElement.prototype.scrollIntoView = () => {};
-}
-
 const notifyMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
