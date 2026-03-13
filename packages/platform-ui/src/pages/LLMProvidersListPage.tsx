@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDeleteLLMProvider, useLLMProviders } from '@/api/hooks/useLLMProviders';
 import type { LLMAuthMethod, LLMProvider } from '@/api/modules/llmEntities';
 
-const LIST_PATH = '/settings/llm/providers';
+const LIST_PATH = '/llm-providers';
 const PAGE_SIZE = 20;
 
 function formatAuthMethod(value: LLMAuthMethod): string {

@@ -6,7 +6,7 @@ import { useLLMProviders } from '@/api/hooks/useLLMProviders';
 import { useDeleteLLMModel, useLLMModels } from '@/api/hooks/useLLMModels';
 import type { LLMModel, LLMProvider } from '@/api/modules/llmEntities';
 
-const LIST_PATH = '/settings/llm/models';
+const LIST_PATH = '/llm-models';
 const MODEL_PAGE_SIZE = 20;
 const PROVIDER_PAGE_SIZE = 100;
 

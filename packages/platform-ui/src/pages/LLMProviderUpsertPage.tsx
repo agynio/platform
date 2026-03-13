@@ -9,7 +9,7 @@ import { SelectInput } from '@/components/SelectInput';
 import { useCreateLLMProvider, useLLMProvider, useUpdateLLMProvider } from '@/api/hooks/useLLMProviders';
 import type { LLMAuthMethod } from '@/api/modules/llmEntities';
 
-const LIST_PATH = '/settings/llm/providers';
+const LIST_PATH = '/llm-providers';
 
 const AUTH_METHOD_OPTIONS = [{ value: 'bearer', label: 'Bearer token' }];
 
@@ -35,7 +35,7 @@ function isValidEndpoint(value: string): boolean {
 export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
   const navigate = useNavigate();
   const params = useParams();
-  const providerId = params.providerId ?? null;
+  const providerId = params.id ?? null;
   const providerQuery = useLLMProvider(mode === 'edit' ? providerId : null);
   const createProvider = useCreateLLMProvider();
   const updateProvider = useUpdateLLMProvider();

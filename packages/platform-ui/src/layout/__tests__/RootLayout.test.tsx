@@ -51,6 +51,8 @@ describe('RootLayout navigation', () => {
       'entitiesMcp',
       'entitiesWorkspaces',
       'entitiesMemory',
+      'entitiesLlmProviders',
+      'entitiesLlmModels',
     ]);
     expect(props.selectedMenuItem).toBe('entitiesAgents');
   });

@@ -39,9 +39,9 @@ function renderWithRoutes(initialEntry: string) {
     <TestProviders>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path="/settings/llm/models" element={<LLMModelsListPage />} />
-          <Route path="/settings/llm/models/new" element={<LLMModelUpsertPage mode="create" />} />
-          <Route path="/settings/llm/models/:modelId/edit" element={<LLMModelUpsertPage mode="edit" />} />
+          <Route path="/llm-models" element={<LLMModelsListPage />} />
+          <Route path="/llm-models/new" element={<LLMModelUpsertPage mode="create" />} />
+          <Route path="/llm-models/:id/edit" element={<LLMModelUpsertPage mode="edit" />} />
         </Routes>
       </MemoryRouter>
     </TestProviders>,
@@ -87,7 +87,7 @@ describe('LLM models pages', () => {
       ),
     );
 
-    renderWithRoutes('/settings/llm/models');
+    renderWithRoutes('/llm-models');
 
     expect(await screen.findByText('LLM Models')).toBeInTheDocument();
     expect(await screen.findByTestId('llm-model-row-model-1')).toBeInTheDocument();
@@ -140,7 +140,7 @@ describe('LLM models pages', () => {
       }),
     );
 
-    renderWithRoutes('/settings/llm/models/new');
+    renderWithRoutes('/llm-models/new');
 
     await user.type(screen.getByLabelText('Name'), 'assistant-preview');
     await user.selectOptions(screen.getByLabelText('Provider'), 'provider-1');
@@ -185,7 +185,7 @@ describe('LLM models pages', () => {
       http.get(abs('/llm/v1/models/:modelId'), () => HttpResponse.json(model)),
     );
 
-    renderWithRoutes('/settings/llm/models/model-1/edit');
+    renderWithRoutes('/llm-models/model-1/edit');
 
     expect(await screen.findByLabelText('Name')).toHaveValue('assistant');
     expect(screen.getByLabelText('Provider')).toHaveValue('provider-1');
@@ -236,7 +236,7 @@ describe('LLM models pages', () => {
       }),
     );
 
-    renderWithRoutes('/settings/llm/models');
+    renderWithRoutes('/llm-models');
 
     const row = await screen.findByTestId('llm-model-row-model-1');
     await user.click(within(row).getByRole('button', { name: 'Delete' }));
@@ -266,7 +266,7 @@ describe('LLM models pages', () => {
       ),
     );
 
-    renderWithRoutes('/settings/llm/models/new');
+    renderWithRoutes('/llm-models/new');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();

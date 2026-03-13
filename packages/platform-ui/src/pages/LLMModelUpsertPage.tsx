@@ -10,7 +10,7 @@ import { useLLMProviders } from '@/api/hooks/useLLMProviders';
 import { useCreateLLMModel, useLLMModel, useUpdateLLMModel } from '@/api/hooks/useLLMModels';
 import type { LLMProvider } from '@/api/modules/llmEntities';
 
-const LIST_PATH = '/settings/llm/models';
+const LIST_PATH = '/llm-models';
 const PROVIDERS_PAGE_SIZE = 100;
 
 type ModelFormValues = {
@@ -30,7 +30,7 @@ function resolveProviderOptions(providers: LLMProvider[]) {
 export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
   const navigate = useNavigate();
   const params = useParams();
-  const modelId = params.modelId ?? null;
+  const modelId = params.id ?? null;
   const providerParams = useMemo(() => ({ page: 1, perPage: PROVIDERS_PAGE_SIZE }), []);
   const providersQuery = useLLMProviders(providerParams);
   const modelQuery = useLLMModel(mode === 'edit' ? modelId : null);

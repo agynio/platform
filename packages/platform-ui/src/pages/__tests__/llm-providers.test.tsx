@@ -39,9 +39,9 @@ function renderWithRoutes(initialEntry: string) {
     <TestProviders>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path="/settings/llm/providers" element={<LLMProvidersListPage />} />
-          <Route path="/settings/llm/providers/new" element={<LLMProviderUpsertPage mode="create" />} />
-          <Route path="/settings/llm/providers/:providerId/edit" element={<LLMProviderUpsertPage mode="edit" />} />
+          <Route path="/llm-providers" element={<LLMProvidersListPage />} />
+          <Route path="/llm-providers/new" element={<LLMProviderUpsertPage mode="create" />} />
+          <Route path="/llm-providers/:id/edit" element={<LLMProviderUpsertPage mode="edit" />} />
         </Routes>
       </MemoryRouter>
     </TestProviders>,
@@ -81,7 +81,7 @@ describe('LLM providers pages', () => {
       ),
     );
 
-    renderWithRoutes('/settings/llm/providers');
+    renderWithRoutes('/llm-providers');
 
     expect(await screen.findByText('LLM Providers')).toBeInTheDocument();
     expect(await screen.findByTestId('llm-provider-row-provider-1')).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('LLM providers pages', () => {
       }),
     );
 
-    renderWithRoutes('/settings/llm/providers/new');
+    renderWithRoutes('/llm-providers/new');
 
     await user.type(screen.getByLabelText('Endpoint'), 'https://api.new.com');
     await user.type(screen.getByLabelText('Bearer token'), 'token-123');
@@ -151,7 +151,7 @@ describe('LLM providers pages', () => {
       http.get(abs('/llm/v1/providers/:providerId'), () => HttpResponse.json(provider)),
     );
 
-    renderWithRoutes('/settings/llm/providers/provider-1/edit');
+    renderWithRoutes('/llm-providers/provider-1/edit');
 
     expect(await screen.findByLabelText('Endpoint')).toHaveValue('https://api.alpha.com');
     expect(screen.getByLabelText('Authentication method')).toHaveValue('bearer');
@@ -187,7 +187,7 @@ describe('LLM providers pages', () => {
       }),
     );
 
-    renderWithRoutes('/settings/llm/providers');
+    renderWithRoutes('/llm-providers');
 
     const row = await screen.findByTestId('llm-provider-row-provider-1');
     await user.click(within(row).getByRole('button', { name: 'Delete' }));
@@ -202,7 +202,7 @@ describe('LLM providers pages', () => {
   it('blocks empty submit with validation errors', async () => {
     const user = userEvent.setup();
 
-    renderWithRoutes('/settings/llm/providers/new');
+    renderWithRoutes('/llm-providers/new');
 
     await user.click(screen.getByRole('button', { name: 'Create' }));
 

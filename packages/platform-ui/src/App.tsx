@@ -114,6 +114,12 @@ function App() {
                     />
                   )}
                 />
+                <Route path="/llm-providers" element={<LLMProvidersListPage />} />
+                <Route path="/llm-providers/new" element={<LLMProviderUpsertPage mode="create" />} />
+                <Route path="/llm-providers/:id/edit" element={<LLMProviderUpsertPage mode="edit" />} />
+                <Route path="/llm-models" element={<LLMModelsListPage />} />
+                <Route path="/llm-models/new" element={<LLMModelUpsertPage mode="create" />} />
+                <Route path="/llm-models/:id/edit" element={<LLMModelUpsertPage mode="edit" />} />
 
                 {/* Tracing */}
                 <Route path="/tracing/traces" element={<TracingTraces />} />
@@ -136,12 +142,6 @@ function App() {
                 <Route path="/monitoring/resources" element={<MonitoringResources />} />
                 {/* Settings */}
                 <Route path="/settings/llm" element={<SettingsLlm />} />
-                <Route path="/settings/llm/providers" element={<LLMProvidersListPage />} />
-                <Route path="/settings/llm/providers/new" element={<LLMProviderUpsertPage mode="create" />} />
-                <Route path="/settings/llm/providers/:providerId/edit" element={<LLMProviderUpsertPage mode="edit" />} />
-                <Route path="/settings/llm/models" element={<LLMModelsListPage />} />
-                <Route path="/settings/llm/models/new" element={<LLMModelUpsertPage mode="create" />} />
-                <Route path="/settings/llm/models/:modelId/edit" element={<LLMModelUpsertPage mode="edit" />} />
                 <Route path="/settings/secrets" element={<SettingsSecrets />} />
                 <Route path="/settings/variables" element={<SettingsVariables />} />
               </Route>
