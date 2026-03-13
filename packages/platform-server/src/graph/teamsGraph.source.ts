@@ -3,8 +3,10 @@ import { create, toJson } from '@bufbuild/protobuf';
 import { ValueSchema } from '@bufbuild/protobuf/wkt';
 
 import type { PersistedGraphEdge, PersistedGraphNode } from '../shared/types/graph.types';
+import { listAllPages, readString } from '../teams/teamsGrpc.pagination';
 import { TEAMS_GRPC_CLIENT } from '../teams/teamsGrpc.token';
 import type { TeamsGrpcClient } from '../teams/teamsGrpc.client';
+import { edgeKey } from './graph.utils';
 import {
   Agent,
   AgentProcessBuffer,
@@ -27,9 +29,6 @@ import {
   WorkspaceConfiguration,
   WorkspacePlatform,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb';
-
-const DEFAULT_PAGE_SIZE = 100;
-const MAX_PAGES = 50;
 
 const TOOL_TYPES: ToolType[] = [
   ToolType.MANAGE,
@@ -107,7 +106,7 @@ export class TeamsGraphSource {
     const addEdge = (source: string, sourceHandle: string, target: string, targetHandle: string): void => {
       if (!nodeIds.has(source) || !nodeIds.has(target)) return;
       if (!sourceHandle || !targetHandle) return;
-      const key = this.edgeKey({ source, sourceHandle, target, targetHandle });
+      const key = edgeKey({ source, sourceHandle, target, targetHandle });
       if (edgeKeys.has(key)) return;
       edgeKeys.add(key);
       edges.push({ id: key, source, sourceHandle, target, targetHandle });
@@ -211,7 +210,7 @@ export class TeamsGraphSource {
   }
 
   private async listAllAgents(): Promise<Agent[]> {
-    return this.listAllPages((page, perPage) =>
+    return listAllPages((page, perPage) =>
       this.teams.listAgents(create(ListAgentsRequestSchema, { page, perPage })),
     );
   }
@@ -219,7 +218,7 @@ export class TeamsGraphSource {
   private async listAllTools(): Promise<Tool[]> {
     const collected = new Map<string, Tool>();
     for (const type of TOOL_TYPES) {
-      const items = await this.listAllPages((page, perPage) =>
+      const items = await listAllPages((page, perPage) =>
         this.teams.listTools(create(ListToolsRequestSchema, { type, page, perPage })),
       );
       for (const tool of items) {
@@ -232,19 +231,19 @@ export class TeamsGraphSource {
   }
 
   private async listAllMcpServers(): Promise<McpServer[]> {
-    return this.listAllPages((page, perPage) =>
+    return listAllPages((page, perPage) =>
       this.teams.listMcpServers(create(ListMcpServersRequestSchema, { page, perPage })),
     );
   }
 
   private async listAllWorkspaces(): Promise<WorkspaceConfiguration[]> {
-    return this.listAllPages((page, perPage) =>
+    return listAllPages((page, perPage) =>
       this.teams.listWorkspaceConfigurations(create(ListWorkspaceConfigurationsRequestSchema, { page, perPage })),
     );
   }
 
   private async listAllMemoryBuckets(): Promise<MemoryBucket[]> {
-    return this.listAllPages((page, perPage) =>
+    return listAllPages((page, perPage) =>
       this.teams.listMemoryBuckets(create(ListMemoryBucketsRequestSchema, { page, perPage })),
     );
   }
@@ -252,7 +251,7 @@ export class TeamsGraphSource {
   private async listAllAttachments(): Promise<Attachment[]> {
     const collected = new Map<string, Attachment>();
     for (const filter of ATTACHMENT_FILTERS) {
-      const items = await this.listAllPages((page, perPage) =>
+      const items = await listAllPages((page, perPage) =>
         this.teams.listAttachments(
           create(ListAttachmentsRequestSchema, {
             kind: filter.kind,
@@ -272,31 +271,14 @@ export class TeamsGraphSource {
     return Array.from(collected.values());
   }
 
-  private async listAllPages<T>(fetchPage: (page: number, perPage: number) => Promise<{ items: T[]; page: number; perPage: number; total: bigint }>): Promise<T[]> {
-    const items: T[] = [];
-    let page = 1;
-    for (let i = 0; i < MAX_PAGES; i += 1) {
-      const response = await fetchPage(page, DEFAULT_PAGE_SIZE);
-      const pageItems = Array.isArray(response.items) ? response.items : [];
-      items.push(...pageItems);
-      const total = Number(response.total ?? BigInt(items.length));
-      const perPage = response.perPage || DEFAULT_PAGE_SIZE;
-      const reachedEnd = response.page * perPage >= total;
-      if (reachedEnd) break;
-      if (pageItems.length === 0) break;
-      page = response.page + 1;
-    }
-    return items;
-  }
-
   private mapAgentConfig(agent: Agent): Record<string, unknown> | undefined {
     const config: Record<string, unknown> = {};
-    const title = this.readString(agent.title);
+    const title = readString(agent.title);
     if (title) config.title = title;
 
     const raw = agent.config;
     if (raw) {
-      const model = this.readString(raw.model);
+      const model = readString(raw.model);
       if (model) config.model = model;
       const systemPrompt = this.readOptionalString(raw.systemPrompt);
       if (systemPrompt !== undefined) config.systemPrompt = systemPrompt;
@@ -320,9 +302,9 @@ export class TeamsGraphSource {
       if (restrictionMessage !== undefined) config.restrictionMessage = restrictionMessage;
       const restrictionMaxInjections = this.readNumber(raw.restrictionMaxInjections);
       if (restrictionMaxInjections !== undefined) config.restrictionMaxInjections = restrictionMaxInjections;
-      const name = this.readString(raw.name);
+      const name = readString(raw.name);
       if (name) config.name = name;
-      const role = this.readString(raw.role);
+      const role = readString(raw.role);
       if (role) config.role = role;
     }
 
@@ -331,7 +313,7 @@ export class TeamsGraphSource {
 
   private mapToolConfig(tool: Tool): Record<string, unknown> | undefined {
     const config: Record<string, unknown> = tool.config ? { ...tool.config } : {};
-    const title = this.readString(tool.name);
+    const title = readString(tool.name);
     if (title) config.title = title;
     if (TOOL_TYPES_WITH_NAME.has(tool.type) && title) {
       config.name = title;
@@ -345,15 +327,15 @@ export class TeamsGraphSource {
 
   private mapMcpConfig(mcp: McpServer): Record<string, unknown> | undefined {
     const config: Record<string, unknown> = {};
-    const title = this.readString(mcp.title);
+    const title = readString(mcp.title);
     if (title) config.title = title;
     const raw = mcp.config;
     if (raw) {
-      const namespace = this.readString(raw.namespace);
+      const namespace = readString(raw.namespace);
       if (namespace) config.namespace = namespace;
-      const command = this.readString(raw.command);
+      const command = readString(raw.command);
       if (command) config.command = command;
-      const workdir = this.readString(raw.workdir);
+      const workdir = readString(raw.workdir);
       if (workdir) config.workdir = workdir;
       const env = this.mapEnvItems(raw.env);
       if (env) config.env = env;
@@ -379,11 +361,11 @@ export class TeamsGraphSource {
 
   private mapWorkspaceConfig(workspace: WorkspaceConfiguration): Record<string, unknown> | undefined {
     const config: Record<string, unknown> = {};
-    const title = this.readString(workspace.title);
+    const title = readString(workspace.title);
     if (title) config.title = title;
     const raw = workspace.config;
     if (raw) {
-      const image = this.readString(raw.image);
+      const image = readString(raw.image);
       if (image) config.image = image;
       const env = this.mapEnvItems(raw.env);
       if (env) config.env = env;
@@ -412,7 +394,7 @@ export class TeamsGraphSource {
 
   private mapMemoryBucketConfig(bucket: MemoryBucket): Record<string, unknown> | undefined {
     const config: Record<string, unknown> = {};
-    const title = this.readString(bucket.title);
+    const title = readString(bucket.title);
     if (title) config.title = title;
     const raw = bucket.config;
     if (raw) {
@@ -474,7 +456,7 @@ export class TeamsGraphSource {
     if (!items || items.length === 0) return undefined;
     const mapped: Array<{ name: string; value: string }> = [];
     for (const item of items) {
-      const name = this.readString(item.name);
+      const name = readString(item.name);
       if (!name) continue;
       mapped.push({ name, value: item.value });
     }
@@ -503,19 +485,13 @@ export class TeamsGraphSource {
     return value;
   }
 
-  private readString(value?: string): string | undefined {
-    if (typeof value !== 'string') return undefined;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-
   private readOptionalString(value?: string): string | undefined {
     if (typeof value !== 'string') return undefined;
     return value;
   }
 
   private normalizeId(value?: string): string | undefined {
-    return this.readString(value);
+    return readString(value);
   }
 
   private addToSet(map: Map<string, Set<string>>, key: string, value: string): void {
@@ -565,10 +541,6 @@ export class TeamsGraphSource {
     for (const mcpId of mcpIds) {
       addEdge(workspaceId, '$self', mcpId, 'workspace');
     }
-  }
-
-  private edgeKey(edge: PersistedGraphEdge): string {
-    return `${edge.source}-${edge.sourceHandle}__${edge.target}-${edge.targetHandle}`;
   }
 
   private memoryConnectorId(agentId: string, memoryId: string): string {

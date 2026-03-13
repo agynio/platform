@@ -20,6 +20,7 @@ import { coerceRole } from '../llm/services/messages.normalization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
+import { listAllPages, readString } from '../teams/teamsGrpc.pagination';
 import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 
@@ -46,9 +47,6 @@ type ThreadTreeNode = {
   hasChildren: boolean;
   children?: ThreadTreeNode[];
 };
-
-const DEFAULT_PAGE_SIZE = 100;
-const MAX_PAGES = 50;
 
 export class ThreadParentNotFoundError extends Error {
   constructor() {
@@ -1270,7 +1268,7 @@ export class AgentsPersistenceService {
 
     const assignedIds = new Set<string>();
     for (const thread of threads) {
-      const assignedId = this.readString(thread.assignedAgentNodeId ?? undefined);
+      const assignedId = readString(thread.assignedAgentNodeId);
       if (assignedId) assignedIds.add(assignedId);
     }
     if (assignedIds.size === 0) return descriptors;
@@ -1280,13 +1278,13 @@ export class AgentsPersistenceService {
 
     const agentById = new Map<string, Agent>();
     for (const agent of agents) {
-      const id = this.readString(agent.id);
+      const id = readString(agent.id);
       if (!id) continue;
       agentById.set(id, agent);
     }
 
     for (const thread of threads) {
-      const assignedId = this.readString(thread.assignedAgentNodeId ?? undefined);
+      const assignedId = readString(thread.assignedAgentNodeId);
       if (!assignedId) continue;
       const agent = agentById.get(assignedId);
       if (!agent) continue;
@@ -1297,46 +1295,21 @@ export class AgentsPersistenceService {
   }
 
   private async listAllTeamsAgents(): Promise<Agent[]> {
-    return this.listAllPages((page, perPage) =>
+    return listAllPages((page, perPage) =>
       this.teamsClient.listAgents(create(ListAgentsRequestSchema, { page, perPage })),
     );
   }
 
-  private async listAllPages<T>(
-    fetchPage: (page: number, perPage: number) => Promise<{ items: T[]; page: number; perPage: number; total: bigint }>,
-  ): Promise<T[]> {
-    const items: T[] = [];
-    let page = 1;
-    for (let i = 0; i < MAX_PAGES; i += 1) {
-      const response = await fetchPage(page, DEFAULT_PAGE_SIZE);
-      const pageItems = Array.isArray(response.items) ? response.items : [];
-      items.push(...pageItems);
-      const total = Number(response.total ?? BigInt(items.length));
-      const perPage = response.perPage || DEFAULT_PAGE_SIZE;
-      const reachedEnd = response.page * perPage >= total;
-      if (reachedEnd) break;
-      if (pageItems.length === 0) break;
-      page = response.page + 1;
-    }
-    return items;
-  }
-
   private buildAgentDescriptor(agent: Agent, fallback: string): AgentDescriptor {
-    const name = this.readString(agent.config?.name);
-    const role = this.readString(agent.config?.role);
-    const title = this.readString(agent.title);
+    const name = readString(agent.config?.name);
+    const role = readString(agent.config?.role);
+    const title = readString(agent.title);
     const profileFallback = name && role ? `${name} (${role})` : name ?? role;
     const resolvedTitle = title ?? profileFallback ?? fallback;
     const descriptor: AgentDescriptor = { title: resolvedTitle };
     if (name) descriptor.name = name;
     if (role) descriptor.role = role;
     return descriptor;
-  }
-
-  private readString(value?: string | null): string | undefined {
-    if (typeof value !== 'string') return undefined;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private getRunEventDelegate(tx: Prisma.TransactionClient): RunEventDelegate | undefined {

@@ -8,6 +8,7 @@ import type {
 import type { GraphAuthor } from './graph.repository';
 import { GraphRepository } from './graph.repository';
 import { FsGraphRepository } from './fsGraph.repository';
+import { edgeKey } from './graph.utils';
 import type { TeamsGraphSnapshot } from './teamsGraph.source';
 import { TeamsGraphSource } from './teamsGraph.source';
 
@@ -103,7 +104,7 @@ export class HybridGraphRepository extends GraphRepository {
     const addEdge = (edge: PersistedGraphEdge): void => {
       if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) return;
       if (!edge.sourceHandle || !edge.targetHandle) return;
-      const key = this.edgeKey(edge);
+      const key = edgeKey(edge);
       if (seen.has(key)) return;
       seen.add(key);
       edges.push({ ...edge, id: key });
@@ -121,7 +122,4 @@ export class HybridGraphRepository extends GraphRepository {
     return edges;
   }
 
-  private edgeKey(edge: PersistedGraphEdge): string {
-    return `${edge.source}-${edge.sourceHandle}__${edge.target}-${edge.targetHandle}`;
-  }
 }
