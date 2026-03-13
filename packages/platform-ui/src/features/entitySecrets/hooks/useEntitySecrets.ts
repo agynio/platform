@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ApiError } from '@/api/http';
+import { extractErrorCode } from '@/lib/extractErrorCode';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import {
   createEntitySecret,
@@ -14,25 +14,6 @@ import {
 } from '@/api/modules/entitySecrets';
 
 const ENTITY_SECRETS_QUERY_KEY = ['entity-secrets'] as const;
-
-function extractErrorCode(error: unknown): string | null {
-  if (!error) return null;
-  const maybeApiError = error as ApiError;
-  const payload = maybeApiError.response?.data;
-  if (payload && typeof payload === 'object' && 'error' in payload) {
-    const errorValue = (payload as { error?: unknown }).error;
-    if (typeof errorValue === 'string') {
-      return errorValue;
-    }
-  }
-  if (maybeApiError.message && typeof maybeApiError.message === 'string') {
-    return maybeApiError.message;
-  }
-  if (error instanceof Error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return null;
-}
 
 function buildEntitySecretsQueryKey(params: { secretProviderId?: string; page?: number; perPage?: number }) {
   const page = params.page ?? 1;
