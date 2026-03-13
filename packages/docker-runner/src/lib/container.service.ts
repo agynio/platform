@@ -394,23 +394,7 @@ export class ContainerService implements DockerClientPort {
       hijackStream.pipe(stdoutStream);
     }
 
-    let outputsClosed = false;
-    let monitorActive = true;
-    let monitorTimer: NodeJS.Timeout | null = null;
-    let inspectInFlight = false;
-
-    const stopMonitor = () => {
-      monitorActive = false;
-      if (monitorTimer) {
-        clearTimeout(monitorTimer);
-        monitorTimer = null;
-      }
-    };
-
     const closeOutputs = () => {
-      if (outputsClosed) return;
-      outputsClosed = true;
-      stopMonitor();
       try {
         stdoutStream.end();
       } catch {
@@ -431,38 +415,11 @@ export class ContainerService implements DockerClientPort {
     const execDetails = await exec.inspect();
     const execId = execDetails.ID ?? 'unknown';
 
-    const scheduleExecMonitor = () => {
-      if (!monitorActive) return;
-      monitorTimer = setTimeout(async () => {
-        if (!monitorActive || outputsClosed) return;
-        if (inspectInFlight) {
-          scheduleExecMonitor();
-          return;
-        }
-        inspectInFlight = true;
-        try {
-          const details = await exec.inspect();
-          if (details.Running === false || typeof details.ExitCode === 'number') {
-            closeOutputs();
-            return;
-          }
-        } catch (err) {
-          this.debug('Interactive exec inspect failed', { execId, error: this.errorContext(err) });
-        } finally {
-          inspectInFlight = false;
-        }
-        scheduleExecMonitor();
-      }, 2000);
-    };
-
-    scheduleExecMonitor();
-
     const terminateProcessGroup = async (reason: 'timeout' | 'idle_timeout'): Promise<void> => {
       await this.terminateExecProcess(exec, { containerId: inspectData.Id, reason });
     };
 
     const close = async (): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
-      stopMonitor();
       try {
         hijackStream.end();
       } catch {
