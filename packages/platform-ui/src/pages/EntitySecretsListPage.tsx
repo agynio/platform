@@ -27,7 +27,7 @@ import {
 } from '@/features/entitySecrets/hooks/useEntitySecrets';
 import { useSecretProviders } from '@/features/entitySecrets/hooks/useSecretProviders';
 import { formatTimestamp } from '@/lib/formatTimestamp';
-import { DEFAULT_PAGE_SIZE, getPaginationMeta } from '@/lib/pagination';
+import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 type SecretFormState = {
   title: string;
@@ -548,14 +548,12 @@ function ResolveSecretDialog({ resolveState, providerLabels, onClose }: ResolveS
 }
 
 export function EntitySecretsListPage() {
-  const [page, setPage] = useState(1);
   const [providerFilter, setProviderFilter] = useState('');
   const secretsQuery = useEntitySecrets({
-    page,
-    perPage: DEFAULT_PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     secretProviderId: providerFilter || undefined,
   });
-  const providersQuery = useSecretProviders({ page: 1, perPage: PROVIDER_DROPDOWN_PAGE_SIZE });
+  const providersQuery = useSecretProviders({ pageSize: PROVIDER_DROPDOWN_PAGE_SIZE });
   const createSecret = useCreateEntitySecret();
   const updateSecret = useUpdateEntitySecret();
   const deleteSecret = useDeleteEntitySecret();
@@ -565,18 +563,13 @@ export function EntitySecretsListPage() {
   const [deleteTarget, setDeleteTarget] = useState<EntitySecret | null>(null);
   const [resolveState, setResolveState] = useState<ResolveState | null>(null);
 
-  const secrets = secretsQuery.data?.items ?? [];
-  const pageSize = secretsQuery.data?.perPage ?? DEFAULT_PAGE_SIZE;
-  const totalCount = secretsQuery.data?.total ?? 0;
-  const { pageCount, safePage, rangeStart, rangeEnd } = getPaginationMeta({
-    page,
-    pageSize,
-    totalCount,
-    itemsCount: secrets.length,
-  });
+  const secrets = secretsQuery.data?.pages.flatMap((pageData) => pageData.items) ?? [];
+  const hasMoreSecrets = secretsQuery.hasNextPage ?? false;
   const tooltipDelay = import.meta.env.MODE === 'test' ? 0 : 300;
 
-  const providers = useMemo(() => providersQuery.data?.items ?? [], [providersQuery.data?.items]);
+  const providers = useMemo(() => providersQuery.data?.pages.flatMap((pageData) => pageData.items) ?? [], [
+    providersQuery.data?.pages,
+  ]);
   const providerOptions = useMemo(
     () => providers.map((provider) => ({ value: provider.id, label: buildProviderLabel(provider) })),
     [providers],
@@ -584,12 +577,6 @@ export function EntitySecretsListPage() {
   const providerLabels = useMemo(() => {
     return new Map(providers.map((provider) => [provider.id, buildProviderLabel(provider)]));
   }, [providers]);
-
-  useEffect(() => {
-    if (safePage !== page) {
-      setPage(safePage);
-    }
-  }, [page, safePage]);
 
   const handleOpenCreate = () => {
     setEditingSecret(null);
@@ -648,6 +635,11 @@ export function EntitySecretsListPage() {
   const isEditing = dialogMode === 'edit';
   const isSaving = createSecret.isPending || updateSecret.isPending;
   const createDisabled = providers.length === 0 || providersQuery.isLoading || isSaving || providersQuery.isError;
+  const handleLoadMore = () => {
+    if (secretsQuery.hasNextPage) {
+      void secretsQuery.fetchNextPage();
+    }
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
@@ -658,7 +650,6 @@ export function EntitySecretsListPage() {
         providersError={providersQuery.isError}
         onProviderChange={(value) => {
           setProviderFilter(value);
-          setPage(1);
         }}
         onCreate={handleOpenCreate}
         createDisabled={createDisabled}
@@ -688,13 +679,11 @@ export function EntitySecretsListPage() {
       />
 
       <PaginationBar
-        page={safePage}
-        pageCount={pageCount}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalCount={totalCount}
+        itemCount={secrets.length}
         itemLabel="secret"
-        onPageChange={setPage}
+        hasMore={hasMoreSecrets}
+        isLoadingMore={secretsQuery.isFetchingNextPage}
+        onLoadMore={handleLoadMore}
       />
 
       <SecretFormDialog

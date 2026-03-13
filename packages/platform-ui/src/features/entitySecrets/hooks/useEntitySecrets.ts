@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type InfiniteData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { extractErrorCode } from '@/lib/extractErrorCode';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import {
@@ -12,26 +12,31 @@ import {
   type SecretCreateRequest,
   type SecretUpdateRequest,
 } from '@/api/modules/entitySecrets';
+import { DEFAULT_PAGE_SIZE, normalizePageToken } from '@/lib/pagination';
 
 const ENTITY_SECRETS_QUERY_KEY = ['entity-secrets'] as const;
 
-function buildEntitySecretsQueryKey(params: { secretProviderId?: string; page?: number; perPage?: number }) {
-  const page = params.page ?? 1;
-  const perPage = params.perPage ?? 20;
+function buildEntitySecretsQueryKey(params: { secretProviderId?: string; pageSize: number }) {
   const providerId = params.secretProviderId ?? null;
-  return [...ENTITY_SECRETS_QUERY_KEY, providerId, page, perPage] as const;
+  return [...ENTITY_SECRETS_QUERY_KEY, providerId, params.pageSize] as const;
 }
 
 function invalidateEntitySecretsQuery(qc: ReturnType<typeof useQueryClient>) {
   return qc.invalidateQueries({ queryKey: ENTITY_SECRETS_QUERY_KEY });
 }
 
-export function useEntitySecrets(params: { secretProviderId?: string; page?: number; perPage?: number } = {}) {
-  const page = params.page ?? 1;
-  const perPage = params.perPage ?? 20;
-  return useQuery<PaginatedSecrets, Error>({
-    queryKey: buildEntitySecretsQueryKey({ secretProviderId: params.secretProviderId, page, perPage }),
-    queryFn: () => listEntitySecrets({ secretProviderId: params.secretProviderId, page, perPage }),
+type EntitySecretsPageParam = string | undefined;
+type EntitySecretsQueryKey = ReturnType<typeof buildEntitySecretsQueryKey>;
+type EntitySecretsData = InfiniteData<PaginatedSecrets, EntitySecretsPageParam>;
+
+export function useEntitySecrets(params: { secretProviderId?: string; pageSize?: number } = {}) {
+  const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
+  return useInfiniteQuery<PaginatedSecrets, Error, EntitySecretsData, EntitySecretsQueryKey, EntitySecretsPageParam>({
+    queryKey: buildEntitySecretsQueryKey({ secretProviderId: params.secretProviderId, pageSize }),
+    queryFn: ({ pageParam }) =>
+      listEntitySecrets({ secretProviderId: params.secretProviderId, pageSize, pageToken: pageParam }),
+    initialPageParam: undefined,
+    getNextPageParam: (lastPage) => normalizePageToken(lastPage.nextPageToken),
     staleTime: 30_000,
   });
 }

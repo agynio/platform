@@ -29,7 +29,7 @@ import {
   useUpdateSecretProvider,
 } from '@/features/entitySecrets/hooks/useSecretProviders';
 import { formatTimestamp } from '@/lib/formatTimestamp';
-import { DEFAULT_PAGE_SIZE, getPaginationMeta } from '@/lib/pagination';
+import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 type ProviderFormState = {
   title: string;
@@ -401,8 +401,7 @@ function ProviderDeleteDialog({ deleteTarget, isDeleting, onClose, onConfirm }: 
 }
 
 export function SecretProvidersListPage() {
-  const [page, setPage] = useState(1);
-  const providersQuery = useSecretProviders({ page, perPage: DEFAULT_PAGE_SIZE });
+  const providersQuery = useSecretProviders({ pageSize: DEFAULT_PAGE_SIZE });
   const createProvider = useCreateSecretProvider();
   const updateProvider = useUpdateSecretProvider();
   const deleteProvider = useDeleteSecretProvider();
@@ -410,22 +409,9 @@ export function SecretProvidersListPage() {
   const [editingProvider, setEditingProvider] = useState<SecretProvider | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SecretProvider | null>(null);
 
-  const providers = providersQuery.data?.items ?? [];
-  const pageSize = providersQuery.data?.perPage ?? DEFAULT_PAGE_SIZE;
-  const totalCount = providersQuery.data?.total ?? 0;
-  const { pageCount, safePage, rangeStart, rangeEnd } = getPaginationMeta({
-    page,
-    pageSize,
-    totalCount,
-    itemsCount: providers.length,
-  });
+  const providers = providersQuery.data?.pages.flatMap((pageData) => pageData.items) ?? [];
+  const hasMoreProviders = providersQuery.hasNextPage ?? false;
   const tooltipDelay = import.meta.env.MODE === 'test' ? 0 : 300;
-
-  useEffect(() => {
-    if (safePage !== page) {
-      setPage(safePage);
-    }
-  }, [page, safePage]);
 
   const handleOpenCreate = () => {
     setEditingProvider(null);
@@ -468,6 +454,11 @@ export function SecretProvidersListPage() {
   };
 
   const createDisabled = providersQuery.isLoading || isSaving;
+  const handleLoadMore = () => {
+    if (providersQuery.hasNextPage) {
+      void providersQuery.fetchNextPage();
+    }
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
@@ -502,13 +493,11 @@ export function SecretProvidersListPage() {
       />
 
       <PaginationBar
-        page={safePage}
-        pageCount={pageCount}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalCount={totalCount}
+        itemCount={providers.length}
         itemLabel="provider"
-        onPageChange={setPage}
+        hasMore={hasMoreProviders}
+        isLoadingMore={providersQuery.isFetchingNextPage}
+        onLoadMore={handleLoadMore}
       />
 
       <ProviderFormDialog

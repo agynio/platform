@@ -4,6 +4,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import type { ApiError } from '@/api/http';
 import React, { type PropsWithChildren, type ReactElement } from 'react';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import {
   useCreateEntitySecret,
   useDeleteEntitySecret,
@@ -102,15 +103,13 @@ describe('entity secrets hooks', () => {
           config: { vault: { address: 'https://vault.example.com', token: 'token' } },
         },
       ],
-      page: 1,
-      perPage: 20,
-      total: 1,
+      nextPageToken: undefined,
     });
     const queryClient = createQueryClient();
     const { result } = renderHook(() => useSecretProviders(), { wrapper: createWrapper(queryClient) });
 
     await waitFor(() => {
-      expect(result.current.data?.items).toEqual([
+      expect(result.current.data?.pages[0].items).toEqual([
         {
           id: 'provider-1',
           createdAt: '2024-01-01T00:00:00Z',
@@ -119,6 +118,53 @@ describe('entity secrets hooks', () => {
           config: { vault: { address: 'https://vault.example.com', token: 'token' } },
         },
       ]);
+    });
+    expect(listSecretProvidersMock).toHaveBeenCalledWith({ pageSize: DEFAULT_PAGE_SIZE, pageToken: undefined });
+  });
+
+  it('fetches additional secret provider pages with tokens', async () => {
+    listSecretProvidersMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'provider-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            title: 'Vault West',
+            type: 'vault',
+            config: { vault: { address: 'https://vault.example.com', token: 'token' } },
+          },
+        ],
+        nextPageToken: 'next-page',
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'provider-2',
+            createdAt: '2024-01-02T00:00:00Z',
+            title: 'Vault East',
+            type: 'vault',
+            config: { vault: { address: 'https://vault.example.com', token: 'token' } },
+          },
+        ],
+        nextPageToken: undefined,
+      });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => useSecretProviders(), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(listSecretProvidersMock).toHaveBeenNthCalledWith(1, {
+      pageSize: DEFAULT_PAGE_SIZE,
+      pageToken: undefined,
+    });
+    expect(listSecretProvidersMock).toHaveBeenNthCalledWith(2, {
+      pageSize: DEFAULT_PAGE_SIZE,
+      pageToken: 'next-page',
     });
   });
 
@@ -177,15 +223,13 @@ describe('entity secrets hooks', () => {
           remoteName: 'db.password',
         },
       ],
-      page: 1,
-      perPage: 20,
-      total: 1,
+      nextPageToken: undefined,
     });
     const queryClient = createQueryClient();
     const { result } = renderHook(() => useEntitySecrets(), { wrapper: createWrapper(queryClient) });
 
     await waitFor(() => {
-      expect(result.current.data?.items).toEqual([
+      expect(result.current.data?.pages[0].items).toEqual([
         {
           id: 'secret-1',
           createdAt: '2024-01-01T00:00:00Z',
@@ -194,6 +238,61 @@ describe('entity secrets hooks', () => {
           remoteName: 'db.password',
         },
       ]);
+    });
+    expect(listEntitySecretsMock).toHaveBeenCalledWith({
+      secretProviderId: undefined,
+      pageSize: DEFAULT_PAGE_SIZE,
+      pageToken: undefined,
+    });
+  });
+
+  it('fetches additional secret pages with tokens', async () => {
+    listEntitySecretsMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'secret-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            title: 'DB Password',
+            secretProviderId: 'provider-1',
+            remoteName: 'db.password',
+          },
+        ],
+        nextPageToken: 'next-secrets',
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'secret-2',
+            createdAt: '2024-01-02T00:00:00Z',
+            title: 'API Key',
+            secretProviderId: 'provider-1',
+            remoteName: 'api.key',
+          },
+        ],
+        nextPageToken: undefined,
+      });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => useEntitySecrets({ secretProviderId: 'provider-1' }), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(listEntitySecretsMock).toHaveBeenNthCalledWith(1, {
+      secretProviderId: 'provider-1',
+      pageSize: DEFAULT_PAGE_SIZE,
+      pageToken: undefined,
+    });
+    expect(listEntitySecretsMock).toHaveBeenNthCalledWith(2, {
+      secretProviderId: 'provider-1',
+      pageSize: DEFAULT_PAGE_SIZE,
+      pageToken: 'next-secrets',
     });
   });
 

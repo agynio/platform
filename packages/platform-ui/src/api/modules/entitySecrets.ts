@@ -1,5 +1,5 @@
 import { http } from '@/api/http';
-import { isRecord, readNumber, readOptionalString, readString } from '@/api/parsing';
+import { isRecord, readOptionalString, readString } from '@/api/parsing';
 
 export interface EntitySecret {
   id: string;
@@ -27,9 +27,7 @@ export interface SecretUpdateRequest {
 
 export interface PaginatedSecrets {
   items: EntitySecret[];
-  page: number;
-  perPage: number;
-  total: number;
+  nextPageToken?: string;
 }
 
 export interface ResolvedSecretValue {
@@ -62,9 +60,7 @@ function parseSecretList(value: unknown): PaginatedSecrets {
   }
   return {
     items: value.items.map(parseEntitySecret),
-    page: readNumber(value.page, 'secrets.page'),
-    perPage: readNumber(value.perPage, 'secrets.perPage'),
-    total: readNumber(value.total, 'secrets.total'),
+    nextPageToken: readOptionalString(value.nextPageToken),
   };
 }
 
@@ -75,22 +71,26 @@ function parseResolvedSecretValue(value: unknown): ResolvedSecretValue {
   return { value: readString(value.value, 'resolvedSecret.value') };
 }
 
-function buildListUrl(params?: { secretProviderId?: string; page?: number; perPage?: number }): string {
+function buildListUrl(params?: { secretProviderId?: string; pageSize?: number; pageToken?: string }): string {
   const searchParams = new URLSearchParams();
   if (typeof params?.secretProviderId === 'string' && params.secretProviderId.length > 0) {
     searchParams.set('secretProviderId', params.secretProviderId);
   }
-  if (typeof params?.page === 'number' && Number.isFinite(params.page)) {
-    searchParams.set('page', String(params.page));
+  if (typeof params?.pageSize === 'number' && Number.isFinite(params.pageSize)) {
+    searchParams.set('pageSize', String(params.pageSize));
   }
-  if (typeof params?.perPage === 'number' && Number.isFinite(params.perPage)) {
-    searchParams.set('perPage', String(params.perPage));
+  if (typeof params?.pageToken === 'string' && params.pageToken.length > 0) {
+    searchParams.set('pageToken', params.pageToken);
   }
   const query = searchParams.toString();
   return query ? `${ENTITY_SECRETS_ENDPOINT}?${query}` : ENTITY_SECRETS_ENDPOINT;
 }
 
-export async function listEntitySecrets(params?: { secretProviderId?: string; page?: number; perPage?: number }): Promise<PaginatedSecrets> {
+export async function listEntitySecrets(params?: {
+  secretProviderId?: string;
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<PaginatedSecrets> {
   const res = await http.get<unknown>(buildListUrl(params));
   return parseSecretList(res);
 }

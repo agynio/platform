@@ -1,5 +1,5 @@
 import { http } from '@/api/http';
-import { isRecord, readNumber, readOptionalString, readString } from '@/api/parsing';
+import { isRecord, readOptionalString, readString } from '@/api/parsing';
 
 export type SecretProviderType = 'vault';
 
@@ -37,9 +37,7 @@ export interface SecretProviderUpdateRequest {
 
 export interface PaginatedSecretProviders {
   items: SecretProvider[];
-  page: number;
-  perPage: number;
-  total: number;
+  nextPageToken?: string;
 }
 
 const SECRET_PROVIDERS_ENDPOINT = '/apiv2/secrets/v1/secret-providers';
@@ -96,25 +94,26 @@ function parseSecretProviderList(value: unknown): PaginatedSecretProviders {
   }
   return {
     items: value.items.map(parseSecretProvider),
-    page: readNumber(value.page, 'secretProviders.page'),
-    perPage: readNumber(value.perPage, 'secretProviders.perPage'),
-    total: readNumber(value.total, 'secretProviders.total'),
+    nextPageToken: readOptionalString(value.nextPageToken),
   };
 }
 
-function buildListUrl(params?: { page?: number; perPage?: number }): string {
+function buildListUrl(params?: { pageSize?: number; pageToken?: string }): string {
   const searchParams = new URLSearchParams();
-  if (typeof params?.page === 'number' && Number.isFinite(params.page)) {
-    searchParams.set('page', String(params.page));
+  if (typeof params?.pageSize === 'number' && Number.isFinite(params.pageSize)) {
+    searchParams.set('pageSize', String(params.pageSize));
   }
-  if (typeof params?.perPage === 'number' && Number.isFinite(params.perPage)) {
-    searchParams.set('perPage', String(params.perPage));
+  if (typeof params?.pageToken === 'string' && params.pageToken.length > 0) {
+    searchParams.set('pageToken', params.pageToken);
   }
   const query = searchParams.toString();
   return query ? `${SECRET_PROVIDERS_ENDPOINT}?${query}` : SECRET_PROVIDERS_ENDPOINT;
 }
 
-export async function listSecretProviders(params?: { page?: number; perPage?: number }): Promise<PaginatedSecretProviders> {
+export async function listSecretProviders(params?: {
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<PaginatedSecretProviders> {
   const res = await http.get<unknown>(buildListUrl(params));
   return parseSecretProviderList(res);
 }

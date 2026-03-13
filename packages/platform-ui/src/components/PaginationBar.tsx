@@ -1,77 +1,41 @@
-import { computePaginationWindow } from '@/lib/pagination';
-
 type PaginationBarProps = {
-  page: number;
-  pageCount: number;
-  rangeStart: number;
-  rangeEnd: number;
-  totalCount: number;
+  itemCount: number;
   itemLabel: string;
   itemLabelPlural?: string;
-  onPageChange: (page: number) => void;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 };
 
 export function PaginationBar({
-  page,
-  pageCount,
-  rangeStart,
-  rangeEnd,
-  totalCount,
+  itemCount,
   itemLabel,
   itemLabelPlural,
-  onPageChange,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: PaginationBarProps) {
-  if (pageCount <= 1) {
+  if (itemCount === 0) {
     return null;
   }
 
-  const label = totalCount === 1 ? itemLabel : itemLabelPlural ?? `${itemLabel}s`;
-  const { start: windowStart, end: windowEnd } = computePaginationWindow(page, pageCount);
-  const pageNumbers = windowEnd < windowStart
-    ? []
-    : Array.from({ length: windowEnd - windowStart + 1 }, (_, index) => windowStart + index);
+  const label = itemCount === 1 ? itemLabel : itemLabelPlural ?? `${itemLabel}s`;
+  const buttonLabel = isLoadingMore ? 'Loading…' : hasMore ? 'Load more' : 'All loaded';
 
   return (
     <div className="border-t border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-[var(--agyn-text-subtle)]">
-          Showing {rangeStart} to {rangeEnd} of {totalCount} {label}
+          Loaded {itemCount} {label}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onPageChange(Math.max(1, page - 1))}
-            disabled={page === 1}
-            className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Previous
-          </button>
-          <div className="flex items-center gap-1">
-            {pageNumbers.map((pageNumber) => (
-              <button
-                key={pageNumber}
-                type="button"
-                onClick={() => onPageChange(pageNumber)}
-                className={`w-8 h-8 rounded-md text-sm transition-all ${
-                  page === pageNumber
-                    ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)] font-medium'
-                    : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
-                }`}
-                aria-current={page === pageNumber ? 'page' : undefined}
-              >
-                {pageNumber}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => onPageChange(Math.min(pageCount, page + 1))}
-            disabled={page === pageCount}
-            className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Next
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={!hasMore || isLoadingMore}
+          className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {buttonLabel}
+        </button>
       </div>
     </div>
   );
