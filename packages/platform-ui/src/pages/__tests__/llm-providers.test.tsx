@@ -76,7 +76,7 @@ describe('LLM providers pages', () => {
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 20, total: providers.length }),
       ),
     );
@@ -102,10 +102,10 @@ describe('LLM providers pages', () => {
     let createPayload: Record<string, string> | null = null;
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 20, total: providers.length }),
       ),
-      http.post(abs('/llm/v1/providers'), async ({ request }) => {
+      http.post(abs('/apiv2/llm/v1/providers'), async ({ request }) => {
         const payload = (await request.json()) as Record<string, string>;
         createPayload = payload;
         const created = {
@@ -148,7 +148,7 @@ describe('LLM providers pages', () => {
     };
 
     server.use(
-      http.get(abs('/llm/v1/providers/:providerId'), () => HttpResponse.json(provider)),
+      http.get(abs('/apiv2/llm/v1/providers/:providerId'), () => HttpResponse.json(provider)),
     );
 
     renderWithRoutes('/llm-providers/provider-1/edit');
@@ -178,10 +178,10 @@ describe('LLM providers pages', () => {
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 20, total: providers.length }),
       ),
-      http.delete(abs('/llm/v1/providers/:providerId'), ({ params }) => {
+      http.delete(abs('/apiv2/llm/v1/providers/:providerId'), ({ params }) => {
         providers = providers.filter((provider) => provider.id !== params.providerId);
         return new HttpResponse(null, { status: 204 });
       }),

@@ -79,10 +79,10 @@ describe('LLM models pages', () => {
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
       ),
-      http.get(abs('/llm/v1/models'), () =>
+      http.get(abs('/apiv2/llm/v1/models'), () =>
         HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
       ),
     );
@@ -118,13 +118,13 @@ describe('LLM models pages', () => {
     let createPayload: Record<string, string> | null = null;
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
       ),
-      http.get(abs('/llm/v1/models'), () =>
+      http.get(abs('/apiv2/llm/v1/models'), () =>
         HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
       ),
-      http.post(abs('/llm/v1/models'), async ({ request }) => {
+      http.post(abs('/apiv2/llm/v1/models'), async ({ request }) => {
         const payload = (await request.json()) as Record<string, string>;
         createPayload = payload;
         const created = {
@@ -179,10 +179,10 @@ describe('LLM models pages', () => {
     };
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
       ),
-      http.get(abs('/llm/v1/models/:modelId'), () => HttpResponse.json(model)),
+      http.get(abs('/apiv2/llm/v1/models/:modelId'), () => HttpResponse.json(model)),
     );
 
     renderWithRoutes('/llm-models/model-1/edit');
@@ -224,13 +224,13 @@ describe('LLM models pages', () => {
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
       ),
-      http.get(abs('/llm/v1/models'), () =>
+      http.get(abs('/apiv2/llm/v1/models'), () =>
         HttpResponse.json({ items: models, page: 1, perPage: 20, total: models.length }),
       ),
-      http.delete(abs('/llm/v1/models/:modelId'), ({ params }) => {
+      http.delete(abs('/apiv2/llm/v1/models/:modelId'), ({ params }) => {
         models = models.filter((model) => model.id !== params.modelId);
         return new HttpResponse(null, { status: 204 });
       }),
@@ -261,7 +261,7 @@ describe('LLM models pages', () => {
     ];
 
     server.use(
-      http.get(abs('/llm/v1/providers'), () =>
+      http.get(abs('/apiv2/llm/v1/providers'), () =>
         HttpResponse.json({ items: providers, page: 1, perPage: 100, total: providers.length }),
       ),
     );

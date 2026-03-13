@@ -52,7 +52,7 @@ export function wrap(inst: AxiosInstance): HttpClient {
 
 // Export wrapped clients; interceptors above still unwrap res.data
 export const http: HttpClient = wrap(createHttp(config.apiBaseUrl));
-export const llmHttp: HttpClient = wrap(createHttp(`${config.apiBaseUrl}/llm/v1`));
+export const llmHttp: HttpClient = wrap(createHttp(`${config.apiBaseUrl}/apiv2/llm/v1`));
 // Tracing API client: use base from config
 // Helper to re-type axios promise (interceptor returns payload at runtime)
 export function asData<T>(p: Promise<unknown>): Promise<T> {

@@ -18,8 +18,8 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
-      '/llm': {
-        target: process.env.VITE_PROXY_TARGET || 'http://platform-server:3010',
+      '/apiv2': {
+        target: process.env.VITE_LLM_GATEWAY_URL || 'http://llm-gateway:8080',
         changeOrigin: true,
       },
     },
