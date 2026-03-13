@@ -1,155 +1,13 @@
-import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { ActionIconButton } from '@/components/ActionIconButton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/Button';
-import {
-  ScreenDialog,
-  ScreenDialogContent,
-  ScreenDialogDescription,
-  ScreenDialogFooter,
-  ScreenDialogHeader,
-  ScreenDialogTitle,
-} from '@/components/Dialog';
-import { Input } from '@/components/Input';
 import { PaginationBar } from '@/components/PaginationBar';
-import { SelectInput } from '@/components/SelectInput';
-import { Textarea } from '@/components/Textarea';
-import type {
-  SecretProvider,
-  SecretProviderCreateRequest,
-  SecretProviderType,
-  SecretProviderUpdateRequest,
-} from '@/api/modules/secretProviders';
-import {
-  useCreateSecretProvider,
-  useDeleteSecretProvider,
-  useSecretProviders,
-  useUpdateSecretProvider,
-} from '@/features/entitySecrets/hooks/useSecretProviders';
+import type { SecretProvider } from '@/api/modules/secretProviders';
+import { useDeleteSecretProvider, useSecretProviders } from '@/features/entitySecrets/hooks/useSecretProviders';
 import { formatTimestamp } from '@/lib/formatTimestamp';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
-
-type ProviderFormState = {
-  title: string;
-  description: string;
-  type: SecretProviderType;
-  vaultAddress: string;
-  vaultToken: string;
-};
-
-type ProviderFormErrors = {
-  vaultAddress?: string;
-  vaultToken?: string;
-};
-
-type ProviderFormOptions = {
-  dialogMode: 'create' | 'edit' | null;
-  editingProvider: SecretProvider | null;
-  onCreate: (payload: SecretProviderCreateRequest) => Promise<SecretProvider>;
-  onUpdate: (id: string, patch: SecretProviderUpdateRequest) => Promise<SecretProvider>;
-  onClose: () => void;
-};
-
-const EMPTY_FORM_STATE: ProviderFormState = {
-  title: '',
-  description: '',
-  type: 'vault',
-  vaultAddress: '',
-  vaultToken: '',
-};
-
-const PROVIDER_TYPE_OPTIONS = [{ value: 'vault', label: 'Vault' }];
-
-function buildFormState(provider: SecretProvider | null): ProviderFormState {
-  if (!provider) {
-    return { ...EMPTY_FORM_STATE };
-  }
-  const vaultConfig = provider.config.vault;
-  return {
-    title: provider.title ?? '',
-    description: provider.description ?? '',
-    type: provider.type,
-    vaultAddress: vaultConfig?.address ?? '',
-    vaultToken: vaultConfig?.token ?? '',
-  };
-}
-
-function useProviderForm({ dialogMode, editingProvider, onCreate, onUpdate, onClose }: ProviderFormOptions) {
-  const [formState, setFormState] = useState<ProviderFormState>(EMPTY_FORM_STATE);
-  const [formErrors, setFormErrors] = useState<ProviderFormErrors>({});
-
-  useEffect(() => {
-    if (dialogMode === 'create') {
-      setFormState({ ...EMPTY_FORM_STATE });
-      setFormErrors({});
-      return;
-    }
-    if (dialogMode === 'edit' && editingProvider) {
-      setFormState(buildFormState(editingProvider));
-      setFormErrors({});
-    }
-  }, [dialogMode, editingProvider]);
-
-  const validateForm = (state: ProviderFormState): ProviderFormErrors => {
-    const errors: ProviderFormErrors = {};
-    if (!state.vaultAddress.trim()) {
-      errors.vaultAddress = 'Vault address is required.';
-    }
-    if (!state.vaultToken.trim()) {
-      errors.vaultToken = 'Vault token is required.';
-    }
-    return errors;
-  };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedTitle = formState.title.trim();
-    const trimmedDescription = formState.description.trim();
-    const trimmedAddress = formState.vaultAddress.trim();
-    const trimmedToken = formState.vaultToken.trim();
-
-    const errors = validateForm({
-      ...formState,
-      vaultAddress: trimmedAddress,
-      vaultToken: trimmedToken,
-    });
-    setFormErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-
-    const payload: SecretProviderCreateRequest = {
-      title: trimmedTitle || undefined,
-      description: trimmedDescription || undefined,
-      type: formState.type,
-      config: {
-        vault: {
-          address: trimmedAddress,
-          token: trimmedToken,
-        },
-      },
-    };
-
-    try {
-      if (dialogMode === 'create') {
-        await onCreate(payload);
-      } else if (dialogMode === 'edit' && editingProvider) {
-        await onUpdate(editingProvider.id, {
-          title: payload.title,
-          description: payload.description,
-          config: payload.config,
-        });
-      }
-      onClose();
-    } catch {
-      // handled by mutation callbacks
-    }
-  };
-
-  return { formState, formErrors, setFormState, handleSubmit };
-}
 
 type SecretProvidersHeaderProps = {
   onCreate: () => void;
@@ -276,184 +134,38 @@ function SecretProvidersTable({ providers, isLoading, tooltipDelay, onEdit, onDe
   );
 }
 
-type ProviderFormDialogProps = {
-  open: boolean;
-  isEditing: boolean;
-  isSaving: boolean;
-  formState: ProviderFormState;
-  formErrors: ProviderFormErrors;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onClose: () => void;
-  setFormState: Dispatch<SetStateAction<ProviderFormState>>;
-};
-
-function ProviderFormDialog({
-  open,
-  isEditing,
-  isSaving,
-  formState,
-  formErrors,
-  onSubmit,
-  onClose,
-  setFormState,
-}: ProviderFormDialogProps) {
-  return (
-    <ScreenDialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <ScreenDialogContent className="sm:max-w-lg" hideCloseButton>
-        <ScreenDialogHeader className="flex-1 gap-2">
-          <ScreenDialogTitle>{isEditing ? 'Edit secret provider' : 'New secret provider'}</ScreenDialogTitle>
-          <ScreenDialogDescription>
-            {isEditing
-              ? 'Update the provider settings used to resolve secrets.'
-              : 'Add a provider integration for storing and resolving secrets.'}
-          </ScreenDialogDescription>
-        </ScreenDialogHeader>
-        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-          <Input
-            label="Title"
-            value={formState.title}
-            onChange={(event) => setFormState((current) => ({ ...current, title: event.target.value }))}
-            placeholder="Provider name"
-            disabled={isSaving}
-          />
-          <Textarea
-            label="Description"
-            value={formState.description}
-            onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
-            placeholder="Add a description (optional)"
-            rows={3}
-            disabled={isSaving}
-          />
-          <SelectInput
-            label="Provider type"
-            value={formState.type}
-            onChange={(event) => setFormState((current) => ({ ...current, type: event.target.value as SecretProviderType }))}
-            options={PROVIDER_TYPE_OPTIONS}
-            disabled={isSaving || isEditing}
-          />
-          <Input
-            label="Vault address"
-            value={formState.vaultAddress}
-            onChange={(event) => setFormState((current) => ({ ...current, vaultAddress: event.target.value }))}
-            placeholder="https://vault.example.com"
-            error={formErrors.vaultAddress}
-            disabled={isSaving}
-          />
-          <Input
-            label="Vault token"
-            type="password"
-            value={formState.vaultToken}
-            onChange={(event) => setFormState((current) => ({ ...current, vaultToken: event.target.value }))}
-            placeholder="Enter a Vault token"
-            error={formErrors.vaultToken}
-            disabled={isSaving}
-          />
-          <ScreenDialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={isSaving}>
-              {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Create provider'}
-            </Button>
-          </ScreenDialogFooter>
-        </form>
-      </ScreenDialogContent>
-    </ScreenDialog>
-  );
-}
-
-type ProviderDeleteDialogProps = {
-  deleteTarget: SecretProvider | null;
-  isDeleting: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-};
-
-function ProviderDeleteDialog({ deleteTarget, isDeleting, onClose, onConfirm }: ProviderDeleteDialogProps) {
-  return (
-    <ScreenDialog open={Boolean(deleteTarget)} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <ScreenDialogContent className="sm:max-w-md">
-        <ScreenDialogHeader>
-          <ScreenDialogTitle>Delete secret provider?</ScreenDialogTitle>
-          <ScreenDialogDescription>
-            This will remove the provider and any secrets linked to it. This action can&apos;t be undone.
-          </ScreenDialogDescription>
-        </ScreenDialogHeader>
-        {deleteTarget ? (
-          <div className="mt-4 rounded-lg border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
-            <div className="font-medium text-[var(--agyn-dark)]">
-              {deleteTarget.title?.trim() || 'Untitled provider'}
-            </div>
-            <div className="mt-1 text-xs">{deleteTarget.id}</div>
-          </div>
-        ) : null}
-        <ScreenDialogFooter className="mt-6">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isDeleting}>
-            Keep provider
-          </Button>
-          <Button type="button" variant="danger" onClick={onConfirm} disabled={isDeleting}>
-            {isDeleting ? 'Deleting…' : 'Delete provider'}
-          </Button>
-        </ScreenDialogFooter>
-      </ScreenDialogContent>
-    </ScreenDialog>
-  );
-}
-
 export function SecretProvidersListPage() {
+  const navigate = useNavigate();
   const providersQuery = useSecretProviders({ pageSize: DEFAULT_PAGE_SIZE });
-  const createProvider = useCreateSecretProvider();
-  const updateProvider = useUpdateSecretProvider();
   const deleteProvider = useDeleteSecretProvider();
-  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
-  const [editingProvider, setEditingProvider] = useState<SecretProvider | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SecretProvider | null>(null);
 
   const providers = providersQuery.data?.pages.flatMap((pageData) => pageData.items) ?? [];
   const hasMoreProviders = providersQuery.hasNextPage ?? false;
   const tooltipDelay = import.meta.env.MODE === 'test' ? 0 : 300;
 
   const handleOpenCreate = () => {
-    setEditingProvider(null);
-    setDialogMode('create');
+    navigate('/secret-providers/new');
   };
 
   const handleOpenEdit = (provider: SecretProvider) => {
-    setEditingProvider(provider);
-    setDialogMode('edit');
+    navigate(`/secret-providers/${provider.id}/edit`);
   };
-
-  const handleCloseDialog = () => {
-    setDialogMode(null);
-    setEditingProvider(null);
-  };
-
-  const form = useProviderForm({
-    dialogMode,
-    editingProvider,
-    onCreate: createProvider.mutateAsync,
-    onUpdate: (id, patch) => updateProvider.mutateAsync({ id, patch }),
-    onClose: handleCloseDialog,
-  });
-
-  const isFormOpen = dialogMode !== null;
-  const isEditing = dialogMode === 'edit';
-  const isSaving = createProvider.isPending || updateProvider.isPending;
   const errorMessage = providersQuery.isError
     ? providersQuery.error?.message ?? 'Failed to load secret providers.'
     : null;
 
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+  const handleDelete = async (provider: SecretProvider) => {
+    const name = provider.title?.trim() || 'this provider';
+    const confirmed = window.confirm(`Delete ${name}? This action cannot be undone.`);
+    if (!confirmed) return;
     try {
-      await deleteProvider.mutateAsync(deleteTarget.id);
-      setDeleteTarget(null);
+      await deleteProvider.mutateAsync(provider.id);
     } catch {
       // handled by mutation callbacks
     }
   };
 
-  const createDisabled = providersQuery.isLoading || isSaving;
+  const createDisabled = false;
   const handleLoadMore = () => {
     if (providersQuery.hasNextPage) {
       void providersQuery.fetchNextPage();
@@ -489,7 +201,7 @@ export function SecretProvidersListPage() {
         isLoading={providersQuery.isLoading}
         tooltipDelay={tooltipDelay}
         onEdit={handleOpenEdit}
-        onDelete={setDeleteTarget}
+        onDelete={handleDelete}
       />
 
       <PaginationBar
@@ -500,23 +212,6 @@ export function SecretProvidersListPage() {
         onLoadMore={handleLoadMore}
       />
 
-      <ProviderFormDialog
-        open={isFormOpen}
-        isEditing={isEditing}
-        isSaving={isSaving}
-        formState={form.formState}
-        formErrors={form.formErrors}
-        setFormState={form.setFormState}
-        onSubmit={form.handleSubmit}
-        onClose={handleCloseDialog}
-      />
-
-      <ProviderDeleteDialog
-        deleteTarget={deleteTarget}
-        isDeleting={deleteProvider.isPending}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
-      />
     </div>
   );
 }

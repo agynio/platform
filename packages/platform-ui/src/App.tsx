@@ -32,6 +32,8 @@ import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
 import { McpServersListPage } from './pages/McpServersListPage';
 import { SecretProvidersListPage } from './pages/SecretProvidersListPage';
 import { EntitySecretsListPage } from './pages/EntitySecretsListPage';
+import { SecretProviderUpsertPage } from './pages/SecretProviderUpsertPage';
+import { EntitySecretUpsertPage } from './pages/EntitySecretUpsertPage';
 import { EntityUpsertPage } from './pages/entities/EntityUpsertPage';
 import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from './features/entities/api/graphEntities';
 
@@ -117,7 +119,11 @@ function App() {
                   )}
                 />
                 <Route path="/secret-providers" element={<SecretProvidersListPage />} />
+                <Route path="/secret-providers/new" element={<SecretProviderUpsertPage mode="create" />} />
+                <Route path="/secret-providers/:entityId/edit" element={<SecretProviderUpsertPage mode="edit" />} />
                 <Route path="/entity-secrets" element={<EntitySecretsListPage />} />
+                <Route path="/entity-secrets/new" element={<EntitySecretUpsertPage mode="create" />} />
+                <Route path="/entity-secrets/:entityId/edit" element={<EntitySecretUpsertPage mode="edit" />} />
                 <Route path="/llm-providers" element={<LLMProvidersListPage />} />
                 <Route path="/llm-providers/new" element={<LLMProviderUpsertPage mode="create" />} />
                 <Route path="/llm-providers/:id/edit" element={<LLMProviderUpsertPage mode="edit" />} />

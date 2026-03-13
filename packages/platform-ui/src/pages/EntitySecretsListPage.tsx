@@ -1,45 +1,23 @@
-import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { ActionIconButton } from '@/components/ActionIconButton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
-import {
-  ScreenDialog,
-  ScreenDialogContent,
-  ScreenDialogDescription,
-  ScreenDialogFooter,
-  ScreenDialogHeader,
-  ScreenDialogTitle,
-} from '@/components/Dialog';
-import { Input } from '@/components/Input';
 import { PaginationBar } from '@/components/PaginationBar';
 import { SelectInput } from '@/components/SelectInput';
 import { Textarea } from '@/components/Textarea';
-import type { EntitySecret, SecretCreateRequest, SecretUpdateRequest } from '@/api/modules/entitySecrets';
-import type { SecretProvider } from '@/api/modules/secretProviders';
+import type { EntitySecret } from '@/api/modules/entitySecrets';
 import {
-  useCreateEntitySecret,
   useDeleteEntitySecret,
   useEntitySecrets,
   useResolveEntitySecret,
-  useUpdateEntitySecret,
 } from '@/features/entitySecrets/hooks/useEntitySecrets';
 import { useSecretProviders } from '@/features/entitySecrets/hooks/useSecretProviders';
+import { buildProviderLabel, PROVIDER_DROPDOWN_PAGE_SIZE } from '@/features/entitySecrets/utils';
 import { formatTimestamp } from '@/lib/formatTimestamp';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
-
-type SecretFormState = {
-  title: string;
-  description: string;
-  secretProviderId: string;
-  remoteName: string;
-};
-
-type SecretFormErrors = {
-  secretProviderId?: string;
-  remoteName?: string;
-};
 
 type ResolveState = {
   secret: EntitySecret;
@@ -47,111 +25,10 @@ type ResolveState = {
   error: string | null;
 };
 
-type SecretFormOptions = {
-  dialogMode: 'create' | 'edit' | null;
-  editingSecret: EntitySecret | null;
-  providerFilter: string;
-  onCreate: (payload: SecretCreateRequest) => Promise<EntitySecret>;
-  onUpdate: (id: string, patch: SecretUpdateRequest) => Promise<EntitySecret>;
-  onClose: () => void;
-};
-
 type ProviderOption = {
   value: string;
   label: string;
 };
-
-const EMPTY_FORM_STATE: SecretFormState = {
-  title: '',
-  description: '',
-  secretProviderId: '',
-  remoteName: '',
-};
-
-// Keep dropdown queries bounded; use filters for larger provider sets.
-const PROVIDER_DROPDOWN_PAGE_SIZE = 100;
-
-function buildFormState(secret: EntitySecret | null): SecretFormState {
-  if (!secret) {
-    return { ...EMPTY_FORM_STATE };
-  }
-  return {
-    title: secret.title ?? '',
-    description: secret.description ?? '',
-    secretProviderId: secret.secretProviderId,
-    remoteName: secret.remoteName,
-  };
-}
-
-function buildProviderLabel(provider: SecretProvider) {
-  return provider.title?.trim() || provider.id;
-}
-
-function useSecretForm({ dialogMode, editingSecret, providerFilter, onCreate, onUpdate, onClose }: SecretFormOptions) {
-  const [formState, setFormState] = useState<SecretFormState>(EMPTY_FORM_STATE);
-  const [formErrors, setFormErrors] = useState<SecretFormErrors>({});
-
-  useEffect(() => {
-    if (dialogMode === 'create') {
-      setFormState({ ...EMPTY_FORM_STATE, secretProviderId: providerFilter || '' });
-      setFormErrors({});
-      return;
-    }
-    if (dialogMode === 'edit' && editingSecret) {
-      setFormState(buildFormState(editingSecret));
-      setFormErrors({});
-    }
-  }, [dialogMode, editingSecret, providerFilter]);
-
-  const validateForm = (state: SecretFormState): SecretFormErrors => {
-    const errors: SecretFormErrors = {};
-    if (!state.secretProviderId.trim()) {
-      errors.secretProviderId = 'Secret provider is required.';
-    }
-    if (!state.remoteName.trim()) {
-      errors.remoteName = 'Remote name is required.';
-    }
-    return errors;
-  };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedTitle = formState.title.trim();
-    const trimmedDescription = formState.description.trim();
-    const trimmedRemoteName = formState.remoteName.trim();
-    const trimmedProviderId = formState.secretProviderId.trim();
-
-    const errors = validateForm({
-      ...formState,
-      remoteName: trimmedRemoteName,
-      secretProviderId: trimmedProviderId,
-    });
-    setFormErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-
-    const payload: SecretCreateRequest = {
-      title: trimmedTitle || undefined,
-      description: trimmedDescription || undefined,
-      secretProviderId: trimmedProviderId,
-      remoteName: trimmedRemoteName,
-    };
-
-    try {
-      if (dialogMode === 'create') {
-        await onCreate(payload);
-      } else if (dialogMode === 'edit' && editingSecret) {
-        await onUpdate(editingSecret.id, payload);
-      }
-      onClose();
-    } catch {
-      // handled by mutation callbacks
-    }
-  };
-
-  return { formState, formErrors, setFormState, handleSubmit };
-}
 
 type EntitySecretsHeaderProps = {
   providerFilter: string;
@@ -378,189 +255,64 @@ function EntitySecretsTable({
   );
 }
 
-type SecretFormDialogProps = {
-  open: boolean;
-  isEditing: boolean;
-  isSaving: boolean;
-  formState: SecretFormState;
-  formErrors: SecretFormErrors;
-  providerOptions: ProviderOption[];
-  providersLoading: boolean;
-  providersError: boolean;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onClose: () => void;
-  setFormState: Dispatch<SetStateAction<SecretFormState>>;
-};
-
-function SecretFormDialog({
-  open,
-  isEditing,
-  isSaving,
-  formState,
-  formErrors,
-  providerOptions,
-  providersLoading,
-  providersError,
-  onSubmit,
-  onClose,
-  setFormState,
-}: SecretFormDialogProps) {
-  return (
-    <ScreenDialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <ScreenDialogContent className="sm:max-w-lg" hideCloseButton>
-        <ScreenDialogHeader className="flex-1 gap-2">
-          <ScreenDialogTitle>{isEditing ? 'Edit secret' : 'New secret'}</ScreenDialogTitle>
-          <ScreenDialogDescription>
-            {isEditing ? 'Update the provider and remote identifier.' : 'Create a new secret reference.'}
-          </ScreenDialogDescription>
-        </ScreenDialogHeader>
-        <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-          <Input
-            label="Title"
-            value={formState.title}
-            onChange={(event) => setFormState((current) => ({ ...current, title: event.target.value }))}
-            placeholder="Secret name"
-            disabled={isSaving}
-          />
-          <Textarea
-            label="Description"
-            value={formState.description}
-            onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
-            placeholder="Add a description (optional)"
-            rows={3}
-            disabled={isSaving}
-          />
-          <SelectInput
-            label="Secret provider"
-            value={formState.secretProviderId}
-            onChange={(event) => setFormState((current) => ({ ...current, secretProviderId: event.target.value }))}
-            options={providerOptions}
-            placeholder={providersLoading ? 'Loading providers…' : 'Select a provider'}
-            error={formErrors.secretProviderId}
-            disabled={providersLoading || providersError || isSaving}
-          />
-          <Input
-            label="Remote name"
-            value={formState.remoteName}
-            onChange={(event) => setFormState((current) => ({ ...current, remoteName: event.target.value }))}
-            placeholder="Path or identifier in the provider"
-            error={formErrors.remoteName}
-            disabled={isSaving}
-          />
-          <ScreenDialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={isSaving}>
-              {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Create secret'}
-            </Button>
-          </ScreenDialogFooter>
-        </form>
-      </ScreenDialogContent>
-    </ScreenDialog>
-  );
-}
-
-type SecretDeleteDialogProps = {
-  deleteTarget: EntitySecret | null;
-  isDeleting: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-};
-
-function SecretDeleteDialog({ deleteTarget, isDeleting, onClose, onConfirm }: SecretDeleteDialogProps) {
-  return (
-    <ScreenDialog open={Boolean(deleteTarget)} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <ScreenDialogContent className="sm:max-w-md">
-        <ScreenDialogHeader>
-          <ScreenDialogTitle>Delete secret?</ScreenDialogTitle>
-          <ScreenDialogDescription>This action can&apos;t be undone.</ScreenDialogDescription>
-        </ScreenDialogHeader>
-        {deleteTarget ? (
-          <div className="mt-4 rounded-lg border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
-            <div className="font-medium text-[var(--agyn-dark)]">
-              {deleteTarget.title?.trim() || 'Untitled secret'}
-            </div>
-            <div className="mt-1 text-xs">{deleteTarget.remoteName}</div>
-          </div>
-        ) : null}
-        <ScreenDialogFooter className="mt-6">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isDeleting}>
-            Keep secret
-          </Button>
-          <Button type="button" variant="danger" onClick={onConfirm} disabled={isDeleting}>
-            {isDeleting ? 'Deleting…' : 'Delete secret'}
-          </Button>
-        </ScreenDialogFooter>
-      </ScreenDialogContent>
-    </ScreenDialog>
-  );
-}
-
-type ResolveSecretDialogProps = {
+type ResolveSecretPanelProps = {
   resolveState: ResolveState | null;
   providerLabels: Map<string, string>;
   onClose: () => void;
 };
 
-function ResolveSecretDialog({ resolveState, providerLabels, onClose }: ResolveSecretDialogProps) {
-  const isOpen = Boolean(resolveState);
+function ResolveSecretPanel({ resolveState, providerLabels, onClose }: ResolveSecretPanelProps) {
+  if (!resolveState) {
+    return null;
+  }
 
   return (
-    <ScreenDialog open={isOpen} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <ScreenDialogContent className="sm:max-w-lg">
-        <ScreenDialogHeader>
-          <ScreenDialogTitle>Resolved secret</ScreenDialogTitle>
-          <ScreenDialogDescription>
+    <div className="shrink-0 border-b border-[var(--agyn-border-subtle)] px-6 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-[var(--agyn-dark)]">Resolved secret</p>
+          <p className="text-xs text-[var(--agyn-text-subtle)]">
             Use this value immediately. It will not be stored in the UI.
-          </ScreenDialogDescription>
-        </ScreenDialogHeader>
-        {resolveState ? (
-          <div className="mt-4 space-y-4">
-            <div className="rounded-lg border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
-              <div className="font-medium text-[var(--agyn-dark)]">
-                {resolveState.secret.title?.trim() || 'Untitled secret'}
-              </div>
-              <div className="mt-1 text-xs">
-                {providerLabels.get(resolveState.secret.secretProviderId) ?? resolveState.secret.secretProviderId}
-              </div>
-            </div>
-            {resolveState.error ? (
-              <Alert variant="destructive">
-                <AlertTitle>Unable to resolve secret</AlertTitle>
-                <AlertDescription>{resolveState.error}</AlertDescription>
-              </Alert>
-            ) : resolveState.value === null ? (
-              <div className="text-sm text-[var(--agyn-text-subtle)]">Resolving secret…</div>
-            ) : (
-              <Textarea value={resolveState.value} readOnly rows={4} />
-            )}
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <div className="mt-4 space-y-4">
+        <div className="rounded-lg border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-4 py-3 text-sm text-[var(--agyn-text-subtle)]">
+          <div className="font-medium text-[var(--agyn-dark)]">
+            {resolveState.secret.title?.trim() || 'Untitled secret'}
           </div>
-        ) : null}
-        <ScreenDialogFooter className="mt-6">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </ScreenDialogFooter>
-      </ScreenDialogContent>
-    </ScreenDialog>
+          <div className="mt-1 text-xs">
+            {providerLabels.get(resolveState.secret.secretProviderId) ?? resolveState.secret.secretProviderId}
+          </div>
+        </div>
+        {resolveState.error ? (
+          <Alert variant="destructive">
+            <AlertTitle>Unable to resolve secret</AlertTitle>
+            <AlertDescription>{resolveState.error}</AlertDescription>
+          </Alert>
+        ) : resolveState.value === null ? (
+          <div className="text-sm text-[var(--agyn-text-subtle)]">Resolving secret…</div>
+        ) : (
+          <Textarea value={resolveState.value} readOnly rows={4} />
+        )}
+      </div>
+    </div>
   );
 }
 
 export function EntitySecretsListPage() {
+  const navigate = useNavigate();
   const [providerFilter, setProviderFilter] = useState('');
   const secretsQuery = useEntitySecrets({
     pageSize: DEFAULT_PAGE_SIZE,
     secretProviderId: providerFilter || undefined,
   });
   const providersQuery = useSecretProviders({ pageSize: PROVIDER_DROPDOWN_PAGE_SIZE });
-  const createSecret = useCreateEntitySecret();
-  const updateSecret = useUpdateEntitySecret();
   const deleteSecret = useDeleteEntitySecret();
   const resolveSecret = useResolveEntitySecret();
-  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
-  const [editingSecret, setEditingSecret] = useState<EntitySecret | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<EntitySecret | null>(null);
   const [resolveState, setResolveState] = useState<ResolveState | null>(null);
 
   const secrets = secretsQuery.data?.pages.flatMap((pageData) => pageData.items) ?? [];
@@ -579,28 +331,13 @@ export function EntitySecretsListPage() {
   }, [providers]);
 
   const handleOpenCreate = () => {
-    setEditingSecret(null);
-    setDialogMode('create');
+    const search = providerFilter ? `?providerId=${encodeURIComponent(providerFilter)}` : '';
+    navigate(`/entity-secrets/new${search}`);
   };
 
   const handleOpenEdit = (secret: EntitySecret) => {
-    setEditingSecret(secret);
-    setDialogMode('edit');
+    navigate(`/entity-secrets/${secret.id}/edit`);
   };
-
-  const handleCloseDialog = () => {
-    setDialogMode(null);
-    setEditingSecret(null);
-  };
-
-  const form = useSecretForm({
-    dialogMode,
-    editingSecret,
-    providerFilter,
-    onCreate: createSecret.mutateAsync,
-    onUpdate: (id, patch) => updateSecret.mutateAsync({ id, patch }),
-    onClose: handleCloseDialog,
-  });
 
   const providerError = providersQuery.isError
     ? providersQuery.error?.message ?? 'Failed to load providers.'
@@ -609,11 +346,12 @@ export function EntitySecretsListPage() {
     ? secretsQuery.error?.message ?? 'Failed to load secrets.'
     : null;
 
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+  const handleDelete = async (secret: EntitySecret) => {
+    const name = secret.title?.trim() || 'this secret';
+    const confirmed = window.confirm(`Delete ${name}? This action cannot be undone.`);
+    if (!confirmed) return;
     try {
-      await deleteSecret.mutateAsync(deleteTarget.id);
-      setDeleteTarget(null);
+      await deleteSecret.mutateAsync(secret.id);
     } catch {
       // handled by mutation callbacks
     }
@@ -631,10 +369,7 @@ export function EntitySecretsListPage() {
     });
   };
 
-  const isFormOpen = dialogMode !== null;
-  const isEditing = dialogMode === 'edit';
-  const isSaving = createSecret.isPending || updateSecret.isPending;
-  const createDisabled = providers.length === 0 || providersQuery.isLoading || isSaving || providersQuery.isError;
+  const createDisabled = providers.length === 0 || providersQuery.isLoading || providersQuery.isError;
   const handleLoadMore = () => {
     if (secretsQuery.hasNextPage) {
       void secretsQuery.fetchNextPage();
@@ -675,7 +410,13 @@ export function EntitySecretsListPage() {
         resolvingSecretId={resolveState?.secret.id ?? null}
         onResolve={handleResolve}
         onEdit={handleOpenEdit}
-        onDelete={setDeleteTarget}
+        onDelete={handleDelete}
+      />
+
+      <ResolveSecretPanel
+        resolveState={resolveState}
+        providerLabels={providerLabels}
+        onClose={() => setResolveState(null)}
       />
 
       <PaginationBar
@@ -686,32 +427,6 @@ export function EntitySecretsListPage() {
         onLoadMore={handleLoadMore}
       />
 
-      <SecretFormDialog
-        open={isFormOpen}
-        isEditing={isEditing}
-        isSaving={isSaving}
-        formState={form.formState}
-        formErrors={form.formErrors}
-        providerOptions={providerOptions}
-        providersLoading={providersQuery.isLoading}
-        providersError={providersQuery.isError}
-        onSubmit={form.handleSubmit}
-        onClose={handleCloseDialog}
-        setFormState={form.setFormState}
-      />
-
-      <SecretDeleteDialog
-        deleteTarget={deleteTarget}
-        isDeleting={deleteSecret.isPending}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
-      />
-
-      <ResolveSecretDialog
-        resolveState={resolveState}
-        providerLabels={providerLabels}
-        onClose={() => setResolveState(null)}
-      />
     </div>
   );
 }
