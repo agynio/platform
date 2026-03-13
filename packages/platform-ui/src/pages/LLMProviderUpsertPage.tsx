@@ -179,6 +179,7 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
                           type="url"
                           placeholder="https://api.example.com"
                           disabled={isSubmitting}
+                          size="sm"
                         />
                       </FormControl>
                       <FormMessage />
@@ -228,6 +229,7 @@ export function LLMProviderUpsertPage({ mode }: LLMProviderUpsertPageProps) {
                           type="password"
                           placeholder={mode === 'create' ? 'Enter token' : 'Leave blank to keep current token'}
                           disabled={isSubmitting}
+                          size="sm"
                         />
                       </FormControl>
                       {mode === 'edit' && (

@@ -179,7 +179,12 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                     <FormItem>
                       <FormLabel>Name</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Friendly model name" disabled={isSubmitting} />
+                        <Input
+                          {...field}
+                          placeholder="Friendly model name"
+                          disabled={isSubmitting}
+                          size="sm"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -219,7 +224,12 @@ export function LLMModelUpsertPage({ mode }: LLMModelUpsertPageProps) {
                     <FormItem>
                       <FormLabel>Remote name</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="remote-model-id" disabled={isSubmitting} />
+                        <Input
+                          {...field}
+                          placeholder="remote-model-id"
+                          disabled={isSubmitting}
+                          size="sm"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
