@@ -17,8 +17,6 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
 import { SendMessageNode } from './nodes/tools/send_message/send_message.node';
-import { SecretProviderNode } from './nodes/secretProvider/secretProvider.node';
-import { SecretNode } from './nodes/secret/secret.node';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
@@ -162,24 +160,6 @@ export function registerDefaultTemplates(registry: TemplateRegistry): TemplateRe
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     MemoryConnectorNode,
-  );
-  registry.register(
-    'secretProvider',
-    {
-      title: 'Secret Provider',
-      kind: 'secret_provider',
-      // capabilities/staticConfigSchema removed from palette per Issue #451
-    },
-    SecretProviderNode,
-  );
-  registry.register(
-    'secret',
-    {
-      title: 'Secret',
-      kind: 'secret',
-      // capabilities/staticConfigSchema removed from palette per Issue #451
-    },
-    SecretNode,
   );
 
   return registry;

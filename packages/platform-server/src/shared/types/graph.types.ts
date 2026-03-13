@@ -94,7 +94,7 @@ export interface GraphBuildResult<TError = unknown> {
 }
 
 // Introspection of TemplateRegistry for UI palette generation
-export type TemplateKind = 'trigger' | 'agent' | 'tool' | 'mcp' | 'service' | 'secret_provider' | 'secret';
+export type TemplateKind = 'trigger' | 'agent' | 'tool' | 'mcp' | 'service';
 export interface TemplateNodeSchema {
   name: string; // template name (technical identifier)
   title: string; // human-readable default title (UI label)

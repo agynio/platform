@@ -155,10 +155,6 @@ export function resolveEntityKind(rawKind?: string | null): GraphEntityKind {
       return 'tool';
     case 'mcp':
       return 'mcp';
-    case 'secret_provider':
-      return 'secret_provider';
-    case 'secret':
-      return 'secret';
     case 'service':
     default:
       return 'workspace';

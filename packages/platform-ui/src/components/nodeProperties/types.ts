@@ -9,7 +9,7 @@ export type NodeStatus =
   | 'provisioning_error'
   | 'deprovisioning_error';
 
-export type NodeKind = 'Agent' | 'Tool' | 'MCP' | 'Trigger' | 'Workspace' | 'SecretProvider' | 'Secret';
+export type NodeKind = 'Agent' | 'Tool' | 'MCP' | 'Trigger' | 'Workspace';
 
 export interface NodeConfig extends Record<string, unknown> {
   kind: NodeKind;

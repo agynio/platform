@@ -5,8 +5,6 @@ import WorkspaceNodeConfigView from './views/WorkspaceNodeConfigView';
 import McpNodeConfigView from './views/McpNodeConfigView';
 import AgentNodeConfigView from './views/AgentNodeConfigView';
 import TriggerNodeConfigView from './views/TriggerNodeConfigView';
-import SecretProviderNodeConfigView from './views/SecretProviderNodeConfigView';
-import SecretNodeConfigView from './views/SecretNodeConfigView';
 import MemoryWorkspaceTemplateView from './views/WorkspaceMemoryTemplateView';
 import MemoryConnectorWorkspaceTemplateView from './views/WorkspaceMemoryConnectorTemplateView';
 import ShellToolTemplateView from './views/toolTemplates/ShellToolTemplateView';
@@ -22,8 +20,6 @@ export const NODE_VIEW_REGISTRY: NodePropertiesViewRegistry = {
   MCP: McpNodeConfigView,
   Agent: AgentNodeConfigView,
   Trigger: TriggerNodeConfigView,
-  SecretProvider: SecretProviderNodeConfigView,
-  Secret: SecretNodeConfigView,
 };
 
 export const NODE_TEMPLATE_VIEW_REGISTRY: NodePropertiesTemplateViewRegistry = {

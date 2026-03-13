@@ -208,44 +208,6 @@ function NodePropertiesSidebar(props: NodePropertiesSidebarProps) {
         } satisfies NodePropertiesViewProps<'Trigger'>;
         return <View {...triggerViewProps} />;
       }
-      case 'SecretProvider': {
-        const View = NODE_VIEW_REGISTRY.SecretProvider;
-        const secretProviderConfig = config as NodePropertiesViewProps<'SecretProvider'>['config'];
-        const secretProviderViewProps: NodePropertiesViewProps<'SecretProvider'> = {
-          config: secretProviderConfig,
-          state,
-          displayTitle,
-          onConfigChange: handleConfigChange,
-          onProvision,
-          onDeprovision,
-          canProvision,
-          canDeprovision,
-          isActionPending,
-          nodeId,
-          graphNodes,
-          graphEdges,
-        } satisfies NodePropertiesViewProps<'SecretProvider'>;
-        return <View {...secretProviderViewProps} />;
-      }
-      case 'Secret': {
-        const View = NODE_VIEW_REGISTRY.Secret;
-        const secretConfig = config as NodePropertiesViewProps<'Secret'>['config'];
-        const secretViewProps: NodePropertiesViewProps<'Secret'> = {
-          config: secretConfig,
-          state,
-          displayTitle,
-          onConfigChange: handleConfigChange,
-          onProvision,
-          onDeprovision,
-          canProvision,
-          canDeprovision,
-          isActionPending,
-          nodeId,
-          graphNodes,
-          graphEdges,
-        } satisfies NodePropertiesViewProps<'Secret'>;
-        return <View {...secretViewProps} />;
-      }
       default: {
         const unexpectedKind: never = config.kind;
         throw new Error(`Unsupported node kind: ${String(unexpectedKind)}`);
