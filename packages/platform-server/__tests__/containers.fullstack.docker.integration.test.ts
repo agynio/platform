@@ -21,8 +21,10 @@ import {
   DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
+  runnerAddressMissing,
+  runnerSecretMissing,
   socketMissing,
-  startDockerRunnerProcess,
+  startDockerRunner,
   startPostgres,
   runPrismaMigrations,
   waitFor,
@@ -30,7 +32,7 @@ import {
   type PostgresHandle,
 } from './helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1';
+const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 const TEST_IMAGE = 'nginx:1.25-alpine';
 
@@ -81,8 +83,7 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunnerProcess(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     clearTestConfig();

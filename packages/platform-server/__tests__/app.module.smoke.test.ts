@@ -6,7 +6,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ConfigService } from '../src/core/services/config.service';
 import type { PrismaClient } from '@prisma/client';
-import { ContainerService } from '@agyn/docker-runner';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
@@ -95,7 +95,7 @@ describe('AppModule bootstrap smoke test', () => {
       removeContainer: vi.fn(),
       findContainersByLabels: vi.fn().mockResolvedValue([]),
       touchLastUsed: vi.fn(),
-    } satisfies Partial<ContainerService>;
+    } satisfies Partial<DockerClient>;
 
     const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;
     const terminationStub = { enqueue: vi.fn() } satisfies Partial<ContainerThreadTerminationService>;
@@ -174,7 +174,7 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)
       .useValue(containerRegistryStub)
-      .overrideProvider(ContainerService)
+      .overrideProvider(DOCKER_CLIENT)
       .useValue(containerServiceStub)
       .overrideProvider(ContainerCleanupService)
       .useValue(cleanupStub)

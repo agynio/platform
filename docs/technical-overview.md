@@ -67,7 +67,7 @@ Per-workspace Docker-in-Docker and registry mirror
 - To override the mirror, set environment variable `DOCKER_MIRROR_URL` to an alternate URL.
 
 Remote Docker runner
-- The platform-server always routes container lifecycle, exec, and log streaming calls through the `@agyn/docker-runner` service.
+- The platform-server always routes container lifecycle, exec, and log streaming calls through the external docker-runner service (not part of this monorepo).
 - The runner exposes authenticated gRPC endpoints; every request includes HMAC metadata derived solely from `DOCKER_RUNNER_SHARED_SECRET`.
 - Only the docker-runner service mounts `/var/run/docker.sock` in default stacks; platform-server and auxiliary services talk to it over the internal network (default `docker-runner:${DOCKER_RUNNER_GRPC_PORT}` with `DOCKER_RUNNER_GRPC_PORT` defaulting to 50051; `DOCKER_RUNNER_PORT` remains an accepted alias).
 - Container events, logs, and exec streams flow over long-lived gRPC streams so the existing watcher pipeline (ContainerEventProcessor, cleanup jobs, metrics) remains unchanged.

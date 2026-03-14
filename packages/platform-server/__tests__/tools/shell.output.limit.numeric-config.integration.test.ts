@@ -11,7 +11,7 @@ import { PrismaService } from '../../src/core/services/prisma.service';
 import { createRunEventsStub, createEventsBusStub } from '../helpers/runEvents.stub';
 import type { EnvService } from '../../src/env/env.service';
 import type { ArchiveService } from '../../src/infra/archive/archive.service';
-import type { ContainerHandle } from '@agyn/docker-runner';
+import type { ContainerHandle } from '../../src/infra/container/container.handle';
 
 class FakeContainer implements ContainerHandle {
   public lastPut?: { data: Buffer; options: { path: string } };

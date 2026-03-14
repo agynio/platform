@@ -1,20 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerHandle, ContainerService } from '@agyn/docker-runner';
-import type { ContainerRegistry } from '../../src/infra/container/container.registry';
-
-const makeRegistry = () => ({
-  registerStart: vi.fn(async () => undefined),
-  updateLastUsed: vi.fn(async () => undefined),
-  markStopped: vi.fn(async () => undefined),
-  markTerminating: vi.fn(async () => undefined),
-  claimForTermination: vi.fn(async () => true),
-  recordTerminationFailure: vi.fn(async () => undefined),
-  findByVolume: vi.fn(async () => null),
-  listByThread: vi.fn(async () => []),
-  ensureIndexes: vi.fn(async () => undefined),
-} satisfies Partial<ContainerRegistry>) as ContainerRegistry;
+import { ContainerHandle } from '../../src/infra/container/container.handle';
+import { createDockerClientPortStub } from '../helpers/dockerClient.stub';
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
@@ -33,7 +21,7 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
+        return new FakeContainer(createDockerClientPortStub(), 'fake');
       }
     }
     const provider = new FakeProvider();

@@ -16,7 +16,7 @@ import { LiveGraphRuntime } from '../../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../../src/graph-core/templateRegistry';
 import { EnvService } from '../../src/env/env.service';
 import { ArchiveService } from '../../src/infra/archive/archive.service';
-import { ContainerService } from '@agyn/docker-runner';
+import { DOCKER_CLIENT, type DockerClient } from '../../src/infra/container/dockerClient.token';
 import { NcpsKeyService } from '../../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../../src/llm/provisioners/llm.provisioner';
 import { SlackAdapter } from '../../src/messaging/slack/slack.adapter';
@@ -59,14 +59,14 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [EventsBusService, () => createDefaultStub('EventsBusService')],
   [PrismaService, () => createDefaultStub('PrismaService', { getClient: vi.fn(() => ({})) })],
   [
-    ContainerService,
+    DOCKER_CLIENT,
     () =>
-      createDefaultStub('ContainerService', {
+      createDefaultStub('DockerClient', {
         start: vi.fn(async () => createDefaultStub('ContainerHandle')),
         findContainerByLabels: vi.fn(async () => undefined),
         findContainersByLabels: vi.fn(async () => []),
         getContainerLabels: vi.fn(async () => ({})),
-      }),
+      }) as Partial<DockerClient>,
   ],
   [WorkspaceProvider, () => new WorkspaceProviderStub()],
   [

@@ -4,15 +4,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
 import {
-  DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
+  runnerAddressMissing,
+  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   type RunnerHandle,
 } from './helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1';
+const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 
 describeOrSkip('runner gRPC exec cancellation integration', () => {
@@ -21,8 +22,7 @@ describeOrSkip('runner gRPC exec cancellation integration', () => {
   let containerId: string | null = null;
 
   beforeAll(async () => {
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunner(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
   }, 120_000);
 

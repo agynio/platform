@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import type { DockerEventFilters } from '@agyn/docker-runner';
+import type { DockerEventFilters } from './dockerRunner.types';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 import { ContainerEventProcessor, type DockerEventMessage } from './containerEvent.processor';
 

@@ -1,4 +1,4 @@
-import type { ContainerCreateOptions } from 'dockerode';
+export type ContainerCreateOptions = Record<string, unknown>;
 
 export const SUPPORTED_PLATFORMS = ['linux/amd64', 'linux/arm64'] as const;
 export type Platform = (typeof SUPPORTED_PLATFORMS)[number];
@@ -115,3 +115,5 @@ export type ContainerInspectInfo = {
   State?: ContainerInspectState;
   NetworkSettings?: ContainerInspectNetworkSettings;
 };
+
+export type DockerEventFilters = Record<string, Array<string | number>>;

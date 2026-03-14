@@ -1,5 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { mapInspectMounts, type ContainerHandle, type ContainerOpts, type SidecarOpts, PLATFORM_LABEL } from '@agyn/docker-runner';
+import { mapInspectMounts } from '../../infra/container/container.mounts';
+import type { ContainerHandle } from '../../infra/container/container.handle';
+import type { ContainerOpts, SidecarOpts } from '../../infra/container/dockerRunner.types';
+import { PLATFORM_LABEL } from '../../infra/container/dockerRunner.types';
 import { DOCKER_CLIENT, type DockerClient } from '../../infra/container/dockerClient.token';
 import { ContainerRegistry } from '../../infra/container/container.registry';
 import {

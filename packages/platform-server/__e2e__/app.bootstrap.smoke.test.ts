@@ -12,7 +12,6 @@ import { StartupRecoveryService } from '../src/core/services/startupRecovery.ser
 import { EventsBusService } from '../src/events/events-bus.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
-import { ContainerService } from '@agyn/docker-runner';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -48,7 +47,6 @@ const agentProbeToken = Symbol('agent_node_probe');
 type BootstrapStubs = {
   prismaServiceStub: Pick<PrismaService, 'getClient'>;
   containerRegistryStub: Partial<ContainerRegistry>;
-  containerServiceStub: Partial<ContainerService>;
   cleanupStub: Partial<ContainerCleanupService>;
   ncpsStub: Partial<NcpsKeyService>;
   runEventsStub: Partial<RunEventsService>;
@@ -101,19 +99,6 @@ const createBootstrapStubs = (): BootstrapStubs => {
     findMany: vi.fn().mockResolvedValue([]),
     touchLastUsed: vi.fn(),
   } satisfies Partial<ContainerRegistry>;
-
-  const containerServiceStub = {
-    start: vi.fn(),
-    stopContainer: vi.fn(),
-    removeContainer: vi.fn(),
-    findContainersByLabels: vi.fn().mockResolvedValue([]),
-    findContainerByLabels: vi.fn().mockResolvedValue(undefined),
-    execContainer: vi.fn().mockResolvedValue({ exitCode: 0, stderr: '', stdout: '' }),
-    putArchive: vi.fn().mockResolvedValue(undefined),
-    touchLastUsed: vi.fn(),
-    ensureDinD: vi.fn().mockResolvedValue(undefined),
-    cleanupDinDSidecars: vi.fn().mockResolvedValue(undefined),
-  } satisfies Partial<ContainerService>;
 
   const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;
 
@@ -195,8 +180,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
   } satisfies Partial<DockerWorkspaceEventsWatcher>;
 
   const dockerClientStub = {
-    checkConnectivity: vi.fn().mockResolvedValue({ status: 200 }),
-    getEndpoint: vi.fn(() => `${runnerConfigDefaults.dockerRunnerGrpcHost}:${runnerConfigDefaults.dockerRunnerGrpcPort}`),
+    checkConnectivity: vi.fn().mockResolvedValue({ status: 'ok' }),
     listContainersByVolume: vi.fn().mockResolvedValue([]),
     removeVolume: vi.fn().mockResolvedValue(undefined),
   } satisfies Partial<DockerClient>;
@@ -210,7 +194,6 @@ const createBootstrapStubs = (): BootstrapStubs => {
   return {
     prismaServiceStub,
     containerRegistryStub,
-    containerServiceStub,
     cleanupStub,
     ncpsStub,
     runEventsStub,
@@ -241,8 +224,6 @@ const applyBootstrapOverrides = (
     .useValue(stubs.prismaServiceStub as PrismaService)
     .overrideProvider(ContainerRegistry)
     .useValue(stubs.containerRegistryStub as ContainerRegistry)
-    .overrideProvider(ContainerService)
-    .useValue(stubs.containerServiceStub as ContainerService)
     .overrideProvider(ContainerCleanupService)
     .useValue(stubs.cleanupStub as ContainerCleanupService)
     .overrideProvider(NcpsKeyService)

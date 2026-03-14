@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
 import { ModuleRef } from '@nestjs/core';
-import { ContainerService } from '@agyn/docker-runner';
-import type { ContainerRegistry } from '../src/infra/container/container.registry';
+import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
@@ -31,7 +30,7 @@ describe('templates: memory registration and agent memory port', () => {
         ...runnerConfigDefaults,
       }),
     );
-    const containerService = new ContainerService(undefined as unknown as ContainerRegistry);
+    const workspaceProvider = new WorkspaceProviderStub();
     const resolver = {
       resolve: async (input: unknown) => ({
         output: input,
@@ -51,7 +50,7 @@ describe('templates: memory registration and agent memory port', () => {
       create<T = any>(cls: new (...args: any[]) => T): T {
         // Provide minimal constructor args for known node classes
         if (cls === WorkspaceNode)
-          return new WorkspaceNode(containerService, configService, ncpsKeyService, envService) as unknown as T;
+          return new WorkspaceNode(workspaceProvider, configService, ncpsKeyService, envService) as unknown as T;
         if (cls === ShellCommandNode)
           return new ShellCommandNode(
             envService as any,

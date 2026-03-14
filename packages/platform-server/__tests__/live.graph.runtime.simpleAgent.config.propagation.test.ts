@@ -5,10 +5,11 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService } from '@agyn/docker-runner';
+import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
+import { createDockerClientStub } from './helpers/dockerClient.stub';
 // PrismaService removed from test harness; use minimal DI stubs
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentNode } from '../src/nodes/agent/agent.node';
@@ -20,11 +21,6 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 describe('LiveGraphRuntime -> Agent config propagation', () => {
   function makeRuntime() {
-    class StubContainerService extends ContainerService {
-      constructor(registry: any) {
-        super(registry as any);
-      }
-    }
     class StubLLMProvisioner extends LLMProvisioner {
       async init(): Promise<void> {}
       async getLLM() {
@@ -79,7 +75,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
 
     return Test.createTestingModule({
       providers: [
-        { provide: ContainerService, useClass: StubContainerService },
+        { provide: DOCKER_CLIENT, useValue: createDockerClientStub() },
         { provide: ConfigService, useValue: new ConfigService().init(cfg) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },

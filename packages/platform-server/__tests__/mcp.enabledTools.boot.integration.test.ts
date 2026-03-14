@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService, ContainerHandle, type ContainerOpts } from '@agyn/docker-runner';
+import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
@@ -19,53 +19,10 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { createDockerClientStub } from './helpers/dockerClient.stub';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
-
-class StubContainerService extends ContainerService {
-  constructor(registry: ContainerRegistry) {
-    super(registry);
-  }
-  override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
-    return new ContainerHandle(this, 'cid');
-  }
-  override async execContainer(
-    _id: string,
-    _command: string[] | string,
-    _options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      tty?: boolean;
-      killOnTimeout?: boolean;
-      signal?: AbortSignal;
-      logToPid1?: boolean;
-    },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return { stdout: '', stderr: '', exitCode: 0 };
-  }
-  override async findContainerByLabels(
-    _labels: Record<string, string>,
-    _opts?: { all?: boolean },
-  ): Promise<ContainerHandle | undefined> {
-    return undefined;
-  }
-  override async findContainersByLabels(
-    _labels: Record<string, string>,
-    _opts?: { all?: boolean },
-  ): Promise<ContainerHandle[]> {
-    return [];
-  }
-  override async getContainerLabels(_id: string): Promise<Record<string, string> | undefined> {
-    return undefined;
-  }
-  override async touchLastUsed(_id: string): Promise<void> {}
-  override async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
-  override async removeContainer(_id: string, _force = false): Promise<void> {}
-  override async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
-}
 class StubConfigService extends ConfigService {
   constructor() {
     super();
@@ -130,7 +87,7 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
   it('agent registers only enabled MCP tools on load', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        { provide: ContainerService, useClass: StubContainerService },
+        { provide: DOCKER_CLIENT, useValue: createDockerClientStub() },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
         {

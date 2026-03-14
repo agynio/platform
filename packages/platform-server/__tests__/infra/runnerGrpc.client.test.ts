@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { ClientDuplexStream } from '@grpc/grpc-js';
 import { Metadata, status } from '@grpc/grpc-js';
-import { NonceCache, verifyAuthHeaders } from '@agyn/docker-runner';
+import { NonceCache, verifyAuthHeaders } from '../../src/infra/container/auth';
 import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
 import type { RunnerServiceGrpcClientInstance } from '../../src/proto/grpc.js';
 

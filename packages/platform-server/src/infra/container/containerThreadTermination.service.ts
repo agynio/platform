@@ -4,7 +4,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { ContainerRegistry, type ContainerMetadata, type ContainerStatus } from './container.registry';
 import { DOCKER_CLIENT, type DockerClient } from './dockerClient.token';
 import { PrismaService } from '../../core/services/prisma.service';
-import type { ContainerHandle } from '@agyn/docker-runner';
+import type { ContainerHandle } from './container.handle';
 
 @Injectable()
 export class ContainerThreadTerminationService {

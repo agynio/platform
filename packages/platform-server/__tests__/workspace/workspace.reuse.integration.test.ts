@@ -13,17 +13,18 @@ import { PrismaService } from '../../src/core/services/prisma.service';
 import { registerTestConfig, clearTestConfig } from '../helpers/config';
 import {
   RUNNER_SECRET,
-  DEFAULT_SOCKET,
   hasTcpDocker,
+  runnerAddressMissing,
+  runnerSecretMissing,
   socketMissing,
-  startDockerRunnerProcess,
+  startDockerRunner,
   startPostgres,
   runPrismaMigrations,
   type RunnerHandle,
   type PostgresHandle,
 } from '../helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1';
+const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe.sequential;
 
 describeOrSkip('Docker workspace reuse lifecycle', () => {
@@ -42,8 +43,7 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunnerProcess(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     clearTestConfig();
