@@ -39,9 +39,12 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
         system: persistedContext.system ?? incomingContext.system,
       };
 
+      // Preserve the persisted transcript order and append the newly received messages.
+      const mergedMessages = [...persisted.messages, ...state.messages];
+
       const merged: LLMState = {
         summary: persisted.summary ?? state.summary,
-        messages: [...persisted.messages, ...state.messages],
+        messages: mergedMessages,
         context: mergedContext,
         meta: state.meta,
       };
@@ -55,7 +58,6 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
       return { ...state, context: this.ensureContext(state.context) };
     }
   }
-
   private ensureContext(context: LLMContextState | undefined): LLMContextState {
     if (!context) return { messageIds: [], memory: [], pendingNewContextItemIds: [] };
     return {
