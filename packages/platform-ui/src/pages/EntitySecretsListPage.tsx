@@ -5,8 +5,8 @@ import { Eye, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { ActionIconButton } from '@/components/ActionIconButton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
+import { Dropdown } from '@/components/Dropdown';
 import { PaginationBar } from '@/components/PaginationBar';
-import { SelectInput } from '@/components/SelectInput';
 import { Textarea } from '@/components/Textarea';
 import type { EntitySecret } from '@/api/modules/entitySecrets';
 import {
@@ -29,6 +29,8 @@ type ProviderOption = {
   value: string;
   label: string;
 };
+
+const ALL_PROVIDERS_VALUE = '__all_providers__';
 
 type EntitySecretsHeaderProps = {
   providerFilter: string;
@@ -58,12 +60,10 @@ function EntitySecretsHeader({
             Define secret entries sourced from providers.
           </p>
           <div className="mt-3 max-w-xs">
-            <SelectInput
+            <Dropdown
               label="Filter by provider"
-              value={providerFilter}
-              onChange={(event) => onProviderChange(event.target.value)}
-              placeholder="All providers"
-              allowEmptyOption
+              value={providerFilter || ALL_PROVIDERS_VALUE}
+              onValueChange={(value) => onProviderChange(value === ALL_PROVIDERS_VALUE ? '' : value)}
               options={providerOptions}
               disabled={providersLoading || providersError}
             />
@@ -323,7 +323,10 @@ export function EntitySecretsListPage() {
     providersQuery.data?.pages,
   ]);
   const providerOptions = useMemo(
-    () => providers.map((provider) => ({ value: provider.id, label: buildProviderLabel(provider) })),
+    () => [
+      { value: ALL_PROVIDERS_VALUE, label: 'All providers' },
+      ...providers.map((provider) => ({ value: provider.id, label: buildProviderLabel(provider) })),
+    ],
     [providers],
   );
   const providerLabels = useMemo(() => {

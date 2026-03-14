@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
+import { Dropdown } from '@/components/Dropdown';
 import { Input } from '@/components/Input';
-import { SelectInput } from '@/components/SelectInput';
 import { Textarea } from '@/components/Textarea';
 import {
   getSecretProvider,
@@ -210,10 +210,12 @@ export function SecretProviderUpsertPage({ mode }: SecretProviderUpsertPageProps
               rows={3}
               disabled={isSaving}
             />
-            <SelectInput
+            <Dropdown
               label="Provider type"
               value={formState.type}
-              onChange={(event) => setFormState((current) => ({ ...current, type: event.target.value as SecretProviderType }))}
+              onValueChange={(value) =>
+                setFormState((current) => ({ ...current, type: value as SecretProviderType }))
+              }
               options={PROVIDER_TYPE_OPTIONS}
               disabled={isSaving || isEditing}
             />

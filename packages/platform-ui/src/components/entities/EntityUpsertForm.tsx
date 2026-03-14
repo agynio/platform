@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { useForm } from 'react-hook-form';
 
 import { Button } from '@/components/Button';
+import { Dropdown } from '@/components/Dropdown';
 import { Input } from '@/components/Input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/forms/Form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dropdown } from '@/components/Dropdown';
 import type { NodeConfig, NodeState } from '@/components/nodeProperties/types';
 import type { NodePropertiesViewProps } from '@/components/nodeProperties/viewTypes';
 import { NODE_TEMPLATE_KIND_MAP, isNodeTemplateName } from '@/components/nodeProperties/viewTypes';
@@ -37,6 +37,7 @@ type NodeViewKind = NodeConfig['kind'];
 
 const SECRET_SUGGESTION_TTL_MS = 5 * 60 * 1000;
 const VARIABLE_SUGGESTION_TTL_MS = 5 * 60 * 1000;
+const EMPTY_RELATION_VALUE = '__relation_none__';
 
 const NODE_STATUS_VALUES: ReadonlyArray<NodeState['status']> = [
   'not_ready',
@@ -977,12 +978,15 @@ export function EntityUpsertForm({
                   <div className="space-y-6">
                     {relationDefinitions.map((definition) => {
                       const options = relationOptionsMap[definition.id] ?? [];
-                      const selections = relationSelections[definition.id] ?? relationPrefillMap[definition.id] ?? [];
+                      const selections = relationSelections[definition.id]
+                        ?? relationPrefillMap[definition.id]
+                        ?? [];
                       const helperText = options.length === 0
                         ? 'No eligible nodes available in this workspace.'
                         : definition.description ?? 'Select an option.';
                       if (definition.mode === 'single') {
                         const controlId = `relation-${definition.id}`;
+                        const placeholder = definition.placeholder ?? 'Select an option';
                         return (
                           <div key={definition.id} className="space-y-2">
                             <label htmlFor={controlId} className="text-sm font-medium text-[var(--agyn-dark)]">
@@ -990,15 +994,23 @@ export function EntityUpsertForm({
                             </label>
                             <Dropdown
                               id={controlId}
-                              placeholder={definition.placeholder ?? 'Select an option'}
-                              value={selections[0] || undefined}
+                              placeholder={placeholder}
+                              value={selections[0] ?? EMPTY_RELATION_VALUE}
                               disabled={isSubmitting || options.length === 0}
-                              onValueChange={(value) => handleSingleRelationChange(definition.id, value)}
+                              onValueChange={(value) =>
+                                handleSingleRelationChange(
+                                  definition.id,
+                                  value === EMPTY_RELATION_VALUE ? '' : value,
+                                )
+                              }
                               helperText={helperText}
-                              options={options.map((option) => ({
-                                value: option.id,
-                                label: option.label,
-                              }))}
+                              options={[
+                                { value: EMPTY_RELATION_VALUE, label: placeholder },
+                                ...options.map((option) => ({
+                                  value: option.id,
+                                  label: option.label,
+                                })),
+                              ]}
                             />
                           </div>
                         );

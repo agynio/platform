@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/Button';
+import { Dropdown } from '@/components/Dropdown';
 import { Input } from '@/components/Input';
-import { SelectInput } from '@/components/SelectInput';
 import { Textarea } from '@/components/Textarea';
 import { getEntitySecret, type EntitySecret } from '@/api/modules/entitySecrets';
 import { useSecretProviders } from '@/features/entitySecrets/hooks/useSecretProviders';
@@ -227,10 +227,10 @@ export function EntitySecretUpsertPage({ mode }: EntitySecretUpsertPageProps) {
               rows={3}
               disabled={isSaving}
             />
-            <SelectInput
+            <Dropdown
               label="Secret provider"
-              value={formState.secretProviderId}
-              onChange={(event) => setFormState((current) => ({ ...current, secretProviderId: event.target.value }))}
+              value={formState.secretProviderId || undefined}
+              onValueChange={(value) => setFormState((current) => ({ ...current, secretProviderId: value }))}
               options={providerOptions}
               placeholder={providersQuery.isLoading ? 'Loading providers…' : 'Select a provider'}
               error={formErrors.secretProviderId}
