@@ -51,6 +51,8 @@ describe('RootLayout navigation', () => {
       'entitiesMcp',
       'entitiesWorkspaces',
       'entitiesMemory',
+      'entitiesSecretProviders',
+      'entitiesSecrets',
       'entitiesLlmProviders',
       'entitiesLlmModels',
     ]);

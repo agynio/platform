@@ -19,6 +19,8 @@ import {
   Hammer,
   Server,
   Building2,
+  Shield,
+  KeyRound,
 } from 'lucide-react';
 import { MainLayout } from '../components/layouts/MainLayout';
 import type { MenuItem } from '../components/Sidebar';
@@ -34,6 +36,8 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   entitiesMcp: '/mcp',
   entitiesWorkspaces: '/workspaces',
   entitiesMemory: '/memory',
+  entitiesSecretProviders: '/secret-providers',
+  entitiesSecrets: '/entity-secrets',
   entitiesLlmProviders: '/llm-providers',
   entitiesLlmModels: '/llm-models',
   containers: '/monitoring/containers',
@@ -66,6 +70,8 @@ const MENU_ITEMS: MenuItem[] = [
       { id: 'entitiesMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" /> },
       { id: 'entitiesWorkspaces', label: 'Workspaces', icon: <Building2 className="w-4 h-4" /> },
       { id: 'entitiesMemory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
+      { id: 'entitiesSecretProviders', label: 'Secret Providers', icon: <Shield className="w-4 h-4" /> },
+      { id: 'entitiesSecrets', label: 'Secrets', icon: <KeyRound className="w-4 h-4" /> },
       { id: 'entitiesLlmProviders', label: 'LLM Providers', icon: <Server className="w-4 h-4" /> },
       { id: 'entitiesLlmModels', label: 'LLM Models', icon: <Bot className="w-4 h-4" /> },
     ],
