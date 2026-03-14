@@ -184,6 +184,7 @@ export function SecretProviderUpsertPage({ mode }: SecretProviderUpsertPageProps
                 </div>
                 <Input
                   label="Title"
+                  size="sm"
                   value={formState.title}
                   onChange={(event) => setFormState((current) => ({ ...current, title: event.target.value }))}
                   placeholder="Provider name"
@@ -212,6 +213,7 @@ export function SecretProviderUpsertPage({ mode }: SecretProviderUpsertPageProps
             />
             <Dropdown
               label="Provider type"
+              size="sm"
               value={formState.type}
               onValueChange={(value) =>
                 setFormState((current) => ({ ...current, type: value as SecretProviderType }))
@@ -221,6 +223,7 @@ export function SecretProviderUpsertPage({ mode }: SecretProviderUpsertPageProps
             />
             <Input
               label="Vault address"
+              size="sm"
               value={formState.vaultAddress}
               onChange={(event) => setFormState((current) => ({ ...current, vaultAddress: event.target.value }))}
               placeholder="https://vault.example.com"
@@ -229,6 +232,7 @@ export function SecretProviderUpsertPage({ mode }: SecretProviderUpsertPageProps
             />
             <Input
               label="Vault token"
+              size="sm"
               type="password"
               value={formState.vaultToken}
               onChange={(event) => setFormState((current) => ({ ...current, vaultToken: event.target.value }))}

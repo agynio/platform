@@ -189,6 +189,7 @@ export function EntitySecretUpsertPage({ mode }: EntitySecretUpsertPageProps) {
                 </div>
                 <Input
                   label="Title"
+                  size="sm"
                   value={formState.title}
                   onChange={(event) => setFormState((current) => ({ ...current, title: event.target.value }))}
                   placeholder="Secret name"
@@ -229,6 +230,7 @@ export function EntitySecretUpsertPage({ mode }: EntitySecretUpsertPageProps) {
             />
             <Dropdown
               label="Secret provider"
+              size="sm"
               value={formState.secretProviderId || undefined}
               onValueChange={(value) => setFormState((current) => ({ ...current, secretProviderId: value }))}
               options={providerOptions}
@@ -238,6 +240,7 @@ export function EntitySecretUpsertPage({ mode }: EntitySecretUpsertPageProps) {
             />
             <Input
               label="Remote name"
+              size="sm"
               value={formState.remoteName}
               onChange={(event) => setFormState((current) => ({ ...current, remoteName: event.target.value }))}
               placeholder="Path or identifier in the provider"
