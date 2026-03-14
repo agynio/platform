@@ -171,8 +171,20 @@ export class ThreadCleanupCoordinator {
   }
 
   private async deleteWorkspaceVolume(threadId: string): Promise<void> {
-    const volumeName = `ha_ws_${threadId}`;
+    const fallbackVolumeName = `ha_ws_${threadId}`;
+    let registryRefs: Array<{ containerId: string; threadId: string | null; status: ContainerStatus }> = [];
+    let workspaceVolume: { id: string; volumeName: string } | null = null;
+    let volumeName = fallbackVolumeName;
+    let shouldReconcile = false;
+
     try {
+      workspaceVolume = await this.prisma.workspaceVolume.findFirst({
+        where: { threadId, removedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, volumeName: true },
+      });
+
+      volumeName = workspaceVolume?.volumeName ?? fallbackVolumeName;
       const dockerContainers = await this.containerService.listContainersByVolume(volumeName);
       if (dockerContainers.length > 0) {
         this.logger.warn(
@@ -186,7 +198,7 @@ export class ThreadCleanupCoordinator {
         return;
       }
 
-      const registryRefs = await this.registry.findByVolume(volumeName);
+      registryRefs = await this.registry.findByVolume(volumeName);
       const mismatchedRefs = registryRefs.filter(
         (ref) => ref.threadId !== threadId || ref.status !== 'stopped',
       );
@@ -202,17 +214,80 @@ export class ThreadCleanupCoordinator {
         );
       }
 
-      await this.containerService.removeVolume(volumeName, { force: true });
-      this.logger.log(`ThreadCleanup: workspace volume removed${this.format({ threadId, volumeName })}`);
+      const outcome = await this.containerService.removeVolume(volumeName, { force: true });
+      if (outcome === 'removed') {
+        this.logger.log(`ThreadCleanup: workspace volume removed${this.format({ threadId, volumeName })}`);
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
+        shouldReconcile = true;
+      } else if (outcome === 'not_found') {
+        this.logger.debug(
+          `ThreadCleanup: workspace volume already missing${this.format({ threadId, volumeName })}`,
+        );
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
+        shouldReconcile = true;
+      } else {
+        this.logger.debug(
+          `ThreadCleanup: workspace volume removal blocked due to references${this.format({ threadId, volumeName })}`,
+        );
+      }
 
-      if (registryRefs.length > 0) {
+      if (shouldReconcile && registryRefs.length > 0) {
         await this.reconcileRegistryVolumeReferences(threadId, volumeName, registryRefs);
       }
     } catch (error) {
+      const statusCode = this.extractStatusCode(error);
+      if (statusCode === 404) {
+        this.logger.debug(
+          `ThreadCleanup: workspace volume already missing${this.format({ threadId, volumeName })}`,
+        );
+        await this.markWorkspaceVolumeRemoved(workspaceVolume?.id, threadId, new Date());
+        if (registryRefs.length > 0) {
+          await this.reconcileRegistryVolumeReferences(threadId, volumeName, registryRefs);
+        }
+        return;
+      }
+
       this.logger.error(
         `ThreadCleanup: failed to remove workspace volume${this.format({ threadId, volumeName, error })}`,
       );
     }
+  }
+
+  private async markWorkspaceVolumeRemoved(
+    workspaceVolumeId: string | undefined,
+    threadId: string,
+    removedAt: Date,
+  ): Promise<void> {
+    if (!workspaceVolumeId) {
+      return;
+    }
+
+    try {
+      await this.prisma.workspaceVolume.updateMany({
+        where: { id: workspaceVolumeId, removedAt: null },
+        data: { removedAt },
+      });
+    } catch (error) {
+      this.logger.error(
+        `ThreadCleanup: failed to mark workspace volume removal${this.format({ threadId, workspaceVolumeId, error })}`,
+      );
+    }
+  }
+
+  private extractStatusCode(error: unknown): number | undefined {
+    if (typeof error === 'object' && error && 'statusCode' in error) {
+      const statusCode = (error as { statusCode?: number }).statusCode;
+      return typeof statusCode === 'number' ? statusCode : undefined;
+    }
+    if (error && typeof error === 'object' && 'code' in error) {
+      const code = (error as { code?: unknown }).code;
+      if (typeof code === 'number') return code;
+      if (typeof code === 'string') {
+        const parsed = Number.parseInt(code, 10);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      }
+    }
+    return undefined;
   }
 
   private async reconcileRegistryVolumeReferences(

@@ -117,12 +117,29 @@ model Thread {
   runs       Run[]
   containers Container[]
   runEvents  RunEvent[]
+  workspaceVolumes WorkspaceVolume[]
 
   // Index parentId to accelerate parent-child lookups
   @@index([parentId])
   // Filter by thread status (open/closed)
   @@index([status])
   @@index([assignedAgentNodeId])
+}
+
+model WorkspaceVolume {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId   String   @db.Uuid @map("thread_id")
+  thread     Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  volumeName String   @map("volume_name")
+  removedAt  DateTime? @map("removed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([volumeName], map: "workspace_volumes_volume_name_key")
+  @@index([threadId], map: "workspace_volumes_thread_id_idx")
+  @@index([removedAt], map: "workspace_volumes_removed_at_idx")
+  @@index([threadId, removedAt], map: "workspace_volumes_thread_id_removed_at_idx")
+  @@map("workspace_volumes")
 }
 
 enum ThreadStatus {

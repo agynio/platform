@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { mapInspectMounts, type ContainerHandle, type ContainerOpts, type SidecarOpts, PLATFORM_LABEL } from '@agyn/docker-runner';
 import { DOCKER_CLIENT, type DockerClient } from '../../infra/container/dockerClient.token';
 import { ContainerRegistry } from '../../infra/container/container.registry';
+import { PrismaService } from '../../core/services/prisma.service';
 import {
   DestroyWorkspaceOptions,
   EnsureWorkspaceResult,
@@ -39,6 +40,7 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   constructor(
     @Inject(DOCKER_CLIENT) private readonly containers: DockerClient,
     private readonly registry: ContainerRegistry,
+    private readonly prismaService: PrismaService,
   ) {
     super();
   }
@@ -110,6 +112,11 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
       await this.containers.touchLastUsed(workspaceHandle.id);
     } catch {
       // ignore errors
+    }
+
+    if (key.threadId) {
+      const volumeName = `ha_ws_${key.threadId}`;
+      await this.ensureWorkspaceVolumeRecord(key.threadId, volumeName);
     }
 
     const providerType: WorkspaceRuntimeProviderType = 'docker';
@@ -415,6 +422,50 @@ export class DockerWorkspaceRuntimeProvider extends WorkspaceRuntimeProvider {
   private volumeBindFor(threadId: string, mountPath: string): string {
     const volumeName = `ha_ws_${threadId}`;
     return `${volumeName}:${mountPath}`;
+  }
+
+  private async ensureWorkspaceVolumeRecord(threadId: string, volumeName: string): Promise<void> {
+    try {
+      const prisma = this.prismaService.getClient();
+      const active = await prisma.workspaceVolume.findFirst({
+        where: { threadId, removedAt: null },
+        select: { id: true, volumeName: true },
+      });
+
+      if (active) {
+        if (active.volumeName !== volumeName) {
+          await prisma.workspaceVolume.update({
+            where: { id: active.id },
+            data: { volumeName },
+          });
+        }
+        return;
+      }
+
+      const reusable = await prisma.workspaceVolume.findFirst({
+        where: { threadId },
+        orderBy: { removedAt: 'desc' },
+        select: { id: true },
+      });
+
+      if (reusable) {
+        await prisma.workspaceVolume.update({
+          where: { id: reusable.id },
+          data: { volumeName, removedAt: null },
+        });
+        return;
+      }
+
+      await prisma.workspaceVolume.create({
+        data: { threadId, volumeName },
+      });
+    } catch (error) {
+      this.logger.error('Failed to ensure workspace volume record', {
+        threadId,
+        volumeName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private buildDinDSidecarOpts(baseLabels: Record<string, string>, mirrorUrl?: string): SidecarOpts {

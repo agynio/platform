@@ -1016,19 +1016,25 @@ export class ContainerService implements DockerClientPort {
     return Array.isArray(result) ? result.map((it) => it.Id) : [];
   }
 
-  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
+  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<'removed' | 'not_found' | 'referenced'> {
     const force = options?.force ?? false;
     this.log(`Removing volume name=${volumeName} force=${force}`);
     const volume = this.docker.getVolume(volumeName);
     try {
       await volume.remove({ force });
+      this.debug(`Volume removed name=${volumeName}`);
+      return 'removed';
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 404) {
         this.debug(`Volume already removed name=${volumeName}`);
-      } else {
-        throw e;
+        return 'not_found';
       }
+      if (sc === 409) {
+        this.debug(`Volume removal blocked due to active references name=${volumeName}`);
+        return 'referenced';
+      }
+      throw e;
     }
   }
 

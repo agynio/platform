@@ -6,13 +6,31 @@ import type { DockerClient } from '../../src/infra/container/dockerClient.token'
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
 import type { WorkspaceKey, WorkspaceSpec } from '../../src/workspace/runtime/workspace.runtime.provider';
 
+const createPrismaStub = () => {
+  const prismaClient = {
+    workspaceVolume: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      create: vi.fn(),
+    },
+  };
+  return {
+    prismaClient,
+    prismaService: { getClient: () => prismaClient },
+  };
+};
+
 describe('DockerWorkspaceRuntimeProvider', () => {
   it('registers workspace containers in the registry when ensuring a new workspace', async () => {
     const dockerClient = createDockerClientStub();
     const registerStart = vi.fn().mockResolvedValue(undefined);
     const registry = { registerStart } as unknown as ContainerRegistry;
+    const { prismaClient, prismaService } = createPrismaStub();
+    prismaClient.workspaceVolume.findFirst.mockResolvedValueOnce(null);
+    prismaClient.workspaceVolume.findFirst.mockResolvedValueOnce(null);
+    prismaClient.workspaceVolume.create.mockResolvedValueOnce({ id: 'volume-thread-abc' });
 
-    const provider = new DockerWorkspaceRuntimeProvider(dockerClient, registry);
+    const provider = new DockerWorkspaceRuntimeProvider(dockerClient, registry, prismaService as any);
 
     const key: WorkspaceKey = { threadId: 'thread-abc', role: 'workspace', nodeId: 'node-xyz' };
     const spec: WorkspaceSpec = { image: 'node:20-bullseye', persistentVolume: { mountPath: '/workspace' } };
@@ -29,6 +47,50 @@ describe('DockerWorkspaceRuntimeProvider', () => {
         labels: expect.objectContaining({ 'hautech.ai/thread_id': 'thread-abc', 'hautech.ai/role': 'workspace' }),
       }),
     );
+    expect(prismaClient.workspaceVolume.create).toHaveBeenCalledWith({
+      data: { threadId: 'thread-abc', volumeName: 'ha_ws_thread-abc' },
+    });
+  });
+
+  it('reactivates an existing workspace volume record when one is available', async () => {
+    const dockerClient = createDockerClientStub();
+    const registry = { registerStart: vi.fn().mockResolvedValue(undefined) } as unknown as ContainerRegistry;
+    const { prismaClient, prismaService } = createPrismaStub();
+
+    prismaClient.workspaceVolume.findFirst
+      .mockResolvedValueOnce(null) // no active volume
+      .mockResolvedValueOnce({ id: 'volume-1' });
+
+    const provider = new DockerWorkspaceRuntimeProvider(dockerClient, registry, prismaService as any);
+
+    const key: WorkspaceKey = { threadId: 'thread-reactivate', role: 'workspace' };
+    const spec: WorkspaceSpec = { image: 'node:20-bullseye', persistentVolume: { mountPath: '/workspace' } };
+
+    await provider.ensureWorkspace(key, spec);
+
+    expect(prismaClient.workspaceVolume.update).toHaveBeenCalledWith({
+      where: { id: 'volume-1' },
+      data: { volumeName: 'ha_ws_thread-reactivate', removedAt: null },
+    });
+    expect(prismaClient.workspaceVolume.create).not.toHaveBeenCalled();
+  });
+
+  it('skips volume updates when an active record already matches the volume name', async () => {
+    const dockerClient = createDockerClientStub();
+    const registry = { registerStart: vi.fn().mockResolvedValue(undefined) } as unknown as ContainerRegistry;
+    const { prismaClient, prismaService } = createPrismaStub();
+
+    prismaClient.workspaceVolume.findFirst.mockResolvedValueOnce({ id: 'volume-active', volumeName: 'ha_ws_thread-active' });
+
+    const provider = new DockerWorkspaceRuntimeProvider(dockerClient, registry, prismaService as any);
+
+    const key: WorkspaceKey = { threadId: 'thread-active', role: 'workspace' };
+    const spec: WorkspaceSpec = { image: 'node:20-bullseye', persistentVolume: { mountPath: '/workspace' } };
+
+    await provider.ensureWorkspace(key, spec);
+
+    expect(prismaClient.workspaceVolume.update).not.toHaveBeenCalled();
+    expect(prismaClient.workspaceVolume.create).not.toHaveBeenCalled();
   });
 });
 
