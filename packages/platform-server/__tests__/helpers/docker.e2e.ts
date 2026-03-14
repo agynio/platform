@@ -33,20 +33,15 @@ export type PostgresHandle = {
   stop: () => Promise<void>;
 };
 
-export async function startDockerRunner(socketPath: string): Promise<RunnerHandle> {
+export async function startDockerRunner(): Promise<RunnerHandle> {
   if (!runnerAddress || !RUNNER_SECRET) {
     throw new Error('DOCKER_RUNNER_GRPC_ADDRESS and DOCKER_RUNNER_SHARED_SECRET are required to run docker e2e tests.');
   }
-  void socketPath;
   await waitForRunnerReadyOnAddress(runnerAddress, RUNNER_SECRET);
   return {
     grpcAddress: runnerAddress,
     close: async () => undefined,
   };
-}
-
-export async function startDockerRunnerProcess(socketPath: string): Promise<RunnerHandle> {
-  return startDockerRunner(socketPath);
 }
 
 async function waitForRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promise<void> {

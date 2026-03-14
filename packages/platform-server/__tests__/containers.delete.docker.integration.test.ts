@@ -23,7 +23,6 @@ import {
   runnerSecretMissing,
   socketMissing,
   startDockerRunner,
-  startDockerRunnerProcess,
   startPostgres,
   runPrismaMigrations,
   type RunnerHandle,
@@ -80,8 +79,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
     registry = new ContainerRegistry(prisma);
     await registry.ensureIndexes();
 
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunner(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     const moduleRef = await Test.createTestingModule({
@@ -291,8 +289,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
     registry = new ContainerRegistry(prisma);
     await registry.ensureIndexes();
 
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunnerProcess(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     const moduleRef = await Test.createTestingModule({

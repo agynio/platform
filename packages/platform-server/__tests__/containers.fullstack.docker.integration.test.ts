@@ -24,7 +24,7 @@ import {
   runnerAddressMissing,
   runnerSecretMissing,
   socketMissing,
-  startDockerRunnerProcess,
+  startDockerRunner,
   startPostgres,
   runPrismaMigrations,
   waitFor,
@@ -83,8 +83,7 @@ describeOrSkip('workspace create → delete full-stack flow', () => {
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunnerProcess(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
 
     clearTestConfig();

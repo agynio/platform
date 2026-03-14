@@ -1,37 +1,8 @@
-import { PassThrough } from 'node:stream';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
 import { ContainerHandle } from '../../src/infra/container/container.handle';
-import type { DockerClientPort } from '../../src/infra/container/dockerClient.token';
-
-const createDockerClientStub = (): DockerClientPort => ({
-  touchLastUsed: vi.fn(async () => undefined),
-  ensureImage: vi.fn(async () => undefined),
-  start: vi.fn(async () => new ContainerHandle(createDockerClientStub(), 'stub')),
-  execContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
-  openInteractiveExec: vi.fn(async () => ({
-    stdin: new PassThrough(),
-    stdout: new PassThrough(),
-    stderr: new PassThrough(),
-    close: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    execId: 'exec-1',
-    terminateProcessGroup: async () => undefined,
-  })),
-  streamContainerLogs: vi.fn(async () => ({ stream: new PassThrough(), close: async () => undefined })),
-  resizeExec: vi.fn(async () => undefined),
-  stopContainer: vi.fn(async () => undefined),
-  removeContainer: vi.fn(async () => undefined),
-  getContainerLabels: vi.fn(async () => undefined),
-  getContainerNetworks: vi.fn(async () => []),
-  findContainersByLabels: vi.fn(async () => []),
-  listContainersByVolume: vi.fn(async () => []),
-  removeVolume: vi.fn(async () => undefined),
-  findContainerByLabels: vi.fn(async () => undefined),
-  putArchive: vi.fn(async () => undefined),
-  inspectContainer: vi.fn(async () => ({ Id: 'stub' })),
-  getEventsStream: vi.fn(async () => new PassThrough()),
-});
+import { createDockerClientPortStub } from '../helpers/dockerClient.stub';
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
@@ -50,7 +21,7 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(createDockerClientStub(), 'fake');
+        return new FakeContainer(createDockerClientPortStub(), 'fake');
       }
     }
     const provider = new FakeProvider();

@@ -1,9 +1,8 @@
+import { PassThrough } from 'node:stream';
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerHandle } from '../src/infra/container/container.handle';
-import type { ContainerOpts } from '../src/infra/container/dockerRunner.types';
-import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
+import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
@@ -36,39 +35,8 @@ import type {
   WorkspaceLogsSession,
   WorkspaceLogsRequest,
 } from '../src/workspace/runtime/workspace.runtime.provider';
-import { PassThrough } from 'node:stream';
+import { createDockerClientStub } from './helpers/dockerClient.stub';
 
-const createDockerClientStub = (): DockerClient => {
-  const stub: DockerClient = {
-    touchLastUsed: async () => undefined,
-    ensureImage: async () => undefined,
-    start: async (_opts?: ContainerOpts) => new ContainerHandle(stub, 'cid'),
-    execContainer: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    openInteractiveExec: async () => ({
-      stdin: new PassThrough(),
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      close: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      execId: 'exec-1',
-      terminateProcessGroup: async () => undefined,
-    }),
-    streamContainerLogs: async () => ({ stream: new PassThrough(), close: async () => undefined }),
-    resizeExec: async () => undefined,
-    stopContainer: async () => undefined,
-    removeContainer: async () => undefined,
-    getContainerLabels: async () => undefined,
-    getContainerNetworks: async () => [],
-    findContainersByLabels: async () => [],
-    listContainersByVolume: async () => [],
-    removeVolume: async () => undefined,
-    findContainerByLabels: async () => undefined,
-    putArchive: async () => undefined,
-    inspectContainer: async () => ({ Id: 'cid' }),
-    getEventsStream: async () => new PassThrough(),
-    checkConnectivity: async () => ({ status: 'ok' }),
-  };
-  return stub;
-};
 
 class StubWorkspaceProvider extends WorkspaceProvider {
   capabilities(): WorkspaceProviderCapabilities {

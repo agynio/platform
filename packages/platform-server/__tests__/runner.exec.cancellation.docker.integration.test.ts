@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
 import {
-  DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
   runnerAddressMissing,
@@ -23,8 +22,7 @@ describeOrSkip('runner gRPC exec cancellation integration', () => {
   let containerId: string | null = null;
 
   beforeAll(async () => {
-    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
-    runner = await startDockerRunner(socketPath);
+    runner = await startDockerRunner();
     dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
   }, 120_000);
 
