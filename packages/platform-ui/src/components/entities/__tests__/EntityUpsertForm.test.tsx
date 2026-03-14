@@ -4,6 +4,26 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+const pointerProto = Element.prototype as typeof Element.prototype & {
+  hasPointerCapture?: (pointerId: number) => boolean;
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+  scrollIntoView?: (opts?: ScrollIntoViewOptions | boolean) => void;
+};
+
+if (!pointerProto.hasPointerCapture) {
+  pointerProto.hasPointerCapture = () => false;
+}
+if (!pointerProto.setPointerCapture) {
+  pointerProto.setPointerCapture = () => {};
+}
+if (!pointerProto.releasePointerCapture) {
+  pointerProto.releasePointerCapture = () => {};
+}
+if (!pointerProto.scrollIntoView) {
+  pointerProto.scrollIntoView = () => {};
+}
+
 vi.mock('@/lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({
     templates: [],
@@ -142,11 +162,13 @@ function renderRelationDialog(options: RelationDialogRenderOptions) {
   return { onSubmit };
 }
 
+const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
+
 describe('EntityUpsertForm', () => {
   it('embeds workspace config fields and submits updated values', async () => {
     const templates = [createTemplate('workspace-template', 'workspace')];
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
+    const user = setupUser();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -161,7 +183,7 @@ describe('EntityUpsertForm', () => {
       </QueryClientProvider>,
     );
 
-    const templateSelect = screen.getByRole('combobox', { name: 'Template' });
+    const templateSelect = screen.getByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
     await user.click(await screen.findByRole('option', { name: 'workspace-template-title' }));
 
@@ -205,7 +227,7 @@ describe('EntityUpsertForm', () => {
       config: { title: 'Existing Agent', template: 'agent-template', kind: 'Agent' },
     });
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
+    const user = setupUser();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -290,6 +312,7 @@ describe('EntityUpsertForm', () => {
       },
     });
     const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const user = setupUser();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -306,8 +329,8 @@ describe('EntityUpsertForm', () => {
     );
 
     const titleInput = await screen.findByLabelText('Entity title');
-    await userEvent.clear(titleInput);
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.clear(titleInput);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -347,12 +370,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const relationSelect = await screen.findByRole('combobox', { name: 'Agent destination' });
-    await waitFor(() => expect(relationSelect).toHaveTextContent('Agent One'));
-
+    const relationSelect = await screen.findByLabelText('Agent destination');
     await user.click(relationSelect);
+    await screen.findByRole('option', { name: 'Agent One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Agent One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -390,17 +415,18 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = setupUser();
 
     const toolsDropdown = await screen.findByRole('combobox', { name: 'Tools' });
     expect(screen.getByLabelText('Remove Tool One')).toBeInTheDocument();
-    await userEvent.click(toolsDropdown);
+    await user.click(toolsDropdown);
     const toolsListbox = await screen.findByRole('listbox');
     expect(toolsListbox).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: 'Tool Two' }));
-    await userEvent.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Tool Two' }));
+    await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     expect(screen.getByText('Tool Two')).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -435,13 +461,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = setupUser();
 
     const mcpDropdown = await screen.findByRole('combobox', { name: 'MCP servers' });
     expect(screen.getByLabelText('Remove MCP One')).toBeInTheDocument();
-    await userEvent.click(mcpDropdown);
-    await userEvent.click(screen.getByRole('button', { name: 'MCP Two' }));
+    await user.click(mcpDropdown);
+    await user.click(screen.getByRole('button', { name: 'MCP Two' }));
     expect(screen.getByLabelText('Remove MCP Two')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -472,11 +499,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: 'Memory connector' });
-    await waitFor(() => expect(select).toHaveTextContent('Connector One'));
+    const select = await screen.findByLabelText('Memory connector');
     await user.click(select);
+    await screen.findByRole('option', { name: 'Connector One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Connector One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Connector Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -514,11 +544,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: 'Workspace' });
-    await waitFor(() => expect(select).toHaveTextContent('Workspace One'));
+    const select = await screen.findByLabelText('Workspace');
     await user.click(select);
+    await screen.findByRole('option', { name: 'Workspace One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Workspace One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -553,15 +586,16 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
+    const user = setupUser();
 
     const agentsDropdown = await screen.findByRole('combobox', { name: 'Managed agents' });
     expect(screen.getByLabelText('Remove Agent One')).toBeInTheDocument();
     expect(screen.getByLabelText('Remove Agent Two')).toBeInTheDocument();
-    await userEvent.click(agentsDropdown);
-    await userEvent.click(screen.getByRole('button', { name: 'Agent Three' }));
-    await userEvent.keyboard('{Escape}');
+    await user.click(agentsDropdown);
+    await user.click(screen.getByRole('button', { name: 'Agent Three' }));
+    await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const payload = onSubmit.mock.calls[0][0];
@@ -592,11 +626,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: /^Agent$/ });
-    await waitFor(() => expect(select).toHaveTextContent('Agent One'));
+    const select = await screen.findByLabelText(/^Agent$/);
     await user.click(select);
+    await screen.findByRole('option', { name: 'Agent One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Agent One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Agent Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -629,11 +666,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: 'Workspace' });
-    await waitFor(() => expect(select).toHaveTextContent('Workspace One'));
+    const select = await screen.findByLabelText('Workspace');
     await user.click(select);
+    await screen.findByRole('option', { name: 'Workspace One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Workspace One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Workspace Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -666,11 +706,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: 'Memory workspace' });
-    await waitFor(() => expect(select).toHaveTextContent('Memory One'));
+    const select = await screen.findByLabelText('Memory workspace');
     await user.click(select);
+    await screen.findByRole('option', { name: 'Memory One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Memory One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -703,11 +746,14 @@ describe('EntityUpsertForm relations', () => {
       graphEdges,
       entity,
     });
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    const select = await screen.findByRole('combobox', { name: 'Memory workspace' });
-    await waitFor(() => expect(select).toHaveTextContent('Memory One'));
+    const select = await screen.findByLabelText('Memory workspace');
     await user.click(select);
+    await screen.findByRole('option', { name: 'Memory One' });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Memory One' })).toHaveAttribute('data-state', 'checked');
+    });
     await user.click(await screen.findByRole('option', { name: 'Memory Two' }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 

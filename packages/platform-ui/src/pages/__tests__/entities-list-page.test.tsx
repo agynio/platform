@@ -234,10 +234,9 @@ describe('Entity list pages', () => {
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
-    const listbox = await screen.findByRole('listbox');
-    expect(await within(listbox).findByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
-    expect(within(listbox).queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
-    expect(within(listbox).queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Worker Service' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Memory Workspace' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Memory Connector' })).not.toBeInTheDocument();
   });
 
   it('keeps MCP servers separate from tools, including template picker', async () => {
@@ -268,9 +267,8 @@ describe('Entity list pages', () => {
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
-    const listbox = await screen.findByRole('listbox');
-    expect(await within(listbox).findByRole('option', { name: 'Slack Tool' })).toBeInTheDocument();
-    expect(within(listbox).queryByRole('option', { name: 'Filesystem MCP' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Slack Tool' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Filesystem MCP' })).not.toBeInTheDocument();
   });
 
   it('renders only memory entities on the memory page', async () => {
@@ -354,10 +352,9 @@ describe('Entity list pages', () => {
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
-    const listbox = await screen.findByRole('listbox');
-    expect(await within(listbox).findByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
-    expect(await within(listbox).findByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
-    expect(within(listbox).queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Memory Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Memory Connector' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Worker Service' })).not.toBeInTheDocument();
   });
 
   it('renders only MCP servers on the MCP page and limits templates accordingly', async () => {
@@ -388,9 +385,8 @@ describe('Entity list pages', () => {
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
-    const listbox = await screen.findByRole('listbox');
-    expect(await within(listbox).findByRole('option', { name: 'Filesystem MCP' })).toBeInTheDocument();
-    expect(within(listbox).queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Filesystem MCP' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Slack Tool' })).not.toBeInTheDocument();
   });
 
   it('renders the MCP config view in the edit dialog', async () => {
@@ -602,9 +598,8 @@ describe('Entity list pages', () => {
 
     const templateSelect = await screen.findByRole('combobox', { name: /template/i });
     await user.click(templateSelect);
-    await screen.findByRole('option', { name: 'Support Agent' });
+    await user.click(await screen.findByRole('option', { name: 'Support Agent' }));
     await waitFor(() => expect(templateSelect).not.toBeDisabled());
-    await user.click(screen.getByRole('option', { name: 'Support Agent' }));
 
     await waitFor(() => expect(createButton).not.toBeDisabled());
   });
