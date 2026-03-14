@@ -34,6 +34,7 @@ import { menuItemBaseClasses } from '../ui/menu-item-classes';
 import { cn } from '../ui/utils';
 import { THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { useThreadSoundNotifications } from '@/hooks/useThreadSoundNotifications';
+import type { Attachment } from '@/hooks/useFileAttachments';
 
 const UNKNOWN_AGENT_LABEL = '(unknown agent)';
 const MESSAGE_LENGTH_LIMIT_LABEL = THREAD_MESSAGE_MAX_LENGTH.toLocaleString();
@@ -80,6 +81,11 @@ interface ThreadsScreenProps {
   onCancelReminder?: (reminderId: string) => void;
   isCancelQueuedMessagesPending?: boolean;
   cancellingReminderIds?: ReadonlySet<string>;
+  attachments?: Attachment[];
+  onAttachFiles?: (files: FileList | File[]) => void;
+  onRemoveAttachment?: (clientId: string) => void;
+  onRetryAttachment?: (clientId: string) => void;
+  isUploading?: boolean;
   className?: string;
 }
 
@@ -123,6 +129,11 @@ export default function ThreadsScreen({
   onCancelReminder,
   isCancelQueuedMessagesPending,
   cancellingReminderIds,
+  attachments = [],
+  onAttachFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
+  isUploading = false,
   className = '',
   conversationScrollRef,
   onConversationScroll,
@@ -258,7 +269,7 @@ export default function ThreadsScreen({
 
   const renderComposer = ({ baseDisabled, trimmedLength }: { baseDisabled: boolean; trimmedLength: number }) => {
     const lengthExceeded = trimmedLength > THREAD_MESSAGE_MAX_LENGTH;
-    const sendDisabled = baseDisabled || lengthExceeded;
+    const sendDisabled = baseDisabled || lengthExceeded || isUploading;
     const trimmedLabel = trimmedLength.toLocaleString();
 
     return (
@@ -275,6 +286,10 @@ export default function ThreadsScreen({
           }}
           sendDisabled={sendDisabled}
           isSending={isSendMessagePending}
+          attachments={attachments}
+          onAttachFiles={onAttachFiles}
+          onRemoveAttachment={onRemoveAttachment}
+          onRetryAttachment={onRetryAttachment}
         />
         {lengthExceeded ? (
           <div className="mt-2 text-xs text-[var(--agyn-red)]">
