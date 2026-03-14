@@ -24,7 +24,14 @@ describe('GraphSocketGateway', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: async () => {} } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     expect(() => gateway.init({ server: fastify.server })).not.toThrow();
   });
 });

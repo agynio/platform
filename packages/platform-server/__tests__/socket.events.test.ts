@@ -31,7 +31,14 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     gateway.init({ server: fastify.server });
 
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
@@ -81,7 +88,14 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     gateway.init({ server: fastify.server });
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
     const toSpy = vi.fn((room: string) => {
@@ -115,7 +129,14 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     gateway.init({ server: fastify.server });
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
     const toSpy = vi.fn((room: string) => {
