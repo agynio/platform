@@ -1,20 +1,37 @@
+import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerHandle, ContainerService } from '@agyn/docker-runner';
-import type { ContainerRegistry } from '../../src/infra/container/container.registry';
+import { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { DockerClientPort } from '../../src/infra/container/dockerClient.token';
 
-const makeRegistry = () => ({
-  registerStart: vi.fn(async () => undefined),
-  updateLastUsed: vi.fn(async () => undefined),
-  markStopped: vi.fn(async () => undefined),
-  markTerminating: vi.fn(async () => undefined),
-  claimForTermination: vi.fn(async () => true),
-  recordTerminationFailure: vi.fn(async () => undefined),
-  findByVolume: vi.fn(async () => null),
-  listByThread: vi.fn(async () => []),
-  ensureIndexes: vi.fn(async () => undefined),
-} satisfies Partial<ContainerRegistry>) as ContainerRegistry;
+const createDockerClientStub = (): DockerClientPort => ({
+  touchLastUsed: vi.fn(async () => undefined),
+  ensureImage: vi.fn(async () => undefined),
+  start: vi.fn(async () => new ContainerHandle(createDockerClientStub(), 'stub')),
+  execContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+  openInteractiveExec: vi.fn(async () => ({
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    close: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    execId: 'exec-1',
+    terminateProcessGroup: async () => undefined,
+  })),
+  streamContainerLogs: vi.fn(async () => ({ stream: new PassThrough(), close: async () => undefined })),
+  resizeExec: vi.fn(async () => undefined),
+  stopContainer: vi.fn(async () => undefined),
+  removeContainer: vi.fn(async () => undefined),
+  getContainerLabels: vi.fn(async () => undefined),
+  getContainerNetworks: vi.fn(async () => []),
+  findContainersByLabels: vi.fn(async () => []),
+  listContainersByVolume: vi.fn(async () => []),
+  removeVolume: vi.fn(async () => undefined),
+  findContainerByLabels: vi.fn(async () => undefined),
+  putArchive: vi.fn(async () => undefined),
+  inspectContainer: vi.fn(async () => ({ Id: 'stub' })),
+  getEventsStream: vi.fn(async () => new PassThrough()),
+});
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
@@ -33,7 +50,7 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
+        return new FakeContainer(createDockerClientStub(), 'fake');
       }
     }
     const provider = new FakeProvider();

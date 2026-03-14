@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import type { ContainerMetadata, ContainerStatus } from '../src/infra/container/container.registry';
 import type { PrismaClient } from '@prisma/client';
-import type { ContainerService } from '@agyn/docker-runner';
+import { ContainerHandle } from '../src/infra/container/container.handle';
+import type { DockerClient } from '../src/infra/container/dockerClient.token';
 import type { PrismaService } from '../src/core/services/prisma.service';
 
 type Row = {
@@ -72,7 +73,7 @@ const createHarness = () => {
     }),
   };
 
-  const containerService: Partial<ContainerService> = {
+  const containerService: Partial<DockerClient> = {
     findContainersByLabels: vi.fn(async (filter: Record<string, string>) => {
       const matches: string[] = [];
       for (const [id, lbl] of labels.entries()) {
@@ -85,7 +86,7 @@ const createHarness = () => {
         }
         if (ok) matches.push(id);
       }
-      return matches.map((id) => ({ id })) as unknown as ReturnType<ContainerService['findContainersByLabels']>;
+      return matches.map((id) => new ContainerHandle(containerService as DockerClient, id));
     }),
     getContainerLabels: vi.fn(async (containerId: string) => labels.get(containerId)),
   };
@@ -96,7 +97,7 @@ const createHarness = () => {
 
   const service = new ContainerThreadTerminationService(
     registry as unknown as any,
-    containerService as ContainerService,
+    containerService as DockerClient,
     prismaService as PrismaService,
   );
 

@@ -19,6 +19,8 @@ import {
   DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
+  runnerAddressMissing,
+  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   startDockerRunnerProcess,
@@ -32,7 +34,7 @@ import {
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
-const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1';
+const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
 
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 

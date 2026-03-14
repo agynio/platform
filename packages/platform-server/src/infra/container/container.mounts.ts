@@ -1,4 +1,4 @@
-import type { ContainerInspectInfo } from './types';
+import type { ContainerInspectInfo } from './dockerRunner.types';
 
 export interface ContainerMount {
   source: string;

@@ -122,7 +122,7 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000), docker-runner (50051)
+# litellm (127.0.0.1:4000)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
@@ -143,12 +143,10 @@ pnpm --filter @agyn/platform-server run prisma:generate
 pnpm --filter @agyn/platform-server dev
 # UI (Vite dev server)
 pnpm --filter @agyn/platform-ui dev
-# docker-runner (gRPC server)
-pnpm --filter @agyn/docker-runner dev
+# docker-runner (gRPC server) runs as an external service
+# (see the docker-runner repo or your deployment stack)
 ```
 Server listens on PORT (default 3010; see packages/platform-server/src/index.ts and Dockerfile), UI dev server on default Vite port.
-
-The docker-runner dev script automatically loads the first `.env` it finds (prefers repo root, falls back to packages/docker-runner) when `NODE_ENV` is not `production`. Production `pnpm start` keeps relying solely on the surrounding environment, so missing `.env` files do not crash the process.
 
 - Production (Docker):
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):

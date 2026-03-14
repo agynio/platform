@@ -11,19 +11,19 @@ import {
 } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
 import { Logger } from '@nestjs/common';
-import {
-  ContainerHandle,
-  type ContainerInspectInfo,
-  type ContainerOpts,
-  type DockerEventFilters,
-  type ExecOptions,
-  type ExecResult,
-  type InteractiveExecOptions,
-  type InteractiveExecSession,
-  type LogsStreamOptions,
-  type LogsStreamSession,
-  buildAuthHeaders,
-} from '@agyn/docker-runner';
+import { buildAuthHeaders } from './auth';
+import { ContainerHandle } from './container.handle';
+import type {
+  ContainerInspectInfo,
+  ContainerOpts,
+  DockerEventFilters,
+  ExecOptions,
+  ExecResult,
+  InteractiveExecOptions,
+  InteractiveExecSession,
+  LogsStreamOptions,
+  LogsStreamSession,
+} from './dockerRunner.types';
 import {
   CancelExecutionRequestSchema,
   CancelExecutionResponse,
@@ -92,7 +92,7 @@ import {
   RUNNER_SERVICE_STREAM_WORKLOAD_LOGS_PATH,
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
 } from '../../proto/grpc.js';
-import { containerOptsToStartWorkloadRequest } from '@agyn/docker-runner';
+import { containerOptsToStartWorkloadRequest } from './workload.grpc';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 

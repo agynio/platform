@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ContainerHandle } from '@agyn/docker-runner';
+import type { ContainerHandle } from '../../src/infra/container/container.handle';
 
 import { DockerWorkspaceRuntimeProvider } from '../../src/workspace/providers/docker.workspace.provider';
 import type { DockerClient } from '../../src/infra/container/dockerClient.token';

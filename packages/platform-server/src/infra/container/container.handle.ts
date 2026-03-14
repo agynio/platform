@@ -1,9 +1,9 @@
-import type { DockerClientPort } from './dockerClient.port';
-import type { ExecOptions } from './types';
+import type { DockerClientPort } from './dockerClient.token';
+import type { ExecOptions } from './dockerRunner.types';
 
 /**
  * Lightweight entity wrapper representing a running (or created) container.
- * Provides convenience methods delegating to ContainerService while binding the docker id.
+ * Provides convenience methods delegating to DockerClientPort while binding the docker id.
  */
 export class ContainerHandle {
   constructor(

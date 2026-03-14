@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GraphApiModule } from '../src/graph/graph-api.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
-import { ContainerService } from '@agyn/docker-runner';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
@@ -120,7 +120,7 @@ if (!shouldRunDbTests) {
         execContainer: vi.fn().mockResolvedValue({ exitCode: 0, stderr: '', stdout: '' }),
         putArchive: vi.fn().mockResolvedValue(undefined),
         touchLastUsed: vi.fn(),
-      } satisfies Partial<ContainerService>;
+      } satisfies Partial<DockerClient>;
 
       const cleanupStub = { start: vi.fn(), stop: vi.fn() } satisfies Partial<ContainerCleanupService>;
       const terminationStub = { enqueue: vi.fn() } satisfies Partial<ContainerThreadTerminationService>;
@@ -212,7 +212,7 @@ if (!shouldRunDbTests) {
 
       builder.overrideProvider(PrismaService).useFactory(() => prismaServiceStub as PrismaService);
       builder.overrideProvider(ContainerRegistry).useFactory(() => containerRegistryStub as ContainerRegistry);
-      builder.overrideProvider(ContainerService).useFactory(() => containerServiceStub as ContainerService);
+      builder.overrideProvider(DOCKER_CLIENT).useFactory(() => containerServiceStub as DockerClient);
       builder.overrideProvider(ContainerCleanupService).useFactory(() => cleanupStub as ContainerCleanupService);
       builder.overrideProvider(ContainerThreadTerminationService).useFactory(() => terminationStub as ContainerThreadTerminationService);
       builder.overrideProvider(NcpsKeyService).useFactory(() => ncpsStub as NcpsKeyService);

@@ -5,7 +5,9 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService } from '@agyn/docker-runner';
+import { PassThrough } from 'node:stream';
+import { ContainerHandle } from '../src/infra/container/container.handle';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
@@ -20,11 +22,37 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 describe('LiveGraphRuntime -> Agent config propagation', () => {
   function makeRuntime() {
-    class StubContainerService extends ContainerService {
-      constructor(registry: any) {
-        super(registry as any);
-      }
-    }
+    const createDockerClientStub = (): DockerClient => {
+      const stub: DockerClient = {
+        touchLastUsed: async () => undefined,
+        ensureImage: async () => undefined,
+        start: async () => new ContainerHandle(stub, 'cid'),
+        execContainer: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+        openInteractiveExec: async () => ({
+          stdin: new PassThrough(),
+          stdout: new PassThrough(),
+          stderr: new PassThrough(),
+          close: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          execId: 'exec-1',
+          terminateProcessGroup: async () => undefined,
+        }),
+        streamContainerLogs: async () => ({ stream: new PassThrough(), close: async () => undefined }),
+        resizeExec: async () => undefined,
+        stopContainer: async () => undefined,
+        removeContainer: async () => undefined,
+        getContainerLabels: async () => undefined,
+        getContainerNetworks: async () => [],
+        findContainersByLabels: async () => [],
+        listContainersByVolume: async () => [],
+        removeVolume: async () => undefined,
+        findContainerByLabels: async () => undefined,
+        putArchive: async () => undefined,
+        inspectContainer: async () => ({ Id: 'cid' }),
+        getEventsStream: async () => new PassThrough(),
+        checkConnectivity: async () => ({ status: 'ok' }),
+      };
+      return stub;
+    };
     class StubLLMProvisioner extends LLMProvisioner {
       async init(): Promise<void> {}
       async getLLM() {
@@ -79,7 +107,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
 
     return Test.createTestingModule({
       providers: [
-        { provide: ContainerService, useClass: StubContainerService },
+        { provide: DOCKER_CLIENT, useValue: createDockerClientStub() },
         { provide: ConfigService, useValue: new ConfigService().init(cfg) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },

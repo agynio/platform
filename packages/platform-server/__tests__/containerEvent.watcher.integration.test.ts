@@ -4,7 +4,8 @@ import type { PrismaClient } from '@prisma/client';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
 import type { ContainerStatus, ContainerEventType } from '@prisma/client';
-import type { ContainerService, DockerEventFilters } from '@agyn/docker-runner';
+import type { DockerClient } from '../src/infra/container/dockerClient.token';
+import type { DockerEventFilters } from '../src/infra/container/dockerRunner.types';
 
 type ContainerRow = {
   id: number;
@@ -219,7 +220,7 @@ describe('DockerWorkspaceEventsWatcher integration', () => {
     stream = new PassThrough();
     processor = new ContainerEventProcessor(new FakePrismaService(prisma));
     const containerService = new FakeContainerService(stream);
-    watcher = new DockerWorkspaceEventsWatcher(containerService as unknown as ContainerService, processor);
+    watcher = new DockerWorkspaceEventsWatcher(containerService as unknown as DockerClient, processor);
     watcher.start();
   });
 

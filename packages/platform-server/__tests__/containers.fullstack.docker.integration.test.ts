@@ -21,6 +21,8 @@ import {
   DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
+  runnerAddressMissing,
+  runnerSecretMissing,
   socketMissing,
   startDockerRunnerProcess,
   startPostgres,
@@ -30,7 +32,7 @@ import {
   type PostgresHandle,
 } from './helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1';
+const shouldSkip = process.env.SKIP_PLATFORM_FULLSTACK_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 const TEST_IMAGE = 'nginx:1.25-alpine';
 

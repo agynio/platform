@@ -1,14 +1,16 @@
 import 'reflect-metadata';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { NestFactory } from '@nestjs/core';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import type { PrismaClient } from '@prisma/client';
 
 import { AppModule } from '../src/bootstrap/app.module';
 import { ConfigService } from '../src/core/services/config.service';
+import { PrismaService } from '../src/core/services/prisma.service';
 
 const LITELLM_PORT = 4000;
 
@@ -16,7 +18,8 @@ const REQUIRED_ENV = {
   NODE_ENV: 'production',
   AGENTS_ENV: 'production',
   LOG_LEVEL: 'error',
-  LLM_PROVIDER: 'litellm',
+  LLM_PROVIDER: 'openai',
+  OPENAI_API_KEY: 'sk-test-openai',
   LITELLM_BASE_URL: `http://127.0.0.1:${LITELLM_PORT}`,
   LITELLM_MASTER_KEY: 'sk-test-master-key',
   AGENTS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/agents_test?schema=public',
@@ -78,12 +81,37 @@ describe('Production bootstrap DI', () => {
   it(
     'initializes the production bootstrap path when docker runner is optional',
     async () => {
+      const transactionClientStub = {
+        $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
+        run: {
+          findMany: vi.fn().mockResolvedValue([]),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+        runEvent: {
+          findMany: vi.fn().mockResolvedValue([]),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+        reminder: {
+          findMany: vi.fn().mockResolvedValue([]),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+      };
+      const prismaClientStub = {
+        $transaction: vi.fn(async (cb: (tx: typeof transactionClientStub) => Promise<unknown>) => {
+          await cb(transactionClientStub);
+          return undefined;
+        }),
+      } satisfies Partial<PrismaClient>;
+      const prismaSpy = vi
+        .spyOn(PrismaService.prototype, 'getClient')
+        .mockReturnValue(prismaClientStub as PrismaClient);
       const adapter = new FastifyAdapter();
       const app = await NestFactory.create(AppModule, adapter);
       try {
         await app.init();
         expect(true).toBe(true);
       } finally {
+        prismaSpy.mockRestore();
         await app.close().catch(() => undefined);
       }
     },

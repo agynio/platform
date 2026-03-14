@@ -1,7 +1,10 @@
+import { PassThrough } from 'node:stream';
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { ContainerService, ContainerHandle, type ContainerOpts } from '@agyn/docker-runner';
+import { ContainerHandle } from '../src/infra/container/container.handle';
+import type { ContainerOpts } from '../src/infra/container/dockerRunner.types';
+import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
@@ -23,49 +26,37 @@ import { ReferenceResolverService } from '../src/utils/reference-resolver.servic
 import { WorkspaceProvider } from '../src/workspace/providers/workspace.provider';
 import { WorkspaceProviderStub } from './helpers/workspace-provider.stub';
 
-class StubContainerService extends ContainerService {
-  constructor(registry: ContainerRegistry) {
-    super(registry);
-  }
-  override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
-    return new ContainerHandle(this, 'cid');
-  }
-  override async execContainer(
-    _id: string,
-    _command: string[] | string,
-    _options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      tty?: boolean;
-      killOnTimeout?: boolean;
-      signal?: AbortSignal;
-      logToPid1?: boolean;
-    },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return { stdout: '', stderr: '', exitCode: 0 };
-  }
-  override async findContainerByLabels(
-    _labels: Record<string, string>,
-    _opts?: { all?: boolean },
-  ): Promise<ContainerHandle | undefined> {
-    return undefined;
-  }
-  override async findContainersByLabels(
-    _labels: Record<string, string>,
-    _opts?: { all?: boolean },
-  ): Promise<ContainerHandle[]> {
-    return [];
-  }
-  override async getContainerLabels(_id: string): Promise<Record<string, string> | undefined> {
-    return undefined;
-  }
-  override async touchLastUsed(_id: string): Promise<void> {}
-  override async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
-  override async removeContainer(_id: string, _force = false): Promise<void> {}
-  override async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
-}
+const createDockerClientStub = (): DockerClient => {
+  const stub: DockerClient = {
+    touchLastUsed: async () => undefined,
+    ensureImage: async () => undefined,
+    start: async (_opts?: ContainerOpts) => new ContainerHandle(stub, 'cid'),
+    execContainer: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    openInteractiveExec: async () => ({
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      close: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      execId: 'exec-1',
+      terminateProcessGroup: async () => undefined,
+    }),
+    streamContainerLogs: async () => ({ stream: new PassThrough(), close: async () => undefined }),
+    resizeExec: async () => undefined,
+    stopContainer: async () => undefined,
+    removeContainer: async () => undefined,
+    getContainerLabels: async () => undefined,
+    getContainerNetworks: async () => [],
+    findContainersByLabels: async () => [],
+    listContainersByVolume: async () => [],
+    removeVolume: async () => undefined,
+    findContainerByLabels: async () => undefined,
+    putArchive: async () => undefined,
+    inspectContainer: async () => ({ Id: 'cid' }),
+    getEventsStream: async () => new PassThrough(),
+    checkConnectivity: async () => ({ status: 'ok' }),
+  };
+  return stub;
+};
 class StubConfigService extends ConfigService {
   constructor() {
     super();
@@ -130,7 +121,7 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
   it('agent registers only enabled MCP tools on load', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        { provide: ContainerService, useClass: StubContainerService },
+        { provide: DOCKER_CLIENT, useValue: createDockerClientStub() },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
         {
