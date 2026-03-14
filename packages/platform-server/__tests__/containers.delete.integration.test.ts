@@ -23,6 +23,7 @@ import { TerminalSessionsService } from '../src/infra/container/terminal.session
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
+import { createDockerClientStub } from './helpers/dockerClient.stub';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
@@ -144,7 +145,6 @@ const createDockerClientStub = (): DockerClient => ({
   inspectContainer: vi.fn().mockResolvedValue({} as any),
   getEventsStream: vi.fn().mockResolvedValue({ on: vi.fn(), off: vi.fn() } as any),
 } as unknown as DockerClient);
-
 const createContainerRegistryStub = () => ({
   ensureIndexes: vi.fn().mockResolvedValue(undefined),
   registerStart: vi.fn(),

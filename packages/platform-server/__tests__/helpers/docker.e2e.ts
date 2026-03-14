@@ -13,10 +13,17 @@ import { createRunnerGrpcServer } from '../../../docker-runner/src/service/grpc/
 import { ContainerService, NonceCache, buildAuthHeaders } from '../../../docker-runner/src';
 import { ReadyRequestSchema, RunnerService } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
-export const RUNNER_SECRET = 'docker-e2e-secret';
+export const RUNNER_SECRET = process.env.DOCKER_RUNNER_SHARED_SECRET ?? '';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
 export const hasTcpDocker = Boolean(process.env.DOCKER_HOST);
 export const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
+const runnerHost = process.env.DOCKER_RUNNER_GRPC_HOST ?? process.env.DOCKER_RUNNER_HOST;
+const runnerPort = process.env.DOCKER_RUNNER_GRPC_PORT ?? process.env.DOCKER_RUNNER_PORT;
+export const runnerAddress =
+  process.env.DOCKER_RUNNER_GRPC_ADDRESS ?? (runnerHost && runnerPort ? `${runnerHost}:${runnerPort}` : undefined);
+export const runnerAddressMissing = !runnerAddress;
+export const runnerSecretMissing = !RUNNER_SECRET;
+const readinessNonceCache = new NonceCache();
 
 export type RunnerHandle = {
   grpcAddress: string;

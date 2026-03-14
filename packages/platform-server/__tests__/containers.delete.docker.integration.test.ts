@@ -24,7 +24,6 @@ import {
   runnerSecretMissing,
   socketMissing,
   startDockerRunner,
-  startDockerRunnerProcess,
   startPostgres,
   runPrismaMigrations,
   type RunnerHandle,

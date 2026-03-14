@@ -12,3 +12,7 @@ plugins:
     out: packages/docker-runner/src/proto/gen
     opt:
       - target=ts
+  - plugin: buf.build/bufbuild/connect-es
+    out: packages/platform-server/src/proto/gen
+    opt:
+      - target=ts
