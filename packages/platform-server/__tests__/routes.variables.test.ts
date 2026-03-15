@@ -1,14 +1,34 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { GraphVariablesController } from '../src/graph/controllers/graphVariables.controller';
-import type { GraphRepository } from '../src/graph/graph.repository';
 import { GraphVariablesService } from '../src/graph/services/graphVariables.service';
-import type { PersistedGraph } from '../src/shared/types/graph.types';
 
 class InMemoryPrismaClient {
+  graphVariable = {
+    data: new Map<string, { key: string; value: string }>(),
+    async findMany() { return Array.from(this.data.values()); },
+    async findUnique(args: { where: { key: string } }) { return this.data.get(args.where.key) ?? null; },
+    async create(args: { data: { key: string; value: string } }) {
+      const { key, value } = args.data;
+      this.data.set(key, { key, value });
+      return { key, value };
+    },
+    async update(args: { where: { key: string }; data: { value: string } }) {
+      const key = args.where.key;
+      if (!this.data.has(key)) throw new Error('not_found');
+      const value = args.data.value;
+      this.data.set(key, { key, value });
+      return { key, value };
+    },
+    async deleteMany(args: { where: { key: string } }) {
+      const existed = this.data.delete(args.where.key);
+      return { count: existed ? 1 : 0 };
+    },
+  };
   variableLocal = {
     data: new Map<string, { key: string; value: string }>(),
     async findMany() { return Array.from(this.data.values()); },
+    async findUnique(args: { where: { key: string } }) { return this.data.get(args.where.key) ?? null; },
     async upsert(args: { where: { key: string }; update: { value: string }; create: { key: string; value: string } }) {
       const key = args.where.key;
       const existing = this.data.get(key);
@@ -23,30 +43,14 @@ class InMemoryPrismaClient {
 
 class PrismaStub { client = new InMemoryPrismaClient(); getClient() { return this.client as unknown as any; } }
 
-class GraphRepoStub implements GraphRepository {
-  private snapshot: PersistedGraph = { name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] };
-  private conflictNextUpsert = false;
-  async initIfNeeded(): Promise<void> {}
-  async get(name: string): Promise<PersistedGraph | null> { return name === 'main' ? this.snapshot : null; }
-  async upsert(req: { name: string; version?: number; nodes: any[]; edges: any[]; variables?: Array<{ key: string; value: string }> }): Promise<PersistedGraph> {
-    if (this.conflictNextUpsert || (req.version ?? 0) !== this.snapshot.version) {
-      this.conflictNextUpsert = false;
-      const err: any = new Error('Version conflict'); err.code = 'VERSION_CONFLICT'; err.current = this.snapshot; throw err;
-    }
-    this.snapshot = { name: 'main', version: this.snapshot.version + 1, updatedAt: new Date().toISOString(), nodes: req.nodes, edges: req.edges, variables: req.variables };
-    return this.snapshot;
-  }
-  async upsertNodeState(): Promise<void> {}
-  triggerConflictOnce() { this.conflictNextUpsert = true; }
-}
-
 describe('GraphVariablesController routes', () => {
-  let fastify: any; let prismaSvc: PrismaStub; let repo: GraphRepoStub; let controller: GraphVariablesController;
+  let fastify: any; let prismaSvc: PrismaStub; let controller: GraphVariablesController;
   beforeEach(async () => {
-    fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub(); repo = new GraphRepoStub();
-    (repo as any).snapshot.variables = [ { key: 'A', value: 'GA' }, { key: 'B', value: 'GB' } ];
+    fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
+    prismaSvc.client.graphVariable.data.set('A', { key: 'A', value: 'GA' });
+    prismaSvc.client.graphVariable.data.set('B', { key: 'B', value: 'GB' });
     prismaSvc.client.variableLocal.data.set('B', { key: 'B', value: 'LB' }); prismaSvc.client.variableLocal.data.set('C', { key: 'C', value: 'LC' });
-    const service = new GraphVariablesService(repo as unknown as GraphRepository, prismaSvc as any);
+    const service = new GraphVariablesService(prismaSvc as any);
     controller = new GraphVariablesController(service);
     fastify.get('/api/graph/variables', async (_req, res) => res.send(await controller.list()));
     // POST should return 201 like Nest's @HttpCode(201)
@@ -89,19 +93,6 @@ describe('GraphVariablesController routes', () => {
     const res = await fastify.inject({ method: 'PUT', url: '/api/graph/variables/A', payload: { graph: '' } });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('BAD_VALUE');
-  });
-
-  it('returns 409 on optimistic version conflict', async () => {
-    // force conflict on next upsert
-    (repo as any).triggerConflictOnce();
-    const res = await fastify.inject({ method: 'POST', url: '/api/graph/variables', payload: { key: 'D', graph: 'GD' } });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error).toBe('VERSION_CONFLICT');
-    // also for PUT
-    (repo as any).triggerConflictOnce();
-    const res2 = await fastify.inject({ method: 'PUT', url: '/api/graph/variables/A', payload: { graph: 'GA2' } });
-    expect(res2.statusCode).toBe(409);
-    expect(res2.json().error).toBe('VERSION_CONFLICT');
   });
 
   it('deletes variable from graph and local override', async () => {

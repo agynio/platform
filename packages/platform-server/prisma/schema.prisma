@@ -30,6 +30,24 @@ model VariableLocal {
   updatedAt DateTime @updatedAt
 }
 
+// Graph-level variables persisted outside the Teams graph source
+model GraphVariable {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Persisted runtime state for graph nodes (MCP enabled tools, etc.)
+model GraphNodeState {
+  id        Int      @id @default(autoincrement())
+  nodeId    String   @unique
+  state     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model LiteLLMVirtualKey {
   id        Int      @id @default(autoincrement())
   alias     String   @unique

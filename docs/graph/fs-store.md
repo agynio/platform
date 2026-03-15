@@ -1,5 +1,9 @@
 # Filesystem-backed Graph Store (format: 2)
 
+> **Deprecated:** Filesystem-backed graph persistence has been removed. The platform now sources graph
+> configuration from the Teams service and `/api/graph` is read-only. This document is retained for
+> legacy reference only.
+
 Overview
 - Graph persistence writes directly to the filesystem under `GRAPH_REPO_PATH` (default `./data/graph`).
 - The layout matches the legacy git working tree: `graph.meta.yaml`, `nodes/`, `edges/`, and `variables.yaml` live at the path root.

@@ -6,6 +6,7 @@ import type {
   Tool,
   WorkspaceConfiguration,
 } from '../../src/proto/gen/agynio/api/teams/v1/teams_pb';
+import { ToolType } from '../../src/proto/gen/agynio/api/teams/v1/teams_pb';
 import type { TeamsGrpcClient } from '../../src/teams/teamsGrpc.client';
 
 type TeamsClientStubOptions = {
@@ -43,12 +44,14 @@ export const createTeamsClientStub = (options?: TeamsClientStubOptions): TeamsGr
 
   const listAgents = options?.listAgents ?? (async (request: { page: number; perPage: number }) => paginate(agents, request.page, request.perPage));
   const listTools = options?.listTools ??
-    (async (request: { page: number; perPage: number; type?: Tool['type'] }) =>
-      paginate(
-        request.type === undefined ? tools : tools.filter((tool) => tool.type === request.type),
+    (async (request: { page: number; perPage: number; type?: Tool['type'] }) => {
+      const shouldFilter = typeof request.type === 'number' && request.type !== ToolType.UNSPECIFIED;
+      return paginate(
+        shouldFilter ? tools.filter((tool) => tool.type === request.type) : tools,
         request.page,
         request.perPage,
-      ));
+      );
+    });
   const listMcpServers = options?.listMcpServers ?? (async (request: { page: number; perPage: number }) => paginate(mcps, request.page, request.perPage));
   const listWorkspaceConfigurations = options?.listWorkspaceConfigurations ??
     (async (request: { page: number; perPage: number }) => paginate(workspaces, request.page, request.perPage));

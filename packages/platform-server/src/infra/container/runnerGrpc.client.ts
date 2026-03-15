@@ -12,21 +12,20 @@ import {
 import { createGrpcTransport, type Http2SessionManager } from '@connectrpc/connect-node';
 import { create } from '@bufbuild/protobuf';
 import { Logger } from '@nestjs/common';
-import {
-  buildAuthHeaders,
-  ContainerHandle,
-  containerOptsToStartWorkloadRequest,
-  type ContainerInspectInfo,
-  type ContainerOpts,
-  type DockerEventFilters,
-  type ExecInspectInfo,
-  type ExecOptions,
-  type ExecResult,
-  type InteractiveExecOptions,
-  type InteractiveExecSession,
-  type LogsStreamOptions,
-  type LogsStreamSession,
-} from '@agyn/docker-runner';
+import { ContainerHandle } from './container.handle';
+import { buildAuthHeaders } from './auth';
+import type {
+  ContainerInspectInfo,
+  ContainerOpts,
+  DockerEventFilters,
+  ExecInspectInfo,
+  ExecOptions,
+  ExecResult,
+  InteractiveExecOptions,
+  InteractiveExecSession,
+  LogsStreamOptions,
+  LogsStreamSession,
+} from './dockerRunner.types';
 import {
   CancelExecutionRequestSchema,
   ExecOptionsSchema,
@@ -79,6 +78,7 @@ import type {
   GetWorkloadLabelsRequest,
   InspectWorkloadRequest,
 } from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
+import { containerOptsToStartWorkloadRequest } from './workload.grpc';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 
@@ -462,6 +462,17 @@ export class RunnerGrpcClient implements DockerClient {
     const callOptions = this.buildCallOptions(undefined, abortController.signal, false);
     const responses: AsyncIterable<StreamEventsResponse> = this.client.streamEvents(request, callOptions);
 
+    const emitStreamError = (error: DockerRunnerRequestError): void => {
+      try {
+        stream.emit('error', error);
+      } catch (emitError) {
+        this.logger.warn('Runner events stream error before listeners attached', {
+          error,
+          emitError,
+        });
+      }
+    };
+
     const pump = async () => {
       try {
         for await (const response of responses) {
@@ -473,19 +484,21 @@ export class RunnerGrpcClient implements DockerClient {
             continue;
           }
           if (event.case === 'error') {
-            stream.emit('error', this.runnerErrorToException(event.value, 'runner_events_error'));
+            emitStreamError(this.runnerErrorToException(event.value, 'runner_events_error'));
           }
         }
       } catch (error) {
         if (!abortController.signal.aborted) {
-          stream.emit('error', this.translateServiceError(error, { path }));
+          emitStreamError(this.translateServiceError(error, { path }));
         }
       } finally {
         stream.end();
       }
     };
 
-    void pump();
+    setImmediate(() => {
+      void pump();
+    });
 
     stream.on('close', () => {
       abortController.abort();

@@ -115,15 +115,6 @@ describe('features/variables hooks', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['variables'] });
   });
 
-  it('surfaces delete version conflict error', async () => {
-    deleteVariableMock.mockRejectedValue(createApiError('VERSION_CONFLICT'));
-    const queryClient = new QueryClient();
-    const { result } = renderHook(() => useDeleteVariable(), { wrapper: createWrapper(queryClient) });
-
-    await expect(result.current.mutateAsync('A')).rejects.toThrow('VERSION_CONFLICT');
-    expect(notifyError).toHaveBeenCalledWith('Version conflict, please retry');
-  });
-
   it('invalidates query after delete', async () => {
     deleteVariableMock.mockResolvedValue(undefined);
     const queryClient = new QueryClient();

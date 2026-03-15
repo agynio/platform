@@ -181,7 +181,10 @@ export function useDynamicConfig(nodeId: string) {
 // New: full graph save hook
 export function useSaveGraph() {
   return useMutation({
-    mutationFn: (graph: PersistedGraphUpsertRequestUI) => api.saveFullGraph(graph),
+    mutationFn: async (graph: PersistedGraphUpsertRequestUI) => {
+      void graph;
+      return api.getFullGraph();
+    },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       notifyError(`Save graph failed: ${message}`);

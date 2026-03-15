@@ -30,17 +30,6 @@ import {
   WorkspacePlatform,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb';
 
-const TOOL_TYPES: ToolType[] = [
-  ToolType.MANAGE,
-  ToolType.MEMORY,
-  ToolType.SHELL_COMMAND,
-  ToolType.SEND_MESSAGE,
-  ToolType.SEND_SLACK_MESSAGE,
-  ToolType.REMIND_ME,
-  ToolType.GITHUB_CLONE_REPO,
-  ToolType.CALL_AGENT,
-];
-
 const TOOL_TYPE_TO_TEMPLATE: Record<ToolType, string | undefined> = {
   [ToolType.UNSPECIFIED]: undefined,
   [ToolType.MANAGE]: 'manageTool',
@@ -216,16 +205,15 @@ export class TeamsGraphSource {
   }
 
   private async listAllTools(): Promise<Tool[]> {
+    const items = await listAllPages((page, perPage) =>
+      this.teams.listTools(create(ListToolsRequestSchema, { page, perPage })),
+    );
     const collected = new Map<string, Tool>();
-    for (const type of TOOL_TYPES) {
-      const items = await listAllPages((page, perPage) =>
-        this.teams.listTools(create(ListToolsRequestSchema, { type, page, perPage })),
-      );
-      for (const tool of items) {
-        const id = this.normalizeId(tool.id);
-        if (!id || collected.has(id)) continue;
-        collected.set(id, tool);
-      }
+    for (const tool of items) {
+      if (!TOOL_TYPE_TO_TEMPLATE[tool.type]) continue;
+      const id = this.normalizeId(tool.id);
+      if (!id || collected.has(id)) continue;
+      collected.set(id, tool);
     }
     return Array.from(collected.values());
   }
