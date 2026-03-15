@@ -1,7 +1,8 @@
 import type { PersistedGraph, PersistedGraphEdge, PersistedGraphNode } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
+import type { TeamAttachmentKind, TeamToolType } from '@/api/types/team';
 
-export type GraphEntityKind = 'trigger' | 'agent' | 'tool' | 'mcp' | 'workspace';
+export type GraphEntityKind = 'trigger' | 'agent' | 'tool' | 'mcp' | 'workspace' | 'memory';
 
 export interface EntityPortDefinition {
   id: string;
@@ -15,13 +16,17 @@ export interface EntityPortGroup {
 
 export interface GraphEntitySummary {
   id: string;
-  node: PersistedGraphNode;
+  entityKind: GraphEntityKind;
+  node?: PersistedGraphNode;
   title: string;
+  description?: string;
   templateName: string;
   templateTitle: string;
   templateKind: GraphEntityKind;
   rawTemplateKind?: string;
   config: Record<string, unknown>;
+  toolType?: TeamToolType;
+  toolName?: string;
   state?: Record<string, unknown>;
   position?: { x: number; y: number };
   ports: EntityPortGroup;
@@ -53,10 +58,12 @@ export interface GraphEntityRelationInput {
   peerHandle: string;
   mode: GraphRelationMode;
   selections: string[];
+  attachmentKind?: TeamAttachmentKind;
 }
 
 export interface GraphEntityUpsertInput {
   id?: string;
+  entityKind: GraphEntityKind;
   template: string;
   title: string;
   config: Record<string, unknown>;
@@ -65,6 +72,7 @@ export interface GraphEntityUpsertInput {
 
 export interface GraphEntityDeleteInput {
   id: string;
+  entityKind: GraphEntityKind;
 }
 
 export type GraphEntityGraph = PersistedGraph;

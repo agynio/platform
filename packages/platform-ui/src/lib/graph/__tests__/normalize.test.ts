@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, type Mock } from 'vitest';
 
 vi.mock('@/api/http', () => ({
   http: {
-    post: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -14,7 +14,7 @@ describe('graph.saveFullGraph', () => {
     vi.clearAllMocks();
   });
 
-  it('posts payload without mutating config shapes', async () => {
+  it('fetches snapshot without mutating config shapes', async () => {
     const payload = {
       name: 'sample',
       nodes: [
@@ -35,11 +35,11 @@ describe('graph.saveFullGraph', () => {
       edges: [],
     };
     const snapshot = JSON.parse(JSON.stringify(payload));
-    (http.post as unknown as Mock).mockResolvedValue({ ok: true });
+    (http.get as unknown as Mock).mockResolvedValue({ ok: true });
 
     await graph.saveFullGraph(payload as any);
 
-    expect(http.post).toHaveBeenCalledWith('/api/graph', payload);
+    expect(http.get).toHaveBeenCalledWith('/api/graph');
     expect(payload).toEqual(snapshot);
   });
 });

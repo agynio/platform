@@ -85,7 +85,8 @@ async function fetchGraph(): Promise<GraphPersisted> {
 }
 
 async function saveGraph(payload: GraphSavePayload): Promise<GraphPersisted> {
-  const response = await graphApi.saveFullGraph(payload);
+  void payload;
+  const response = await graphApi.getFullGraph();
   return assertPersistedGraph(response);
 }
 

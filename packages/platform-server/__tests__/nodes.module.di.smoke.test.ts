@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
-import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { PrismaService } from '../src/core/services/prisma.service';
-import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'litellm';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -21,16 +17,6 @@ const makeStub = <T extends Record<string, unknown>>(overrides: T): T =>
       return fn;
     },
   });
-
-const slackAdapterStub = makeStub({
-  sendText: vi.fn(),
-});
-
-const persistenceStub = makeStub({
-  getOrCreateThreadByAlias: vi.fn().mockResolvedValue('thread-123'),
-  updateThreadChannelDescriptor: vi.fn().mockResolvedValue(undefined),
-  ensureAssignedAgent: vi.fn().mockResolvedValue(undefined),
-});
 
 const prismaClientStub = makeStub({
   $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({})),
@@ -53,15 +39,6 @@ const eventsBusStub = makeStub({
   emitReminderCount: vi.fn(),
 });
 
-const runtimeStub = makeStub({
-  getOutboundNodeIds: vi.fn(() => []),
-  getNodes: vi.fn(() => []),
-});
-
-const templateRegistryStub = makeStub({
-  getMeta: vi.fn(() => undefined),
-});
-
 if (!shouldRunDbTests) {
   describe.skip('NodesModule DI smoke test', () => {
     it('skipped because RUN_DB_TESTS is not true', () => {
@@ -70,17 +47,7 @@ if (!shouldRunDbTests) {
   });
 } else {
   describe('NodesModule DI smoke test', () => {
-    it('constructs SlackTrigger and RemindMeNode with stubs', () => {
-      const slackTrigger = new SlackTrigger(
-        createReferenceResolverStub().stub,
-        persistenceStub as unknown as AgentsPersistenceService,
-        prismaStub as unknown as PrismaService,
-        slackAdapterStub as unknown as SlackAdapter,
-        runtimeStub as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime,
-        templateRegistryStub as unknown as import('../src/graph-core/templateRegistry').TemplateRegistry,
-      );
-      expect(slackTrigger).toBeInstanceOf(SlackTrigger);
-
+    it('constructs RemindMeNode with stubs', () => {
       const remindMeNode = new RemindMeNode(
         eventsBusStub as unknown as EventsBusService,
         prismaStub as unknown as PrismaService,

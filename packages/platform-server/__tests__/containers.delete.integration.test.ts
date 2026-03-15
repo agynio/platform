@@ -23,7 +23,6 @@ import { TerminalSessionsService } from '../src/infra/container/terminal.session
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { registerTestConfig, clearTestConfig } from './helpers/config';
-import { createDockerClientStub } from './helpers/dockerClient.stub';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
 import { DockerRunnerConnectivityMonitor } from '../src/infra/container/dockerRunnerConnectivity.monitor';
@@ -119,6 +118,32 @@ const createLifecycleStub = () => ({
   sweep: vi.fn().mockResolvedValue(undefined),
 });
 
+const createDockerClientStub = (): DockerClient => ({
+  touchLastUsed: vi.fn().mockResolvedValue(undefined),
+  ensureImage: vi.fn().mockResolvedValue(undefined),
+  start: vi.fn().mockResolvedValue({ id: 'dummy', stop: vi.fn(), remove: vi.fn() }),
+  execContainer: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+  openInteractiveExec: vi.fn().mockResolvedValue({
+    stdin: null,
+    stdout: null,
+    stderr: null,
+    close: vi.fn(),
+    inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+  } as any),
+  streamContainerLogs: vi.fn().mockResolvedValue({ close: vi.fn() } as any),
+  resizeExec: vi.fn().mockResolvedValue(undefined),
+  stopContainer: vi.fn().mockResolvedValue(undefined),
+  removeContainer: vi.fn().mockResolvedValue(undefined),
+  getContainerLabels: vi.fn().mockResolvedValue(undefined),
+  getContainerNetworks: vi.fn().mockResolvedValue([]),
+  findContainersByLabels: vi.fn().mockResolvedValue([]),
+  listContainersByVolume: vi.fn().mockResolvedValue([]),
+  removeVolume: vi.fn().mockResolvedValue(undefined),
+  findContainerByLabels: vi.fn().mockResolvedValue(undefined),
+  putArchive: vi.fn().mockResolvedValue(undefined),
+  inspectContainer: vi.fn().mockResolvedValue({} as any),
+  getEventsStream: vi.fn().mockResolvedValue({ on: vi.fn(), off: vi.fn() } as any),
+} as unknown as DockerClient);
 const createContainerRegistryStub = () => ({
   ensureIndexes: vi.fn().mockResolvedValue(undefined),
   registerStart: vi.fn(),

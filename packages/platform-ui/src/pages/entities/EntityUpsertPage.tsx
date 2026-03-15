@@ -2,9 +2,13 @@ import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityUpsertForm } from '@/components/entities/EntityUpsertForm';
-import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
-import { getTemplateOptions } from '@/features/entities/api/graphEntities';
-import { mapPersistedGraphToNodes } from '@/features/graph/mappers';
+import { useTeamEntities } from '@/features/entities/hooks/useTeamEntities';
+import {
+  getTemplateOptions,
+  limitTemplateOptionsForKind,
+  mapTeamAttachmentsToEdges,
+  mapTeamEntitiesToGraphNodes,
+} from '@/features/entities/api/teamEntities';
 import type { GraphEntityKind } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
 
@@ -25,28 +29,25 @@ export function EntityUpsertPage({
 }: EntityUpsertPageProps) {
   const navigate = useNavigate();
   const { entityId } = useParams<{ entityId?: string }>();
-  const { entities, createEntity, updateEntity, graphQuery, templatesQuery, isSaving } = useGraphEntities();
+  const { entities, createEntity, updateEntity, templatesQuery, attachmentsQuery, isSaving, isLoading } = useTeamEntities();
 
   const templates = useMemo(() => {
     const options = getTemplateOptions(templatesQuery.data ?? [], kind, templateExcludeNames);
-    if (!templateIncludeNames || templateIncludeNames.size === 0) {
-      return options;
-    }
-    return options.filter((option) => templateIncludeNames.has(option.name));
+    const filtered = !templateIncludeNames || templateIncludeNames.size === 0
+      ? options
+      : options.filter((option) => templateIncludeNames.has(option.name));
+    return limitTemplateOptionsForKind(filtered, kind);
   }, [kind, templateExcludeNames, templateIncludeNames, templatesQuery.data]);
 
   const graphNodes = useMemo<GraphNodeConfig[]>(() => {
-    if (!graphQuery.data) return [];
-    return mapPersistedGraphToNodes(graphQuery.data, templatesQuery.data ?? []).nodes;
-  }, [graphQuery.data, templatesQuery.data]);
+    return mapTeamEntitiesToGraphNodes(entities, templatesQuery.data ?? []);
+  }, [entities, templatesQuery.data]);
 
   const graphEdges = useMemo<GraphPersistedEdge[]>(() => {
-    if (!graphQuery.data?.edges) return [];
-    return graphQuery.data.edges.filter((edge): edge is GraphPersistedEdge => Boolean(edge));
-  }, [graphQuery.data]);
+    return mapTeamAttachmentsToEdges(attachmentsQuery.data);
+  }, [attachmentsQuery.data]);
 
   const editableEntity = mode === 'edit' ? entities.find((item) => item.id === entityId) : undefined;
-  const isLoading = graphQuery.isLoading || templatesQuery.isLoading;
   const showForm = mode === 'create' || Boolean(editableEntity);
 
   const handleSubmit = async (input: Parameters<typeof createEntity>[0]) => {

@@ -10,7 +10,6 @@ import { MemoryService } from './memory/memory.service';
 import { MemoryNode } from './memory/memory.node';
 import { MemoryConnectorNode } from './memoryConnector/memoryConnector.node';
 import { AgentNode } from './agent/agent.node';
-import { SlackTrigger } from './slackTrigger/slackTrigger.node';
 import { SlackAdapter } from '../messaging/slack/slack.adapter';
 import { ThreadTransportService } from '../messaging/threadTransport.service';
 import { LocalMCPServerNode } from './mcp';
@@ -53,7 +52,6 @@ class NodesTemplateRegistrar implements OnModuleInit {
     MemoryNode,
     MemoryConnectorNode,
     AgentNode,
-    SlackTrigger,
     LocalMCPServerNode,
     ManageToolNode,
     CallAgentNode,
@@ -84,7 +82,6 @@ class NodesTemplateRegistrar implements OnModuleInit {
     MemoryNode,
     MemoryConnectorNode,
     AgentNode,
-    SlackTrigger,
     LocalMCPServerNode,
     ManageToolNode,
     CallAgentNode,

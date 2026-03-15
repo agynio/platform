@@ -6,10 +6,9 @@ import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
-import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, SystemMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -25,8 +24,6 @@ if (!shouldRunDbTests) {
   const prismaService = { getClient: () => prisma } as unknown as PrismaService;
 
   const metricsStub = { getThreadsMetrics: async () => ({}) } as ThreadsMetricsService;
-  const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as unknown as TemplateRegistry;
-  const graphRepoStub = { get: async () => ({ nodes: [], edges: [] }) } as unknown as GraphRepository;
 
   const runEvents = new RunEventsService(prismaService);
   const eventsBus = new EventsBusService(runEvents);
@@ -34,8 +31,7 @@ if (!shouldRunDbTests) {
   const agents = new AgentsPersistenceService(
     prismaService,
     metricsStub,
-    templateRegistryStub,
-    graphRepoStub,
+    createTeamsClientStub(),
     runEvents,
     callAgentLinking,
     eventsBus,

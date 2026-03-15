@@ -1,14 +1,13 @@
 import { Global, Module } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import { CoreModule } from '../core/core.module';
-import { ConfigService } from '../core/services/config.service';
 import { EventsModule } from '../events/events.module';
 import { InfraModule } from '../infra/infra.module';
 import { EnvModule } from '../env/env.module';
 import { LLMModule } from '../llm/llm.module';
 import { VaultModule } from '../vault/vault.module';
 import { GraphRepository } from '../graph/graph.repository';
-import { FsGraphRepository } from '../graph/fsGraph.repository';
+import { TeamsGraphSource } from '../graph/teamsGraph.source';
+import { TeamsGraphRepository } from '../graph/teamsGraph.repository';
 import { NodesModule } from '../nodes/nodes.module';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
@@ -16,26 +15,22 @@ import { RunSignalsRegistry } from '../agents/run-signals.service';
 import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
 import { ThreadCleanupCoordinator } from '../agents/threadCleanup.coordinator';
 import { RemindersService } from '../agents/reminders.service';
-import { TemplateRegistry } from '../graph-core/templateRegistry';
+import { TeamsModule } from '../teams/teams.module';
 
 @Global()
 @Module({
-  imports: [CoreModule, EnvModule, EventsModule, InfraModule, VaultModule, LLMModule, NodesModule],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, VaultModule, LLMModule, NodesModule, TeamsModule],
   providers: [
     ThreadsMetricsService,
     RunSignalsRegistry,
     CallAgentLinkingService,
     ThreadCleanupCoordinator,
     RemindersService,
+    TeamsGraphSource,
+    TeamsGraphRepository,
     {
       provide: GraphRepository,
-      useFactory: async (config: ConfigService, moduleRef: ModuleRef) => {
-        const templateRegistry = await moduleRef.resolve(TemplateRegistry, undefined, { strict: false });
-        const repo = new FsGraphRepository(config, templateRegistry);
-        await repo.initIfNeeded();
-        return repo;
-      },
-      inject: [ConfigService, ModuleRef],
+      useExisting: TeamsGraphRepository,
     },
     AgentsPersistenceService,
   ],

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EntityTable, type EntityTableSortKey, type EntityTableSortState } from '@/components/entities/EntityTable';
-import { useGraphEntities } from '@/features/entities/hooks/useGraphEntities';
-import { getTemplateOptions } from '@/features/entities/api/graphEntities';
+import { useTeamEntities } from '@/features/entities/hooks/useTeamEntities';
+import { getTemplateOptions } from '@/features/entities/api/teamEntities';
 import type { GraphEntityKind, GraphEntitySummary } from '@/features/entities/types';
 
 interface ToolbarAction {
@@ -36,7 +36,7 @@ export function EntityListPage({
   templateExcludeNames,
 }: EntityListPageProps) {
   const navigate = useNavigate();
-  const { entities, deleteEntity, graphQuery, templatesQuery, conflict, resolveConflict, isSaving } = useGraphEntities();
+  const { entities, deleteEntity, templatesQuery, isSaving, isLoading, hasError } = useTeamEntities();
   const [sort, setSort] = useState<EntityTableSortState>({ key: 'title', direction: 'asc' });
 
   const templates = useMemo(() => {
@@ -49,7 +49,7 @@ export function EntityListPage({
 
   const filteredEntities = useMemo(() => {
     return entities.filter((entity) => {
-      if (entity.templateKind !== kind) {
+      if (entity.entityKind !== kind) {
         return false;
       }
       if (templateIncludeNames && templateIncludeNames.size > 0 && !templateIncludeNames.has(entity.templateName)) {
@@ -73,8 +73,6 @@ export function EntityListPage({
     });
   }, [filteredEntities, sort]);
 
-  const isLoading = graphQuery.isLoading || templatesQuery.isLoading;
-
   const handleCreateClick = () => {
     navigate(`${listPath}/new`);
   };
@@ -86,7 +84,7 @@ export function EntityListPage({
   const handleDeleteClick = async (entity: GraphEntitySummary) => {
     const confirmed = window.confirm(`Delete ${entity.title}? This action cannot be undone.`);
     if (!confirmed) return;
-    await deleteEntity({ id: entity.id });
+    await deleteEntity({ id: entity.id, entityKind: entity.entityKind });
   };
 
   const showEmptyLabel = emptyLabel;
@@ -133,31 +131,12 @@ export function EntityListPage({
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {(conflict || graphQuery.isError || templatesQuery.isError) && (
+        {(hasError || templatesQuery.isError) && (
           <div className="shrink-0 space-y-4 border-b border-[var(--agyn-border-subtle)] px-6 py-4">
-            {conflict && (
-              <Alert className="border-amber-400/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-                <AlertTitle>Graph updated elsewhere</AlertTitle>
-                <AlertDescription className="flex items-center justify-between gap-3">
-                  <span>Latest graph changes are available. Refresh to continue editing.</span>
-                  <button
-                    type="button"
-                    onClick={() => resolveConflict()}
-                    className="inline-flex items-center gap-2 rounded-md border border-[var(--agyn-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--agyn-dark)] hover:bg-[var(--agyn-bg-light)] transition-colors"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Refresh graph
-                  </button>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {(graphQuery.isError || templatesQuery.isError) && (
-              <Alert variant="destructive">
-                <AlertTitle>Unable to load graph data</AlertTitle>
-                <AlertDescription>Check your connection and try again.</AlertDescription>
-              </Alert>
-            )}
+            <Alert variant="destructive">
+              <AlertTitle>Unable to load entities</AlertTitle>
+              <AlertDescription>Check your connection and try again.</AlertDescription>
+            </Alert>
           </div>
         )}
 

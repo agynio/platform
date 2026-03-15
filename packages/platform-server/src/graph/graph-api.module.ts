@@ -7,7 +7,6 @@ import { GraphPersistController } from './controllers/graphPersist.controller';
 import { GraphVariablesController } from './controllers/graphVariables.controller';
 import { MemoryController } from './controllers/memory.controller';
 import { RunsController } from './controllers/runs.controller';
-import { GraphGuard } from './graph.guard';
 import { NodeStateService } from './nodeState.service';
 import { GraphVariablesService } from './services/graphVariables.service';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
@@ -28,7 +27,7 @@ import { GraphCoreModule } from '../graph-core/graph-core.module';
     AgentsRemindersController,
     RemindersController,
   ],
-  providers: [GraphGuard, NodeStateService, GraphVariablesService],
+  providers: [NodeStateService, GraphVariablesService],
   exports: [GraphCoreModule, NodeStateService, GraphVariablesService],
 })
 export class GraphApiModule {}

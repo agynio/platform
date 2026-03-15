@@ -1,0 +1,421 @@
+syntax = "proto3";
+
+package agynio.api.teams.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum AgentWhenBusy {
+  AGENT_WHEN_BUSY_UNSPECIFIED = 0;
+  AGENT_WHEN_BUSY_WAIT = 1;
+  AGENT_WHEN_BUSY_INJECT_AFTER_TOOLS = 2;
+}
+
+enum AgentProcessBuffer {
+  AGENT_PROCESS_BUFFER_UNSPECIFIED = 0;
+  AGENT_PROCESS_BUFFER_ALL_TOGETHER = 1;
+  AGENT_PROCESS_BUFFER_ONE_BY_ONE = 2;
+}
+
+enum ToolType {
+  TOOL_TYPE_UNSPECIFIED = 0;
+  TOOL_TYPE_MANAGE = 1;
+  TOOL_TYPE_MEMORY = 2;
+  TOOL_TYPE_SHELL_COMMAND = 3;
+  TOOL_TYPE_SEND_MESSAGE = 4;
+  TOOL_TYPE_SEND_SLACK_MESSAGE = 5;
+  TOOL_TYPE_REMIND_ME = 6;
+  TOOL_TYPE_GITHUB_CLONE_REPO = 7;
+  TOOL_TYPE_CALL_AGENT = 8;
+}
+
+enum WorkspacePlatform {
+  WORKSPACE_PLATFORM_UNSPECIFIED = 0;
+  WORKSPACE_PLATFORM_LINUX_AMD64 = 1;
+  WORKSPACE_PLATFORM_LINUX_ARM64 = 2;
+  WORKSPACE_PLATFORM_AUTO = 3;
+}
+
+enum MemoryBucketScope {
+  MEMORY_BUCKET_SCOPE_UNSPECIFIED = 0;
+  MEMORY_BUCKET_SCOPE_GLOBAL = 1;
+  MEMORY_BUCKET_SCOPE_PER_THREAD = 2;
+}
+
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_AGENT = 1;
+  ENTITY_TYPE_TOOL = 2;
+  ENTITY_TYPE_MCP_SERVER = 3;
+  ENTITY_TYPE_WORKSPACE_CONFIGURATION = 4;
+  ENTITY_TYPE_MEMORY_BUCKET = 5;
+}
+
+enum AttachmentKind {
+  ATTACHMENT_KIND_UNSPECIFIED = 0;
+  ATTACHMENT_KIND_AGENT_TOOL = 1;
+  ATTACHMENT_KIND_AGENT_MEMORY_BUCKET = 2;
+  ATTACHMENT_KIND_AGENT_WORKSPACE_CONFIGURATION = 3;
+  ATTACHMENT_KIND_AGENT_MCP_SERVER = 4;
+  ATTACHMENT_KIND_MCP_SERVER_WORKSPACE_CONFIGURATION = 5;
+}
+
+message AgentConfig {
+  string model = 1;
+  string system_prompt = 2;
+  uint32 debounce_ms = 3;
+  AgentWhenBusy when_busy = 4;
+  AgentProcessBuffer process_buffer = 5;
+  bool send_final_response_to_thread = 6;
+  uint32 summarization_keep_tokens = 7;
+  uint32 summarization_max_tokens = 8;
+  bool restrict_output = 9;
+  string restriction_message = 10;
+  uint32 restriction_max_injections = 11;
+  string name = 12;
+  string role = 13;
+}
+
+message Agent {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string title = 4;
+  string description = 5;
+  AgentConfig config = 6;
+}
+
+message AgentCreateRequest {
+  string title = 1;
+  string description = 2;
+  AgentConfig config = 3;
+}
+
+message AgentUpdateRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  AgentConfig config = 4;
+}
+
+message GetAgentRequest {
+  string id = 1;
+}
+
+message DeleteAgentRequest {
+  string id = 1;
+}
+
+message ListAgentsRequest {
+  optional string q = 1;
+  optional uint32 page = 2;
+  optional uint32 per_page = 3;
+}
+
+message PaginatedAgents {
+  repeated Agent items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+message Tool {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  ToolType type = 4;
+  string name = 5;
+  string description = 6;
+  google.protobuf.Struct config = 7;
+}
+
+message ToolCreateRequest {
+  ToolType type = 1;
+  string name = 2;
+  string description = 3;
+  google.protobuf.Struct config = 4;
+}
+
+message ToolUpdateRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  google.protobuf.Struct config = 4;
+}
+
+message GetToolRequest {
+  string id = 1;
+}
+
+message DeleteToolRequest {
+  string id = 1;
+}
+
+message ListToolsRequest {
+  ToolType type = 1;
+  optional uint32 page = 2;
+  optional uint32 per_page = 3;
+}
+
+message PaginatedTools {
+  repeated Tool items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+message McpEnvItem {
+  string name = 1;
+  string value = 2;
+}
+
+message McpServerRestartPolicy {
+  uint32 max_attempts = 1;
+  uint32 backoff_ms = 2;
+}
+
+message McpServerConfig {
+  string namespace = 1;
+  string command = 2;
+  string workdir = 3;
+  repeated McpEnvItem env = 4;
+  optional uint32 request_timeout_ms = 5;
+  optional uint32 startup_timeout_ms = 6;
+  optional uint32 heartbeat_interval_ms = 7;
+  optional uint32 stale_timeout_ms = 8;
+  McpServerRestartPolicy restart = 9;
+}
+
+message McpServer {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string title = 4;
+  string description = 5;
+  McpServerConfig config = 6;
+}
+
+message McpServerCreateRequest {
+  string title = 1;
+  string description = 2;
+  McpServerConfig config = 3;
+}
+
+message McpServerUpdateRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  McpServerConfig config = 4;
+}
+
+message GetMcpServerRequest {
+  string id = 1;
+}
+
+message DeleteMcpServerRequest {
+  string id = 1;
+}
+
+message ListMcpServersRequest {
+  optional uint32 page = 1;
+  optional uint32 per_page = 2;
+}
+
+message PaginatedMcpServers {
+  repeated McpServer items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+message WorkspaceEnvItem {
+  string name = 1;
+  string value = 2;
+}
+
+message WorkspaceVolumeConfig {
+  bool enabled = 1;
+  string mount_path = 2;
+}
+
+message WorkspaceConfig {
+  string image = 1;
+  repeated WorkspaceEnvItem env = 2;
+  string initial_script = 3;
+  google.protobuf.Value cpu_limit = 4;
+  google.protobuf.Value memory_limit = 5;
+  WorkspacePlatform platform = 6;
+  bool enable_dind = 7;
+  uint32 ttl_seconds = 8;
+  google.protobuf.Struct nix = 9;
+  WorkspaceVolumeConfig volumes = 10;
+}
+
+message WorkspaceConfiguration {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string title = 4;
+  string description = 5;
+  WorkspaceConfig config = 6;
+}
+
+message WorkspaceConfigurationCreateRequest {
+  string title = 1;
+  string description = 2;
+  WorkspaceConfig config = 3;
+}
+
+message WorkspaceConfigurationUpdateRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  WorkspaceConfig config = 4;
+}
+
+message GetWorkspaceConfigurationRequest {
+  string id = 1;
+}
+
+message DeleteWorkspaceConfigurationRequest {
+  string id = 1;
+}
+
+message ListWorkspaceConfigurationsRequest {
+  optional uint32 page = 1;
+  optional uint32 per_page = 2;
+}
+
+message PaginatedWorkspaceConfigurations {
+  repeated WorkspaceConfiguration items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+message MemoryBucketConfig {
+  MemoryBucketScope scope = 1;
+  string collection_prefix = 2;
+}
+
+message MemoryBucket {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string title = 4;
+  string description = 5;
+  MemoryBucketConfig config = 6;
+}
+
+message MemoryBucketCreateRequest {
+  string title = 1;
+  string description = 2;
+  MemoryBucketConfig config = 3;
+}
+
+message MemoryBucketUpdateRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  MemoryBucketConfig config = 4;
+}
+
+message GetMemoryBucketRequest {
+  string id = 1;
+}
+
+message DeleteMemoryBucketRequest {
+  string id = 1;
+}
+
+message ListMemoryBucketsRequest {
+  optional uint32 page = 1;
+  optional uint32 per_page = 2;
+}
+
+message PaginatedMemoryBuckets {
+  repeated MemoryBucket items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+message Attachment {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  AttachmentKind kind = 4;
+  EntityType source_type = 5;
+  string source_id = 6;
+  EntityType target_type = 7;
+  string target_id = 8;
+}
+
+message AttachmentCreateRequest {
+  AttachmentKind kind = 1;
+  string source_id = 2;
+  string target_id = 3;
+}
+
+message DeleteAttachmentRequest {
+  string id = 1;
+}
+
+message ListAttachmentsRequest {
+  EntityType source_type = 1;
+  optional string source_id = 2;
+  EntityType target_type = 3;
+  optional string target_id = 4;
+  AttachmentKind kind = 5;
+  optional uint32 page = 6;
+  optional uint32 per_page = 7;
+}
+
+message PaginatedAttachments {
+  repeated Attachment items = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+  uint64 total = 4;
+}
+
+service TeamsService {
+  rpc ListAgents(ListAgentsRequest) returns (PaginatedAgents);
+  rpc CreateAgent(AgentCreateRequest) returns (Agent);
+  rpc GetAgent(GetAgentRequest) returns (Agent);
+  rpc UpdateAgent(AgentUpdateRequest) returns (Agent);
+  rpc DeleteAgent(DeleteAgentRequest) returns (google.protobuf.Empty);
+
+  rpc ListTools(ListToolsRequest) returns (PaginatedTools);
+  rpc CreateTool(ToolCreateRequest) returns (Tool);
+  rpc GetTool(GetToolRequest) returns (Tool);
+  rpc UpdateTool(ToolUpdateRequest) returns (Tool);
+  rpc DeleteTool(DeleteToolRequest) returns (google.protobuf.Empty);
+
+  rpc ListMcpServers(ListMcpServersRequest) returns (PaginatedMcpServers);
+  rpc CreateMcpServer(McpServerCreateRequest) returns (McpServer);
+  rpc GetMcpServer(GetMcpServerRequest) returns (McpServer);
+  rpc UpdateMcpServer(McpServerUpdateRequest) returns (McpServer);
+  rpc DeleteMcpServer(DeleteMcpServerRequest) returns (google.protobuf.Empty);
+
+  rpc ListWorkspaceConfigurations(ListWorkspaceConfigurationsRequest)
+      returns (PaginatedWorkspaceConfigurations);
+  rpc CreateWorkspaceConfiguration(WorkspaceConfigurationCreateRequest)
+      returns (WorkspaceConfiguration);
+  rpc GetWorkspaceConfiguration(GetWorkspaceConfigurationRequest)
+      returns (WorkspaceConfiguration);
+  rpc UpdateWorkspaceConfiguration(WorkspaceConfigurationUpdateRequest)
+      returns (WorkspaceConfiguration);
+  rpc DeleteWorkspaceConfiguration(DeleteWorkspaceConfigurationRequest)
+      returns (google.protobuf.Empty);
+
+  rpc ListMemoryBuckets(ListMemoryBucketsRequest) returns (PaginatedMemoryBuckets);
+  rpc CreateMemoryBucket(MemoryBucketCreateRequest) returns (MemoryBucket);
+  rpc GetMemoryBucket(GetMemoryBucketRequest) returns (MemoryBucket);
+  rpc UpdateMemoryBucket(MemoryBucketUpdateRequest) returns (MemoryBucket);
+  rpc DeleteMemoryBucket(DeleteMemoryBucketRequest) returns (google.protobuf.Empty);
+
+  rpc ListAttachments(ListAttachmentsRequest) returns (PaginatedAttachments);
+  rpc CreateAttachment(AttachmentCreateRequest) returns (Attachment);
+  rpc DeleteAttachment(DeleteAttachmentRequest) returns (google.protobuf.Empty);
+}

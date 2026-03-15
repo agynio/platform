@@ -82,8 +82,10 @@ export const graph = {
     http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
 
   // Full graph
-  saveFullGraph: (g: PersistedGraphUpsertRequestUI) =>
-    http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, g),
+  saveFullGraph: (g: PersistedGraphUpsertRequestUI) => {
+    void g;
+    return http.get<PersistedGraph>(`/api/graph`);
+  },
   getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
 };
 

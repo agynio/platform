@@ -13,6 +13,7 @@ import { GraphCanvas, type GraphCanvasDropHandler, type GraphNodeData } from '..
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
+import type { McpToolDescriptor } from '../nodeProperties/types';
 import { resolveAgentDisplayTitle } from '../../utils/agentDisplay';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
@@ -26,6 +27,7 @@ import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/fea
 import type { TemplateSchema, NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 import { getUuid } from '@/utils/getUuid';
+import { isRecord } from '@/utils/typeGuards';
 
 type FlowNode = Node<GraphNodeData>;
 
@@ -116,6 +118,42 @@ function encodeHandle(handle?: string | null): string {
     return handle;
   }
   return '$';
+}
+
+type McpStateSnapshot = {
+  tools: McpToolDescriptor[];
+  enabledTools?: string[];
+};
+
+function parseMcpTool(value: unknown): McpToolDescriptor | null {
+  if (!isRecord(value)) return null;
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  if (!name) return null;
+  const tool: McpToolDescriptor = { name };
+  if (typeof value.title === 'string') {
+    tool.title = value.title;
+  }
+  if (typeof value.description === 'string') {
+    tool.description = value.description;
+  }
+  return tool;
+}
+
+function readMcpState(state: unknown): McpStateSnapshot {
+  if (!isRecord(state)) {
+    return { tools: [], enabledTools: undefined };
+  }
+  const mcp = isRecord(state.mcp) ? (state.mcp as Record<string, unknown>) : null;
+  if (!mcp) {
+    return { tools: [], enabledTools: undefined };
+  }
+  const tools = Array.isArray(mcp.tools)
+    ? mcp.tools.map(parseMcpTool).filter((tool): tool is McpToolDescriptor => tool !== null)
+    : [];
+  const enabledTools = Array.isArray(mcp.enabledTools)
+    ? mcp.enabledTools.filter((tool): tool is string => typeof tool === 'string')
+    : undefined;
+  return { tools, enabledTools };
 }
 
 function decodeHandle(handle?: string | null): string | undefined {
@@ -405,7 +443,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const lastActionAtRef = useRef<number>(0);
 
   const edgeTypes = useMemo<EdgeTypes>(() => ({ gradient: GradientEdge }), []);
-  const fallbackEnabledTools = useMemo<string[]>(() => [], []);
   const templatesQuery = useTemplates();
   const sidebarNodeItems = useMemo(() => mapTemplatesToSidebarItems(templatesQuery.data), [templatesQuery.data]);
   const templatesByName = useMemo(() => {
@@ -594,11 +631,19 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     setEnabledTools: setMcpEnabledTools,
     isLoading: mcpToolsLoading,
   } = useMcpNodeState(mcpNodeId);
+  const fallbackMcpState = useMemo(() => {
+    if (!mcpNodeId) {
+      return { tools: [], enabledTools: undefined };
+    }
+    return readMcpState(selectedNode?.state);
+  }, [mcpNodeId, selectedNode?.state]);
+  const resolvedMcpTools = mcpToolsLoading ? fallbackMcpState.tools : mcpTools;
+  const resolvedEnabledTools = mcpEnabledTools ?? (mcpToolsLoading ? fallbackMcpState.enabledTools : undefined);
 
   const handleToggleMcpTool = useCallback(
     (toolName: string, enabled: boolean) => {
       if (!mcpNodeId) return;
-      const current = mcpEnabledTools ?? [];
+      const current = resolvedEnabledTools ?? [];
       const next = new Set(current);
       if (enabled) {
         next.add(toolName);
@@ -607,7 +652,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       }
       setMcpEnabledTools(Array.from(next));
     },
-    [mcpEnabledTools, mcpNodeId, setMcpEnabledTools],
+    [mcpNodeId, resolvedEnabledTools, setMcpEnabledTools],
   );
 
   const handleNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
@@ -875,8 +920,8 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           canProvision={canProvision}
           canDeprovision={canDeprovision}
           isActionPending={isActionPending}
-          tools={mcpTools}
-          enabledTools={mcpEnabledTools ?? fallbackEnabledTools}
+          tools={resolvedMcpTools}
+          enabledTools={resolvedEnabledTools}
           onToggleTool={handleToggleMcpTool}
           toolsLoading={mcpToolsLoading}
           nixPackageSearch={handleNixPackageSearch}

@@ -1,18 +1,32 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Http2SessionManager } from '@connectrpc/connect-node';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
+import { ContainerService, NonceCache } from '@agyn/docker-runner';
+import type { RunnerConfig } from '../../docker-runner/src/service/config';
+import { createRunnerGrpcServer } from '../../docker-runner/src/service/grpc/server';
+import type { Http2Server } from 'node:http2';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { DockerWorkspaceRuntimeProvider } from '../src/workspace/providers/docker.workspace.provider';
 
 const RUNNER_SECRET_OVERRIDE = process.env.DOCKER_RUNNER_SHARED_SECRET_OVERRIDE;
 const RUNNER_SECRET = RUNNER_SECRET_OVERRIDE ?? process.env.DOCKER_RUNNER_SHARED_SECRET;
 const RUNNER_ADDRESS_OVERRIDE = process.env.DOCKER_RUNNER_GRPC_ADDRESS;
-const RUNNER_HOST = process.env.DOCKER_RUNNER_GRPC_HOST ?? process.env.DOCKER_RUNNER_HOST;
-const RUNNER_PORT = process.env.DOCKER_RUNNER_GRPC_PORT ?? process.env.DOCKER_RUNNER_PORT;
+const RUNNER_HOST = process.env.DOCKER_RUNNER_GRPC_HOST;
+const RUNNER_PORT = process.env.DOCKER_RUNNER_GRPC_PORT;
+
+const DEFAULT_RUNNER_HOST = 'docker-runner';
+const DEFAULT_RUNNER_PORT = '50051';
 
 const resolvedRunnerAddress =
-  RUNNER_ADDRESS_OVERRIDE ?? (RUNNER_HOST && RUNNER_PORT ? `${RUNNER_HOST}:${RUNNER_PORT}` : undefined);
-const shouldRunTests = Boolean(RUNNER_SECRET && resolvedRunnerAddress);
+  RUNNER_ADDRESS_OVERRIDE ??
+  (RUNNER_HOST && RUNNER_PORT && !(RUNNER_HOST === DEFAULT_RUNNER_HOST && RUNNER_PORT === DEFAULT_RUNNER_PORT)
+    ? `${RUNNER_HOST}:${RUNNER_PORT}`
+    : undefined);
+
+if (!RUNNER_SECRET) {
+  throw new Error('Docker runner gRPC environment variables are required for workspace exec tests.');
+}
 const TEST_IMAGE = 'ghcr.io/agynio/devcontainer:latest';
 const THREAD_ID = `grpc-exec-${Date.now()}`;
 const TEST_TIMEOUT_MS = 30_000;
@@ -23,28 +37,75 @@ class NoopContainerRegistry {
 
 const registry = new NoopContainerRegistry() as unknown as ContainerRegistry;
 
+let grpcServer: Http2Server | undefined;
 let provider: DockerWorkspaceRuntimeProvider;
 let runnerClient: RunnerGrpcClient;
 let workspaceId: string;
-const describeRunner = shouldRunTests ? describe : describe.skip;
+let runnerAddress = resolvedRunnerAddress;
+let sessionManager: Http2SessionManager | undefined;
 
-describeRunner('DockerWorkspaceRuntimeProvider exec over gRPC runner', () => {
-  beforeAll(async () => {
-    runnerClient = new RunnerGrpcClient({ address: resolvedRunnerAddress!, sharedSecret: RUNNER_SECRET! });
-    provider = new DockerWorkspaceRuntimeProvider(runnerClient, registry);
+beforeAll(async () => {
+  if (!runnerAddress) {
+    const runnerConfig: RunnerConfig = {
+      grpcHost: '127.0.0.1',
+      grpcPort: 0,
+      sharedSecret: RUNNER_SECRET,
+      signatureTtlMs: 60_000,
+      dockerSocket: process.env.DOCKER_RUNNER_SOCKET ?? '/var/run/docker.sock',
+      logLevel: 'info',
+    };
 
-    const ensure = await provider.ensureWorkspace(
-      { threadId: THREAD_ID, role: 'workspace' },
-      { image: TEST_IMAGE, ttlSeconds: 600 },
-    );
-    workspaceId = ensure.workspaceId;
-  }, TEST_TIMEOUT_MS);
-
-  afterAll(async () => {
-    if (workspaceId) {
-      await provider.destroyWorkspace(workspaceId, { force: true }).catch(() => undefined);
+    if (!process.env.DOCKER_SOCKET) {
+      process.env.DOCKER_SOCKET = runnerConfig.dockerSocket;
     }
-  }, TEST_TIMEOUT_MS);
+
+    const containers = new ContainerService();
+    const nonceCache = new NonceCache({ ttlMs: runnerConfig.signatureTtlMs });
+    grpcServer = createRunnerGrpcServer({ config: runnerConfig, containers, nonceCache });
+    runnerAddress = await new Promise<string>((resolve, reject) => {
+      const onError = (err: Error) => {
+        grpcServer!.off('error', onError);
+        reject(err);
+      };
+      grpcServer!.once('error', onError);
+      grpcServer!.listen(0, runnerConfig.grpcHost, () => {
+        grpcServer!.off('error', onError);
+        const address = grpcServer!.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('Failed to bind docker-runner server'));
+          return;
+        }
+        resolve(`${runnerConfig.grpcHost}:${address.port}`);
+      });
+    });
+  }
+
+  const baseUrl = runnerAddress.startsWith('http') ? runnerAddress : `http://${runnerAddress}`;
+  sessionManager = new Http2SessionManager(baseUrl);
+  runnerClient = new RunnerGrpcClient({ address: runnerAddress, sharedSecret: RUNNER_SECRET, sessionManager });
+  provider = new DockerWorkspaceRuntimeProvider(runnerClient, registry);
+
+  const ensure = await provider.ensureWorkspace(
+    { threadId: THREAD_ID, role: 'workspace' },
+    { image: TEST_IMAGE, ttlSeconds: 600 },
+  );
+  workspaceId = ensure.workspaceId;
+}, TEST_TIMEOUT_MS);
+
+afterAll(async () => {
+  if (workspaceId) {
+    await provider.destroyWorkspace(workspaceId, { force: true }).catch(() => undefined);
+  }
+  sessionManager?.abort();
+  sessionManager = undefined;
+  if (grpcServer) {
+    await new Promise<void>((resolve) => {
+      grpcServer!.close(() => resolve());
+    });
+  }
+}, TEST_TIMEOUT_MS);
+
+describe('DockerWorkspaceRuntimeProvider exec over gRPC runner', () => {
   it(
     'executes non-interactive echo command',
     async () => {

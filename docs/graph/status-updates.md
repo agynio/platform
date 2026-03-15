@@ -32,11 +32,14 @@ socket.on('node_status', (payload) => {
 });
 
 Notes
-- HTTP endpoints remain for actions (pause/resume, provision/deprovision) and configuration updates.
+- HTTP endpoints remain for actions (pause/resume, provision/deprovision) and node state updates.
 - Remove any polling loops (e.g., 2s intervals) for status; rely on socket events.
 
-Config persistence
-- Graph configuration changes persist via POST /api/graph (full-graph updates).
+Graph source and persistence
+- Graph configuration is sourced from the Teams service; `/api/graph` is GET-only and returns the latest snapshot.
+- UI edits to layout are local-only; the backend does not accept full-graph writes.
+- Node state persists via `/api/graph/nodes/:nodeId/state` and is merged into the snapshot on read.
+- Graph variables persist via `/api/graph/variables`; local overrides are stored separately.
 - The per-node dynamic-config save endpoint was removed; only the schema endpoint remains for rendering purposes.
 
 ## Template Capabilities & Static Config (Updated)
@@ -56,7 +59,6 @@ Static config schemas (all templates now expose one – some are currently empty
 - `shellTool`: (empty object for now).
 - `githubCloneRepoTool`: (empty object for now).
 - `sendSlackMessageTool`: (empty object for now).
-- `slackTrigger`: debounceMs, waitForBusy (note: presently setConfig is a no-op; values must be supplied at creation time until runtime reconfiguration is implemented).
 
 Dynamic config (currently only MCP server) becomes available after initial tool discovery; UI should check `dynamicConfigReady` before rendering its form.
 

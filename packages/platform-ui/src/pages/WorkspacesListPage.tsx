@@ -1,5 +1,5 @@
 import { EntityListPage } from './entities/EntityListPage';
-import { EXCLUDED_WORKSPACE_TEMPLATES } from '@/features/entities/api/graphEntities';
+import { EXCLUDED_WORKSPACE_TEMPLATES } from '@/features/entities/api/teamEntities';
 
 export function WorkspacesListPage() {
   return (

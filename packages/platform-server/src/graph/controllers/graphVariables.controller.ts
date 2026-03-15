@@ -17,7 +17,6 @@ export class GraphVariablesController {
     try { return await this.service.create('main', parsed.key, parsed.graph); }
     catch (e: unknown) {
       if (isCodeError(e) && e.code === 'DUPLICATE_KEY') throw new HttpException({ error: 'DUPLICATE_KEY' }, HttpStatus.CONFLICT);
-      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
       throw e;
     }
   }
@@ -27,9 +26,7 @@ export class GraphVariablesController {
     const parsed = parseUpdateBody(body);
     try { return await this.service.update('main', key, parsed); }
     catch (e: unknown) {
-      if (isCodeError(e) && e.code === 'GRAPH_NOT_FOUND') throw new HttpException({ error: 'GRAPH_NOT_FOUND' }, HttpStatus.NOT_FOUND);
       if (isCodeError(e) && e.code === 'KEY_NOT_FOUND') throw new HttpException({ error: 'KEY_NOT_FOUND' }, HttpStatus.NOT_FOUND);
-      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
       throw e;
     }
   }
@@ -37,11 +34,7 @@ export class GraphVariablesController {
   @Delete(':key')
   @HttpCode(204)
   async remove(@Param('key') key: string): Promise<void> {
-    try { await this.service.remove('main', key); }
-    catch (e: unknown) {
-      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
-      throw e;
-    }
+    await this.service.remove('main', key);
   }
 }
 

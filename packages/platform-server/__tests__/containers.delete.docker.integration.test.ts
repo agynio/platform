@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Http2SessionManager } from '@connectrpc/connect-node';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
@@ -23,6 +24,7 @@ import {
   runnerSecretMissing,
   socketMissing,
   startDockerRunner,
+  startDockerRunnerProcess,
   startPostgres,
   runPrismaMigrations,
   type RunnerHandle,
@@ -43,6 +45,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
   let registry: ContainerRegistry;
   let runner: RunnerHandle;
   let dockerClient: RunnerGrpcClient;
+  let sessionManager: Http2SessionManager | undefined;
   let dbHandle: PostgresHandle;
   const orphanContainers = new Set<string>();
   const startRegisteredContainer = async (prefix: string): Promise<{ containerId: string }> => {
@@ -79,8 +82,11 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
     registry = new ContainerRegistry(prisma);
     await registry.ensureIndexes();
 
-    runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunner(socketPath);
+    const baseUrl = runner.grpcAddress.startsWith('http') ? runner.grpcAddress : `http://${runner.grpcAddress}`;
+    sessionManager = new Http2SessionManager(baseUrl);
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET, sessionManager });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
@@ -105,6 +111,8 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
 
   afterAll(async () => {
     const adapter = app?.getHttpAdapter?.().getInstance?.();
+    sessionManager?.abort();
+    sessionManager = undefined;
     if (app) {
       await app.close();
     }
@@ -252,6 +260,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
   let registry: ContainerRegistry;
   let runner: RunnerHandle;
   let dockerClient: RunnerGrpcClient;
+  let sessionManager: Http2SessionManager | undefined;
   let dbHandle: PostgresHandle;
   const orphanContainers = new Set<string>();
 
@@ -289,8 +298,11 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
     registry = new ContainerRegistry(prisma);
     await registry.ensureIndexes();
 
-    runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunnerProcess(socketPath);
+    const baseUrl = runner.grpcAddress.startsWith('http') ? runner.grpcAddress : `http://${runner.grpcAddress}`;
+    sessionManager = new Http2SessionManager(baseUrl);
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET, sessionManager });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
@@ -314,6 +326,8 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
   }, 120_000);
 
   afterAll(async () => {
+    sessionManager?.abort();
+    sessionManager = undefined;
     if (app) {
       await app.close();
     }

@@ -7,14 +7,11 @@ import { createRunEventsStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
-const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
-const graphRepoStub = {
-  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
-} as any;
 
 const createLinkingStub = () => {
   const spies = {
@@ -43,8 +40,7 @@ const createPersistence = (linking?: CallAgentLinkingService) => {
   const svc = new AgentsPersistenceService(
     new StubPrismaService(createPrismaStub()) as any,
     metricsStub,
-    templateRegistryStub,
-    graphRepoStub,
+    createTeamsClientStub(),
     createRunEventsStub() as any,
     linking ?? createLinkingStub().instance,
     eventsBusStub as any,

@@ -14,6 +14,7 @@ const trackedEnvKeys = [
   'AGENTS_DATABASE_URL',
   'AGENTS_ENV',
   'AGENTS_DEPLOYMENT',
+  'TEAMS_SERVICE_ADDR',
   'DEPLOYMENT_ID',
   'NODE_ENV',
   'HOSTNAME',
@@ -45,6 +46,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_KEY_DURATION = ' 15m ';
     process.env.LITELLM_MODELS = 'gpt-5o, claude-4 '; 
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
+    process.env.TEAMS_SERVICE_ADDR = 'teams:9090';
 
     const config = ConfigService.fromEnv();
 
@@ -64,6 +66,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
     process.env.AGENTS_ENV = ' staging ';
     process.env.HOSTNAME = 'web-1';
+    process.env.TEAMS_SERVICE_ADDR = 'teams:9090';
 
     const config = ConfigService.fromEnv();
 
@@ -76,6 +79,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.LITELLM_BASE_URL = 'http://litellm.internal:4000';
     process.env.LITELLM_MASTER_KEY = 'sk-master';
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
+    process.env.TEAMS_SERVICE_ADDR = 'teams:9090';
 
     expect(() => ConfigService.fromEnv()).toThrowError(
       'LLM_PROVIDER must be either "litellm" or "openai", received "anthropic"',
@@ -89,6 +93,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
     process.env.OPENAI_API_KEY = 'sk-openai';
     process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+    process.env.TEAMS_SERVICE_ADDR = 'teams:9090';
 
     const config = ConfigService.fromEnv();
 
@@ -104,6 +109,7 @@ describe('ConfigService.fromEnv', () => {
     process.env.AGENTS_DATABASE_URL = 'postgresql://agents:agents@localhost:5443/agents';
     process.env.OPENAI_API_KEY = 'sk-openai-lite';
     process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+    process.env.TEAMS_SERVICE_ADDR = 'teams:9090';
 
     const config = ConfigService.fromEnv();
 
