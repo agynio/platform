@@ -42,9 +42,9 @@ import {
 } from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { create } from '@bufbuild/protobuf';
-import type { ContainerService, InteractiveExecSession, LogsStreamSession, NonceCache } from '../..';
+import type { ContainerService, InteractiveExecSession, LogsStreamSession, NonceCache } from '../../index.js';
 import type { ContainerHandle } from '../../lib/container.handle';
-import { verifyAuthHeaders } from '../..';
+import { verifyAuthHeaders } from '../../index.js';
 import type { RunnerConfig } from '../config';
 import { createDockerEventsParser } from '../dockerEvents.parser';
 import { startWorkloadRequestToContainerOpts } from '../../contracts/workload.grpc';

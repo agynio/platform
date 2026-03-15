@@ -1,6 +1,6 @@
 import './env';
 
-import { ContainerService, NonceCache } from '..';
+import { ContainerService, NonceCache } from '../index.js';
 import { loadRunnerConfig } from './config';
 import { createRunnerGrpcServer } from './grpc/server';
 
