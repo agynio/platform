@@ -1,5 +1,5 @@
 import { http } from '@/api/http';
-import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
+import type { TemplateSchema, NodeStatus, ReminderDTO } from '@/api/types/graph';
 import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { collectVaultRefs } from '@/lib/vault/collect';
 import { parseVaultRef, isValidVaultRef } from '@/lib/vault/parse';
@@ -54,7 +54,7 @@ export const graph = {
 
   // Node status/tools
   getNodeStatus: (nodeId: string) => http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
-  discoverNodeTools: (nodeId: string) =>
+  discoverTools: (nodeId: string) =>
     http.post<{ tools: Array<{ name: string; description: string }>; updatedAt?: string }>(
       `/api/graph/nodes/${encodeURIComponent(nodeId)}/discover-tools`,
     ),
@@ -82,15 +82,7 @@ export const graph = {
   postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') =>
     http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
 
-  // Full graph
-  saveFullGraph: (g: PersistedGraphUpsertRequestUI) => {
-    void g;
-    return http.get<PersistedGraph>(`/api/graph`);
-  },
-  getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
 };
-
-export type { PersistedGraphUpsertRequestUI };
 
 // Secrets helpers/types (authoritative definitions for Settings/Secrets)
 export type SecretKey = { mount: string; path: string; key: string };

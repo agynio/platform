@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NodeStatus } from '@/api/types/graph';
 import { graphApiService } from '../services/api';
-import { buildGraphSavePayload, mapPersistedGraphToNodes, type GraphNodeMetadata } from '../mappers';
+import { mapPersistedGraphToNodes, type GraphNodeMetadata } from '../mappers';
+import { fetchTeamsGraphSnapshot } from '../services/teamsGraph';
 import type {
   GraphNodeConfig,
   GraphNodeStatus,
@@ -9,8 +10,6 @@ import type {
   GraphSaveState,
   GraphNodeUpdate,
 } from '../types';
-
-const SAVE_DEBOUNCE_MS = 800;
 
 function toGraphStatus(status: NodeStatus | undefined): GraphNodeStatus {
   const state = status?.provisionStatus?.state;
@@ -66,100 +65,21 @@ export function useGraphData(): UseGraphDataResult {
   const baseRef = useRef<GraphBaseState>({ name: 'agents', version: 0, edges: [] });
   const [loading, setLoading] = useState(true);
   const [savingState, setSavingState] = useState<GraphSaveState>({ status: 'saved', error: null });
-  const saveTimeoutRef = useRef<number | null>(null);
-  const dirtyRef = useRef(false);
   const hydratedRef = useRef(false);
   const abortRef = useRef(false);
-  const savingInFlightRef = useRef(false);
-  const pendingSaveRef = useRef(false);
-  const isMountedRef = useRef(true);
 
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
 
-  const clearScheduledSave = useCallback(() => {
-    if (saveTimeoutRef.current !== null) {
-      window.clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-  }, []);
-
-  const performSave = useCallback(async () => {
-    clearScheduledSave();
-    if (!dirtyRef.current) {
-      pendingSaveRef.current = false;
-      return;
-    }
-
-    if (savingInFlightRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-
-    savingInFlightRef.current = true;
-    pendingSaveRef.current = false;
-    dirtyRef.current = false;
-
-    try {
-      const payload = buildGraphSavePayload({
-        name: baseRef.current.name,
-        version: baseRef.current.version,
-        nodes: nodesRef.current,
-        metadata: metadataRef.current,
-        edges: baseRef.current.edges,
-      });
-      const result = await graphApiService.saveGraph(payload);
-      baseRef.current = {
-        name: result.name,
-        version: result.version,
-        edges: (result.edges ?? []).map(cloneEdge),
-      };
-
-      if (isMountedRef.current && !abortRef.current) {
-        setEdgeState((result.edges ?? []).map(cloneEdge));
-        if (dirtyRef.current || pendingSaveRef.current) {
-          setSavingState({ status: 'saving', error: null });
-        } else {
-          setSavingState({ status: 'saved', error: null });
-        }
-      }
-    } catch (error) {
-      dirtyRef.current = true;
-      const message = error instanceof Error ? error.message : 'Save failed';
-      if (isMountedRef.current && !abortRef.current) {
-        setSavingState({ status: 'error', error: { message } });
-      }
-    } finally {
-      savingInFlightRef.current = false;
-      const shouldContinue = isMountedRef.current && !abortRef.current;
-      if (shouldContinue && pendingSaveRef.current) {
-        pendingSaveRef.current = false;
-        dirtyRef.current = true;
-        void performSave();
-      }
-    }
-  }, [clearScheduledSave]);
-
   const scheduleSave = useCallback(() => {
     if (!hydratedRef.current) {
       return;
     }
-    dirtyRef.current = true;
-    if (isMountedRef.current && !abortRef.current) {
-      setSavingState({ status: 'saving', error: null });
+    if (!abortRef.current) {
+      setSavingState({ status: 'saved', error: null });
     }
-
-    if (savingInFlightRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-
-    clearScheduledSave();
-    saveTimeoutRef.current = window.setTimeout(() => {
-      void performSave();
-    }, SAVE_DEBOUNCE_MS);
-  }, [clearScheduledSave, performSave]);
+  }, []);
 
   const applyNodeStatus = useCallback((nodeId: string, status: NodeStatus) => {
     setNodes((prev) =>
@@ -372,7 +292,7 @@ export function useGraphData(): UseGraphDataResult {
     setLoading(true);
     try {
       const [graph, templates] = await Promise.all([
-        graphApiService.fetchGraph(),
+        fetchTeamsGraphSnapshot(),
         graphApiService.fetchTemplates(),
       ]);
 
@@ -423,16 +343,11 @@ export function useGraphData(): UseGraphDataResult {
   }, [applyNodeStatus]);
 
   useEffect(() => {
-    isMountedRef.current = true;
     void refresh();
     return () => {
       abortRef.current = true;
-      isMountedRef.current = false;
-      savingInFlightRef.current = false;
-      pendingSaveRef.current = false;
-      clearScheduledSave();
     };
-  }, [refresh, clearScheduledSave]);
+  }, [refresh]);
 
   const savingErrorMessage = useMemo(() => savingState.error?.message ?? null, [savingState.error]);
 

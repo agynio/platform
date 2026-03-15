@@ -479,11 +479,13 @@ describe('ManageTool graph wiring', () => {
         {
           provide: GraphRepository,
           useValue: {
-            initIfNeeded: async () => {},
-            get: async () => null,
-            upsert: async () => {
-              throw new Error('not-implemented');
-            },
+            load: async () => ({
+              name: 'main',
+              version: 0,
+              updatedAt: new Date().toISOString(),
+              nodes: [],
+              edges: [],
+            }),
           },
         },
         { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },

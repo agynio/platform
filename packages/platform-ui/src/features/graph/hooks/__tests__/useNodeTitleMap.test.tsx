@@ -9,11 +9,11 @@ import type { GraphPersisted } from '../../types';
 import { useNodeTitleMap } from '../useNodeTitleMap';
 
 const serviceMocks = vi.hoisted(() => ({
-  fetchGraph: vi.fn(),
+  fetchTeamsGraphSnapshot: vi.fn(),
 }));
 
-vi.mock('../../services/api', () => ({
-  graphApiService: serviceMocks,
+vi.mock('../../services/teamsGraph', () => ({
+  fetchTeamsGraphSnapshot: serviceMocks.fetchTeamsGraphSnapshot,
 }));
 
 const templateHookMocks = vi.hoisted(() => ({
@@ -34,7 +34,7 @@ function createWrapper() {
 
 describe('useNodeTitleMap', () => {
   beforeEach(() => {
-    serviceMocks.fetchGraph.mockReset();
+    serviceMocks.fetchTeamsGraphSnapshot.mockReset();
     templateHookMocks.useTemplates.mockReset();
   });
 
@@ -84,7 +84,7 @@ describe('useNodeTitleMap', () => {
       refetch: vi.fn(),
     };
 
-    serviceMocks.fetchGraph.mockResolvedValue(graphResponse);
+    serviceMocks.fetchTeamsGraphSnapshot.mockResolvedValue(graphResponse);
     templateHookMocks.useTemplates.mockReturnValue(templatesQuery);
 
     const { wrapper } = createWrapper();
@@ -94,7 +94,7 @@ describe('useNodeTitleMap', () => {
       expect(result.current.status).toBe('success');
     });
 
-    expect(serviceMocks.fetchGraph).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.fetchTeamsGraphSnapshot).toHaveBeenCalledTimes(1);
     expect(templateHookMocks.useTemplates).toHaveBeenCalled();
     expect(result.current.titleMap.get('alpha-node')).toBe('Agent Alpha');
     expect(result.current.titleMap.get('beta-node')).toBe('Tool Template');

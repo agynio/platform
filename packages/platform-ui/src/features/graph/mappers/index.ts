@@ -3,9 +3,7 @@ import type {
   GraphNodeConfig,
   GraphNodeStatus,
   GraphPersisted,
-  GraphPersistedEdge,
   GraphPersistedNode,
-  GraphUpsertRequest,
 } from '../types';
 
 export interface GraphNodeMetadata {
@@ -152,14 +150,6 @@ export function mapPersistedGraphToNodes(
   return { nodes, metadata };
 }
 
-interface BuildSavePayloadOptions {
-  name: string;
-  version?: number;
-  nodes: GraphNodeConfig[];
-  metadata: Map<string, GraphNodeMetadata>;
-  edges: GraphPersistedEdge[];
-}
-
 export interface BuildGraphNodeFromTemplateOptions {
   id: string;
   position: { x: number; y: number };
@@ -212,37 +202,4 @@ export function buildGraphNodeFromTemplate(
   } satisfies GraphNodeMetadata;
 
   return { node, metadata };
-}
-
-function toPersistedNode(node: GraphNodeConfig, meta: GraphNodeMetadata): GraphPersistedNode {
-  const position = {
-    x: Number.isFinite(node.x) ? node.x : meta.position?.x ?? 0,
-    y: Number.isFinite(node.y) ? node.y : meta.position?.y ?? 0,
-  };
-  return {
-    id: node.id,
-    template: meta.template,
-    position,
-    config: meta.config ? { ...meta.config } : undefined,
-  } satisfies GraphPersistedNode;
-}
-
-export function buildGraphSavePayload(options: BuildSavePayloadOptions): GraphUpsertRequest {
-  const { name, version, nodes, metadata, edges } = options;
-  const persistedNodes: GraphPersistedNode[] = nodes.map((node) => {
-    const meta = metadata.get(node.id);
-    if (!meta) {
-      throw new Error(`Missing metadata for node ${node.id}`);
-    }
-    return toPersistedNode(node, meta);
-  });
-
-  const persistedEdges = edges.map((edge) => ({ ...edge }));
-
-  return {
-    name,
-    version,
-    nodes: persistedNodes,
-    edges: persistedEdges,
-  } satisfies GraphUpsertRequest;
 }

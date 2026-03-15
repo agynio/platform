@@ -123,10 +123,3 @@ export interface PersistedGraph {
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
 }
-export interface PersistedGraphUpsertRequest {
-  name: string;
-  version?: number; // expected version (undefined => create)
-  nodes: PersistedGraphNode[];
-  edges: PersistedGraphEdge[];
-}
-export type PersistedGraphUpsertResponse = PersistedGraph;

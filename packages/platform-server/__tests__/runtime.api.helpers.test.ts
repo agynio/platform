@@ -12,9 +12,15 @@ class ModuleRefStub {
 }
 import { GraphRepository } from '../src/graph/graph.repository';
 class StubRepo extends GraphRepository {
-  async initIfNeeded(): Promise<void> {}
-  async get(): Promise<null> { return null; }
-  async upsert(): Promise<never> { throw new Error('not-implemented'); }
+  async load() {
+    return {
+      name: 'main',
+      version: 0,
+      updatedAt: new Date().toISOString(),
+      nodes: [],
+      edges: [],
+    };
+  }
 }
 function makeRuntimeAndRegistry() {
   const moduleRef = new ModuleRefStub() as ModuleRef;

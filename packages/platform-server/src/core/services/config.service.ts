@@ -37,7 +37,6 @@ export const configSchema = z.object({
     .transform((models) => models.map((model) => model.trim()).filter((model) => model.length > 0)),
   githubToken: z.string().min(1).optional(),
   // Graph persistence
-  graphRepoPath: z.string().default('./data/graph'),
   graphBranch: z
     .string()
     .default('main')
@@ -47,13 +46,6 @@ export const configSchema = z.object({
     }),
   graphAuthorName: z.string().optional(),
   graphAuthorEmail: z.string().optional(),
-  graphLockTimeoutMs: z
-    .union([z.string(), z.number()])
-    .default('5000')
-    .transform((v) => {
-      const n = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(n) ? n : 5000;
-    }),
   teamsServiceAddr: z
     .string()
     .min(1, 'TEAMS_SERVICE_ADDR is required')
@@ -354,9 +346,6 @@ export class ConfigService implements Config {
   }
 
   // Graph config accessors
-  get graphRepoPath(): string {
-    return this.params.graphRepoPath;
-  }
   get graphBranch(): string {
     return this.params.graphBranch;
   }
@@ -366,10 +355,6 @@ export class ConfigService implements Config {
   get graphAuthorEmail(): string | undefined {
     return this.params.graphAuthorEmail;
   }
-  get graphLockTimeoutMs(): number {
-    return this.params.graphLockTimeoutMs;
-  }
-
   get teamsServiceAddr(): string {
     return this.params.teamsServiceAddr;
   }
@@ -562,7 +547,6 @@ export class ConfigService implements Config {
     const legacy = process.env.NCPS_URL;
     const urlServer = process.env.NCPS_URL_SERVER || legacy;
     const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
-    const graphRepoPathEnv = process.env.GRAPH_REPO_PATH;
     const graphBranchEnv = process.env.GRAPH_BRANCH;
     const dockerRunnerPortEnv = process.env.DOCKER_RUNNER_PORT ?? process.env.DOCKER_RUNNER_GRPC_PORT;
     const parsed = configSchema.parse({
@@ -579,11 +563,9 @@ export class ConfigService implements Config {
       litellmModels,
       githubToken: process.env.GH_TOKEN,
       // Pass raw env; schema will validate/assign default
-      graphRepoPath: graphRepoPathEnv,
       graphBranch: graphBranchEnv,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
-      graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
       teamsServiceAddr: process.env.TEAMS_SERVICE_ADDR,
       vaultEnabled: process.env.VAULT_ENABLED,
       vaultAddr: process.env.VAULT_ADDR,

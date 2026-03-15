@@ -6,11 +6,6 @@ import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { LocalMCPServerTool } from '../src/nodes/mcp/localMcpServer.tool';
 
 type TemplateRegistryStub = { toSchema: () => unknown[] };
-type GraphRepositoryStub = {
-  initIfNeeded: () => Promise<void>;
-  get: () => Promise<unknown>;
-  upsert: () => Promise<unknown>;
-};
 type RuntimeStub = {
   provisionNode: (id: string) => Promise<void>;
   deprovisionNode: (id: string) => Promise<void>;
@@ -25,13 +20,8 @@ function makeController(runtimeOverrides: Partial<RuntimeStub> = {}) {
     getNodeInstance: vi.fn(),
     ...runtimeOverrides,
   };
-  const graphRepository: GraphRepositoryStub = {
-    initIfNeeded: vi.fn(async () => {}),
-    get: vi.fn(async () => null),
-    upsert: vi.fn(async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] })),
-  };
   return {
-    controller: new GraphController(templateRegistry as never, runtime as never, graphRepository as never),
+    controller: new GraphController(templateRegistry as never, runtime as never),
     runtime,
   };
 }

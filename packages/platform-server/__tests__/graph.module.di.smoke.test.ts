@@ -190,9 +190,13 @@ if (!shouldRunDbTests) {
       } satisfies Partial<TemplateRegistry>;
 
       const graphRepositoryStub = {
-        initIfNeeded: vi.fn().mockResolvedValue(undefined),
-        get: vi.fn().mockResolvedValue(null),
-        upsert: vi.fn().mockResolvedValue({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+        load: vi.fn().mockResolvedValue({
+          name: 'main',
+          version: 0,
+          updatedAt: new Date().toISOString(),
+          nodes: [],
+          edges: [],
+        }),
       } satisfies Partial<GraphRepository>;
 
       const builder = Test.createTestingModule({

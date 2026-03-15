@@ -1,7 +1,6 @@
 import type { NodeKind } from '@/components/Node';
 import type { SavingStatus } from '@/components/SavingStatusControl';
 import type { PersistedGraph, PersistedGraphEdge, PersistedGraphNode } from '@agyn/shared';
-import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 
 export type GraphNodeStatus =
   | 'not_ready'
@@ -79,5 +78,3 @@ export interface GraphSaveState {
   status: GraphSavingStatus;
   error: GraphSaveError | null;
 }
-
-export type GraphUpsertRequest = PersistedGraphUpsertRequestUI;

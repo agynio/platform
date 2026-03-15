@@ -6,8 +6,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { AgentsThreads } from '../AgentsThreads';
 import { TestProviders, server, abs } from '../../../__tests__/integration/testUtils';
-import type { PersistedGraph } from '@agyn/shared';
-import type { TemplateSchema } from '@/api/types/graph';
 import type { MarkdownComposerProps } from '../../components/MarkdownComposer';
 import { THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 
@@ -254,34 +252,21 @@ function registerThreadScenario({
 }
 
 function registerGraphAgents(agents: Array<{ id: string; template: string; name: string; title?: string }>) {
-  const graphPayload = {
-    name: 'agents',
-    version: 1,
-    updatedAt: t(0),
-    nodes: agents.map((agent) => ({
-      id: agent.id,
-      template: agent.template,
-      config: { name: agent.name, title: agent.title },
-    })),
-    edges: [],
-  } satisfies PersistedGraph;
-
-  const templatePayload = agents.map(
-    (agent) =>
-      ({
-        name: agent.template,
-        title: agent.title ?? agent.name,
-        kind: 'agent',
-        sourcePorts: [] as string[],
-        targetPorts: [] as string[],
-      } satisfies TemplateSchema),
-  );
+  const now = t(0);
+  const items = agents.map((agent) => ({
+    id: agent.id,
+    createdAt: now,
+    updatedAt: now,
+    title: agent.title,
+    description: null,
+    config: { name: agent.name, title: agent.title },
+  }));
+  const perPage = Math.max(items.length, 1);
+  const payload = { items, page: 1, perPage, total: items.length };
 
   server.use(
-    http.get('*/api/graph', () => HttpResponse.json(graphPayload)),
-    http.get(abs('/api/graph'), () => HttpResponse.json(graphPayload)),
-    http.get('*/api/graph/templates', () => HttpResponse.json(templatePayload)),
-    http.get(abs('/api/graph/templates'), () => HttpResponse.json(templatePayload)),
+    http.get('*/apiv2/team/v1/agents', () => HttpResponse.json(payload)),
+    http.get(abs('/apiv2/team/v1/agents'), () => HttpResponse.json(payload)),
   );
 }
 

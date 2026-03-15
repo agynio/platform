@@ -23,9 +23,8 @@ import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta
 import type { ContainerItem } from '@/api/modules/containers';
 import type { ApiError } from '@/api/http';
 import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTerminalDialog';
-import { graph as graphApi } from '@/api/modules/graph';
-import type { TemplateSchema } from '@/api/types/graph';
-import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
+import { listAllAgents } from '@/api/modules/teamApi';
+import type { TeamAgent } from '@/api/types/team';
 import { normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 import { clearDraft, readDraft, writeDraft, THREAD_MESSAGE_MAX_LENGTH } from '@/utils/draftStorage';
 import { getUuid } from '@/utils/getUuid';
@@ -757,51 +756,36 @@ export function AgentsThreads() {
   );
 
   const shouldLoadAgents = drafts.length > 0;
-  const fullGraphQuery = useQuery<PersistedGraph>({
-    queryKey: ['agents', 'graph', 'full'],
-    queryFn: () => graphApi.getFullGraph(),
-    enabled: shouldLoadAgents,
-    staleTime: 60000,
-  });
-  const graphTemplatesQuery = useQuery<TemplateSchema[]>({
-    queryKey: ['agents', 'graph', 'templates'],
-    queryFn: () => graphApi.getTemplates(),
+  const agentsQuery = useQuery<TeamAgent[]>({
+    queryKey: ['agents', 'team', 'agents'],
+    queryFn: () => listAllAgents(),
     enabled: shouldLoadAgents,
     staleTime: 60000,
   });
 
   const agentOptions = useMemo<AgentOption[]>(() => {
-    const graphData = fullGraphQuery.data;
-    if (!graphData) return [];
-    const templates = graphTemplatesQuery.data ?? [];
-    const templateByName = new Map<string, TemplateSchema>();
-    for (const template of templates) {
-      if (!template?.name) continue;
-      templateByName.set(template.name, template);
-    }
-
+    const agents = agentsQuery.data;
+    if (!agents) return [];
     const result: AgentOption[] = [];
     const seen = new Set<string>();
-    for (const node of (graphData.nodes ?? []) as PersistedGraphNode[]) {
-      if (!node?.id || seen.has(node.id)) continue;
-      const template = templateByName.get(node.template);
-      if (template?.kind !== 'agent') continue;
-      const config = node.config && typeof node.config === 'object' ? (node.config as Record<string, unknown>) : undefined;
+    for (const agent of agents) {
+      if (!agent?.id || seen.has(agent.id)) continue;
+      const config = agent.config && typeof agent.config === 'object' ? (agent.config as Record<string, unknown>) : undefined;
       const rawName = typeof config?.name === 'string' ? config.name.trim() : '';
       const configTitleCandidate = typeof config?.title === 'string' ? config.title.trim() : '';
-      const templateTitle = typeof template?.title === 'string' ? template.title.trim() : '';
-      const name = rawName.length > 0 ? rawName : UNKNOWN_AGENT_LABEL;
-      seen.add(node.id);
+      const title = typeof agent.title === 'string' ? agent.title.trim() : '';
+      const name = rawName || title || configTitleCandidate || UNKNOWN_AGENT_LABEL;
+      seen.add(agent.id);
       result.push({
-        id: node.id,
+        id: agent.id,
         name,
-        graphTitle: configTitleCandidate || templateTitle || undefined,
+        graphTitle: configTitleCandidate || title || undefined,
       });
     }
 
     result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
-  }, [fullGraphQuery.data, graphTemplatesQuery.data]);
+  }, [agentsQuery.data]);
 
   const draftFetchOptions = useCallback(
     async (query: string): Promise<AutocompleteOption[]> => {

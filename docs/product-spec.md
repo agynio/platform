@@ -35,7 +35,7 @@ Architecture and components
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph snapshots, node lifecycle/actions, MCP tool discovery, reminders, runs, vault proxy, variable CRUD, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: Teams service snapshot via gRPC; platform-server keeps no local graph persistence and treats `/api/graph` as read-only.
+  - Graph store: Teams service snapshot via gRPC; platform-server keeps no local graph persistence.
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace runtime
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Networking is managed by the runner. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror reachable at http://registry-mirror:5000.
@@ -95,7 +95,7 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph configuration and variables are sourced from the Teams service via gRPC; `/api/graph` is GET-only. Node state is in-memory only; filesystem-backed graph storage is retired.
+- Graph configuration and variables are sourced from the Teams service via gRPC; node state is in-memory only; filesystem-backed graph storage is retired.
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/fs-store.md (legacy filesystem format reference)
@@ -112,7 +112,7 @@ Configuration matrix (server env vars)
 - LLM_PROVIDER (defaults to `litellm`; set to `openai` to bypass LiteLLM). Other values are rejected.
   - LiteLLM tuning: LITELLM_KEY_ALIAS (default `agents/<env>/<deployment>`), LITELLM_KEY_DURATION (`30d`), LITELLM_MODELS (`all-team-models`)
   - TEAMS_SERVICE_ADDR (Teams gRPC endpoint for graph source)
-  - GRAPH_REPO_PATH / GRAPH_BRANCH / GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL (legacy; ignored)
+  - GRAPH_BRANCH / GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL (legacy; ignored)
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)

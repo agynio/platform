@@ -34,7 +34,7 @@ Notes
 - Remove any polling loops (e.g., 2s intervals) for status; rely on socket events.
 
 Graph source and persistence
-- Graph configuration is sourced from the Teams service; `/api/graph` is GET-only and returns the latest snapshot.
+- Graph configuration is sourced from the Teams service; the platform no longer exposes a `/api/graph` snapshot endpoint.
 - UI edits to layout are local-only; the backend does not accept full-graph writes.
 - Node state is not persisted; node status reflects runtime provisioning only.
 - Graph variables are managed via the Teams service and exposed via `/api/graph/variables`.

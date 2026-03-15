@@ -54,16 +54,16 @@ export class MemoryService {
     const rows = await this.repo.listDistinctNodeThreads();
     let graph = null;
     try {
-      graph = await this.graphRepo.get('main');
+      graph = await this.graphRepo.load();
     } catch {
       graph = null;
     }
 
-    if (!graph) {
+    if (!graph || (graph.nodes.length === 0 && graph.edges.length === 0)) {
       return this.buildDocsFromPersistence(rows);
     }
 
-    return this.buildDocsFromGraph(graph.nodes ?? [], rows);
+    return this.buildDocsFromGraph(graph.nodes, rows);
   }
 
   private getSegments(path: string): string[] {

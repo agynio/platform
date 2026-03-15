@@ -13,7 +13,6 @@ export class ReferenceResolverService {
   ) {}
 
   private buildProviders(
-    graphName: string | undefined,
     overrides: Partial<Providers> | undefined,
     basePath?: string,
   ): Providers {
@@ -47,10 +46,10 @@ export class ReferenceResolverService {
 
   async resolve<T>(
     input: T,
-    opts?: ResolveOptions & { graphName?: string; providers?: Partial<Providers> },
+    opts?: ResolveOptions & { providers?: Partial<Providers> },
   ): Promise<ResolveResult<T>> {
-    const { graphName, providers: overrides, ...options } = opts || {};
-    const providers = this.buildProviders(graphName, overrides, options.basePath);
+    const { providers: overrides, ...options } = opts || {};
+    const providers = this.buildProviders(overrides, options.basePath);
     return resolveReferences(input, providers, options);
   }
 }

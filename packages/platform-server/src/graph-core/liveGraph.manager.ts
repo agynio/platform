@@ -44,7 +44,6 @@ export class LiveGraphRuntime {
     (ev: { nodeId: string; prev: NodeStatusState; next: NodeStatusState; at: number }) => void
   >();
   private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
-  private graphName = 'main';
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
@@ -91,8 +90,6 @@ export class LiveGraphRuntime {
    * Does not throw on failure; logs and returns { applied: false }.
    */
   public async load(): Promise<{ applied: boolean; version?: number }> {
-    const name = 'main';
-    this.graphName = name;
     const toRuntimeGraph = (saved: {
       nodes: Array<{
         id: string;
@@ -116,22 +113,21 @@ export class LiveGraphRuntime {
       }) as GraphDefinition;
 
     try {
-      const existing = await this.graphs.get(name);
-      if (existing) {
-        this.logger.log(
-          `Applying persisted graph to live runtime ${JSON.stringify({
-            version: existing.version,
-            nodes: existing.nodes.length,
-            edges: existing.edges.length,
-          })}`,
-        );
-        await this.apply(toRuntimeGraph(existing));
-        this.logger.log('Initial persisted graph applied successfully');
-        return { applied: true, version: existing.version };
-      } else {
+      const existing = await this.graphs.load();
+      if (existing.nodes.length === 0 && existing.edges.length === 0) {
         this.logger.log('No persisted graph found; starting with empty runtime graph.');
         return { applied: false };
       }
+      this.logger.log(
+        `Applying persisted graph to live runtime ${JSON.stringify({
+          version: existing.version,
+          nodes: existing.nodes.length,
+          edges: existing.edges.length,
+        })}`,
+      );
+      await this.apply(toRuntimeGraph(existing));
+      this.logger.log('Initial persisted graph applied successfully');
+      return { applied: true, version: existing.version };
     } catch (e) {
       if (e instanceof GraphError) {
         const cause = e && typeof e === 'object' && 'cause' in e ? (e as { cause?: unknown }).cause : undefined;
@@ -445,7 +441,6 @@ export class LiveGraphRuntime {
   private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const { output } = await this.referenceResolver.resolve<Record<string, unknown>>(config, {
-        graphName: this.graphName,
         basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
       });
       return output;

@@ -4,19 +4,20 @@ import type { GraphNodeConfig, GraphNodeMetadata } from '@/features/graph/types'
 import { useGraphData } from '../useGraphData';
 
 const apiMocks = vi.hoisted(() => ({
-  fetchGraph: vi.fn(),
   fetchTemplates: vi.fn(),
   fetchNodeStatus: vi.fn(),
-  saveGraph: vi.fn(),
+}));
+
+const teamsGraphMocks = vi.hoisted(() => ({
+  fetchTeamsGraphSnapshot: vi.fn(),
 }));
 
 vi.mock('../../services/api', () => ({
-  graphApiService: {
-    fetchGraph: apiMocks.fetchGraph,
-    fetchTemplates: apiMocks.fetchTemplates,
-    fetchNodeStatus: apiMocks.fetchNodeStatus,
-    saveGraph: apiMocks.saveGraph,
-  },
+  graphApiService: apiMocks,
+}));
+
+vi.mock('../../services/teamsGraph', () => ({
+  fetchTeamsGraphSnapshot: teamsGraphMocks.fetchTeamsGraphSnapshot,
 }));
 
 const graphResponse = {
@@ -48,79 +49,32 @@ const statusResponse = { provisionStatus: { state: 'ready' } };
 
 describe('useGraphData', () => {
   beforeEach(() => {
-    apiMocks.fetchGraph.mockResolvedValue(structuredClone(graphResponse));
+    teamsGraphMocks.fetchTeamsGraphSnapshot.mockResolvedValue(structuredClone(graphResponse));
     apiMocks.fetchTemplates.mockResolvedValue(structuredClone(templatesResponse));
     apiMocks.fetchNodeStatus.mockResolvedValue(structuredClone(statusResponse));
-    apiMocks.saveGraph.mockResolvedValue(structuredClone(graphResponse));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    vi.useRealTimers();
   });
 
-  it('debounces saves and reports success', async () => {
+  it('loads snapshot data and applies status updates', async () => {
     const { result } = renderHook(() => useGraphData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(apiMocks.fetchGraph).toHaveBeenCalledTimes(1);
+    expect(teamsGraphMocks.fetchTeamsGraphSnapshot).toHaveBeenCalledTimes(1);
+    expect(result.current.nodes).toHaveLength(1);
 
-    vi.useFakeTimers();
-    act(() => {
-      result.current.updateNode('node-1', { title: 'Updated Agent' });
+    await waitFor(() => {
+      expect(result.current.nodes.at(0)?.status).toBe('ready');
     });
-
-    expect(result.current.savingState.status).toBe('saving');
-
-    await vi.advanceTimersByTimeAsync(800);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(apiMocks.saveGraph).toHaveBeenCalledTimes(1);
-    expect(result.current.savingState.status).toBe('saved');
-    const payload = apiMocks.saveGraph.mock.calls[0]?.[0];
-    expect(payload?.nodes?.[0]?.config?.title).toBe('Updated Agent');
   });
 
-  it('persists workspace limit updates and schedules a save', async () => {
+  it('preserves title when profile fields change', async () => {
     const { result } = renderHook(() => useGraphData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    vi.useFakeTimers();
-    act(() => {
-      result.current.updateNode('node-1', {
-        config: { title: 'Agent One', cpu_limit: '750m', memory_limit: '1Gi' },
-      });
-    });
-
-    expect(result.current.savingState.status).toBe('saving');
-    expect((result.current.nodes.at(0)?.config as Record<string, unknown>)?.cpu_limit).toBe('750m');
-    expect((result.current.nodes.at(0)?.config as Record<string, unknown>)?.memory_limit).toBe('1Gi');
-
-    await vi.advanceTimersByTimeAsync(800);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(apiMocks.saveGraph).toHaveBeenCalledTimes(1);
-    const payload = apiMocks.saveGraph.mock.calls[0]?.[0] as {
-      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
-    } | undefined;
-    const updatedNode = payload?.nodes?.find((node) => node.id === 'node-1');
-    expect(updatedNode?.config?.cpu_limit).toBe('750m');
-    expect(updatedNode?.config?.memory_limit).toBe('1Gi');
-
-    vi.useRealTimers();
-  });
-
-  it('preserves config title when profile fields change', async () => {
-    const { result } = renderHook(() => useGraphData());
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    vi.useFakeTimers();
     act(() => {
       result.current.updateNode('node-1', { config: { name: 'Voyager', role: 'Pathfinder' } });
     });
@@ -129,40 +83,6 @@ describe('useGraphData', () => {
     expect(nodeConfig?.title).toBe('Agent One');
     expect(nodeConfig?.name).toBe('Voyager');
     expect(nodeConfig?.role).toBe('Pathfinder');
-
-    await vi.advanceTimersByTimeAsync(800);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const payload = apiMocks.saveGraph.mock.calls.at(-1)?.[0] as {
-      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
-    } | undefined;
-    const persistedNode = payload?.nodes?.find((node) => node.id === 'node-1');
-    expect(persistedNode?.config?.title).toBe('Agent One');
-    expect(persistedNode?.config?.name).toBe('Voyager');
-    expect(persistedNode?.config?.role).toBe('Pathfinder');
-
-    vi.useRealTimers();
-  });
-
-  it('surfaces save errors after debounce', async () => {
-    apiMocks.saveGraph.mockRejectedValueOnce(new Error('network boom'));
-
-    const { result } = renderHook(() => useGraphData());
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    vi.useFakeTimers();
-    act(() => {
-      result.current.updateNode('node-1', { title: 'Boom' });
-    });
-
-    await vi.advanceTimersByTimeAsync(800);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(result.current.savingState.status).toBe('error');
-    expect(result.current.savingErrorMessage).toContain('network boom');
   });
 
   it('removes nodes and connected edges via removeNodes', async () => {
@@ -186,12 +106,11 @@ describe('useGraphData', () => {
       },
     ];
 
-    apiMocks.fetchGraph.mockResolvedValueOnce(structuredClone(graphWithEdges));
+    teamsGraphMocks.fetchTeamsGraphSnapshot.mockResolvedValueOnce(structuredClone(graphWithEdges));
 
     const { result } = renderHook(() => useGraphData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    vi.useFakeTimers();
     expect(result.current.nodes.some((node) => node.id === 'node-1')).toBe(true);
     expect(result.current.edges).toHaveLength(1);
 
@@ -201,17 +120,12 @@ describe('useGraphData', () => {
 
     expect(result.current.nodes.some((node) => node.id === 'node-1')).toBe(false);
     expect(result.current.edges).toHaveLength(0);
-    expect(result.current.savingState.status).toBe('saving');
-
-    vi.useRealTimers();
   });
 
-  it('adds nodes via addNode and schedules saves when requested', async () => {
+  it('adds nodes via addNode', async () => {
     const { result } = renderHook(() => useGraphData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-
-    vi.useFakeTimers();
 
     const newNode: GraphNodeConfig = {
       id: 'node-2',
@@ -235,21 +149,6 @@ describe('useGraphData', () => {
     });
 
     expect(result.current.nodes.some((node) => node.id === 'node-2')).toBe(true);
-    expect(result.current.savingState.status).toBe('saving');
-
-    await vi.advanceTimersByTimeAsync(800);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(apiMocks.saveGraph).toHaveBeenCalledTimes(1);
-    const payload = apiMocks.saveGraph.mock.calls[0]?.[0] as {
-      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
-    } | undefined;
-    const persisted = payload?.nodes?.find((node) => node.id === 'node-2');
-    expect(persisted?.config).toEqual({ title: 'Agent Two' });
-
-    vi.useRealTimers();
   });
 
   it('throws when addNode receives an invalid id', async () => {

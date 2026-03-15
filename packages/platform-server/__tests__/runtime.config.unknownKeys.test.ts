@@ -41,12 +41,14 @@ const makeRuntime = (
   templates.register('Memory', { title: 'Memory', kind: 'tool' }, MemoryNode as any);
   templates.register('StrictAgent', { title: 'Strict Agent', kind: 'agent' }, StrictAgentNode as any);
   class StubRepo extends GraphRepository {
-    async initIfNeeded(): Promise<void> {}
-    async get(): Promise<any> {
-      return null;
-    }
-    async upsert(): Promise<any> {
-      throw new Error('not-implemented');
+    async load() {
+      return {
+        name: 'main',
+        version: 0,
+        updatedAt: new Date().toISOString(),
+        nodes: [],
+        edges: [],
+      };
     }
   }
   const resolver = {

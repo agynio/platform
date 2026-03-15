@@ -1,14 +1,5 @@
-import type {
-  PersistedGraph,
-  PersistedGraphUpsertRequest,
-  PersistedGraphUpsertResponse,
-} from '../shared/types/graph.types';
+import type { PersistedGraph } from '../shared/types/graph.types';
 
-export type GraphAuthor = { name?: string; email?: string };
-
-// Abstract repository token for DI and implementation unification.
 export abstract class GraphRepository {
-  abstract initIfNeeded(): Promise<void>;
-  abstract get(name: string): Promise<PersistedGraph | null>;
-  abstract upsert(req: PersistedGraphUpsertRequest, author?: GraphAuthor): Promise<PersistedGraphUpsertResponse>;
+  abstract load(): Promise<PersistedGraph>;
 }

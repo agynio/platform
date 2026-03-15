@@ -14,36 +14,6 @@ Templates
     curl http://localhost:3010/api/templates
     ```
 
-Graph state (filesystem-backed)
-- GET `/api/graph`
-  - 200: Persisted graph document: `{ name, version, updatedAt, nodes, edges }`
-  - Example:
-    ```bash
-    curl http://localhost:3010/api/graph
-    ```
-- POST `/api/graph`
-  - Body: `PersistedGraphUpsertRequest` → `{ name='main', version, nodes, edges }`
-  - Headers (optional): `x-graph-author-name`, `x-graph-author-email` are retained for compatibility but no longer influence persistence.
-  - Success: returns updated persisted graph `{ name, version, updatedAt, nodes, edges }`
-  - Errors (status → body):
-    - 409 `{ error: 'VERSION_CONFLICT', current?: PersistedGraph }`
-    - 409 `{ error: 'LOCK_TIMEOUT' }`
-    - 409 `{ error: 'MCP_COMMAND_MUTATION_FORBIDDEN' }` (enum value GraphErrorCode.McpCommandMutationForbidden)
-    - 500 `{ error: 'PERSIST_FAILED' }`
-    - 400 `{ error: 'Bad Request' | string }` (includes deterministic edge check; see notes)
-  - Notes:
-    - A provided `edge.id` must match the deterministic id `${source}-${sourceHandle}__${target}-${targetHandle}`. If it doesn't, the server returns `400` with `{ error: 'Edge id mismatch: expected <id> got <id>' }`.
-    - Persistence failures surface as `500 { error: 'PERSIST_FAILED' }`.
-    - Lock acquisition timeout surfaces as `409 { error: 'LOCK_TIMEOUT' }`.
-  - Example:
-    ```bash
-    curl -X POST http://localhost:3010/api/graph \
-      -H 'content-type: application/json' \
-      -H 'x-graph-author-name: Jane Dev' \
-      -H 'x-graph-author-email: jane@example.com' \
-      -d '{"name":"main","version":1,"nodes":[],"edges":[]}'
-    ```
-
 Templates alias
 - GET `/graph/templates` → same as `/api/templates`
 
@@ -96,7 +66,7 @@ Sockets
 
 Notes
 - Route handlers surface structured errors and emit socket events on state changes.
-- Graph snapshots are sourced from the Teams service; `/api/graph` is read-only.
+- Graph snapshots are sourced from the Teams service; the platform no longer exposes `/api/graph`.
 - MCP mutation guard prevents unsafe changes to MCP commands.
 - Error codes align with the error envelope described above.
 Nix proxy

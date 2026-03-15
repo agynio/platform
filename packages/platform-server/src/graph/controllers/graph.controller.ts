@@ -1,10 +1,9 @@
 import { Controller, Get, Post, Param, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { z } from 'zod';
 import { TemplateRegistry } from '../../graph-core/templateRegistry';
-import type { PersistedGraph, TemplateNodeSchema } from '../../shared/types/graph.types';
+import type { TemplateNodeSchema } from '../../shared/types/graph.types';
 import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
 import type { NodeStatusState } from '../../nodes/base/Node';
-import { GraphRepository } from '../graph.repository';
 import { LocalMCPServerNode } from '../../nodes/mcp/localMcpServer.node';
 
 @Controller('api/graph')
@@ -12,26 +11,11 @@ export class GraphController {
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
-    @Inject(GraphRepository) private readonly graphRepository: GraphRepository,
   ) {}
 
   @Get('templates')
   async getTemplates(): Promise<TemplateNodeSchema[]> {
     return this.templateRegistry.toSchema();
-  }
-
-  @Get()
-  async getGraph(): Promise<PersistedGraph> {
-    await this.graphRepository.initIfNeeded();
-    const graph = await this.graphRepository.get('main');
-    if (graph) return graph;
-    return {
-      name: 'main',
-      version: 0,
-      updatedAt: new Date().toISOString(),
-      nodes: [],
-      edges: [],
-    };
   }
 
   @Get('nodes/:nodeId/status')

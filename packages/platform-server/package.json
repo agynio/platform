@@ -4,9 +4,6 @@
   "private": true,
   "main": "src/index.ts",
   "type": "module",
-  "bin": {
-    "graph-ref-migrate": "./tools/graph-ref-migrate/bin.mjs"
-  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",

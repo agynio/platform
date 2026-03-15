@@ -1,7 +1,7 @@
 # Filesystem-backed Graph Store (format: 2)
 
 > **Deprecated:** Filesystem-backed graph persistence has been removed. The platform now sources graph
-> configuration from the Teams service and `/api/graph` is read-only. This document is retained for
+> configuration from the Teams service and `/api/graph` has been removed. This document is retained for
 > legacy reference only.
 
 Overview

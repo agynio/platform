@@ -119,11 +119,9 @@ class StubConfigService extends ConfigService {
       litellmMasterKey: 'sk-test',
       openaiBaseUrl: undefined,
       githubToken: 'test',
-      graphRepoPath: './data/graph',
       graphBranch: 'main',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
-      graphLockTimeoutMs: 5000,
       vaultEnabled: false,
       vaultAddr: undefined,
       vaultToken: undefined,
@@ -204,10 +202,16 @@ describe('Graph MCP integration', () => {
     const moduleRef = module.get(ModuleRef);
 
     const templateRegistry = buildTemplateRegistry({ moduleRef });
-    class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert'> {
-      async initIfNeeded(): Promise<void> {}
-      async get(): Promise<null> { return null; }
-      async upsert(): Promise<never> { throw new Error('not-implemented'); }
+    class GraphRepoStub implements Pick<GraphRepository, 'load'> {
+      async load() {
+        return {
+          name: 'main',
+          version: 0,
+          updatedAt: new Date().toISOString(),
+          nodes: [],
+          edges: [],
+        };
+      }
     }
 
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };

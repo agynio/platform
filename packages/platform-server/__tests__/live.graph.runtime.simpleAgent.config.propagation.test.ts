@@ -37,11 +37,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       githubInstallationId: 'test',
       openaiApiKey: 'test',
       githubToken: 'test',
-      graphRepoPath: './data/graph',
       graphBranch: 'main',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
-      graphLockTimeoutMs: 5000,
       vaultEnabled: false,
       vaultAddr: undefined,
       vaultToken: undefined,
@@ -96,9 +94,15 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         const moduleRef = module.get(ModuleRef);
         const registry = buildTemplateRegistry({ moduleRef });
         class StubRepo extends GraphRepository {
-          async initIfNeeded(): Promise<void> {}
-          async get(): Promise<null> { return null; }
-          async upsert(): Promise<never> { throw new Error('not-implemented'); }
+          async load() {
+            return {
+              name: 'main',
+              version: 0,
+              updatedAt: new Date().toISOString(),
+              nodes: [],
+              edges: [],
+            };
+          }
         }
         const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
         const runtime = new LiveGraphRuntime(registry, new StubRepo(), moduleRef, resolver as any);

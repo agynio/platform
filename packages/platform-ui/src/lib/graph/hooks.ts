@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graph as api } from '@/api/modules/graph';
-import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import { graphSocket } from './socket';
 import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
 import { notifyError } from '../notify';
@@ -175,20 +174,6 @@ export function useDynamicConfig(nodeId: string) {
   return { schema };
 }
 
-// New: full graph save hook
-export function useSaveGraph() {
-  return useMutation({
-    mutationFn: async (graph: PersistedGraphUpsertRequestUI) => {
-      void graph;
-      return api.getFullGraph();
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      notifyError(`Save graph failed: ${message}`);
-    },
-  });
-}
-
 type McpTool = { name: string; description?: string; title?: string };
 
 export function useMcpTools(nodeId: string | null | undefined) {
@@ -206,7 +191,7 @@ export function useMcpTools(nodeId: string | null | undefined) {
     queryKey: safeQueryKey,
     queryFn: async () => {
       if (!resolvedId) return { tools: [], updatedAt: undefined };
-      const res = await api.discoverNodeTools(resolvedId);
+      const res = await api.discoverTools(resolvedId);
       const tools = Array.isArray(res?.tools)
         ? res.tools
             .filter((tool) => tool && typeof tool.name === 'string')

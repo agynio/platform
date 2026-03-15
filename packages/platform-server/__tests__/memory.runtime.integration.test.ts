@@ -113,12 +113,14 @@ function makeRuntime(
   templates.register('memory', { title: 'Memory', kind: 'tool' }, MemoryConnectorNode);
 
   class StubRepo extends GraphRepository {
-    async initIfNeeded(): Promise<void> {}
-    async get(): Promise<null> {
-      return null;
-    }
-    async upsert(): Promise<never> {
-      throw new Error('not-implemented');
+    async load() {
+      return {
+        name: 'main',
+        version: 0,
+        updatedAt: new Date().toISOString(),
+        nodes: [],
+        edges: [],
+      };
     }
   }
   // Cast moduleRef back to real ModuleRef type for LiveGraphRuntime ctor compatibility

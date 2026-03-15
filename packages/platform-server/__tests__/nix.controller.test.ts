@@ -69,7 +69,6 @@ describe.sequential('NixController', () => {
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
         litellmBaseUrl: 'http://localhost:4000',
         litellmMasterKey: 'sk-test',
-        graphRepoPath: './data/graph',
         graphBranch: 'main',
         dockerMirrorUrl: 'http://registry-mirror:5000',
         nixAllowedChannels: 'nixpkgs-unstable',

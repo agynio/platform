@@ -4,11 +4,14 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const graphMocks = vi.hoisted(() => ({
-  getFullGraph: vi.fn(),
   listVaultMounts: vi.fn(),
   listVaultPaths: vi.fn(),
   listVaultKeys: vi.fn(),
   readVaultKey: vi.fn(),
+}));
+
+const teamsGraphMocks = vi.hoisted(() => ({
+  fetchTeamsGraphSnapshot: vi.fn(),
 }));
 
 const computeRequiredKeysMock = vi.hoisted(() => vi.fn());
@@ -20,13 +23,17 @@ vi.mock('@/api/modules/graph', () => ({
   computeSecretsUnion: computeSecretsUnionMock,
 }));
 
+vi.mock('@/features/graph/services/teamsGraph', () => ({
+  fetchTeamsGraphSnapshot: teamsGraphMocks.fetchTeamsGraphSnapshot,
+}));
+
 import { useSecretsData } from '../useSecretsData';
 
 describe('useSecretsData', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    graphMocks.getFullGraph.mockResolvedValue({} as unknown);
+    teamsGraphMocks.fetchTeamsGraphSnapshot.mockResolvedValue({} as unknown);
     graphMocks.listVaultMounts.mockResolvedValue({ items: ['secret'] });
     graphMocks.listVaultPaths.mockResolvedValue({ items: ['github'] });
     graphMocks.listVaultKeys.mockResolvedValue({ items: ['TOKEN'] });
