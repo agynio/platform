@@ -3,10 +3,13 @@ import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { Code, ConnectError, createClient, type CallOptions, type Client } from '@connectrpc/connect';
 import { createGrpcTransport } from '@connectrpc/connect-node';
 import {
-  AgentCreateRequestSchema,
-  AgentUpdateRequestSchema,
-  AttachmentCreateRequestSchema,
+  CreateAgentRequestSchema,
+  CreateAttachmentRequestSchema,
+  CreateMcpServerRequestSchema,
+  CreateMemoryBucketRequestSchema,
+  CreateToolRequestSchema,
   CreateVariableRequestSchema,
+  CreateWorkspaceConfigurationRequestSchema,
   DeleteAgentRequestSchema,
   DeleteAttachmentRequestSchema,
   DeleteMcpServerRequestSchema,
@@ -27,31 +30,31 @@ import {
   ListToolsRequestSchema,
   ListVariablesRequestSchema,
   ListWorkspaceConfigurationsRequestSchema,
-  McpServerCreateRequestSchema,
-  McpServerUpdateRequestSchema,
-  MemoryBucketCreateRequestSchema,
-  MemoryBucketUpdateRequestSchema,
   ResolveVariableRequestSchema,
   TeamsService,
-  ToolCreateRequestSchema,
-  ToolUpdateRequestSchema,
+  UpdateAgentRequestSchema,
+  UpdateMcpServerRequestSchema,
+  UpdateMemoryBucketRequestSchema,
+  UpdateToolRequestSchema,
   UpdateVariableRequestSchema,
-  WorkspaceConfigurationCreateRequestSchema,
-  WorkspaceConfigurationUpdateRequestSchema,
+  UpdateWorkspaceConfigurationRequestSchema,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb.js';
 import type {
   Agent,
-  AgentCreateRequest,
-  AgentUpdateRequest,
   Attachment,
-  AttachmentCreateRequest,
   CreateAgentResponse,
+  CreateAgentRequest,
   CreateAttachmentResponse,
+  CreateAttachmentRequest,
+  CreateMcpServerRequest,
   CreateMcpServerResponse,
+  CreateMemoryBucketRequest,
   CreateMemoryBucketResponse,
+  CreateToolRequest,
   CreateToolResponse,
   CreateVariableRequest,
   CreateVariableResponse,
+  CreateWorkspaceConfigurationRequest,
   CreateWorkspaceConfigurationResponse,
   DeleteAgentRequest,
   DeleteAttachmentRequest,
@@ -87,27 +90,24 @@ import type {
   ListWorkspaceConfigurationsRequest,
   ListWorkspaceConfigurationsResponse,
   McpServer,
-  McpServerCreateRequest,
-  McpServerUpdateRequest,
   MemoryBucket,
-  MemoryBucketCreateRequest,
-  MemoryBucketUpdateRequest,
   ResolveVariableRequest,
   ResolveVariableResponse,
   Tool,
-  ToolCreateRequest,
-  ToolUpdateRequest,
+  UpdateAgentRequest,
   UpdateAgentResponse,
+  UpdateMcpServerRequest,
   UpdateMcpServerResponse,
+  UpdateMemoryBucketRequest,
   UpdateMemoryBucketResponse,
+  UpdateToolRequest,
   UpdateToolResponse,
   UpdateVariableRequest,
   UpdateVariableResponse,
+  UpdateWorkspaceConfigurationRequest,
   UpdateWorkspaceConfigurationResponse,
   Variable,
   WorkspaceConfiguration,
-  WorkspaceConfigurationCreateRequest,
-  WorkspaceConfigurationUpdateRequest,
 } from '../proto/gen/agynio/api/teams/v1/teams_pb.js';
 
 type TeamsGrpcClientConfig = {
@@ -174,10 +174,10 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createAgent(request: AgentCreateRequest): Promise<Agent> {
-    const response = await this.call<AgentCreateRequest, CreateAgentResponse>(
+  async createAgent(request: CreateAgentRequest): Promise<Agent> {
+    const response = await this.call<CreateAgentRequest, CreateAgentResponse>(
       teamsServicePath('createAgent'),
-      AgentCreateRequestSchema,
+      CreateAgentRequestSchema,
       request,
       'createAgent',
     );
@@ -194,10 +194,10 @@ export class TeamsGrpcClient {
     return this.requireResponseField(response.agent, 'agent');
   }
 
-  async updateAgent(request: AgentUpdateRequest): Promise<Agent> {
-    const response = await this.call<AgentUpdateRequest, UpdateAgentResponse>(
+  async updateAgent(request: UpdateAgentRequest): Promise<Agent> {
+    const response = await this.call<UpdateAgentRequest, UpdateAgentResponse>(
       teamsServicePath('updateAgent'),
-      AgentUpdateRequestSchema,
+      UpdateAgentRequestSchema,
       request,
       'updateAgent',
     );
@@ -222,10 +222,10 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createTool(request: ToolCreateRequest): Promise<Tool> {
-    const response = await this.call<ToolCreateRequest, CreateToolResponse>(
+  async createTool(request: CreateToolRequest): Promise<Tool> {
+    const response = await this.call<CreateToolRequest, CreateToolResponse>(
       teamsServicePath('createTool'),
-      ToolCreateRequestSchema,
+      CreateToolRequestSchema,
       request,
       'createTool',
     );
@@ -242,10 +242,10 @@ export class TeamsGrpcClient {
     return this.requireResponseField(response.tool, 'tool');
   }
 
-  async updateTool(request: ToolUpdateRequest): Promise<Tool> {
-    const response = await this.call<ToolUpdateRequest, UpdateToolResponse>(
+  async updateTool(request: UpdateToolRequest): Promise<Tool> {
+    const response = await this.call<UpdateToolRequest, UpdateToolResponse>(
       teamsServicePath('updateTool'),
-      ToolUpdateRequestSchema,
+      UpdateToolRequestSchema,
       request,
       'updateTool',
     );
@@ -270,10 +270,10 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createMcpServer(request: McpServerCreateRequest): Promise<McpServer> {
-    const response = await this.call<McpServerCreateRequest, CreateMcpServerResponse>(
+  async createMcpServer(request: CreateMcpServerRequest): Promise<McpServer> {
+    const response = await this.call<CreateMcpServerRequest, CreateMcpServerResponse>(
       teamsServicePath('createMcpServer'),
-      McpServerCreateRequestSchema,
+      CreateMcpServerRequestSchema,
       request,
       'createMcpServer',
     );
@@ -290,10 +290,10 @@ export class TeamsGrpcClient {
     return this.requireResponseField(response.mcpServer, 'mcp_server');
   }
 
-  async updateMcpServer(request: McpServerUpdateRequest): Promise<McpServer> {
-    const response = await this.call<McpServerUpdateRequest, UpdateMcpServerResponse>(
+  async updateMcpServer(request: UpdateMcpServerRequest): Promise<McpServer> {
+    const response = await this.call<UpdateMcpServerRequest, UpdateMcpServerResponse>(
       teamsServicePath('updateMcpServer'),
-      McpServerUpdateRequestSchema,
+      UpdateMcpServerRequestSchema,
       request,
       'updateMcpServer',
     );
@@ -321,14 +321,14 @@ export class TeamsGrpcClient {
   }
 
   async createWorkspaceConfiguration(
-    request: WorkspaceConfigurationCreateRequest,
+    request: CreateWorkspaceConfigurationRequest,
   ): Promise<WorkspaceConfiguration> {
     const response = await this.call<
-      WorkspaceConfigurationCreateRequest,
+      CreateWorkspaceConfigurationRequest,
       CreateWorkspaceConfigurationResponse
     >(
       teamsServicePath('createWorkspaceConfiguration'),
-      WorkspaceConfigurationCreateRequestSchema,
+      CreateWorkspaceConfigurationRequestSchema,
       request,
       'createWorkspaceConfiguration',
     );
@@ -348,14 +348,14 @@ export class TeamsGrpcClient {
   }
 
   async updateWorkspaceConfiguration(
-    request: WorkspaceConfigurationUpdateRequest,
+    request: UpdateWorkspaceConfigurationRequest,
   ): Promise<WorkspaceConfiguration> {
     const response = await this.call<
-      WorkspaceConfigurationUpdateRequest,
+      UpdateWorkspaceConfigurationRequest,
       UpdateWorkspaceConfigurationResponse
     >(
       teamsServicePath('updateWorkspaceConfiguration'),
-      WorkspaceConfigurationUpdateRequestSchema,
+      UpdateWorkspaceConfigurationRequestSchema,
       request,
       'updateWorkspaceConfiguration',
     );
@@ -380,10 +380,10 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createMemoryBucket(request: MemoryBucketCreateRequest): Promise<MemoryBucket> {
-    const response = await this.call<MemoryBucketCreateRequest, CreateMemoryBucketResponse>(
+  async createMemoryBucket(request: CreateMemoryBucketRequest): Promise<MemoryBucket> {
+    const response = await this.call<CreateMemoryBucketRequest, CreateMemoryBucketResponse>(
       teamsServicePath('createMemoryBucket'),
-      MemoryBucketCreateRequestSchema,
+      CreateMemoryBucketRequestSchema,
       request,
       'createMemoryBucket',
     );
@@ -400,10 +400,10 @@ export class TeamsGrpcClient {
     return this.requireResponseField(response.memoryBucket, 'memory_bucket');
   }
 
-  async updateMemoryBucket(request: MemoryBucketUpdateRequest): Promise<MemoryBucket> {
-    const response = await this.call<MemoryBucketUpdateRequest, UpdateMemoryBucketResponse>(
+  async updateMemoryBucket(request: UpdateMemoryBucketRequest): Promise<MemoryBucket> {
+    const response = await this.call<UpdateMemoryBucketRequest, UpdateMemoryBucketResponse>(
       teamsServicePath('updateMemoryBucket'),
-      MemoryBucketUpdateRequestSchema,
+      UpdateMemoryBucketRequestSchema,
       request,
       'updateMemoryBucket',
     );
@@ -485,10 +485,10 @@ export class TeamsGrpcClient {
     );
   }
 
-  async createAttachment(request: AttachmentCreateRequest): Promise<Attachment> {
-    const response = await this.call<AttachmentCreateRequest, CreateAttachmentResponse>(
+  async createAttachment(request: CreateAttachmentRequest): Promise<Attachment> {
+    const response = await this.call<CreateAttachmentRequest, CreateAttachmentResponse>(
       teamsServicePath('createAttachment'),
-      AttachmentCreateRequestSchema,
+      CreateAttachmentRequestSchema,
       request,
       'createAttachment',
     );

@@ -35,16 +35,19 @@ import {
   TouchWorkloadResponseSchema,
 } from './gen/agynio/api/runner/v1/runner_pb.js';
 import {
-  AgentCreateRequestSchema,
-  AgentUpdateRequestSchema,
-  AttachmentCreateRequestSchema,
+  CreateAgentRequestSchema,
   CreateAgentResponseSchema,
+  CreateAttachmentRequestSchema,
   CreateAttachmentResponseSchema,
+  CreateMcpServerRequestSchema,
   CreateMcpServerResponseSchema,
+  CreateMemoryBucketRequestSchema,
   CreateMemoryBucketResponseSchema,
+  CreateToolRequestSchema,
   CreateToolResponseSchema,
   CreateVariableRequestSchema,
   CreateVariableResponseSchema,
+  CreateWorkspaceConfigurationRequestSchema,
   CreateWorkspaceConfigurationResponseSchema,
   DeleteAgentRequestSchema,
   DeleteAgentResponseSchema,
@@ -86,23 +89,20 @@ import {
   ListVariablesResponseSchema,
   ListWorkspaceConfigurationsRequestSchema,
   ListWorkspaceConfigurationsResponseSchema,
-  McpServerCreateRequestSchema,
-  McpServerUpdateRequestSchema,
-  MemoryBucketCreateRequestSchema,
-  MemoryBucketUpdateRequestSchema,
   ResolveVariableRequestSchema,
   ResolveVariableResponseSchema,
-  ToolCreateRequestSchema,
-  ToolUpdateRequestSchema,
+  UpdateAgentRequestSchema,
   UpdateAgentResponseSchema,
+  UpdateMcpServerRequestSchema,
   UpdateMcpServerResponseSchema,
+  UpdateMemoryBucketRequestSchema,
   UpdateMemoryBucketResponseSchema,
+  UpdateToolRequestSchema,
   UpdateToolResponseSchema,
   UpdateVariableRequestSchema,
   UpdateVariableResponseSchema,
+  UpdateWorkspaceConfigurationRequestSchema,
   UpdateWorkspaceConfigurationResponseSchema,
-  WorkspaceConfigurationCreateRequestSchema,
-  WorkspaceConfigurationUpdateRequestSchema,
 } from './gen/agynio/api/teams/v1/teams_pb.js';
 
 const unaryDefinition = (
@@ -299,7 +299,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createAgent: unaryDefinition(
     TEAMS_SERVICE_CREATE_AGENT_PATH,
-    AgentCreateRequestSchema,
+    CreateAgentRequestSchema,
     CreateAgentResponseSchema,
   ),
   getAgent: unaryDefinition(
@@ -309,7 +309,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   updateAgent: unaryDefinition(
     TEAMS_SERVICE_UPDATE_AGENT_PATH,
-    AgentUpdateRequestSchema,
+    UpdateAgentRequestSchema,
     UpdateAgentResponseSchema,
   ),
   deleteAgent: unaryDefinition(
@@ -324,7 +324,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createTool: unaryDefinition(
     TEAMS_SERVICE_CREATE_TOOL_PATH,
-    ToolCreateRequestSchema,
+    CreateToolRequestSchema,
     CreateToolResponseSchema,
   ),
   getTool: unaryDefinition(
@@ -334,7 +334,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   updateTool: unaryDefinition(
     TEAMS_SERVICE_UPDATE_TOOL_PATH,
-    ToolUpdateRequestSchema,
+    UpdateToolRequestSchema,
     UpdateToolResponseSchema,
   ),
   deleteTool: unaryDefinition(
@@ -349,7 +349,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createMcpServer: unaryDefinition(
     TEAMS_SERVICE_CREATE_MCP_SERVER_PATH,
-    McpServerCreateRequestSchema,
+    CreateMcpServerRequestSchema,
     CreateMcpServerResponseSchema,
   ),
   getMcpServer: unaryDefinition(
@@ -359,7 +359,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   updateMcpServer: unaryDefinition(
     TEAMS_SERVICE_UPDATE_MCP_SERVER_PATH,
-    McpServerUpdateRequestSchema,
+    UpdateMcpServerRequestSchema,
     UpdateMcpServerResponseSchema,
   ),
   deleteMcpServer: unaryDefinition(
@@ -374,7 +374,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_CREATE_WORKSPACE_CONFIGURATION_PATH,
-    WorkspaceConfigurationCreateRequestSchema,
+    CreateWorkspaceConfigurationRequestSchema,
     CreateWorkspaceConfigurationResponseSchema,
   ),
   getWorkspaceConfiguration: unaryDefinition(
@@ -384,7 +384,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   updateWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_UPDATE_WORKSPACE_CONFIGURATION_PATH,
-    WorkspaceConfigurationUpdateRequestSchema,
+    UpdateWorkspaceConfigurationRequestSchema,
     UpdateWorkspaceConfigurationResponseSchema,
   ),
   deleteWorkspaceConfiguration: unaryDefinition(
@@ -399,7 +399,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_CREATE_MEMORY_BUCKET_PATH,
-    MemoryBucketCreateRequestSchema,
+    CreateMemoryBucketRequestSchema,
     CreateMemoryBucketResponseSchema,
   ),
   getMemoryBucket: unaryDefinition(
@@ -409,7 +409,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   updateMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH,
-    MemoryBucketUpdateRequestSchema,
+    UpdateMemoryBucketRequestSchema,
     UpdateMemoryBucketResponseSchema,
   ),
   deleteMemoryBucket: unaryDefinition(
@@ -454,7 +454,7 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   ),
   createAttachment: unaryDefinition(
     TEAMS_SERVICE_CREATE_ATTACHMENT_PATH,
-    AttachmentCreateRequestSchema,
+    CreateAttachmentRequestSchema,
     CreateAttachmentResponseSchema,
   ),
   deleteAttachment: unaryDefinition(

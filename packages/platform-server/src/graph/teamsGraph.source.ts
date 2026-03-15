@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { create, toJson } from '@bufbuild/protobuf';
-import { ValueSchema } from '@bufbuild/protobuf/wkt';
+import { create } from '@bufbuild/protobuf';
 
 import type { PersistedGraphEdge, PersistedGraphNode } from '../shared/types/graph.types';
 import { listAllPages, readString } from '../teams/teamsGrpc.pagination';
@@ -493,11 +492,8 @@ export class TeamsGraphSource {
     return mapped.length > 0 ? mapped : undefined;
   }
 
-  private readValue(value?: WorkspaceConfig['cpuLimit']): string | number | undefined {
-    if (!value) return undefined;
-    const json = toJson(ValueSchema, value);
-    if (typeof json === 'string' || typeof json === 'number') return json;
-    return undefined;
+  private readValue(value?: WorkspaceConfig['cpuLimit']): string | undefined {
+    return readString(value);
   }
 
   private readNumber(value?: number): number | undefined {

@@ -1,6 +1,8 @@
+import { create } from '@bufbuild/protobuf';
 import { Inject, Injectable } from '@nestjs/common';
 import type { ResolveOptions, ResolveResult, Providers } from './references';
 import { resolveReferences, ResolveError } from './references';
+import { ResolveVariableRequestSchema } from '../proto/gen/agynio/api/teams/v1/teams_pb';
 import { VaultService } from '../vault/vault.service';
 import { TEAMS_GRPC_CLIENT } from '../teams/teamsGrpc.token';
 import type { TeamsGrpcClient } from '../teams/teamsGrpc.client';
@@ -32,7 +34,8 @@ export class ReferenceResolverService {
           source: 'variable',
         });
       }
-      const response = await this.teamsClient.resolveVariable({ key: ref.name });
+      const request = create(ResolveVariableRequestSchema, { key: ref.name });
+      const response = await this.teamsClient.resolveVariable(request);
       if (!response?.found) return undefined;
       const value = response.value?.trim?.() ?? response.value;
       return value && value.length > 0 ? value : undefined;
