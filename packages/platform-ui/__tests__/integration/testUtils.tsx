@@ -126,7 +126,6 @@ const relativeHandlers = [
     const nodeId = params.nodeId as string;
     return _HttpResponse.json({
       nodeId,
-      isPaused: false,
       provisionStatus: { state: 'not_ready' },
       // dynamicConfigReady removed
     });
@@ -248,7 +247,6 @@ const absoluteHandlers = [
     const nodeId = params.nodeId as string;
     return _HttpResponse.json({
       nodeId,
-      isPaused: false,
       provisionStatus: { state: 'not_ready' },
     });
   }),

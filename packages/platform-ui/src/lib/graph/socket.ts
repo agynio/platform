@@ -5,7 +5,6 @@ import type { NodeStatusEvent, ReminderCountEvent } from './types';
 import type { RunTimelineEvent, RunTimelineEventsCursor, ToolOutputChunk, ToolOutputTerminal } from '@/api/types/agents';
 
 // Strictly typed server-to-client socket events (listener signatures)
-type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
 type ThreadSummary = { id: string; alias: string; summary: string | null; status: 'open' | 'closed'; createdAt: string; parentId?: string | null };
 type MessageSummary = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
 type RunSummary = {
@@ -18,7 +17,6 @@ type RunSummary = {
 type RunEventSocketPayload = { runId: string; mutation: 'append' | 'update'; event: RunTimelineEvent };
 interface ServerToClientEvents {
   node_status: (payload: NodeStatusEvent) => void;
-  node_state: (payload: NodeStateEvent) => void;
   node_reminder_count: (payload: ReminderCountEvent) => void;
   thread_created: (payload: { thread: ThreadSummary }) => void;
   thread_updated: (payload: { thread: ThreadSummary }) => void;
@@ -36,7 +34,6 @@ type SubscribePayload = { room?: string; rooms?: string[] };
 interface ClientToServerEvents { subscribe: (payload: SubscribePayload) => void }
 
 type Listener = (ev: NodeStatusEvent) => void;
-type StateListener = (ev: { nodeId: string; state: Record<string, unknown>; updatedAt: string }) => void;
 type ReminderListener = (ev: ReminderCountEvent) => void;
 type ThreadCreatedPayload = { thread: ThreadSummary };
 type ThreadUpdatedPayload = { thread: ThreadSummary };
@@ -52,7 +49,6 @@ class GraphSocket {
   // Typed socket instance; null until connected
   private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
   private listeners = new Map<string, Set<Listener>>();
-  private stateListeners = new Map<string, Set<StateListener>>();
   private reminderListeners = new Map<string, Set<ReminderListener>>();
   private threadCreatedListeners = new Set<(payload: ThreadCreatedPayload) => void>();
   private threadUpdatedListeners = new Set<(payload: ThreadUpdatedPayload) => void>();
@@ -159,13 +155,6 @@ class GraphSocket {
     socket.on('node_status', handleNodeStatus);
     this.socketCleanup.push(() => socket.off('node_status', handleNodeStatus));
 
-    const handleNodeState: ServerToClientEvents['node_state'] = (payload) => {
-      const set = this.stateListeners.get(payload.nodeId);
-      if (set) for (const fn of set) fn(payload);
-    };
-    socket.on('node_state', handleNodeState);
-    this.socketCleanup.push(() => socket.off('node_state', handleNodeState));
-
     const handleNodeReminderCount: ServerToClientEvents['node_reminder_count'] = (payload) => {
       const set = this.reminderListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
@@ -251,19 +240,6 @@ class GraphSocket {
     };
   }
 
-  onNodeState(nodeId: string, cb: StateListener) {
-    let set = this.stateListeners.get(nodeId);
-    if (!set) {
-      set = new Set();
-      this.stateListeners.set(nodeId, set);
-    }
-    set.add(cb);
-    return () => {
-      set!.delete(cb);
-      if (set!.size === 0) this.stateListeners.delete(nodeId);
-    };
-  }
-
   onReminderCount(nodeId: string, cb: ReminderListener) {
     let set = this.reminderListeners.get(nodeId);
     if (!set) {
@@ -318,7 +294,6 @@ class GraphSocket {
     this.subscribedRooms.clear();
     this.runCursors.clear();
     this.listeners.clear();
-    this.stateListeners.clear();
     this.reminderListeners.clear();
     this.threadCreatedListeners.clear();
     this.threadUpdatedListeners.clear();

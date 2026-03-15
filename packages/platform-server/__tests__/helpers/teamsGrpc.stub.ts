@@ -32,41 +32,65 @@ export const createTeamsClientStub = (options?: TeamsClientStubOptions): TeamsGr
   const memoryBuckets = options?.memoryBuckets ?? [];
   const attachments = options?.attachments ?? [];
 
-  const paginate = <T>(items: T[], page: number, perPage: number) => {
-    const start = Math.max(0, (page - 1) * perPage);
+  const readOffset = (token?: string) => {
+    if (!token) return 0;
+    const offset = Number.parseInt(token, 10);
+    if (!Number.isFinite(offset) || offset < 0) return 0;
+    return offset;
+  };
+
+  const paginate = <T>(items: T[], pageSize: number, pageToken?: string) => {
+    const size = pageSize > 0 ? pageSize : items.length;
+    const start = readOffset(pageToken);
+    const nextOffset = start + size;
     return {
-      items: items.slice(start, start + perPage),
-      page,
-      perPage,
-      total: BigInt(items.length),
+      items: items.slice(start, start + size),
+      nextPageToken: nextOffset < items.length ? String(nextOffset) : '',
     };
   };
 
-  const listAgents = options?.listAgents ?? (async (request: { page: number; perPage: number }) => paginate(agents, request.page, request.perPage));
-  const listTools = options?.listTools ??
-    (async (request: { page: number; perPage: number; type?: Tool['type'] }) => {
-      const shouldFilter = typeof request.type === 'number' && request.type !== ToolType.UNSPECIFIED;
-      return paginate(
-        shouldFilter ? tools.filter((tool) => tool.type === request.type) : tools,
-        request.page,
-        request.perPage,
-      );
+  const listAgents = options?.listAgents ??
+    (async (request: { pageSize: number; pageToken?: string }) => {
+      const { items, nextPageToken } = paginate(agents, request.pageSize, request.pageToken);
+      return { agents: items, nextPageToken };
     });
-  const listMcpServers = options?.listMcpServers ?? (async (request: { page: number; perPage: number }) => paginate(mcps, request.page, request.perPage));
+  const listTools = options?.listTools ??
+    (async (request: { pageSize: number; pageToken?: string; type?: Tool['type'] }) => {
+      const shouldFilter = typeof request.type === 'number' && request.type !== ToolType.UNSPECIFIED;
+      const { items, nextPageToken } = paginate(
+        shouldFilter ? tools.filter((tool) => tool.type === request.type) : tools,
+        request.pageSize,
+        request.pageToken,
+      );
+      return { tools: items, nextPageToken };
+    });
+  const listMcpServers = options?.listMcpServers ??
+    (async (request: { pageSize: number; pageToken?: string }) => {
+      const { items, nextPageToken } = paginate(mcps, request.pageSize, request.pageToken);
+      return { mcpServers: items, nextPageToken };
+    });
   const listWorkspaceConfigurations = options?.listWorkspaceConfigurations ??
-    (async (request: { page: number; perPage: number }) => paginate(workspaces, request.page, request.perPage));
+    (async (request: { pageSize: number; pageToken?: string }) => {
+      const { items, nextPageToken } = paginate(workspaces, request.pageSize, request.pageToken);
+      return { workspaceConfigurations: items, nextPageToken };
+    });
   const listMemoryBuckets = options?.listMemoryBuckets ??
-    (async (request: { page: number; perPage: number }) => paginate(memoryBuckets, request.page, request.perPage));
+    (async (request: { pageSize: number; pageToken?: string }) => {
+      const { items, nextPageToken } = paginate(memoryBuckets, request.pageSize, request.pageToken);
+      return { memoryBuckets: items, nextPageToken };
+    });
   const listAttachments = options?.listAttachments ??
-    (async (request: { page: number; perPage: number; kind?: Attachment['kind']; sourceType?: Attachment['sourceType']; targetType?: Attachment['targetType'] }) =>
-      paginate(
+    (async (request: { pageSize: number; pageToken?: string; kind?: Attachment['kind']; sourceType?: Attachment['sourceType']; targetType?: Attachment['targetType'] }) => {
+      const { items, nextPageToken } = paginate(
         attachments.filter((attachment) =>
           attachment.kind === request.kind
           && attachment.sourceType === request.sourceType
           && attachment.targetType === request.targetType),
-        request.page,
-        request.perPage,
-      ));
+        request.pageSize,
+        request.pageToken,
+      );
+      return { attachments: items, nextPageToken };
+    });
 
   return {
     listAgents,

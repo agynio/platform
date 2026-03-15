@@ -20,6 +20,8 @@ import {
   ListMemoryBucketsRequestSchema,
   ListToolsRequestSchema,
   ListWorkspaceConfigurationsRequestSchema,
+  McpToolFilter,
+  McpToolFilterMode,
   McpServer,
   MemoryBucket,
   MemoryBucketScope,
@@ -102,13 +104,13 @@ export class TeamsGraphSource {
     };
 
     for (const agent of agents) {
-      const id = this.normalizeId(agent.id);
+      const id = this.normalizeId(agent.meta?.id);
       if (!id) continue;
       addNode({ id, template: 'agent', config: this.mapAgentConfig(agent) });
     }
 
     for (const tool of tools) {
-      const id = this.normalizeId(tool.id);
+      const id = this.normalizeId(tool.meta?.id);
       if (!id) continue;
       const template = TOOL_TYPE_TO_TEMPLATE[tool.type];
       if (!template) continue;
@@ -117,19 +119,19 @@ export class TeamsGraphSource {
     }
 
     for (const mcp of mcps) {
-      const id = this.normalizeId(mcp.id);
+      const id = this.normalizeId(mcp.meta?.id);
       if (!id) continue;
       addNode({ id, template: 'mcpServer', config: this.mapMcpConfig(mcp) });
     }
 
     for (const workspace of workspaces) {
-      const id = this.normalizeId(workspace.id);
+      const id = this.normalizeId(workspace.meta?.id);
       if (!id) continue;
       addNode({ id, template: 'workspace', config: this.mapWorkspaceConfig(workspace) });
     }
 
     for (const memory of memoryBuckets) {
-      const id = this.normalizeId(memory.id);
+      const id = this.normalizeId(memory.meta?.id);
       if (!id) continue;
       addNode({ id, template: 'memory', config: this.mapMemoryBucketConfig(memory) });
     }
@@ -199,19 +201,23 @@ export class TeamsGraphSource {
   }
 
   private async listAllAgents(): Promise<Agent[]> {
-    return listAllPages((page, perPage) =>
-      this.teams.listAgents(create(ListAgentsRequestSchema, { page, perPage })),
+    return listAllPages((pageToken, pageSize) =>
+      this.teams
+        .listAgents(create(ListAgentsRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.agents, nextPageToken: response.nextPageToken })),
     );
   }
 
   private async listAllTools(): Promise<Tool[]> {
-    const items = await listAllPages((page, perPage) =>
-      this.teams.listTools(create(ListToolsRequestSchema, { page, perPage })),
+    const items = await listAllPages((pageToken, pageSize) =>
+      this.teams
+        .listTools(create(ListToolsRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.tools, nextPageToken: response.nextPageToken })),
     );
     const collected = new Map<string, Tool>();
     for (const tool of items) {
       if (!TOOL_TYPE_TO_TEMPLATE[tool.type]) continue;
-      const id = this.normalizeId(tool.id);
+      const id = this.normalizeId(tool.meta?.id);
       if (!id || collected.has(id)) continue;
       collected.set(id, tool);
     }
@@ -219,39 +225,49 @@ export class TeamsGraphSource {
   }
 
   private async listAllMcpServers(): Promise<McpServer[]> {
-    return listAllPages((page, perPage) =>
-      this.teams.listMcpServers(create(ListMcpServersRequestSchema, { page, perPage })),
+    return listAllPages((pageToken, pageSize) =>
+      this.teams
+        .listMcpServers(create(ListMcpServersRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.mcpServers, nextPageToken: response.nextPageToken })),
     );
   }
 
   private async listAllWorkspaces(): Promise<WorkspaceConfiguration[]> {
-    return listAllPages((page, perPage) =>
-      this.teams.listWorkspaceConfigurations(create(ListWorkspaceConfigurationsRequestSchema, { page, perPage })),
+    return listAllPages((pageToken, pageSize) =>
+      this.teams
+        .listWorkspaceConfigurations(
+          create(ListWorkspaceConfigurationsRequestSchema, { pageSize, pageToken: pageToken ?? '' }),
+        )
+        .then((response) => ({ items: response.workspaceConfigurations, nextPageToken: response.nextPageToken })),
     );
   }
 
   private async listAllMemoryBuckets(): Promise<MemoryBucket[]> {
-    return listAllPages((page, perPage) =>
-      this.teams.listMemoryBuckets(create(ListMemoryBucketsRequestSchema, { page, perPage })),
+    return listAllPages((pageToken, pageSize) =>
+      this.teams
+        .listMemoryBuckets(create(ListMemoryBucketsRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.memoryBuckets, nextPageToken: response.nextPageToken })),
     );
   }
 
   private async listAllAttachments(): Promise<Attachment[]> {
     const collected = new Map<string, Attachment>();
     for (const filter of ATTACHMENT_FILTERS) {
-      const items = await listAllPages((page, perPage) =>
-        this.teams.listAttachments(
-          create(ListAttachmentsRequestSchema, {
-            kind: filter.kind,
-            sourceType: filter.sourceType,
-            targetType: filter.targetType,
-            page,
-            perPage,
-          }),
-        ),
+      const items = await listAllPages((pageToken, pageSize) =>
+        this.teams
+          .listAttachments(
+            create(ListAttachmentsRequestSchema, {
+              kind: filter.kind,
+              sourceType: filter.sourceType,
+              targetType: filter.targetType,
+              pageSize,
+              pageToken: pageToken ?? '',
+            }),
+          )
+          .then((response) => ({ items: response.attachments, nextPageToken: response.nextPageToken })),
       );
       for (const attachment of items) {
-        const key = this.normalizeId(attachment.id) ?? `${attachment.kind}:${attachment.sourceId}:${attachment.targetId}`;
+        const key = this.normalizeId(attachment.meta?.id) ?? `${attachment.kind}:${attachment.sourceId}:${attachment.targetId}`;
         if (collected.has(key)) continue;
         collected.set(key, attachment);
       }
@@ -343,6 +359,8 @@ export class TeamsGraphSource {
         if (backoffMs !== undefined) restart.backoffMs = backoffMs;
         if (Object.keys(restart).length > 0) config.restart = restart;
       }
+      const toolFilter = this.mapMcpToolFilter(raw.toolFilter);
+      if (toolFilter) config.toolFilter = toolFilter;
     }
     return Object.keys(config).length > 0 ? config : undefined;
   }
@@ -392,6 +410,30 @@ export class TeamsGraphSource {
       if (collectionPrefix !== undefined) config.collectionPrefix = collectionPrefix;
     }
     return Object.keys(config).length > 0 ? config : undefined;
+  }
+
+  private mapMcpToolFilter(
+    filter: McpToolFilter | undefined,
+  ): { mode: 'allow' | 'deny'; rules: Array<{ pattern: string }> } | undefined {
+    if (!filter) return undefined;
+    const mode = this.mapMcpToolFilterMode(filter.mode);
+    if (!mode) return undefined;
+    const rules = filter.rules
+      .map((rule) => readString(rule.pattern))
+      .filter((pattern): pattern is string => Boolean(pattern))
+      .map((pattern) => ({ pattern }));
+    return { mode, rules };
+  }
+
+  private mapMcpToolFilterMode(value: McpToolFilterMode): 'allow' | 'deny' | undefined {
+    switch (value) {
+      case McpToolFilterMode.ALLOW:
+        return 'allow';
+      case McpToolFilterMode.DENY:
+        return 'deny';
+      default:
+        return undefined;
+    }
   }
 
   private mapWhenBusy(value: AgentWhenBusy): 'wait' | 'injectAfterTools' | undefined {

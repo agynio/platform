@@ -3,7 +3,6 @@ import { PassThrough } from 'node:stream';
 
 import { McpServerConfig } from '../src/mcp/types.js';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
-import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceHandle } from '../src/workspace/workspace.handle';
 import {
   WorkspaceProvider,
@@ -187,7 +186,7 @@ describe('LocalMCPServer (mock)', () => {
       resolveEnvItems: vi.fn(),
     };
     const configStub = { mcpToolsStaleTimeoutMs: 0 } as const;
-    server = new LocalMCPServerNode(envStub as any, configStub as any, createModuleRefStub());
+    server = new LocalMCPServerNode(envStub as any, configStub as any);
     const mockWorkspaceNode = {
       provide: async (threadId: string) => {
         let handle = handles.get(threadId);
@@ -219,9 +218,10 @@ describe('LocalMCPServer (mock)', () => {
     await server.deprovision();
   });
 
-  it('lists tools when enabledTools are provided', async () => {
-    expect(server.listTools()).toEqual([]);
-    await server.setState({ mcp: { enabledTools: ['echo'] } as any });
+  it('lists tools after discovery', async () => {
+    (server as any).toolsDiscovered = false;
+    (server as any).toolsCache = null;
+    await server.discoverTools();
     const tools = server.listTools();
     expect(tools.find((t) => String(t.name).endsWith('_echo'))).toBeTruthy();
   });
@@ -263,10 +263,13 @@ describe('LocalMCPServer (mock)', () => {
     (server as any).on('mcp.tools_updated', (p: { tools: any[]; updatedAt: number }) => {
       lastPayload = p;
     });
-    (server as any).preloadCachedTools([{ name: 'pre' }], Date.now());
+    await server.setConfig({ ...server.config, toolFilter: { mode: 'deny', rules: [] } } as any);
     expect(lastPayload).toBeTruthy();
     expect(Array.isArray(lastPayload!.tools)).toBe(true);
-    await (server as any).discoverTools();
+    lastPayload = null;
+    (server as any).toolsDiscovered = false;
+    (server as any).toolsCache = null;
+    await server.discoverTools();
     expect(lastPayload).toBeTruthy();
     expect(typeof lastPayload!.updatedAt).toBe('number');
   });

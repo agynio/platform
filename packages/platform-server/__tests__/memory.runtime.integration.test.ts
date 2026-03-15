@@ -120,7 +120,6 @@ function makeRuntime(
     async upsert(): Promise<never> {
       throw new Error('not-implemented');
     }
-    async upsertNodeState(): Promise<void> {}
   }
   // Cast moduleRef back to real ModuleRef type for LiveGraphRuntime ctor compatibility
   const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };

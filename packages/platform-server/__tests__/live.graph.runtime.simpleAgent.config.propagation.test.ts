@@ -99,7 +99,6 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
           async initIfNeeded(): Promise<void> {}
           async get(): Promise<null> { return null; }
           async upsert(): Promise<never> { throw new Error('not-implemented'); }
-          async upsertNodeState(): Promise<void> {}
         }
         const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
         const runtime = new LiveGraphRuntime(registry, new StubRepo(), moduleRef, resolver as any);

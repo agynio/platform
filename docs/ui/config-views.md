@@ -2,14 +2,12 @@ Config Views (UI)
 
 Overview
 - Custom Config Views render configuration sections for builder nodes.
-- Views are registered in a typed registry and resolved by template name and mode (static or dynamic).
+- Views are registered in a typed registry and resolved by template name (static config only; dynamic views are not wired).
 
 How to add a new Config View
-- Create a component implementing either:
-  - StaticConfigViewProps (for static config saved in graph), or
-  - DynamicConfigViewProps (for runtime-driven config schema).
+- Create a component implementing StaticConfigViewProps (for static config saved in graph).
 - Register it in the default config views registry:
-  - registerConfigView({ template: '<templateName>', mode: 'static' | 'dynamic', component: YourComponent })
+  - registerConfigView({ template: '<templateName>', mode: 'static', component: YourComponent })
 
 Event semantics
 - onChange(next): emit the full new value for the section; parent replaces that section and autosaves.

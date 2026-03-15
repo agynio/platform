@@ -49,12 +49,16 @@ Templates alias
 
 Node status and actions
 - GET `/graph/nodes/:nodeId/status`
-  - 200: `{ isPaused?, provisionStatus?, dynamicConfigReady? }`
+  - 200: `{ provisionStatus? }`
 - POST `/graph/nodes/:nodeId/actions`
-  - Body: `{ action: 'pause'|'resume'|'provision'|'deprovision' }`
+  - Body: `{ action: 'provision'|'deprovision' }`
   - 204: no body on success; server also emits a `node_status` socket event
   - 400 `{ error: 'unknown_action' }`
   - 500 `{ error: string }`
+ - POST `/graph/nodes/:nodeId/discover-tools`
+  - 200 `{ tools: Array<{ name: string; description?: string }>, updatedAt?: string }`
+  - 400 `{ error: 'node_not_mcp' }`
+  - 404 `{ error: 'node_not_found' }`
 
 Agent runs timeline
 - GET `/api/agents/runs/:runId/events`
@@ -75,12 +79,6 @@ Context items
   - 200 `{ items: Array<{ id, role, contentText, contentJson, metadata, sizeBytes, createdAt }> }`
   - Empty `ids` returns `{ items: [] }`.
 
-Dynamic-config schema (read-only)
-- GET `/graph/nodes/:nodeId/dynamic-config/schema`
-  - 200: `{ ready: boolean, schema?: JSONSchema }`
-  - 404: `{ error: 'node_not_found' }`
-  - 500: `{ error: 'dynamic_config_schema_error' | string }`
-
 Vault proxy (enabled only when VAULT_ENABLED=true)
 - GET `/api/vault/mounts` → `{ items: string[] }`
 - GET `/api/vault/kv/:mount/paths?prefix=` → `{ items: string[] }`
@@ -93,13 +91,12 @@ Vault proxy (enabled only when VAULT_ENABLED=true)
 
 Sockets
 - Default namespace (no custom path)
-  - Event `node_status`: `{ nodeId, isPaused?, provisionStatus?, dynamicConfigReady?, updatedAt }`
-  - Event `node_config`: `{ nodeId, config, dynamicConfig, version }` (emitted after successful /api/graph save with changes)
+  - Event `node_status`: `{ nodeId, provisionStatus?, updatedAt? }`
   - See docs/graph/status-updates.md and docs/ui/graph/index.md
 
 Notes
 - Route handlers surface structured errors and emit socket events on state changes.
-- The filesystem store enforces deterministic edge IDs and uses a dataset-scoped file lock plus atomic writes.
+- Graph snapshots are sourced from the Teams service; `/api/graph` is read-only.
 - MCP mutation guard prevents unsafe changes to MCP commands.
 - Error codes align with the error envelope described above.
 Nix proxy

@@ -45,7 +45,6 @@ const createEventsBusNoop = (): EventsBusService =>
     subscribeToToolOutputChunk: () => () => undefined,
     subscribeToToolOutputTerminal: () => () => undefined,
     subscribeToReminderCount: () => () => undefined,
-    subscribeToNodeState: () => () => undefined,
     subscribeToThreadCreated: () => () => undefined,
     subscribeToThreadUpdated: () => () => undefined,
     subscribeToMessageCreated: () => () => undefined,

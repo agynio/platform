@@ -11,5 +11,4 @@ export abstract class GraphRepository {
   abstract initIfNeeded(): Promise<void>;
   abstract get(name: string): Promise<PersistedGraph | null>;
   abstract upsert(req: PersistedGraphUpsertRequest, author?: GraphAuthor): Promise<PersistedGraphUpsertResponse>;
-  abstract upsertNodeState(name: string, nodeId: string, patch: Record<string, unknown>): Promise<void>;
 }

@@ -28,7 +28,6 @@ function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
       displayTitle={config.title}
       onConfigChange={onConfigChange}
       tools={[]}
-      enabledTools={[]}
       {...rest}
     />,
   );

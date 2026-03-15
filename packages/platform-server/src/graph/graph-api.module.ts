@@ -3,31 +3,28 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
 import { AgentsThreadsController } from '../agents/threads.controller';
 import { ContextItemsController } from '../agents/contextItems.controller';
 import { GraphController } from './controllers/graph.controller';
-import { GraphPersistController } from './controllers/graphPersist.controller';
-import { GraphVariablesController } from './controllers/graphVariables.controller';
 import { MemoryController } from './controllers/memory.controller';
 import { RunsController } from './controllers/runs.controller';
-import { NodeStateService } from './nodeState.service';
-import { GraphVariablesService } from './services/graphVariables.service';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
 import { EventsModule } from '../events/events.module';
 import { GraphCoreModule } from '../graph-core/graph-core.module';
+import { VariablesController } from './controllers/variables.controller';
+import { TeamsModule } from '../teams/teams.module';
 
 @Module({
-  imports: [GraphCoreModule, GraphDomainModule, EventsModule],
+  imports: [GraphCoreModule, GraphDomainModule, EventsModule, TeamsModule],
   controllers: [
     RunsController,
-    GraphPersistController,
     GraphController,
     MemoryController,
-    GraphVariablesController,
     AgentsThreadsController,
     ContextItemsController,
     AgentsRemindersController,
     RemindersController,
+    VariablesController,
   ],
-  providers: [NodeStateService, GraphVariablesService],
-  exports: [GraphCoreModule, NodeStateService, GraphVariablesService],
+  providers: [],
+  exports: [GraphCoreModule],
 })
 export class GraphApiModule {}

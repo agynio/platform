@@ -33,9 +33,9 @@ Architecture and components
   - Checkpointing via Postgres (default); streaming UI integration planned.
 - Server
   - HTTP APIs and Socket.IO for management and status streaming.
-  - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
+  - Endpoints manage graph templates, graph snapshots, node lifecycle/actions, MCP tool discovery, reminders, runs, vault proxy, variable CRUD, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: filesystem dataset (format: 2) with deterministic edge IDs, dataset-level file locks, and staged working-tree swaps. Each upsert builds a full graph tree in a sibling directory, fsyncs it, and atomically swaps it into place (conflict/timeout/persist error modes preserved).
+  - Graph store: Teams service snapshot via gRPC; platform-server keeps no local graph persistence and treats `/api/graph` as read-only.
   - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace runtime
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Networking is managed by the runner. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror reachable at http://registry-mirror:5000.
@@ -54,11 +54,11 @@ Features and capabilities
 
 Core data model and state
 - Graph
-  - Nodes: typed by template; static config schema; capabilities (pausable, provisionable, static/dynamic configurable).
+  - Nodes: typed by template; configs applied via setConfig; template metadata provides kind and ports.
   - Edges: deterministic IDs; reversible by PortsRegistry knowledge.
   - Version: monotonically increasing; optimistic locking on apply; single graph “main”.
 - Runtime status
-  - Per-node paused flag; provision status (not_ready, provisioning, ready, deprovisioning, error); per-node dynamic-config readiness.
+  - Per-node provision status (not_ready, provisioning, ready, deprovisioning, provisioning_error, deprovisioning_error).
 - Containers
   - container_id, node_id, thread_id, image, status, last_used_at, kill_after_at, termination_reason, metadata.labels, metadata.platform, metadata.ttlSeconds.
 - Observability
@@ -95,7 +95,7 @@ Performance and scale
 - Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph configuration is sourced from Teams service; `/api/graph` is GET-only. Node state and graph variables persist in Postgres (`GraphNodeState`, `GraphVariable`); filesystem-backed graph storage is retired.
+- Graph configuration and variables are sourced from the Teams service via gRPC; `/api/graph` is GET-only. Node state is in-memory only; filesystem-backed graph storage is retired.
 - UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/fs-store.md (legacy filesystem format reference)

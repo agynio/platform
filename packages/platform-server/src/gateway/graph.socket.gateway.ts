@@ -7,7 +7,6 @@ import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 import {
   EventsBusService,
   type MessageBroadcast,
-  type NodeStateBusEvent,
   type ReminderCountEvent as ReminderCountBusEvent,
   type RunEventBroadcast,
   type RunEventBusPayload,
@@ -41,15 +40,6 @@ export const NodeStatusEventSchema = z
   })
   .strict();
 export type NodeStatusEvent = z.infer<typeof NodeStatusEventSchema>;
-
-export const NodeStateEventSchema = z
-  .object({
-    nodeId: z.string(),
-    state: z.record(z.string(), z.unknown()),
-    updatedAt: z.string().datetime(),
-  })
-  .strict();
-export type NodeStateEvent = z.infer<typeof NodeStateEventSchema>;
 
 // RemindMe: active reminder count event
 export const ReminderCountSocketEventSchema = z
@@ -123,7 +113,6 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     this.cleanup.push(this.eventsBus.subscribeToToolOutputChunk(this.handleToolOutputChunk));
     this.cleanup.push(this.eventsBus.subscribeToToolOutputTerminal(this.handleToolOutputTerminal));
     this.cleanup.push(this.eventsBus.subscribeToReminderCount(this.handleReminderCount));
-    this.cleanup.push(this.eventsBus.subscribeToNodeState(this.handleNodeState));
     this.cleanup.push(this.eventsBus.subscribeToThreadCreated(this.handleThreadCreated));
     this.cleanup.push(this.eventsBus.subscribeToThreadUpdated(this.handleThreadUpdated));
     this.cleanup.push(this.eventsBus.subscribeToMessageCreated(this.handleMessageCreated));
@@ -345,19 +334,6 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     });
   };
 
-  private readonly handleNodeState = (payload: NodeStateBusEvent): void => {
-    try {
-      this.emitNodeState(payload.nodeId, payload.state, payload.updatedAtMs);
-    } catch (err) {
-      this.logger.warn(
-        `GraphSocketGateway failed to emit node_state${this.formatContext({
-          nodeId: payload.nodeId,
-          error: this.toSafeError(err),
-        })}`,
-      );
-    }
-  };
-
   private readonly handleThreadCreated = (thread: ThreadBroadcast): void => {
     try {
       this.emitThreadCreated(thread);
@@ -458,7 +434,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   };
 
   private broadcast<T extends { nodeId: string }>(
-    event: 'node_status' | 'node_state' | 'node_reminder_count',
+    event: 'node_status' | 'node_reminder_count',
     payload: T,
     schema: z.ZodType<T>,
   ) {
@@ -488,15 +464,6 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
 
   // Note: node-level subscription handled via runtime.subscribe()
 
-  /** Emit node_state event when NodeStateService updates runtime snapshot. Public for DI bridge usage. */
-  emitNodeState(nodeId: string, state: Record<string, unknown>, updatedAtMs?: number): void {
-    const payload: NodeStateEvent = {
-      nodeId,
-      state,
-      updatedAt: new Date(updatedAtMs ?? Date.now()).toISOString(),
-    };
-    this.broadcast('node_state', payload, NodeStateEventSchema);
-  }
   /** Emit node_reminder_count event for RemindMe tool nodes when registry changes. */
   emitReminderCount(nodeId: string, count: number, updatedAtMs?: number): void {
     const payload: ReminderCountSocketEvent = {

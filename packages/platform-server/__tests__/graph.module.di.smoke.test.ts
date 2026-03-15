@@ -193,7 +193,6 @@ if (!shouldRunDbTests) {
         initIfNeeded: vi.fn().mockResolvedValue(undefined),
         get: vi.fn().mockResolvedValue(null),
         upsert: vi.fn().mockResolvedValue({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
-        upsertNodeState: vi.fn().mockResolvedValue(undefined),
       } satisfies Partial<GraphRepository>;
 
       const builder = Test.createTestingModule({
@@ -230,7 +229,6 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(TemplateRegistry).useFactory(() => templateRegistryStub as TemplateRegistry);
       builder.overrideProvider(GraphRepository).useFactory(() => graphRepositoryStub as GraphRepository);
       builder.overrideProvider(GraphSocketGateway).useValue({
-        emitNodeState: vi.fn(),
         emitThreadCreated: vi.fn(),
         emitThreadUpdated: vi.fn(),
         emitRunEvent: vi.fn(),

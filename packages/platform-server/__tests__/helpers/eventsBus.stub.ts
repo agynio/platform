@@ -2,7 +2,6 @@ import { vi } from 'vitest';
 
 export type EventsBusStub = {
   publishEvent: ReturnType<typeof vi.fn>;
-  emitNodeState: ReturnType<typeof vi.fn>;
   emitThreadCreated: ReturnType<typeof vi.fn>;
   emitThreadUpdated: ReturnType<typeof vi.fn>;
   emitMessageCreated: ReturnType<typeof vi.fn>;
@@ -16,7 +15,6 @@ export type EventsBusStub = {
   subscribeToToolOutputChunk: ReturnType<typeof vi.fn>;
   subscribeToToolOutputTerminal: ReturnType<typeof vi.fn>;
   subscribeToReminderCount: ReturnType<typeof vi.fn>;
-  subscribeToNodeState: ReturnType<typeof vi.fn>;
   subscribeToThreadCreated: ReturnType<typeof vi.fn>;
   subscribeToThreadUpdated: ReturnType<typeof vi.fn>;
   subscribeToMessageCreated: ReturnType<typeof vi.fn>;
@@ -29,7 +27,6 @@ export function createEventsBusStub(): EventsBusStub {
   const disposer = () => vi.fn();
   return {
     publishEvent: vi.fn(async () => null),
-    emitNodeState: vi.fn(),
     emitThreadCreated: vi.fn(),
     emitThreadUpdated: vi.fn(),
     emitMessageCreated: vi.fn(),
@@ -43,7 +40,6 @@ export function createEventsBusStub(): EventsBusStub {
     subscribeToToolOutputChunk: vi.fn(() => disposer()),
     subscribeToToolOutputTerminal: vi.fn(() => disposer()),
     subscribeToReminderCount: vi.fn(() => disposer()),
-    subscribeToNodeState: vi.fn(() => disposer()),
     subscribeToThreadCreated: vi.fn(() => disposer()),
     subscribeToThreadUpdated: vi.fn(() => disposer()),
     subscribeToMessageCreated: vi.fn(() => disposer()),

@@ -76,19 +76,19 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     const teamsClient = createTeamsClientStub({
       agents: [
         create(AgentSchema, {
-          id: 'agent-configured',
+          meta: { id: 'agent-configured' },
           title: '  Configured Agent  ',
           description: '',
           config: create(AgentConfigSchema, { name: '  Casey  ', role: '  Lead Engineer  ' }),
         }),
         create(AgentSchema, {
-          id: 'agent-profile',
+          meta: { id: 'agent-profile' },
           title: '',
           description: '',
           config: create(AgentConfigSchema, { name: '  Delta  ', role: '  Support  ' }),
         }),
-        create(AgentSchema, { id: 'agent-template', title: '', description: '' }),
-        create(AgentSchema, { id: 'agent-assigned', title: 'Assigned Only', description: '' }),
+        create(AgentSchema, { meta: { id: 'agent-template' }, title: '', description: '' }),
+        create(AgentSchema, { meta: { id: 'agent-assigned' }, title: 'Assigned Only', description: '' }),
       ],
     });
     const threadConfigured = (await stub.thread.create({ data: { alias: 'config' } })).id;

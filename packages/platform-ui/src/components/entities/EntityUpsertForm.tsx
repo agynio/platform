@@ -23,7 +23,7 @@ import type {
   TemplateOption,
 } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
-import { useMcpNodeState } from '@/lib/graph/hooks';
+import { useMcpTools } from '@/lib/graph/hooks';
 import {
   EXCLUDED_WORKSPACE_TEMPLATES,
   TEAM_ATTACHMENT_KIND,
@@ -540,24 +540,15 @@ export function EntityUpsertForm({
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
-    enabledTools: mcpEnabledTools,
-    setEnabledTools: setMcpEnabledTools,
+    updatedAt: mcpToolsUpdatedAt,
+    discoverTools: discoverMcpTools,
     isLoading: mcpToolsLoading,
-  } = useMcpNodeState(mcpStateNodeId);
+  } = useMcpTools(mcpStateNodeId);
 
-  const handleToggleMcpTool = useCallback(
-    (toolName: string, enabled: boolean) => {
-      if (!mcpStateNodeId) return;
-      const current = new Set(mcpEnabledTools ?? []);
-      if (enabled) {
-        current.add(toolName);
-      } else {
-        current.delete(toolName);
-      }
-      setMcpEnabledTools(Array.from(current));
-    },
-    [mcpEnabledTools, mcpStateNodeId, setMcpEnabledTools],
-  );
+  const handleDiscoverMcpTools = useCallback(() => {
+    if (!mcpStateNodeId) return;
+    void discoverMcpTools();
+  }, [discoverMcpTools, mcpStateNodeId]);
 
   const handleViewConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
@@ -683,8 +674,8 @@ export function EntityUpsertForm({
           ensureSecretKeys,
           ensureVariableKeys,
           tools: mcpTools,
-          enabledTools: mcpEnabledTools,
-          onToggleTool: handleToggleMcpTool,
+          toolsUpdatedAt: mcpToolsUpdatedAt,
+          onDiscoverTools: handleDiscoverMcpTools,
           toolsLoading: mcpToolsLoading,
           nodeId: nodeIdForView,
           graphNodes: safeGraphNodes,
@@ -766,8 +757,8 @@ export function EntityUpsertForm({
     safeGraphNodes,
     safeGraphEdges,
     mcpTools,
-    mcpEnabledTools,
-    handleToggleMcpTool,
+    mcpToolsUpdatedAt,
+    handleDiscoverMcpTools,
     mcpToolsLoading,
   ]);
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
-import { createModuleRefStub } from './helpers/module-ref.stub';
+import { LocalMCPServerTool } from '../src/nodes/mcp/localMcpServer.tool';
 
 class MockLogger {
   info = vi.fn();
@@ -8,61 +9,52 @@ class MockLogger {
   error = vi.fn();
 }
 
-describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
+describe('LocalMCPServerNode tool filtering', () => {
   let server: LocalMCPServerNode;
 
   beforeEach(async () => {
-    const nodeStateService = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: [] } })) } as any;
-    const moduleRef = createModuleRefStub({ get: vi.fn(() => nodeStateService) });
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
-    const logger = new MockLogger();
-    server = new LocalMCPServerNode(envStub, {} as any, moduleRef as any);
-    (server as any).logger = logger;
-    // Manually init nodeId since we are not running through runtime
+    server = new LocalMCPServerNode(envStub, {} as any);
+    (server as any).logger = new MockLogger();
     (server as any).init({ nodeId: 'node-1' });
     await server.setConfig({ namespace: 'ns' } as any);
-    // Preload two tools into cache
-    (server as any).preloadCachedTools([
-      { name: 'a', description: 'A', inputSchema: { type: 'object' } },
-      { name: 'b', description: 'B', inputSchema: { type: 'object' } },
-    ], Date.now());
+    (server as any).toolsCache = [
+      new LocalMCPServerTool('alpha', 'A', z.object({}).strict(), server),
+      new LocalMCPServerTool('beta', 'B', z.object({}).strict(), server),
+    ];
   });
 
-  it('returns [] when enabledTools=[]', () => {
-    // enabledTools is [] from beforeEach
+  it('returns all tools when no filter is set', () => {
     const tools = server.listTools();
-    expect(tools.length).toBe(0);
+    expect(tools.map((t) => t.name)).toEqual(['ns_alpha', 'ns_beta']);
   });
 
-  it('returns [] when enabledTools is undefined', () => {
-    const ns = { getSnapshot: vi.fn(() => ({ mcp: {} })) } as any;
-    (server as any).nodeStateService = ns;
-    // Clear last enabled tools cache as well
-    (server as any)._lastEnabledTools = undefined;
+  it('filters tools using allow rules', async () => {
+    await server.setConfig({
+      namespace: 'ns',
+      toolFilter: { mode: 'allow', rules: [{ pattern: 'beta' }] },
+    } as any);
     const tools = server.listTools();
-    expect(tools).toEqual([]);
-  });
-
-  it('returns only enabled tool when enabledTools=["ns_a"]', () => {
-    // Update snapshot to include only ns_a
-    const ns = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: ['ns_a'] } })) } as any;
-    (server as any).nodeStateService = ns;
-    const tools = server.listTools();
-    expect(tools.map(t => t.name)).toEqual(['ns_a']);
+    expect(tools.map((t) => t.name)).toEqual(['ns_beta']);
   });
 });
 
-describe('LocalMCPServerNode setState enabledTools emits mcp.tools_updated', () => {
-  it('emits on hook invocation', async () => {
+describe('LocalMCPServerNode config updates emit tools_updated', () => {
+  it('emits on setConfig changes', async () => {
     const logger = new MockLogger();
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
-    const server = new LocalMCPServerNode(envStub, {} as any, createModuleRefStub());
+    const server = new LocalMCPServerNode(envStub, {} as any);
     (server as any).logger = logger;
-    // Preload one tool for payload consistency
-    (server as any).preloadCachedTools([{ name: 'x', description: 'X', inputSchema: { type: 'object' } }], Date.now());
-    let fired = false;
-    (server as any).on('mcp.tools_updated', (_payload: { tools: unknown[]; updatedAt: number }) => { fired = true; });
-    await server.setState({ mcp: { tools: [], toolsUpdatedAt: Date.now(), enabledTools: ['ns_x'] } as any });
-    expect(fired).toBe(true);
+    (server as any).toolsCache = [new LocalMCPServerTool('x', 'X', z.object({}).strict(), server)];
+
+    let fired: { tools: unknown[]; updatedAt: number } | null = null;
+    server.on('mcp.tools_updated', (payload: { tools: unknown[]; updatedAt: number }) => {
+      fired = payload;
+    });
+
+    await server.setConfig({ namespace: 'ns' } as any);
+    expect(fired).toBeTruthy();
+    expect(Array.isArray(fired?.tools)).toBe(true);
+    expect(typeof fired?.updatedAt).toBe('number');
   });
 });

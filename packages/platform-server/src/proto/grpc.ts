@@ -2,7 +2,6 @@ import { makeGenericClientConstructor } from '@grpc/grpc-js';
 import type { MethodDefinition, ServiceDefinition } from '@grpc/grpc-js';
 import { toBinary, fromBinary } from '@bufbuild/protobuf';
 import type { DescMessage } from '@bufbuild/protobuf';
-import { EmptySchema } from '@bufbuild/protobuf/wkt';
 import {
   CancelExecutionRequestSchema,
   CancelExecutionResponseSchema,
@@ -37,44 +36,72 @@ import {
 } from './gen/agynio/api/runner/v1/runner_pb.js';
 import {
   AgentCreateRequestSchema,
-  AgentSchema,
   AgentUpdateRequestSchema,
   AttachmentCreateRequestSchema,
-  AttachmentSchema,
+  CreateAgentResponseSchema,
+  CreateAttachmentResponseSchema,
+  CreateMcpServerResponseSchema,
+  CreateMemoryBucketResponseSchema,
+  CreateToolResponseSchema,
+  CreateVariableRequestSchema,
+  CreateVariableResponseSchema,
+  CreateWorkspaceConfigurationResponseSchema,
   DeleteAgentRequestSchema,
+  DeleteAgentResponseSchema,
   DeleteAttachmentRequestSchema,
+  DeleteAttachmentResponseSchema,
   DeleteMcpServerRequestSchema,
+  DeleteMcpServerResponseSchema,
   DeleteMemoryBucketRequestSchema,
+  DeleteMemoryBucketResponseSchema,
   DeleteToolRequestSchema,
+  DeleteToolResponseSchema,
+  DeleteVariableRequestSchema,
+  DeleteVariableResponseSchema,
   DeleteWorkspaceConfigurationRequestSchema,
+  DeleteWorkspaceConfigurationResponseSchema,
   GetAgentRequestSchema,
+  GetAgentResponseSchema,
   GetMcpServerRequestSchema,
+  GetMcpServerResponseSchema,
   GetMemoryBucketRequestSchema,
+  GetMemoryBucketResponseSchema,
   GetToolRequestSchema,
+  GetToolResponseSchema,
+  GetVariableRequestSchema,
+  GetVariableResponseSchema,
   GetWorkspaceConfigurationRequestSchema,
+  GetWorkspaceConfigurationResponseSchema,
   ListAgentsRequestSchema,
+  ListAgentsResponseSchema,
   ListAttachmentsRequestSchema,
+  ListAttachmentsResponseSchema,
   ListMcpServersRequestSchema,
+  ListMcpServersResponseSchema,
   ListMemoryBucketsRequestSchema,
+  ListMemoryBucketsResponseSchema,
   ListToolsRequestSchema,
+  ListToolsResponseSchema,
+  ListVariablesRequestSchema,
+  ListVariablesResponseSchema,
   ListWorkspaceConfigurationsRequestSchema,
+  ListWorkspaceConfigurationsResponseSchema,
   McpServerCreateRequestSchema,
-  McpServerSchema,
   McpServerUpdateRequestSchema,
   MemoryBucketCreateRequestSchema,
-  MemoryBucketSchema,
   MemoryBucketUpdateRequestSchema,
-  PaginatedAgentsSchema,
-  PaginatedAttachmentsSchema,
-  PaginatedMcpServersSchema,
-  PaginatedMemoryBucketsSchema,
-  PaginatedToolsSchema,
-  PaginatedWorkspaceConfigurationsSchema,
+  ResolveVariableRequestSchema,
+  ResolveVariableResponseSchema,
   ToolCreateRequestSchema,
-  ToolSchema,
   ToolUpdateRequestSchema,
+  UpdateAgentResponseSchema,
+  UpdateMcpServerResponseSchema,
+  UpdateMemoryBucketResponseSchema,
+  UpdateToolResponseSchema,
+  UpdateVariableRequestSchema,
+  UpdateVariableResponseSchema,
+  UpdateWorkspaceConfigurationResponseSchema,
   WorkspaceConfigurationCreateRequestSchema,
-  WorkspaceConfigurationSchema,
   WorkspaceConfigurationUpdateRequestSchema,
 } from './gen/agynio/api/teams/v1/teams_pb.js';
 
@@ -254,6 +281,12 @@ export const TEAMS_SERVICE_CREATE_MEMORY_BUCKET_PATH = '/agynio.api.teams.v1.Tea
 export const TEAMS_SERVICE_GET_MEMORY_BUCKET_PATH = '/agynio.api.teams.v1.TeamsService/GetMemoryBucket';
 export const TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH = '/agynio.api.teams.v1.TeamsService/UpdateMemoryBucket';
 export const TEAMS_SERVICE_DELETE_MEMORY_BUCKET_PATH = '/agynio.api.teams.v1.TeamsService/DeleteMemoryBucket';
+export const TEAMS_SERVICE_LIST_VARIABLES_PATH = '/agynio.api.teams.v1.TeamsService/ListVariables';
+export const TEAMS_SERVICE_CREATE_VARIABLE_PATH = '/agynio.api.teams.v1.TeamsService/CreateVariable';
+export const TEAMS_SERVICE_GET_VARIABLE_PATH = '/agynio.api.teams.v1.TeamsService/GetVariable';
+export const TEAMS_SERVICE_UPDATE_VARIABLE_PATH = '/agynio.api.teams.v1.TeamsService/UpdateVariable';
+export const TEAMS_SERVICE_DELETE_VARIABLE_PATH = '/agynio.api.teams.v1.TeamsService/DeleteVariable';
+export const TEAMS_SERVICE_RESOLVE_VARIABLE_PATH = '/agynio.api.teams.v1.TeamsService/ResolveVariable';
 export const TEAMS_SERVICE_LIST_ATTACHMENTS_PATH = '/agynio.api.teams.v1.TeamsService/ListAttachments';
 export const TEAMS_SERVICE_CREATE_ATTACHMENT_PATH = '/agynio.api.teams.v1.TeamsService/CreateAttachment';
 export const TEAMS_SERVICE_DELETE_ATTACHMENT_PATH = '/agynio.api.teams.v1.TeamsService/DeleteAttachment';
@@ -262,142 +295,172 @@ export const teamsServiceGrpcDefinition: ServiceDefinition = {
   listAgents: unaryDefinition(
     TEAMS_SERVICE_LIST_AGENTS_PATH,
     ListAgentsRequestSchema,
-    PaginatedAgentsSchema,
+    ListAgentsResponseSchema,
   ),
   createAgent: unaryDefinition(
     TEAMS_SERVICE_CREATE_AGENT_PATH,
     AgentCreateRequestSchema,
-    AgentSchema,
+    CreateAgentResponseSchema,
   ),
   getAgent: unaryDefinition(
     TEAMS_SERVICE_GET_AGENT_PATH,
     GetAgentRequestSchema,
-    AgentSchema,
+    GetAgentResponseSchema,
   ),
   updateAgent: unaryDefinition(
     TEAMS_SERVICE_UPDATE_AGENT_PATH,
     AgentUpdateRequestSchema,
-    AgentSchema,
+    UpdateAgentResponseSchema,
   ),
   deleteAgent: unaryDefinition(
     TEAMS_SERVICE_DELETE_AGENT_PATH,
     DeleteAgentRequestSchema,
-    EmptySchema,
+    DeleteAgentResponseSchema,
   ),
   listTools: unaryDefinition(
     TEAMS_SERVICE_LIST_TOOLS_PATH,
     ListToolsRequestSchema,
-    PaginatedToolsSchema,
+    ListToolsResponseSchema,
   ),
   createTool: unaryDefinition(
     TEAMS_SERVICE_CREATE_TOOL_PATH,
     ToolCreateRequestSchema,
-    ToolSchema,
+    CreateToolResponseSchema,
   ),
   getTool: unaryDefinition(
     TEAMS_SERVICE_GET_TOOL_PATH,
     GetToolRequestSchema,
-    ToolSchema,
+    GetToolResponseSchema,
   ),
   updateTool: unaryDefinition(
     TEAMS_SERVICE_UPDATE_TOOL_PATH,
     ToolUpdateRequestSchema,
-    ToolSchema,
+    UpdateToolResponseSchema,
   ),
   deleteTool: unaryDefinition(
     TEAMS_SERVICE_DELETE_TOOL_PATH,
     DeleteToolRequestSchema,
-    EmptySchema,
+    DeleteToolResponseSchema,
   ),
   listMcpServers: unaryDefinition(
     TEAMS_SERVICE_LIST_MCP_SERVERS_PATH,
     ListMcpServersRequestSchema,
-    PaginatedMcpServersSchema,
+    ListMcpServersResponseSchema,
   ),
   createMcpServer: unaryDefinition(
     TEAMS_SERVICE_CREATE_MCP_SERVER_PATH,
     McpServerCreateRequestSchema,
-    McpServerSchema,
+    CreateMcpServerResponseSchema,
   ),
   getMcpServer: unaryDefinition(
     TEAMS_SERVICE_GET_MCP_SERVER_PATH,
     GetMcpServerRequestSchema,
-    McpServerSchema,
+    GetMcpServerResponseSchema,
   ),
   updateMcpServer: unaryDefinition(
     TEAMS_SERVICE_UPDATE_MCP_SERVER_PATH,
     McpServerUpdateRequestSchema,
-    McpServerSchema,
+    UpdateMcpServerResponseSchema,
   ),
   deleteMcpServer: unaryDefinition(
     TEAMS_SERVICE_DELETE_MCP_SERVER_PATH,
     DeleteMcpServerRequestSchema,
-    EmptySchema,
+    DeleteMcpServerResponseSchema,
   ),
   listWorkspaceConfigurations: unaryDefinition(
     TEAMS_SERVICE_LIST_WORKSPACE_CONFIGURATIONS_PATH,
     ListWorkspaceConfigurationsRequestSchema,
-    PaginatedWorkspaceConfigurationsSchema,
+    ListWorkspaceConfigurationsResponseSchema,
   ),
   createWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_CREATE_WORKSPACE_CONFIGURATION_PATH,
     WorkspaceConfigurationCreateRequestSchema,
-    WorkspaceConfigurationSchema,
+    CreateWorkspaceConfigurationResponseSchema,
   ),
   getWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_GET_WORKSPACE_CONFIGURATION_PATH,
     GetWorkspaceConfigurationRequestSchema,
-    WorkspaceConfigurationSchema,
+    GetWorkspaceConfigurationResponseSchema,
   ),
   updateWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_UPDATE_WORKSPACE_CONFIGURATION_PATH,
     WorkspaceConfigurationUpdateRequestSchema,
-    WorkspaceConfigurationSchema,
+    UpdateWorkspaceConfigurationResponseSchema,
   ),
   deleteWorkspaceConfiguration: unaryDefinition(
     TEAMS_SERVICE_DELETE_WORKSPACE_CONFIGURATION_PATH,
     DeleteWorkspaceConfigurationRequestSchema,
-    EmptySchema,
+    DeleteWorkspaceConfigurationResponseSchema,
   ),
   listMemoryBuckets: unaryDefinition(
     TEAMS_SERVICE_LIST_MEMORY_BUCKETS_PATH,
     ListMemoryBucketsRequestSchema,
-    PaginatedMemoryBucketsSchema,
+    ListMemoryBucketsResponseSchema,
   ),
   createMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_CREATE_MEMORY_BUCKET_PATH,
     MemoryBucketCreateRequestSchema,
-    MemoryBucketSchema,
+    CreateMemoryBucketResponseSchema,
   ),
   getMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_GET_MEMORY_BUCKET_PATH,
     GetMemoryBucketRequestSchema,
-    MemoryBucketSchema,
+    GetMemoryBucketResponseSchema,
   ),
   updateMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_UPDATE_MEMORY_BUCKET_PATH,
     MemoryBucketUpdateRequestSchema,
-    MemoryBucketSchema,
+    UpdateMemoryBucketResponseSchema,
   ),
   deleteMemoryBucket: unaryDefinition(
     TEAMS_SERVICE_DELETE_MEMORY_BUCKET_PATH,
     DeleteMemoryBucketRequestSchema,
-    EmptySchema,
+    DeleteMemoryBucketResponseSchema,
+  ),
+  listVariables: unaryDefinition(
+    TEAMS_SERVICE_LIST_VARIABLES_PATH,
+    ListVariablesRequestSchema,
+    ListVariablesResponseSchema,
+  ),
+  createVariable: unaryDefinition(
+    TEAMS_SERVICE_CREATE_VARIABLE_PATH,
+    CreateVariableRequestSchema,
+    CreateVariableResponseSchema,
+  ),
+  getVariable: unaryDefinition(
+    TEAMS_SERVICE_GET_VARIABLE_PATH,
+    GetVariableRequestSchema,
+    GetVariableResponseSchema,
+  ),
+  updateVariable: unaryDefinition(
+    TEAMS_SERVICE_UPDATE_VARIABLE_PATH,
+    UpdateVariableRequestSchema,
+    UpdateVariableResponseSchema,
+  ),
+  deleteVariable: unaryDefinition(
+    TEAMS_SERVICE_DELETE_VARIABLE_PATH,
+    DeleteVariableRequestSchema,
+    DeleteVariableResponseSchema,
+  ),
+  resolveVariable: unaryDefinition(
+    TEAMS_SERVICE_RESOLVE_VARIABLE_PATH,
+    ResolveVariableRequestSchema,
+    ResolveVariableResponseSchema,
   ),
   listAttachments: unaryDefinition(
     TEAMS_SERVICE_LIST_ATTACHMENTS_PATH,
     ListAttachmentsRequestSchema,
-    PaginatedAttachmentsSchema,
+    ListAttachmentsResponseSchema,
   ),
   createAttachment: unaryDefinition(
     TEAMS_SERVICE_CREATE_ATTACHMENT_PATH,
     AttachmentCreateRequestSchema,
-    AttachmentSchema,
+    CreateAttachmentResponseSchema,
   ),
   deleteAttachment: unaryDefinition(
     TEAMS_SERVICE_DELETE_ATTACHMENT_PATH,
     DeleteAttachmentRequestSchema,
-    EmptySchema,
+    DeleteAttachmentResponseSchema,
   ),
 };
 

@@ -52,11 +52,12 @@ export const graph = {
   writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
     http.post<{ mount: string; path: string; key: string; version: number }>(`/api/vault/kv/${encodeURIComponent(mount)}/write`, body),
 
-  // Node status/state
+  // Node status/tools
   getNodeStatus: (nodeId: string) => http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
-  getNodeState: (nodeId: string) => http.get<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`),
-  putNodeState: (nodeId: string, state: Record<string, unknown>) =>
-    http.put<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, { state }),
+  discoverNodeTools: (nodeId: string) =>
+    http.post<{ tools: Array<{ name: string; description: string }>; updatedAt?: string }>(
+      `/api/graph/nodes/${encodeURIComponent(nodeId)}/discover-tools`,
+    ),
 
   // Dynamic config schema (404 -> null)
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {

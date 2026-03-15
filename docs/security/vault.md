@@ -20,7 +20,7 @@ Workspace env vars
   - `env: Array<{ key: string; value: string | SecretRef | VariableRef }>`
   - Plain strings are injected verbatim.
   - Vault references use `{ kind: 'vault', path: 'services/slack', key: 'BOT_TOKEN', mount?: 'secret' }`.
-  - Graph variable references use `{ kind: 'var', name: 'SLACK_BOT_TOKEN', default?: 'fallback' }`.
+  - Graph variable references use `{ kind: 'var', name: 'SLACK_BOT_TOKEN', default?: 'fallback' }` (resolved via Teams-managed graph variables).
 - On provision, the server resolves vault-backed entries and injects values into the container environment.
 - Legacy compatibility removed: envRefs is no longer supported. Providing envRefs will fail validation. A legacy plain env map may still be accepted by the server for convenience, but new configurations should use the array form.
 
@@ -28,7 +28,7 @@ GitHub Clone Repo auth
 - New: `token?: string | SecretRef | VariableRef`
   - Plain strings are used directly.
   - Vault references are resolved server-side before cloning.
-  - Variable references allow graph variables to supply tokens.
+  - Variable references allow Teams-managed graph variables to supply tokens.
 - Fallbacks: if not provided or resolution fails, server falls back to `ConfigService.githubToken`.
 - Backward compatibility: legacy `authRef` remains supported at runtime but is not shown in templates.
 

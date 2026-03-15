@@ -1,17 +1,18 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
-import { Toggle } from './Toggle';
 
 interface ToolItemProps {
   name: string;
-  description: string;
-  enabled: boolean;
-  onToggle: (enabled: boolean) => void;
+  description?: string;
 }
 
-export function ToolItem({ name, description, enabled, onToggle }: ToolItemProps) {
+export function ToolItem({ name, description }: ToolItemProps) {
   const nameRef = useRef<HTMLDivElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
+  const trimmedDescription = useMemo(() => {
+    const value = typeof description === 'string' ? description.trim() : '';
+    return value.length > 0 ? value : null;
+  }, [description]);
 
   useEffect(() => {
     const checkTruncation = () => {
@@ -35,8 +36,8 @@ export function ToolItem({ name, description, enabled, onToggle }: ToolItemProps
   );
 
   return (
-    <div className="flex items-start justify-between p-3 border border-[var(--agyn-border-default)] rounded-[10px] bg-[var(--agyn-bg-light)]">
-      <div className="flex-1 min-w-0 mr-3">
+    <div className="p-3 border border-[var(--agyn-border-default)] rounded-[10px] bg-[var(--agyn-bg-light)]">
+      <div className="min-w-0">
         {isTruncated ? (
           <Tooltip>
             <TooltipTrigger className="w-full text-left">
@@ -49,17 +50,11 @@ export function ToolItem({ name, description, enabled, onToggle }: ToolItemProps
         ) : (
           nameElement
         )}
-        <div className="text-xs text-[var(--agyn-gray)] mt-0.5">
-          {description}
-        </div>
-      </div>
-      <div className="flex-shrink-0">
-        <Toggle
-          label=""
-          description=""
-          checked={enabled}
-          onCheckedChange={onToggle}
-        />
+        {trimmedDescription && (
+          <div className="text-xs text-[var(--agyn-gray)] mt-0.5">
+            {trimmedDescription}
+          </div>
+        )}
       </div>
     </div>
   );

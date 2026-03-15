@@ -32,7 +32,6 @@ const graphResponse = {
     },
   ],
   edges: [],
-  variables: [],
 };
 
 const templatesResponse = [
@@ -45,7 +44,7 @@ const templatesResponse = [
   },
 ];
 
-const statusResponse = { provisionStatus: { state: 'ready' }, isPaused: false };
+const statusResponse = { provisionStatus: { state: 'ready' } };
 
 describe('useGraphData', () => {
   beforeEach(() => {

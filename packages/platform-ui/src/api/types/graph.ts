@@ -25,7 +25,7 @@ export interface TemplateSchema {
 }
 
 export interface ProvisionStatus { state: ProvisionState; details?: unknown }
-export interface NodeStatus { isPaused?: boolean; provisionStatus?: ProvisionStatus }
+export interface NodeStatus { provisionStatus?: ProvisionStatus }
 
 export interface ReminderDTO { id: string; threadId: string; note: string; at: string }
 

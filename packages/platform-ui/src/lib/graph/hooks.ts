@@ -4,7 +4,7 @@ import { graph as api } from '@/api/modules/graph';
 import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import { graphSocket } from './socket';
 import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
-import { z } from 'zod';
+import { notifyError } from '../notify';
 
 export function useTemplates() {
   return useQuery({
@@ -13,8 +13,6 @@ export function useTemplates() {
     staleTime: 1000 * 60 * 60, // 1h
   });
 }
-
-import { notifyError } from '../notify';
 
 export function useNodeStatus(nodeId: string) {
   const qc = useQueryClient();
@@ -146,9 +144,8 @@ export function useNodeAction(nodeId: string) {
       const prev = qc.getQueryData<NodeStatus>(key);
       // Optimistic update rules
       let optimistic: Partial<NodeStatus> = {};
-      if (action === 'provision') optimistic = { provisionStatus: { state: 'provisioning' as const }, isPaused: false };
-      if (action === 'deprovision')
-        optimistic = { provisionStatus: { state: 'deprovisioning' as const }, isPaused: false };
+      if (action === 'provision') optimistic = { provisionStatus: { state: 'provisioning' as const } };
+      if (action === 'deprovision') optimistic = { provisionStatus: { state: 'deprovisioning' as const } };
       qc.setQueryData(key, { ...(prev || {}), ...optimistic });
       return { prev };
     },
@@ -192,106 +189,48 @@ export function useSaveGraph() {
   });
 }
 
-// Typed MCP node state accessors
-const McpToolSchema = z.object({
-  name: z.string(),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  inputSchema: z.unknown().optional(),
-  outputSchema: z.unknown().optional(),
-});
+type McpTool = { name: string; description?: string; title?: string };
 
-const McpStateSchema = z.object({
-  mcp: z
-    .object({
-      tools: z.array(McpToolSchema).default([]).optional(),
-      enabledTools: z.array(z.string()).optional(),
-      toolsUpdatedAt: z.union([z.string(), z.number()]).optional(),
-    })
-    .partial()
-    .optional(),
-});
-
-type McpTool = z.infer<typeof McpToolSchema>;
-
-export function useMcpNodeState(nodeId: string | null | undefined) {
-  const qc = useQueryClient();
+export function useMcpTools(nodeId: string | null | undefined) {
   const resolvedId = typeof nodeId === 'string' && nodeId.length > 0 ? nodeId : null;
   const queryKey = useMemo(
-    () => (resolvedId ? (['graph', 'node', resolvedId, 'state', 'mcp'] as const) : null),
+    () => (resolvedId ? (['graph', 'node', resolvedId, 'tools'] as const) : null),
     [resolvedId],
   );
   const safeQueryKey = useMemo(
-    () => queryKey ?? (['graph', 'node', '__none__', 'state', 'mcp'] as const),
+    () => queryKey ?? (['graph', 'node', '__none__', 'tools'] as const),
     [queryKey],
   );
 
-  const q = useQuery<{ tools: McpTool[]; enabledTools?: string[] }>({
+  const q = useQuery<{ tools: McpTool[]; updatedAt?: string }>({
     queryKey: safeQueryKey,
     queryFn: async () => {
-      if (!resolvedId) return { tools: [], enabledTools: undefined };
-      const res = await api.getNodeState(resolvedId);
-      const state = (res?.state ?? {}) as Record<string, unknown>;
-      const parsed = McpStateSchema.safeParse(state);
-      if (!parsed.success) return { tools: [], enabledTools: undefined };
-      return { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools };
+      if (!resolvedId) return { tools: [], updatedAt: undefined };
+      const res = await api.discoverNodeTools(resolvedId);
+      const tools = Array.isArray(res?.tools)
+        ? res.tools
+            .filter((tool) => tool && typeof tool.name === 'string')
+            .map((tool) => ({
+              name: tool.name,
+              description: tool.description,
+            }))
+        : [];
+      return { tools, updatedAt: res?.updatedAt };
     },
     enabled: resolvedId !== null,
-    staleTime: 2000,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
-  useEffect(() => {
-    if (!resolvedId || !queryKey) return;
-    graphSocket.connect();
-    const room = `node:${resolvedId}`;
-    graphSocket.subscribe([room]);
-    const off = graphSocket.onNodeState(resolvedId, (ev) => {
-      const s = (ev?.state ?? {}) as Record<string, unknown>;
-      const parsed = McpStateSchema.safeParse(s);
-      if (!parsed.success) return;
-      qc.setQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(queryKey, {
-        tools: parsed.data.mcp?.tools ?? [],
-        enabledTools: parsed.data.mcp?.enabledTools,
-      });
-    });
-    return () => {
-      off();
-      graphSocket.unsubscribe([room]);
-    };
-  }, [qc, queryKey, resolvedId]);
-
-  const m = useMutation({
-    mutationFn: async (enabledTools: string[]) => {
-      if (!resolvedId) return enabledTools;
-      await api.putNodeState(resolvedId, { mcp: { enabledTools } });
-      return enabledTools;
-    },
-    onMutate: async (enabledTools) => {
-      if (!resolvedId || !queryKey) return { prev: undefined };
-      await qc.cancelQueries({ queryKey });
-      const prev = qc.getQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(queryKey);
-      qc.setQueryData(queryKey, { tools: prev?.tools ?? [], enabledTools });
-      return { prev };
-    },
-    onError: (err: unknown, _vars, ctx) => {
-      if (queryKey && ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
-      const message = err instanceof Error ? err.message : String(err);
-      notifyError(`Failed to update MCP tools: ${message}`);
-    },
-  });
-
-  const setEnabledTools = useCallback(
-    (next: string[]) => {
-      if (!resolvedId) return;
-      m.mutate(next);
-    },
-    [m, resolvedId],
-  );
+  const discoverTools = useCallback(async () => {
+    if (!resolvedId) return;
+    await q.refetch();
+  }, [q, resolvedId]);
 
   return {
     tools: q.data?.tools ?? [],
-    enabledTools: q.data?.enabledTools,
-    setEnabledTools,
-    isLoading: resolvedId ? q.isPending : false,
+    updatedAt: q.data?.updatedAt,
+    discoverTools,
+    isLoading: resolvedId ? q.isFetching : false,
   } as const;
 }

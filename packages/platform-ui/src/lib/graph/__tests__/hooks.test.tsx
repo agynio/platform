@@ -15,7 +15,7 @@ describe('graph hooks', () => {
     hoisted.getMock.mockReset();
     hoisted.getMock.mockImplementation(async (url: string) => {
       if (url.endsWith('/api/graph/templates')) return [{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }];
-      if (String(url).includes('/status')) return { isPaused: false };
+      if (String(url).includes('/status')) return { provisionStatus: { state: 'not_ready' } };
       if (String(url).includes('/reminders')) return { items: [{ id: '1', threadId: 't', note: 'n', at: new Date().toISOString() }] };
       return {};
     });
@@ -58,18 +58,18 @@ describe('graph hooks', () => {
 
     try {
       await waitFor(() => expect(result.current.data).toBeTruthy());
-      expect(result.current.data?.isPaused).toBe(false);
+      expect(result.current.data?.provisionStatus?.state).toBe('not_ready');
       expect(subscribeSpy).toHaveBeenCalledWith(['node:n1']);
       expect(connectSpy).toHaveBeenCalled();
       expect(onNodeStatusSpy).toHaveBeenCalled();
 
       const fresh = new Date().toISOString();
-      statusHandler?.({ nodeId: 'n1', isPaused: true, updatedAt: fresh } as NodeStatusEvent);
-      await waitFor(() => expect(result.current.data?.isPaused).toBe(true));
+      statusHandler?.({ nodeId: 'n1', provisionStatus: { state: 'ready' }, updatedAt: fresh } as NodeStatusEvent);
+      await waitFor(() => expect(result.current.data?.provisionStatus?.state).toBe('ready'));
 
       const stale = new Date(Date.now() - 60000).toISOString();
-      statusHandler?.({ nodeId: 'n1', isPaused: false, updatedAt: stale } as NodeStatusEvent);
-      await waitFor(() => expect(result.current.data?.isPaused).toBe(true));
+      statusHandler?.({ nodeId: 'n1', provisionStatus: { state: 'not_ready' }, updatedAt: stale } as NodeStatusEvent);
+      await waitFor(() => expect(result.current.data?.provisionStatus?.state).toBe('ready'));
 
       reconnectHandler?.();
       await waitFor(() => expect(invalidateSpy).toHaveBeenCalled());

@@ -1,24 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import type { ResolveOptions, ResolveResult, Providers } from './references';
 import { resolveReferences, ResolveError } from './references';
 import { VaultService } from '../vault/vault.service';
-import { GraphVariablesService } from '../graph/services/graphVariables.service';
+import { TEAMS_GRPC_CLIENT } from '../teams/teamsGrpc.token';
+import type { TeamsGrpcClient } from '../teams/teamsGrpc.client';
 
 @Injectable()
 export class ReferenceResolverService {
   constructor(
-    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
     @Inject(VaultService) private readonly vaultService: VaultService,
+    @Inject(TEAMS_GRPC_CLIENT) private readonly teamsClient: TeamsGrpcClient,
   ) {}
-
-  private getVariablesService(): GraphVariablesService | undefined {
-    try {
-      return this.moduleRef.get(GraphVariablesService, { strict: false });
-    } catch {
-      return undefined;
-    }
-  }
 
   private buildProviders(
     graphName: string | undefined,
@@ -35,14 +27,16 @@ export class ReferenceResolverService {
       return this.vaultService.getSecret({ mount: ref.mount ?? 'secret', path: ref.path, key: ref.key });
     };
     const variable = async (ref: { name: string }) => {
-      const variablesService = this.getVariablesService();
-      if (!variablesService) {
-        throw new ResolveError('provider_missing', 'GraphVariablesService unavailable', {
+      if (!this.teamsClient) {
+        throw new ResolveError('provider_missing', 'TeamsGrpcClient unavailable', {
           path: basePath ?? '/variable',
           source: 'variable',
         });
       }
-      return variablesService.resolveValue(graphName ?? 'main', ref.name);
+      const response = await this.teamsClient.resolveVariable({ key: ref.name });
+      if (!response?.found) return undefined;
+      const value = response.value?.trim?.() ?? response.value;
+      return value && value.length > 0 ? value : undefined;
     };
     return {
       secret,

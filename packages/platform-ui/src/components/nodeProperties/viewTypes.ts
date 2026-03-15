@@ -24,7 +24,7 @@ type WorkspaceSupportProps = Pick<
 
 type McpSupportProps = Pick<
   NodePropertiesSidebarProps,
-  'tools' | 'enabledTools' | 'onToggleTool' | 'toolsLoading'
+  'tools' | 'toolsUpdatedAt' | 'onDiscoverTools' | 'toolsLoading'
 >;
 
 export type NodePropertiesViewPropsMap = {

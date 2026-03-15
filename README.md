@@ -286,7 +286,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 
 ## API Docs
 - See docs/api/index.md for current HTTP and socket endpoints:
-  - /api/templates, /api/graph, /graph/templates, /graph/nodes/:nodeId/status, /api/agents/runs/:runId/events, /api/agents/context-items, dynamic-config schema, Vault proxy routes, Nix proxy routes, socket events.
+  - /api/templates, /api/graph, /graph/templates, /graph/nodes/:nodeId/status, /graph/nodes/:nodeId/discover-tools, /api/graph/variables, /api/agents/runs/:runId/events, /api/agents/context-items, Vault proxy routes, Nix proxy routes, socket events.
 - No OpenAPI/Swagger spec checked in; discover via docs/api/index.md and controllers under packages/platform-server/src/graph/ (GraphApiModule wiring).
 
 ## Deployment

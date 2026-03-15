@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { McpSection } from '../McpSection';
 import type { NodeConfig } from '../types';
@@ -21,8 +21,8 @@ function McpNodeConfigContent({
   config,
   onConfigChange,
   tools,
-  enabledTools,
-  onToggleTool,
+  toolsUpdatedAt,
+  onDiscoverTools,
   toolsLoading,
   secretSuggestions,
   variableSuggestions,
@@ -41,6 +41,10 @@ function McpNodeConfigContent({
   const restartConfig = useMemo(
     () => (isRecord(configRecord.restart) ? (configRecord.restart as Record<string, unknown>) : {}),
     [configRecord.restart],
+  );
+  const toolFilterConfig = useMemo(
+    () => (isRecord(configRecord.toolFilter) ? (configRecord.toolFilter as Record<string, unknown>) : undefined),
+    [configRecord.toolFilter],
   );
   const mcpRestartMaxAttempts = readNumber(restartConfig.maxAttempts);
   const mcpRestartBackoff = readNumber(restartConfig.backoffMs);
@@ -64,7 +68,21 @@ function McpNodeConfigContent({
   const [envOpen, setEnvOpen] = useState(true);
   const [limitsOpen, setLimitsOpen] = useState(false);
 
-  const enabledToolSet = useMemo(() => new Set(enabledTools ?? []), [enabledTools]);
+  const derivedToolFilterMode = toolFilterConfig?.mode === 'deny' ? 'deny' : 'allow';
+  const toolFilterMatchers = useMemo(() => {
+    const rawMatchers = toolFilterConfig?.matchers;
+    if (!Array.isArray(rawMatchers)) return [];
+    return rawMatchers
+      .map((matcher) => (typeof matcher === 'string' ? matcher.trim() : ''))
+      .filter((matcher) => matcher.length > 0);
+  }, [toolFilterConfig?.matchers]);
+  const [toolFilterMode, setToolFilterMode] = useState<'allow' | 'deny'>(derivedToolFilterMode);
+
+  useEffect(() => {
+    setToolFilterMode(derivedToolFilterMode);
+  }, [derivedToolFilterMode]);
+
+  const toolFilterText = useMemo(() => toolFilterMatchers.join('\n'), [toolFilterMatchers]);
   const toolList = useMemo(() => (Array.isArray(tools) ? tools : []), [tools]);
 
   const handleRestartChange = useCallback(
@@ -108,11 +126,31 @@ function McpNodeConfigContent({
     [envOpen, envVars, onAdd, onNameChange, onRemove, onSourceTypeChange, onValueChange, onValueFocus, secretSuggestions, variableSuggestions],
   );
 
-  const handleToggleTool = useCallback(
-    (toolName: string, enabled: boolean) => {
-      onToggleTool?.(toolName, enabled);
+  const handleToolFilterModeChange = useCallback(
+    (value: string) => {
+      const nextMode = value === 'deny' ? 'deny' : 'allow';
+      setToolFilterMode(nextMode);
+      if (toolFilterMatchers.length === 0) {
+        return;
+      }
+      onConfigChange?.({ toolFilter: { mode: nextMode, matchers: toolFilterMatchers } });
     },
-    [onToggleTool],
+    [onConfigChange, toolFilterMatchers],
+  );
+
+  const handleToolFilterMatchersChange = useCallback(
+    (value: string) => {
+      const matchers = value
+        .split('\n')
+        .map((matcher) => matcher.trim())
+        .filter((matcher) => matcher.length > 0);
+      if (matchers.length === 0) {
+        onConfigChange?.({ toolFilter: undefined });
+        return;
+      }
+      onConfigChange?.({ toolFilter: { mode: toolFilterMode, matchers } });
+    },
+    [onConfigChange, toolFilterMode],
   );
 
   return (
@@ -135,11 +173,17 @@ function McpNodeConfigContent({
         restartBackoffMs: mcpRestartBackoff,
       }}
       onLimitChange={handleLimitChange}
+      toolFilter={{
+        mode: toolFilterMode,
+        matchers: toolFilterText,
+        onModeChange: handleToolFilterModeChange,
+        onMatchersChange: handleToolFilterMatchersChange,
+      }}
       tools={{
         items: toolList,
-        enabled: enabledToolSet,
         loading: Boolean(toolsLoading),
-        onToggle: handleToggleTool,
+        updatedAt: toolsUpdatedAt,
+        onDiscover: onDiscoverTools,
       }}
     />
   );

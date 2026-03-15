@@ -11,7 +11,6 @@ import type {
 export interface GraphNodeMetadata {
   template: string;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
   position?: { x: number; y: number };
 }
 
@@ -125,11 +124,9 @@ export function mapPersistedGraphToNodes(
     const position = normalizePosition(node.position);
     const title = deriveTitle(node, tpl);
     const config = node.config ? { ...(node.config as Record<string, unknown>) } : undefined;
-    const state = node.state ? { ...(node.state as Record<string, unknown>) } : undefined;
     metadata.set(node.id, {
       template: node.template,
       config,
-      state,
       position,
     });
     const ports = {
@@ -145,7 +142,6 @@ export function mapPersistedGraphToNodes(
       y: position.y,
       status: DEFAULT_STATUS,
       config,
-      state,
       runtime: undefined,
       capabilities: deriveCapabilities(tpl),
       ports,
@@ -170,14 +166,13 @@ export interface BuildGraphNodeFromTemplateOptions {
   title?: string;
   status?: GraphNodeStatus;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
 }
 
 export function buildGraphNodeFromTemplate(
   template: TemplateSchema,
   options: BuildGraphNodeFromTemplateOptions,
 ): { node: GraphNodeConfig; metadata: GraphNodeMetadata } {
-  const { id, position, status: desiredStatus, config: initialConfig, state: initialState } = options;
+  const { id, position, status: desiredStatus, config: initialConfig } = options;
   const rawTitle = typeof options.title === 'string' ? options.title.trim() : '';
   const fallbackTitle = typeof template.title === 'string' && template.title.trim().length > 0
     ? template.title.trim()
@@ -187,7 +182,6 @@ export function buildGraphNodeFromTemplate(
   const status = desiredStatus ?? DEFAULT_STATUS;
 
   const config = initialConfig ? { ...initialConfig } : undefined;
-  const state = initialState ? { ...initialState } : undefined;
   const ports: GraphNodeConfig['ports'] = {
     inputs: toPortList(template?.targetPorts),
     outputs: toPortList(template?.sourcePorts),
@@ -202,7 +196,6 @@ export function buildGraphNodeFromTemplate(
     y: Number.isFinite(position.y) ? position.y : 0,
     status,
     config,
-    state,
     runtime: undefined,
     capabilities: deriveCapabilities(template),
     ports,
@@ -212,7 +205,6 @@ export function buildGraphNodeFromTemplate(
   const metadata: GraphNodeMetadata = {
     template: template.name,
     config: config ? { ...config } : undefined,
-    state: state ? { ...state } : undefined,
     position: {
       x: Number.isFinite(position.x) ? position.x : 0,
       y: Number.isFinite(position.y) ? position.y : 0,
@@ -232,7 +224,6 @@ function toPersistedNode(node: GraphNodeConfig, meta: GraphNodeMetadata): GraphP
     template: meta.template,
     position,
     config: meta.config ? { ...meta.config } : undefined,
-    state: meta.state ? { ...meta.state } : undefined,
   } satisfies GraphPersistedNode;
 }
 

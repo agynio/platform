@@ -6,7 +6,7 @@ import NodeDetailsPanel from '../NodeDetailsPanel';
 
 // No templates provider mock needed; actions and badges are driven by status alone
 
-let mockStatus: any = { isPaused: false, provisionStatus: { state: 'not_ready' } };
+let mockStatus: any = { provisionStatus: { state: 'not_ready' } };
 let mockMutate = vi.fn();
 
 vi.mock('../../../lib/graph/hooks', () => ({
@@ -16,7 +16,7 @@ vi.mock('../../../lib/graph/hooks', () => ({
 
 describe('NodeDetailsPanel', () => {
   beforeEach(() => {
-    mockStatus = { isPaused: false, provisionStatus: { state: 'not_ready' } };
+    mockStatus = { provisionStatus: { state: 'not_ready' } };
     mockMutate = vi.fn();
   });
 
@@ -37,7 +37,7 @@ describe('NodeDetailsPanel', () => {
   });
 
   it('enables Provision on not_ready and calls provision', () => {
-    mockStatus = { isPaused: false, provisionStatus: { state: 'not_ready' } };
+    mockStatus = { provisionStatus: { state: 'not_ready' } };
     renderPanel();
     const start = screen.getByText('Provision');
     expect(start).not.toBeDisabled();
@@ -48,7 +48,7 @@ describe('NodeDetailsPanel', () => {
   // Pause/Resume removed; Start/Stop only per server API alignment
 
   it('enables Deprovision when ready', () => {
-    mockStatus = { isPaused: false, provisionStatus: { state: 'ready' } };
+    mockStatus = { provisionStatus: { state: 'ready' } };
     renderPanel();
     const stop = screen.getByText('Deprovision');
     expect(stop).not.toBeDisabled();

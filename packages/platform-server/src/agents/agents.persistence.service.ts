@@ -1278,7 +1278,7 @@ export class AgentsPersistenceService {
 
     const agentById = new Map<string, Agent>();
     for (const agent of agents) {
-      const id = readString(agent.id);
+      const id = readString(agent.meta?.id);
       if (!id) continue;
       agentById.set(id, agent);
     }
@@ -1295,8 +1295,10 @@ export class AgentsPersistenceService {
   }
 
   private async listAllTeamsAgents(): Promise<Agent[]> {
-    return listAllPages((page, perPage) =>
-      this.teamsClient.listAgents(create(ListAgentsRequestSchema, { page, perPage })),
+    return listAllPages((pageToken, pageSize) =>
+      this.teamsClient
+        .listAgents(create(ListAgentsRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.agents, nextPageToken: response.nextPageToken })),
     );
   }
 

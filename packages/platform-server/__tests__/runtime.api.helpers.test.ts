@@ -15,7 +15,6 @@ class StubRepo extends GraphRepository {
   async initIfNeeded(): Promise<void> {}
   async get(): Promise<null> { return null; }
   async upsert(): Promise<never> { throw new Error('not-implemented'); }
-  async upsertNodeState(): Promise<void> {}
 }
 function makeRuntimeAndRegistry() {
   const moduleRef = new ModuleRefStub() as ModuleRef;

@@ -3,29 +3,25 @@ export const MAX_PAGES = 50;
 
 export type PaginatedResponse<T> = {
   items: T[];
-  page: number;
-  perPage: number;
-  total: bigint;
+  nextPageToken?: string | null;
 };
 
 export const listAllPages = async <T>(
-  fetchPage: (page: number, perPage: number) => Promise<PaginatedResponse<T>>,
+  fetchPage: (pageToken: string | undefined, pageSize: number) => Promise<PaginatedResponse<T>>,
 ): Promise<T[]> => {
   const items: T[] = [];
-  let page = 1;
+  let pageToken: string | undefined = undefined;
   for (let i = 0; i < MAX_PAGES; i += 1) {
-    const response = await fetchPage(page, DEFAULT_PAGE_SIZE);
+    const response = await fetchPage(pageToken, DEFAULT_PAGE_SIZE);
     const pageItems = response.items;
     items.push(...pageItems);
-    const perPage = response.perPage;
-    if (perPage === 0) {
-      throw new Error('teams_pagination_per_page_zero');
+    const nextToken = readString(response.nextPageToken ?? undefined);
+    if (!nextToken) break;
+    if (nextToken === pageToken) {
+      throw new Error('teams_pagination_duplicate_token');
     }
-    const total = Number(response.total);
-    const reachedEnd = response.page * perPage >= total;
-    if (reachedEnd) break;
     if (pageItems.length === 0) break;
-    page = response.page + 1;
+    pageToken = nextToken;
   }
   return items;
 };

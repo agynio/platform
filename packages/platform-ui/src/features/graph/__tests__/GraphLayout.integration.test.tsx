@@ -26,7 +26,7 @@ const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
   useGraphSocket: vi.fn(),
   useNodeStatus: vi.fn(),
-  useMcpNodeState: vi.fn(),
+  useMcpTools: vi.fn(),
   useNodeAction: vi.fn(),
   useTemplates: vi.fn(),
 }));
@@ -67,7 +67,7 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
 }));
 
 vi.mock('@/lib/graph/hooks', () => ({
-  useMcpNodeState: hookMocks.useMcpNodeState,
+  useMcpTools: hookMocks.useMcpTools,
   useTemplates: hookMocks.useTemplates,
 }));
 
@@ -109,7 +109,6 @@ type GraphDataMock = {
   savingErrorMessage: string | null;
   updateNode: vi.Mock;
   applyNodeStatus: vi.Mock;
-  applyNodeState: vi.Mock;
   setEdges: vi.Mock;
   removeNodes: vi.Mock;
   addNode: vi.Mock;
@@ -126,7 +125,6 @@ function mockGraphData(overrides: Partial<GraphDataMock> = {}): GraphDataMock {
     savingErrorMessage: null,
     updateNode: vi.fn(),
     applyNodeStatus: vi.fn(),
-    applyNodeState: vi.fn(),
     setEdges: vi.fn(),
     removeNodes: vi.fn(),
     addNode: vi.fn(),
@@ -143,10 +141,10 @@ describe('GraphLayout', () => {
     sidebarProps.length = 0;
     emptySidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
-    hookMocks.useMcpNodeState.mockReturnValue({
+    hookMocks.useMcpTools.mockReturnValue({
       tools: [],
-      enabledTools: [],
-      setEnabledTools: vi.fn(),
+      updatedAt: undefined,
+      discoverTools: vi.fn(),
       isLoading: false,
     });
     hookMocks.useTemplates.mockReturnValue({ data: [], isLoading: false, isError: false });
@@ -161,7 +159,6 @@ describe('GraphLayout', () => {
   it('renders agent fallback title when persisted title is empty', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -180,7 +177,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -199,7 +195,6 @@ describe('GraphLayout', () => {
   it('respects literal config title even when matching template', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -218,7 +213,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -239,7 +233,6 @@ describe('GraphLayout', () => {
   it('derives agent title from name when role missing', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -258,7 +251,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -279,7 +271,6 @@ describe('GraphLayout', () => {
   it('falls back to template when title and profile are empty', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -298,7 +289,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -319,7 +309,6 @@ describe('GraphLayout', () => {
   it('passes sidebar config/state and persists config updates', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -339,19 +328,16 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
 
-    hookMocks.useGraphSocket.mockImplementation(({ onStatus, onState }) => {
+    hookMocks.useGraphSocket.mockImplementation(({ onStatus }) => {
       onStatus?.({
         nodeId: 'node-1',
         updatedAt: new Date().toISOString(),
         provisionStatus: { state: 'ready' },
-        isPaused: false,
       } as any);
-      onState?.({ nodeId: 'node-1', state: { foo: 'bar' } } as any);
     });
 
     const refetchStatus = vi.fn();
@@ -405,8 +391,8 @@ describe('GraphLayout', () => {
       ensureSecretKeys?: () => Promise<string[]>;
       ensureVariableKeys?: () => Promise<string[]>;
       tools?: unknown[];
-      enabledTools?: unknown[];
-      onToggleTool?: (name: string, enabled: boolean) => void;
+      toolsUpdatedAt?: string;
+      onDiscoverTools?: () => void;
       toolsLoading?: boolean;
       onProvision?: () => void;
       onDeprovision?: () => void;
@@ -423,8 +409,8 @@ describe('GraphLayout', () => {
     expect(typeof sidebar.ensureSecretKeys).toBe('function');
     expect(typeof sidebar.ensureVariableKeys).toBe('function');
     expect(Array.isArray(sidebar.tools)).toBe(true);
-    expect(Array.isArray(sidebar.enabledTools)).toBe(true);
-    expect(typeof sidebar.onToggleTool).toBe('function');
+    expect(sidebar.toolsUpdatedAt).toBeUndefined();
+    expect(typeof sidebar.onDiscoverTools).toBe('function');
     expect(typeof sidebar.toolsLoading).toBe('boolean');
     expect(typeof sidebar.onProvision).toBe('function');
     expect(typeof sidebar.onDeprovision).toBe('function');
@@ -470,7 +456,6 @@ describe('GraphLayout', () => {
   it('restores agent profile fallback when title cleared in sidebar', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     const graph = mockGraphData({
@@ -489,7 +474,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -562,7 +546,6 @@ describe('GraphLayout', () => {
   it('persists agent title edits and restores the saved value after refresh', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     const graph = mockGraphData({
@@ -581,7 +564,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -659,7 +641,6 @@ describe('GraphLayout', () => {
   it('retains agent title when only profile fields change', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     const graph = mockGraphData({
@@ -678,7 +659,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -760,7 +740,6 @@ describe('GraphLayout', () => {
   it('keeps agent title empty and updates placeholder fallback when profile fields change', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     const graph = mockGraphData({
@@ -779,7 +758,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -859,7 +837,6 @@ describe('GraphLayout', () => {
   it('keeps stored agent title when distinct from template', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -878,7 +855,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 
@@ -899,7 +875,6 @@ describe('GraphLayout', () => {
   it('renders backend templates in the empty sidebar', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -908,7 +883,6 @@ describe('GraphLayout', () => {
       edges: [],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
@@ -942,7 +916,6 @@ describe('GraphLayout', () => {
   it('provides a sidebar status message when templates fail to load', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -951,7 +924,6 @@ describe('GraphLayout', () => {
       edges: [],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
@@ -971,7 +943,6 @@ describe('GraphLayout', () => {
   it('shows a loading status message while templates are fetching', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -980,7 +951,6 @@ describe('GraphLayout', () => {
       edges: [],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
@@ -1089,7 +1059,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
       setEdges,
       removeNodes,
     });
@@ -1156,7 +1125,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
       setEdges,
       removeNodes,
     });
@@ -1208,7 +1176,6 @@ describe('GraphLayout', () => {
       savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
       setEdges,
       removeNodes,
     });
@@ -1276,7 +1243,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
       setEdges,
       removeNodes,
     });
@@ -1325,11 +1291,11 @@ describe('GraphLayout', () => {
     await waitFor(() => expect(setEdges).toHaveBeenCalledWith([]));
   });
 
-  it('wires MCP tools state into the sidebar and toggles enabled tools', async () => {
+  it('wires MCP tools into the sidebar and triggers discovery', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
-    const setEnabledTools = vi.fn();
+    const discoverTools = vi.fn();
 
     mockGraphData({
       nodes: [
@@ -1347,20 +1313,19 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
       setEdges,
       removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
     hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
-    hookMocks.useMcpNodeState.mockReturnValue({
+    hookMocks.useMcpTools.mockReturnValue({
       tools: [
         { name: 'search', title: 'Search' },
         { name: 'summarize', title: 'Summarize' },
       ],
-      enabledTools: ['search'],
-      setEnabledTools,
+      updatedAt: '2024-06-01T12:00:00.000Z',
+      discoverTools,
       isLoading: false,
     });
 
@@ -1382,32 +1347,29 @@ describe('GraphLayout', () => {
     });
 
     await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+    expect(discoverTools).not.toHaveBeenCalled();
 
     const sidebar = sidebarProps.at(-1) as {
       tools?: unknown;
-      enabledTools?: unknown;
+      toolsUpdatedAt?: string;
       toolsLoading?: boolean;
-      onToggleTool?: (name: string, enabled: boolean) => void;
+      onDiscoverTools?: () => void;
     };
 
     expect(sidebar.tools).toEqual([
       { name: 'search', title: 'Search' },
       { name: 'summarize', title: 'Summarize' },
     ]);
-    expect(sidebar.enabledTools).toEqual(['search']);
+    expect(sidebar.toolsUpdatedAt).toBe('2024-06-01T12:00:00.000Z');
     expect(sidebar.toolsLoading).toBe(false);
 
-    sidebar.onToggleTool?.('summarize', true);
-    sidebar.onToggleTool?.('search', false);
-
-    expect(setEnabledTools).toHaveBeenNthCalledWith(1, ['search', 'summarize']);
-    expect(setEnabledTools).toHaveBeenNthCalledWith(2, []);
+    sidebar.onDiscoverTools?.();
+    await waitFor(() => expect(discoverTools).toHaveBeenCalledTimes(1));
   });
 
   it('preserves selection when switching between nodes in any event order', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -1438,7 +1400,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
@@ -1495,7 +1456,6 @@ describe('GraphLayout', () => {
   it('wires sidebar providers through graph services', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
@@ -1515,7 +1475,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
       removeNodes,
     });
@@ -1607,7 +1566,6 @@ describe('GraphLayout', () => {
   it('clears sidebar selection when the node disappears', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     const graphState = {
@@ -1630,7 +1588,6 @@ describe('GraphLayout', () => {
       savingErrorMessage: null as string | null,
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     };
 
@@ -1669,7 +1626,6 @@ describe('GraphLayout', () => {
   it('omits UI-only keys when persisting agent config updates', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
-    const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
     mockGraphData({
@@ -1693,7 +1649,6 @@ describe('GraphLayout', () => {
       ],
       updateNode,
       applyNodeStatus,
-      applyNodeState,
       setEdges,
     });
 

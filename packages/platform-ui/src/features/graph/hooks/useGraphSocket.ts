@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NodeStatusEvent } from '@/lib/graph/types';
-import { graphSocketService, type NodeStateEvent } from '../services/socket';
+import { graphSocketService } from '../services/socket';
 
 export interface UseGraphSocketOptions {
   nodeIds: string[];
   onStatus?: (event: NodeStatusEvent) => void;
-  onState?: (event: NodeStateEvent) => void;
 }
 
 export interface UseGraphSocketResult {
@@ -23,14 +22,11 @@ function normalizeNodeIds(nodeIds: string[]): string[] {
 }
 
 export function useGraphSocket(options: UseGraphSocketOptions): UseGraphSocketResult {
-  const { onStatus, onState } = options;
+  const { onStatus } = options;
   const nodeIds = useMemo(() => normalizeNodeIds(options.nodeIds), [options.nodeIds]);
   const statusHandlerRef = useRef<typeof onStatus>(onStatus);
-  const stateHandlerRef = useRef<typeof onState>(onState);
   statusHandlerRef.current = onStatus;
-  stateHandlerRef.current = onState;
   const enableStatus = Boolean(onStatus);
-  const enableState = Boolean(onState);
 
   const [connected, setConnected] = useState(() => graphSocketService.isConnected());
 
@@ -65,15 +61,6 @@ export function useGraphSocket(options: UseGraphSocketOptions): UseGraphSocketRe
       }
     }
 
-    if (enableState) {
-      for (const id of nodeIds) {
-        const off = graphSocketService.onNodeState(id, (event) => {
-          stateHandlerRef.current?.(event);
-        });
-        disconnectors.push(off);
-      }
-    }
-
     const resubscribe = () => {
       graphSocketService.subscribeToNodes(nodeIds);
     };
@@ -86,7 +73,7 @@ export function useGraphSocket(options: UseGraphSocketOptions): UseGraphSocketRe
       offReconnect();
       offConnect();
     };
-  }, [nodeIds, enableStatus, enableState]);
+  }, [nodeIds, enableStatus]);
 
   return { connected };
 }

@@ -72,8 +72,8 @@ export interface NodePropertiesSidebarProps {
   canDeprovision?: boolean;
   isActionPending?: boolean;
   tools?: McpToolDescriptor[];
-  enabledTools?: string[] | null;
-  onToggleTool?: (toolName: string, nextEnabled: boolean) => void;
+  toolsUpdatedAt?: string;
+  onDiscoverTools?: () => void;
   toolsLoading?: boolean;
   nixPackageSearch?: (query: string) => Promise<Array<{ value: string; label: string }>>;
   fetchNixPackageVersions?: (name: string) => Promise<string[]>;

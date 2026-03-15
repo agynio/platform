@@ -23,30 +23,30 @@ import {
 describe('TeamsGraphSource', () => {
   it('maps Teams entities and attachments into graph nodes/edges', async () => {
     const agent = create(AgentSchema, {
-      id: 'agent-1',
+      meta: { id: 'agent-1' },
       title: ' Agent One ',
       description: '',
       config: create(AgentConfigSchema, { name: ' Casey ', role: ' Lead ', model: 'gpt-4' }),
     });
     const tool = create(ToolSchema, {
-      id: 'tool-shell',
+      meta: { id: 'tool-shell' },
       name: ' Shell Tool ',
       description: 'ignored',
       type: ToolType.SHELL_COMMAND,
       config: { mode: 'fast' },
     });
     const mcp = create(McpServerSchema, {
-      id: 'mcp-1',
+      meta: { id: 'mcp-1' },
       title: ' MCP Server ',
       config: { namespace: 'tools', command: 'run', workdir: '/srv', env: [{ name: 'TOKEN', value: 'secret' }] },
     });
     const detachedMcp = create(McpServerSchema, {
-      id: 'mcp-2',
+      meta: { id: 'mcp-2' },
       title: ' Detached MCP ',
       config: { namespace: 'detached', command: 'run2' },
     });
     const workspace = create(WorkspaceConfigurationSchema, {
-      id: 'workspace-1',
+      meta: { id: 'workspace-1' },
       title: ' Workspace ',
       config: create(WorkspaceConfigSchema, {
         image: 'ubuntu',
@@ -55,7 +55,7 @@ describe('TeamsGraphSource', () => {
       }),
     });
     const detachedWorkspace = create(WorkspaceConfigurationSchema, {
-      id: 'workspace-2',
+      meta: { id: 'workspace-2' },
       title: ' Workspace Two ',
       config: create(WorkspaceConfigSchema, {
         image: 'debian',
@@ -63,7 +63,7 @@ describe('TeamsGraphSource', () => {
       }),
     });
     const memoryBucket = create(MemoryBucketSchema, {
-      id: 'memory-1',
+      meta: { id: 'memory-1' },
       title: ' Memory ',
       config: create(MemoryBucketConfigSchema, {
         scope: MemoryBucketScope.GLOBAL,
@@ -72,7 +72,7 @@ describe('TeamsGraphSource', () => {
     });
     const attachments = [
       create(AttachmentSchema, {
-        id: 'attach-agent-tool',
+        meta: { id: 'attach-agent-tool' },
         kind: AttachmentKind.AGENT_TOOL,
         sourceId: 'agent-1',
         targetId: 'tool-shell',
@@ -80,7 +80,7 @@ describe('TeamsGraphSource', () => {
         targetType: EntityType.TOOL,
       }),
       create(AttachmentSchema, {
-        id: 'attach-agent-mcp',
+        meta: { id: 'attach-agent-mcp' },
         kind: AttachmentKind.AGENT_MCP_SERVER,
         sourceId: 'agent-1',
         targetId: 'mcp-1',
@@ -88,7 +88,7 @@ describe('TeamsGraphSource', () => {
         targetType: EntityType.MCP_SERVER,
       }),
       create(AttachmentSchema, {
-        id: 'attach-agent-memory',
+        meta: { id: 'attach-agent-memory' },
         kind: AttachmentKind.AGENT_MEMORY_BUCKET,
         sourceId: 'agent-1',
         targetId: 'memory-1',
@@ -96,7 +96,7 @@ describe('TeamsGraphSource', () => {
         targetType: EntityType.MEMORY_BUCKET,
       }),
       create(AttachmentSchema, {
-        id: 'attach-agent-workspace',
+        meta: { id: 'attach-agent-workspace' },
         kind: AttachmentKind.AGENT_WORKSPACE_CONFIGURATION,
         sourceId: 'agent-1',
         targetId: 'workspace-1',
@@ -104,7 +104,7 @@ describe('TeamsGraphSource', () => {
         targetType: EntityType.WORKSPACE_CONFIGURATION,
       }),
       create(AttachmentSchema, {
-        id: 'attach-mcp-workspace',
+        meta: { id: 'attach-mcp-workspace' },
         kind: AttachmentKind.MCP_SERVER_WORKSPACE_CONFIGURATION,
         sourceId: 'mcp-1',
         targetId: 'workspace-1',
@@ -112,7 +112,7 @@ describe('TeamsGraphSource', () => {
         targetType: EntityType.WORKSPACE_CONFIGURATION,
       }),
       create(AttachmentSchema, {
-        id: 'attach-mcp-workspace-detached',
+        meta: { id: 'attach-mcp-workspace-detached' },
         kind: AttachmentKind.MCP_SERVER_WORKSPACE_CONFIGURATION,
         sourceId: 'mcp-2',
         targetId: 'workspace-2',

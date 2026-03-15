@@ -63,7 +63,7 @@ function primeTeamHandlers() {
   server.use(
     http.get(abs('/api/graph/templates'), () => HttpResponse.json(templateSet)),
     http.get(abs('/api/graph/nodes/:nodeId/status'), ({ params }) =>
-      HttpResponse.json({ nodeId: params.nodeId, isPaused: false, provisionStatus: { state: 'not_ready' } }),
+      HttpResponse.json({ nodeId: params.nodeId, provisionStatus: { state: 'not_ready' } }),
     ),
     http.get(abs('/apiv2/team/v1/agents'), () =>
       HttpResponse.json({

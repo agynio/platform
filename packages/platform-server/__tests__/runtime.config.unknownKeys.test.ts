@@ -48,7 +48,6 @@ const makeRuntime = (
     async upsert(): Promise<any> {
       throw new Error('not-implemented');
     }
-    async upsertNodeState(): Promise<void> {}
   }
   const resolver = {
     resolve: async (input: unknown) =>
@@ -82,25 +81,6 @@ describe('runtime config unknown keys handling', () => {
     const inst = runtime.getNodeInstance('bad') as MemoryNode;
     const ports = inst.getPortConfig();
     expect(Object.keys((ports as any).sourcePorts || {})).toContain('$self');
-  });
-
-  // dynamicConfig fully removed; replace test to assert state persistence path
-  it('node state is persisted via updateNodeState', async () => {
-    const runtime = makeRuntime();
-    const g: GraphDefinition = {
-      nodes: [
-        {
-          id: 'n2',
-          data: { template: 'Memory', config: { scope: 'global' }, state: { info: 'x' } },
-        },
-      ],
-      edges: [],
-    };
-    const res = await runtime.apply(g);
-    expect(res.errors.length).toBe(0);
-    // state is available in lastGraph snapshot
-    const nodes = runtime.getNodes();
-    expect(nodes.find((n) => n.id === 'n2')).toBeTruthy();
   });
 
   it('updates live config on config update path', async () => {

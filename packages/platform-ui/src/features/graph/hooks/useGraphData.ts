@@ -51,7 +51,6 @@ interface UseGraphDataResult {
   savingErrorMessage: string | null;
   updateNode: (nodeId: string, updates: GraphNodeUpdate) => void;
   applyNodeStatus: (nodeId: string, status: NodeStatus) => void;
-  applyNodeState: (nodeId: string, state: Record<string, unknown>) => void;
   setEdges: (next: GraphPersistedEdge[]) => void;
   removeNodes: (ids: string[]) => void;
   addNode: (node: GraphNodeConfig, metadata: GraphNodeMetadata) => void;
@@ -173,20 +172,9 @@ export function useGraphData(): UseGraphDataResult {
             provisionStatus: status.provisionStatus
               ? { state: toGraphStatus(status), details: status.provisionStatus.details }
               : undefined,
-            isPaused: status.isPaused,
           },
         } satisfies GraphNodeConfig;
       }),
-    );
-  }, []);
-
-  const applyNodeState = useCallback((nodeId: string, state: Record<string, unknown>) => {
-    const meta = metadataRef.current.get(nodeId);
-    if (meta) {
-      meta.state = { ...state };
-    }
-    setNodes((prev) =>
-      prev.map((node) => (node.id === nodeId ? { ...node, state: { ...state } } : node)),
     );
   }, []);
 
@@ -249,12 +237,6 @@ export function useGraphData(): UseGraphDataResult {
           }
           if (typeof updates.status === 'string' && updates.status !== node.status) {
             next.status = updates.status as GraphNodeStatus;
-          }
-          if (updates.state && updates.state !== node.state) {
-            next.state = { ...updates.state };
-            if (meta) {
-              meta.state = { ...updates.state };
-            }
           }
           if (updates.runtime) {
             next.runtime = { ...(node.runtime ?? {}), ...updates.runtime };
@@ -353,7 +335,6 @@ export function useGraphData(): UseGraphDataResult {
     const clonedMetadata: GraphNodeMetadata = {
       template: metadata?.template ?? node.template,
       config: metadata?.config ? { ...metadata.config } : node.config ? { ...(node.config as Record<string, unknown>) } : undefined,
-      state: metadata?.state ? { ...metadata.state } : node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
       position: metadata?.position
         ? { x: metadata.position.x, y: metadata.position.y }
         : { x: node.x, y: node.y },
@@ -365,7 +346,6 @@ export function useGraphData(): UseGraphDataResult {
       const clonedNode: GraphNodeConfig = {
         ...node,
         config: node.config ? { ...(node.config as Record<string, unknown>) } : undefined,
-        state: node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
         runtime: node.runtime ? { ...(node.runtime ?? {}) } : undefined,
         capabilities: node.capabilities ? { ...(node.capabilities ?? {}) } : undefined,
         ports: {
@@ -464,7 +444,6 @@ export function useGraphData(): UseGraphDataResult {
     savingErrorMessage,
     updateNode,
     applyNodeStatus,
-    applyNodeState,
     setEdges,
     removeNodes,
     addNode,

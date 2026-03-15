@@ -6,7 +6,6 @@ import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
-import { NodeStateService } from '../src/graph/nodeState.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
@@ -186,7 +185,6 @@ describe('Graph MCP integration', () => {
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
-        { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },
         TemplateRegistry,
         LiveGraphRuntime,
         GraphRepository,
@@ -206,11 +204,10 @@ describe('Graph MCP integration', () => {
     const moduleRef = module.get(ModuleRef);
 
     const templateRegistry = buildTemplateRegistry({ moduleRef });
-    class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert' | 'upsertNodeState'> {
+    class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert'> {
       async initIfNeeded(): Promise<void> {}
       async get(): Promise<null> { return null; }
       async upsert(): Promise<never> { throw new Error('not-implemented'); }
-      async upsertNodeState(): Promise<void> {}
     }
 
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };

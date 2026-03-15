@@ -150,9 +150,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
       updatedAt: new Date(0).toISOString(),
       nodes: [],
       edges: [],
-      variables: [],
     }),
-    upsertNodeState: vi.fn().mockResolvedValue(undefined),
   } satisfies Record<string, unknown>;
 
   const templateRegistryStub = {

@@ -4,8 +4,14 @@ import * as nixApi from '@/api/modules/nix';
 import type { NodeStatus, TemplateSchema } from '@/api/types/graph';
 import type { GraphPersisted } from '../types';
 
-interface NodeStateResponse {
-  state: Record<string, unknown>;
+interface McpToolResponse {
+  name: string;
+  description?: string;
+}
+
+interface DiscoverToolsResponse {
+  tools: McpToolResponse[];
+  updatedAt?: string;
 }
 
 function assertPersistedGraph(payload: unknown): GraphPersisted {
@@ -38,9 +44,6 @@ function assertNodeStatus(payload: unknown): NodeStatus {
   if (!payload || typeof payload !== 'object') return {};
   const record = payload as Record<string, unknown>;
   const result: NodeStatus = {};
-  if (typeof record.isPaused === 'boolean') {
-    result.isPaused = record.isPaused;
-  }
   const provisionStatus = record.provisionStatus;
   if (provisionStatus != null && typeof provisionStatus !== 'object') {
     throw new Error('Node status invalid: provisionStatus');
@@ -57,15 +60,25 @@ function assertNodeStatus(payload: unknown): NodeStatus {
   return result;
 }
 
-function assertNodeState(payload: unknown): NodeStateResponse {
+function assertDiscoverTools(payload: unknown): DiscoverToolsResponse {
   if (!payload || typeof payload !== 'object') {
-    throw new Error('Node state payload invalid');
+    return { tools: [] };
   }
-  const state = (payload as Record<string, unknown>).state;
-  if (!state || typeof state !== 'object') {
-    return { state: {} };
-  }
-  return { state: state as Record<string, unknown> };
+  const record = payload as Record<string, unknown>;
+  const tools = Array.isArray(record.tools)
+    ? record.tools
+        .map((tool) => {
+          if (!tool || typeof tool !== 'object') return null;
+          const toolRecord = tool as Record<string, unknown>;
+          const name = typeof toolRecord.name === 'string' ? toolRecord.name : '';
+          if (!name) return null;
+          const description = typeof toolRecord.description === 'string' ? toolRecord.description : undefined;
+          return { name, description } satisfies McpToolResponse;
+        })
+        .filter((tool): tool is McpToolResponse => tool !== null)
+    : [];
+  const updatedAt = typeof record.updatedAt === 'string' ? record.updatedAt : undefined;
+  return { tools, updatedAt };
 }
 
 export type GraphSavePayload = PersistedGraphUpsertRequestUI;
@@ -100,14 +113,9 @@ async function fetchNodeStatus(nodeId: string): Promise<NodeStatus> {
   return assertNodeStatus(payload);
 }
 
-async function fetchNodeState(nodeId: string): Promise<NodeStateResponse> {
-  const payload = await graphApi.getNodeState(nodeId);
-  return assertNodeState(payload);
-}
-
-async function updateNodeState(nodeId: string, state: Record<string, unknown>): Promise<NodeStateResponse> {
-  const payload = await graphApi.putNodeState(nodeId, state);
-  return assertNodeState(payload);
+async function discoverNodeTools(nodeId: string): Promise<DiscoverToolsResponse> {
+  const payload = await graphApi.discoverNodeTools(nodeId);
+  return assertDiscoverTools(payload);
 }
 
 async function searchNixPackages(query: string): Promise<Array<{ name: string }>> {
@@ -173,8 +181,7 @@ export const graphApiService = {
   saveGraph,
   fetchTemplates,
   fetchNodeStatus,
-  fetchNodeState,
-  updateNodeState,
+  discoverNodeTools,
   searchNixPackages,
   listNixPackageVersions,
   resolveNixSelection,
@@ -186,4 +193,4 @@ export const graphApiService = {
 };
 
 export type GraphApiService = typeof graphApiService;
-export type GraphNodeStateResponse = NodeStateResponse;
+export type GraphDiscoverToolsResponse = DiscoverToolsResponse;

@@ -65,7 +65,6 @@ function WorkspaceEnvHarness({
       displayTitle={config.title}
       onConfigChange={handleConfigChange}
       tools={[]}
-      enabledTools={[]}
       {...extraProps}
     />
   );

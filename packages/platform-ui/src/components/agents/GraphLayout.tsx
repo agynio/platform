@@ -13,21 +13,19 @@ import { GraphCanvas, type GraphCanvasDropHandler, type GraphNodeData } from '..
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
-import type { McpToolDescriptor } from '../nodeProperties/types';
 import { resolveAgentDisplayTitle } from '../../utils/agentDisplay';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
 import { useNodeStatus } from '@/features/graph/hooks/useNodeStatus';
 import { useNodeAction } from '@/features/graph/hooks/useNodeAction';
-import { useMcpNodeState, useTemplates } from '@/lib/graph/hooks';
+import { useMcpTools, useTemplates } from '@/lib/graph/hooks';
 import { mapTemplatesToSidebarItems } from '@/lib/graph/sidebarNodeItems';
 import { buildGraphNodeFromTemplate } from '@/features/graph/mappers';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
 import type { TemplateSchema, NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 import { listAllSecretPaths } from '@/features/secrets/utils/flatVault';
 import { getUuid } from '@/utils/getUuid';
-import { isRecord } from '@/utils/typeGuards';
 
 type FlowNode = Node<GraphNodeData>;
 
@@ -120,42 +118,6 @@ function encodeHandle(handle?: string | null): string {
   return '$';
 }
 
-type McpStateSnapshot = {
-  tools: McpToolDescriptor[];
-  enabledTools?: string[];
-};
-
-function parseMcpTool(value: unknown): McpToolDescriptor | null {
-  if (!isRecord(value)) return null;
-  const name = typeof value.name === 'string' ? value.name.trim() : '';
-  if (!name) return null;
-  const tool: McpToolDescriptor = { name };
-  if (typeof value.title === 'string') {
-    tool.title = value.title;
-  }
-  if (typeof value.description === 'string') {
-    tool.description = value.description;
-  }
-  return tool;
-}
-
-function readMcpState(state: unknown): McpStateSnapshot {
-  if (!isRecord(state)) {
-    return { tools: [], enabledTools: undefined };
-  }
-  const mcp = isRecord(state.mcp) ? (state.mcp as Record<string, unknown>) : null;
-  if (!mcp) {
-    return { tools: [], enabledTools: undefined };
-  }
-  const tools = Array.isArray(mcp.tools)
-    ? mcp.tools.map(parseMcpTool).filter((tool): tool is McpToolDescriptor => tool !== null)
-    : [];
-  const enabledTools = Array.isArray(mcp.enabledTools)
-    ? mcp.enabledTools.filter((tool): tool is string => typeof tool === 'string')
-    : undefined;
-  return { tools, enabledTools };
-}
-
 function decodeHandle(handle?: string | null): string | undefined {
   if (!handle || handle === '$') {
     return undefined;
@@ -244,7 +206,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     savingErrorMessage,
     updateNode,
     applyNodeStatus,
-    applyNodeState,
     setEdges,
     removeNodes,
     addNode,
@@ -428,9 +389,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     onStatus: (event) => {
       const { nodeId, updatedAt: _ignored, ...status } = event;
       applyNodeStatus(nodeId, status);
-    },
-    onState: (event) => {
-      applyNodeState(event.nodeId, event.state ?? {});
     },
   });
 
@@ -627,33 +585,15 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const mcpNodeId = selectedNode?.kind === 'MCP' ? selectedNode.id : null;
   const {
     tools: mcpTools,
-    enabledTools: mcpEnabledTools,
-    setEnabledTools: setMcpEnabledTools,
+    updatedAt: mcpToolsUpdatedAt,
+    discoverTools: discoverMcpTools,
     isLoading: mcpToolsLoading,
-  } = useMcpNodeState(mcpNodeId);
-  const fallbackMcpState = useMemo(() => {
-    if (!mcpNodeId) {
-      return { tools: [], enabledTools: undefined };
-    }
-    return readMcpState(selectedNode?.state);
-  }, [mcpNodeId, selectedNode?.state]);
-  const resolvedMcpTools = mcpToolsLoading ? fallbackMcpState.tools : mcpTools;
-  const resolvedEnabledTools = mcpEnabledTools ?? (mcpToolsLoading ? fallbackMcpState.enabledTools : undefined);
+  } = useMcpTools(mcpNodeId);
 
-  const handleToggleMcpTool = useCallback(
-    (toolName: string, enabled: boolean) => {
-      if (!mcpNodeId) return;
-      const current = resolvedEnabledTools ?? [];
-      const next = new Set(current);
-      if (enabled) {
-        next.add(toolName);
-      } else {
-        next.delete(toolName);
-      }
-      setMcpEnabledTools(Array.from(next));
-    },
-    [mcpNodeId, resolvedEnabledTools, setMcpEnabledTools],
-  );
+  const handleDiscoverMcpTools = useCallback(() => {
+    if (!mcpNodeId) return;
+    void discoverMcpTools();
+  }, [discoverMcpTools, mcpNodeId]);
 
   const handleNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     let nextSelectedId = selectedNodeIdRef.current;
@@ -920,9 +860,9 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           canProvision={canProvision}
           canDeprovision={canDeprovision}
           isActionPending={isActionPending}
-          tools={resolvedMcpTools}
-          enabledTools={resolvedEnabledTools}
-          onToggleTool={handleToggleMcpTool}
+          tools={mcpTools}
+          toolsUpdatedAt={mcpToolsUpdatedAt}
+          onDiscoverTools={handleDiscoverMcpTools}
           toolsLoading={mcpToolsLoading}
           nixPackageSearch={handleNixPackageSearch}
           fetchNixPackageVersions={handleFetchNixPackageVersions}

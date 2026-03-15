@@ -484,7 +484,6 @@ describe('ManageTool graph wiring', () => {
             upsert: async () => {
               throw new Error('not-implemented');
             },
-            upsertNodeState: async () => {},
           },
         },
         { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },

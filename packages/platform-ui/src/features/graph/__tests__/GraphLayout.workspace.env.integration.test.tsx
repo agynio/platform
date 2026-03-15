@@ -23,7 +23,7 @@ const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
   useGraphSocket: vi.fn(),
   useNodeStatus: vi.fn(),
-  useMcpNodeState: vi.fn(),
+  useMcpTools: vi.fn(),
   useNodeAction: vi.fn(),
   useTemplates: vi.fn(),
 }));
@@ -61,7 +61,7 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
 }));
 
 vi.mock('@/lib/graph/hooks', () => ({
-  useMcpNodeState: hookMocks.useMcpNodeState,
+  useMcpTools: hookMocks.useMcpTools,
   useTemplates: hookMocks.useTemplates,
 }));
 
@@ -103,7 +103,6 @@ type GraphDataMock = {
   savingErrorMessage: string | null;
   updateNode: vi.Mock;
   applyNodeStatus: vi.Mock;
-  applyNodeState: vi.Mock;
   setEdges: vi.Mock;
   removeNodes: vi.Mock;
   addNode: vi.Mock;
@@ -120,7 +119,6 @@ function mockGraphData(overrides: Partial<GraphDataMock> = {}): GraphDataMock {
     savingErrorMessage: null,
     updateNode: vi.fn(),
     applyNodeStatus: vi.fn(),
-    applyNodeState: vi.fn(),
     setEdges: vi.fn(),
     removeNodes: vi.fn(),
     addNode: vi.fn(),
@@ -136,10 +134,10 @@ describe('GraphLayout workspace env integration', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
-    hookMocks.useMcpNodeState.mockReturnValue({
+    hookMocks.useMcpTools.mockReturnValue({
       tools: [],
-      enabledTools: [],
-      setEnabledTools: vi.fn(),
+      updatedAt: undefined,
+      discoverTools: vi.fn(),
       isLoading: false,
     });
     hookMocks.useTemplates.mockReturnValue({ data: [], isLoading: false, isError: false });

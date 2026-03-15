@@ -98,7 +98,6 @@ export class LiveGraphRuntime {
         id: string;
         template: string;
         config?: Record<string, unknown>;
-        state?: Record<string, unknown>;
       }>;
       edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
       version: number;
@@ -106,7 +105,7 @@ export class LiveGraphRuntime {
       ({
         nodes: saved.nodes.map((n) => ({
           id: n.id,
-          data: { template: n.template, config: n.config, state: n.state },
+          data: { template: n.template, config: n.config },
         })),
         edges: saved.edges.map((e) => ({
           source: e.source,
@@ -163,15 +162,6 @@ export class LiveGraphRuntime {
     }
   }
 
-  // Update persisted runtime snapshot state for a node (typed helper)
-  updateNodeState(id: string, state: Record<string, unknown>): void {
-    if (!this.state.lastGraph) return;
-    const node = this.state.lastGraph.nodes.find((n) => n.id === id);
-    if (node) {
-      node.data.state = state;
-    }
-  }
-
   // Return the live node instance (if present).
   getNodeInstance(id: string): Node | undefined {
     return this.state.nodes.get(id)?.instance;
@@ -193,12 +183,6 @@ export class LiveGraphRuntime {
     const inst = this.state.nodes.get(id)?.instance;
     const st = inst?.status;
     return st ? { provisionStatus: { state: st } } : {};
-  }
-
-  /** Return the last known persisted runtime state snapshot for a node. */
-  getNodeStateSnapshot(id: string): Record<string, unknown> | undefined {
-    const node = this.state.lastGraph?.nodes.find((n) => n.id === id);
-    return node?.data?.state as Record<string, unknown> | undefined;
   }
 
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
@@ -260,7 +244,7 @@ export class LiveGraphRuntime {
         // non-fatal
       }
     }
-    // 2b. Dynamic config removed: use node state mutations in future.
+    // 2b. Dynamic config removed.
 
     // 3. Remove edges (reverse if needed) BEFORE removing nodes
     this.logger.debug('Remove edges');
@@ -280,9 +264,8 @@ export class LiveGraphRuntime {
       await this.disposeNode(nodeId).catch((err) => pushError(err as GraphError));
     }
 
-    // Persist next graph snapshot early so dependent services (e.g., NodeStateService)
-    // can read initial state during first edge attachment and provisioning.
-    // This ensures boot-time agent↔MCP sync uses the persisted state.
+    // Persist next graph snapshot early so dependent services
+    // can read graph metadata during first edge attachment and provisioning.
     this.state.lastGraph = next;
 
     // 5. Add edges
@@ -404,7 +387,6 @@ export class LiveGraphRuntime {
         );
         live.config = cleanedConfig;
       }
-      await created.setState(node.data.state ?? {});
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched
