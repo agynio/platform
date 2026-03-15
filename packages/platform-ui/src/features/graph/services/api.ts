@@ -54,7 +54,8 @@ function assertDiscoverTools(payload: unknown): DiscoverToolsResponse {
           const name = typeof toolRecord.name === 'string' ? toolRecord.name : '';
           if (!name) return null;
           const description = typeof toolRecord.description === 'string' ? toolRecord.description : undefined;
-          return { name, description } satisfies McpToolResponse;
+          const response: McpToolResponse = description ? { name, description } : { name };
+          return response;
         })
         .filter((tool): tool is McpToolResponse => tool !== null)
     : [];

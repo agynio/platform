@@ -594,7 +594,6 @@ export function mapTeamEntitiesToGraphNodes(
         position: { x: 0, y: 0 },
         title: entity.title,
         config: entity.config,
-        state: entity.state,
       }).node;
     }
     return {
@@ -606,7 +605,6 @@ export function mapTeamEntitiesToGraphNodes(
       y: 0,
       status: 'ready',
       config: entity.config,
-      state: entity.state,
       ports: { inputs: [], outputs: [] },
     } satisfies GraphNodeConfig;
   });
