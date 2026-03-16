@@ -1,51 +1,50 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
-import { createModuleRefStub } from './helpers/module-ref.stub';
-import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
+import { LocalMCPServerTool } from '../src/nodes/mcp/localMcpServer.tool';
 
-const makeEnvService = () => ({ resolveEnvItems: vi.fn(async () => ({})), resolveProviderEnv: vi.fn(async () => ({})) });
-
-describe('LocalMCPServerNode listTools: snapshot-first, fallback-to-setState, namespacing', () => {
+describe('LocalMCPServerNode tool filtering and snapshots', () => {
   let server: LocalMCPServerNode;
-  let logger: { log: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+
+  const seedTools = () => {
+    const toolA = new LocalMCPServerTool('alpha', 'A', z.object({}).strict(), server);
+    const toolB = new LocalMCPServerTool('beta', 'B', z.object({}).strict(), server);
+    (server as any).toolsCache = [toolA, toolB];
+    (server as any).toolsDiscovered = true;
+  };
 
   beforeEach(async () => {
-    logger = { log: vi.fn(), error: vi.fn(), debug: vi.fn() };
-    const nodeStateService = { getSnapshot: vi.fn((_id: string) => undefined) } as any; // snapshot not ready
-    const moduleRef = createModuleRefStub({ get: () => nodeStateService });
-    server = new LocalMCPServerNode(makeEnvService() as any, {} as any, moduleRef);
+    const envStub = { resolveEnvItems: vi.fn(async () => ({})), resolveProviderEnv: vi.fn(async () => ({})) } as any;
+    server = new LocalMCPServerNode(envStub, {} as any);
     (server as any).init({ nodeId: 'node-x' });
-    const provider = new WorkspaceProviderStub();
-    const workspaceNode = new WorkspaceNodeStub(provider);
-    (server as any).setContainerProvider(workspaceNode);
     await server.setConfig({ namespace: 'ns' } as any);
-    (server as any).preloadCachedTools(
-      [
-        { name: 'a', description: 'A', inputSchema: { type: 'object' } },
-        { name: 'b', description: 'B', inputSchema: { type: 'object' } },
-      ],
-      Date.now(),
-    );
-    (server as any).logger = logger;
-    (server as any).nodeStateService = nodeStateService;
+    seedTools();
   });
 
-  it('returns [] when enabledTools is not provided', () => {
+  it('returns namespaced tools when no filter is set', () => {
     const tools = server.listTools();
-    expect(tools).toEqual([]);
+    expect(tools.map((t) => t.name)).toEqual(['ns_alpha', 'ns_beta']);
   });
 
-  it('falls back to setState enabledTools when snapshot is undefined', async () => {
-    await server.setState({ mcp: { enabledTools: ['a', 'c'] } as any });
-    const tools = server.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['ns_a']);
-    expect(logger.log.mock.calls.find((c: any[]) => String(c[0]).includes('unknown tool'))).toBeTruthy();
+  it('applies allow/deny toolFilter rules against raw names', async () => {
+    await server.setConfig({
+      namespace: 'ns',
+      toolFilter: { mode: 'allow', rules: [{ pattern: 'alpha' }] },
+    } as any);
+    expect(server.listTools().map((t) => t.name)).toEqual(['ns_alpha']);
+
+    await server.setConfig({
+      namespace: 'ns',
+      toolFilter: { mode: 'deny', rules: [{ pattern: 'beta' }] },
+    } as any);
+    expect(server.listTools().map((t) => t.name)).toEqual(['ns_alpha']);
   });
 
-  it('accepts raw names from snapshot and maps to runtime namespaced form', async () => {
-    const ns = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: ['a'] } })) } as any;
-    (server as any).nodeStateService = ns;
-    const tools = server.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['ns_a']);
+  it('snapshots include updatedAt and namespaced tool names', () => {
+    const ts = Date.now();
+    (server as any).lastToolsUpdatedAt = ts;
+    const snapshot = server.getToolsSnapshot();
+    expect(snapshot.updatedAt).toBe(ts);
+    expect(snapshot.tools.map((tool) => tool.name)).toEqual(['ns_alpha', 'ns_beta']);
   });
 });

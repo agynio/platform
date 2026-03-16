@@ -21,7 +21,6 @@ describe('Gateway node_status integration', () => {
       subscribeToToolOutputChunk: () => () => {},
       subscribeToToolOutputTerminal: () => () => {},
       subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
       subscribeToThreadCreated: () => () => {},
       subscribeToThreadUpdated: () => () => {},
       subscribeToMessageCreated: () => () => {},

@@ -2,7 +2,7 @@
 
 How these docs are organized
 - Product specification: end-to-end features, behaviors, and operations.
-- API and graph store: HTTP/Socket APIs and persistence internals.
+- API and graph sources: HTTP/Socket APIs and persistence internals.
 - Containers and security: workspace lifecycle and secret handling.
 - Observability and UI: traces, spans, and the graph builder.
 - Contributing and ADRs: internal engineering references.
@@ -12,8 +12,8 @@ Index
 - API Reference: [api/index.md](api/index.md)
   - Realtime notifications: socket payloads are published via the notifications service and served by notifications-gateway when running docker-compose.yml.
 - Graph
-  - Filesystem Store: [graph/fs-store.md](graph/fs-store.md)
-  - Status Updates: [graph/status-updates.md](graph/status-updates.md)
+  - Teams graph source & status updates: [graph/status-updates.md](graph/status-updates.md)
+  - Legacy filesystem store (deprecated): [graph/fs-store.md](graph/fs-store.md)
 - Containers
   - Workspaces: [containers/workspaces.md](containers/workspaces.md)
   - Env Overlays: [config/env-overlays.md](config/env-overlays.md)
@@ -37,4 +37,4 @@ Index
 Slack integration
 - For Slack-triggered flows and outbound messages, see:
   - Secrets and tokens: [security/vault.md](security/vault.md)
-  - Graph UI templates (SlackTrigger, SendSlackMessageTool): [ui/graph/README.md](ui/graph/README.md)
+  - Graph UI templates (SendSlackMessageTool): [ui/graph/README.md](ui/graph/README.md)

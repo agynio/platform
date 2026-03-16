@@ -4,7 +4,6 @@ import { EnvService } from '../src/env/env.service';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { Signal } from '../src/signal';
-import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 import { runnerConfigDefaults } from './helpers/config';
 
@@ -55,7 +54,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     shell.setContainerProvider(workspaceNode as unknown as ShellCommandNode['provider']);
     await shell.setConfig({ env: [ { name: 'S_VAR', value: 's' } ] });
 
-    const mcp = new LocalMCPServerNode(envService as any, cfg as any, createModuleRefStub());
+    const mcp = new LocalMCPServerNode(envService as any, cfg as any);
     mcp.init({ nodeId: 'mcp' });
     (mcp as any).setContainerProvider(workspaceNode);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { name: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 });

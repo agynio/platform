@@ -12,7 +12,6 @@ type GatewayTestContext = {
     chunk: Handler<ToolOutputChunkPayload>;
     terminal: Handler<ToolOutputTerminalPayload>;
     reminder: Handler<ReminderCountEvent>;
-    nodeState: Handler<{ nodeId: string; state: Record<string, unknown>; updatedAtMs?: number }>;
     threadCreated: Handler<{ id: string }>;
     threadUpdated: Handler<{ id: string }>;
     messageCreated: Handler<{ threadId: string; message: { id: string } }>;
@@ -30,7 +29,6 @@ function createGatewayTestContext(): GatewayTestContext {
     chunk: null,
     terminal: null,
     reminder: null,
-    nodeState: null,
     threadCreated: null,
     threadUpdated: null,
     messageCreated: null,
@@ -43,7 +41,6 @@ function createGatewayTestContext(): GatewayTestContext {
     chunk: vi.fn(),
     terminal: vi.fn(),
     reminder: vi.fn(),
-    nodeState: vi.fn(),
     threadCreated: vi.fn(),
     threadUpdated: vi.fn(),
     messageCreated: vi.fn(),
@@ -58,7 +55,6 @@ function createGatewayTestContext(): GatewayTestContext {
     | 'subscribeToToolOutputChunk'
     | 'subscribeToToolOutputTerminal'
     | 'subscribeToReminderCount'
-    | 'subscribeToNodeState'
     | 'subscribeToThreadCreated'
     | 'subscribeToThreadUpdated'
     | 'subscribeToMessageCreated'
@@ -81,10 +77,6 @@ function createGatewayTestContext(): GatewayTestContext {
     subscribeToReminderCount: (listener) => {
       handlers.reminder = listener;
       return disposers.reminder;
-    },
-    subscribeToNodeState: (listener) => {
-      handlers.nodeState = listener;
-      return disposers.nodeState;
     },
     subscribeToThreadCreated: (listener) => {
       handlers.threadCreated = listener;
@@ -243,12 +235,6 @@ describe('GraphSocketGateway event bus integration', () => {
     expect(scheduleAncestors).toHaveBeenCalledWith('thread-1');
   });
 
-  it('forwards node_state events to emitNodeState', () => {
-    const spy = vi.spyOn(ctx.gateway, 'emitNodeState');
-    ctx.handlers.nodeState?.({ nodeId: 'node-1', state: { value: 1 }, updatedAtMs: 10 });
-    expect(spy).toHaveBeenCalledWith('node-1', { value: 1 }, 10);
-  });
-
   it('emits thread and message events', () => {
     const threadCreated = vi.spyOn(ctx.gateway, 'emitThreadCreated');
     const threadUpdated = vi.spyOn(ctx.gateway, 'emitThreadUpdated');
@@ -297,7 +283,6 @@ describe('GraphSocketGateway event bus integration', () => {
     expect(ctx.disposers.chunk).toHaveBeenCalledTimes(1);
     expect(ctx.disposers.terminal).toHaveBeenCalledTimes(1);
     expect(ctx.disposers.reminder).toHaveBeenCalledTimes(1);
-    expect(ctx.disposers.nodeState).toHaveBeenCalledTimes(1);
     expect(ctx.disposers.threadCreated).toHaveBeenCalledTimes(1);
     expect(ctx.disposers.threadUpdated).toHaveBeenCalledTimes(1);
     expect(ctx.disposers.messageCreated).toHaveBeenCalledTimes(1);

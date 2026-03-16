@@ -15,6 +15,7 @@ describe('LLM settings controller (models endpoint)', () => {
     agentsDbUrl: process.env.AGENTS_DATABASE_URL,
     litellmBaseUrl: process.env.LITELLM_BASE_URL,
     litellmMasterKey: process.env.LITELLM_MASTER_KEY,
+    teamsServiceAddr: process.env.TEAMS_SERVICE_ADDR,
   };
 
   beforeAll(async () => {
@@ -22,6 +23,7 @@ describe('LLM settings controller (models endpoint)', () => {
     process.env.AGENTS_DATABASE_URL = 'postgres://localhost:5432/test';
     process.env.LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000';
     process.env.LITELLM_MASTER_KEY = process.env.LITELLM_MASTER_KEY || 'sk-dev-master-1234';
+    process.env.TEAMS_SERVICE_ADDR = process.env.TEAMS_SERVICE_ADDR || 'teams:9090';
 
     ConfigService.clearInstanceForTest();
     ConfigService.fromEnv();
@@ -43,6 +45,7 @@ describe('LLM settings controller (models endpoint)', () => {
     process.env.AGENTS_DATABASE_URL = previousEnv.agentsDbUrl;
     process.env.LITELLM_BASE_URL = previousEnv.litellmBaseUrl;
     process.env.LITELLM_MASTER_KEY = previousEnv.litellmMasterKey;
+    process.env.TEAMS_SERVICE_ADDR = previousEnv.teamsServiceAddr;
   });
 
   it('returns model list via injected service', async () => {

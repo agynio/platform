@@ -7,7 +7,7 @@ export function OnboardingPage() {
   const location = useLocation();
   const targetPath = useMemo(() => {
     const state = location.state as { from?: string } | null;
-    return state?.from ?? '/agents/graph';
+    return state?.from ?? '/agents';
   }, [location.state]);
 
   return <OnboardingFlow targetPath={targetPath} />;

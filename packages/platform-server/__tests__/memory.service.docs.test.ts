@@ -27,7 +27,7 @@ describe('MemoryService listDocs aggregation', () => {
   it('returns graph memory nodes when persistence is empty', async () => {
     const repo = createRepoStub([]);
     const graph = {
-      get: vi.fn().mockResolvedValue({
+      load: vi.fn().mockResolvedValue({
         ...baseGraph,
         nodes: [
           { id: 'mem-global', template: 'memory', config: { scope: 'global' as MemoryScope } },
@@ -44,7 +44,7 @@ describe('MemoryService listDocs aggregation', () => {
       { nodeId: 'mem-global', scope: 'global' },
       { nodeId: 'mem-threaded', scope: 'perThread' },
     ]);
-    expect(graph.get).toHaveBeenCalledWith('main');
+    expect(graph.load).toHaveBeenCalled();
   });
 
   it('augments perThread nodes with persisted thread IDs and filters stale rows', async () => {
@@ -57,7 +57,7 @@ describe('MemoryService listDocs aggregation', () => {
       { nodeId: 'stale-node', threadId: 'orphan' },
     ]);
     const graph = {
-      get: vi.fn().mockResolvedValue({
+      load: vi.fn().mockResolvedValue({
         ...baseGraph,
         nodes: [
           { id: 'mem-global', template: 'memory', config: { scope: 'global' as MemoryScope } },
@@ -75,7 +75,7 @@ describe('MemoryService listDocs aggregation', () => {
       { nodeId: 'mem-threaded', scope: 'perThread', threadId: 'thread-1' },
       { nodeId: 'mem-threaded', scope: 'perThread', threadId: 'thread-2' },
     ]);
-    expect(graph.get).toHaveBeenCalledWith('main');
+    expect(graph.load).toHaveBeenCalled();
   });
 
   it('falls back to persistence when graph fails', async () => {
@@ -83,7 +83,7 @@ describe('MemoryService listDocs aggregation', () => {
       { nodeId: 'persist-global', threadId: null },
       { nodeId: 'persist-thread', threadId: ' t1 ' },
     ]);
-    const graph = { get: vi.fn().mockRejectedValue(new Error('boom')) };
+    const graph = { load: vi.fn().mockRejectedValue(new Error('boom')) };
 
     const svc = new MemoryService(repo, graph as any);
     const result = await svc.listDocs();

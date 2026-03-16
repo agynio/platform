@@ -1,5 +1,7 @@
 import { Input } from '../Input';
 import { BashInput } from '../BashInput';
+import { Dropdown } from '../Dropdown';
+import { Textarea } from '../Textarea';
 
 import type { EnvEditorProps } from './EnvEditor';
 import { EnvEditor } from './EnvEditor';
@@ -30,11 +32,17 @@ interface McpSectionProps {
   onLimitsOpenChange: (open: boolean) => void;
   limits: McpLimits;
   onLimitChange: (key: keyof McpLimits, value: number | undefined) => void;
+  toolFilter: {
+    mode: 'allow' | 'deny';
+    matchers: string;
+    onModeChange: (value: 'allow' | 'deny') => void;
+    onMatchersChange: (value: string) => void;
+  };
   tools: {
     items: McpToolDescriptor[];
-    enabled: Set<string>;
     loading: boolean;
-    onToggle: (toolName: string, enabled: boolean) => void;
+    updatedAt?: string;
+    onDiscover?: () => void;
   };
 }
 
@@ -50,6 +58,7 @@ export function McpSection({
   onLimitsOpenChange,
   limits,
   onLimitChange,
+  toolFilter,
   tools,
 }: McpSectionProps) {
   const limitFields: LimitField[] = [
@@ -142,11 +151,39 @@ export function McpSection({
 
       <LimitsSection title="Limits" open={limitsOpen} onOpenChange={onLimitsOpenChange} fields={limitFields} />
 
+      <section>
+        <div className="space-y-4">
+          <Dropdown
+            label="Tool filter mode"
+            value={toolFilter.mode}
+            onValueChange={(value) => toolFilter.onModeChange(value === 'deny' ? 'deny' : 'allow')}
+            options={[
+              { value: 'allow', label: 'Allow list' },
+              { value: 'deny', label: 'Deny list' },
+            ]}
+            size="sm"
+          />
+          <div>
+            <FieldLabel
+              label="Tool filter matchers"
+              hint="One matcher per line (e.g. filesystem:*). Leave empty to allow all tools."
+            />
+            <Textarea
+              rows={4}
+              placeholder="filesystem:*\nmath:*"
+              value={toolFilter.matchers}
+              onChange={(event) => toolFilter.onMatchersChange(event.target.value)}
+              size="sm"
+            />
+          </div>
+        </div>
+      </section>
+
       <ToolsList
         tools={tools.items}
-        enabledToolSet={tools.enabled}
         loading={tools.loading}
-        onToggle={tools.onToggle}
+        updatedAt={tools.updatedAt}
+        onDiscover={tools.onDiscover}
       />
     </>
   );

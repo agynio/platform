@@ -21,11 +21,9 @@ import { LLMProvidersListPage } from './pages/LLMProvidersListPage';
 import { LLMProviderUpsertPage } from './pages/LLMProviderUpsertPage';
 import { LLMModelsListPage } from './pages/LLMModelsListPage';
 import { LLMModelUpsertPage } from './pages/LLMModelUpsertPage';
-import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OnboardingGate } from './features/onboarding/components/OnboardingGate';
 import { AgentsListPage } from './pages/AgentsListPage';
-import { TriggersListPage } from './pages/TriggersListPage';
 import { ToolsListPage } from './pages/ToolsListPage';
 import { WorkspacesListPage } from './pages/WorkspacesListPage';
 import { MemoryEntitiesListPage } from './pages/MemoryEntitiesListPage';
@@ -35,7 +33,7 @@ import { EntitySecretsListPage } from './pages/EntitySecretsListPage';
 import { SecretProviderUpsertPage } from './pages/SecretProviderUpsertPage';
 import { EntitySecretUpsertPage } from './pages/EntitySecretUpsertPage';
 import { EntityUpsertPage } from './pages/entities/EntityUpsertPage';
-import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_WORKSPACE_TEMPLATES } from './features/entities/api/graphEntities';
+import { EXCLUDED_WORKSPACE_TEMPLATES, INCLUDED_MEMORY_TEMPLATES } from './features/entities/api/teamEntities';
 
 const queryClient = new QueryClient();
 
@@ -54,7 +52,6 @@ function App() {
                 <Route path="/agents" element={<AgentsListPage />} />
                 <Route path="/agents/new" element={<EntityUpsertPage kind="agent" mode="create" listPath="/agents" />} />
                 <Route path="/agents/:entityId/edit" element={<EntityUpsertPage kind="agent" mode="edit" listPath="/agents" />} />
-                <Route path="/agents/graph" element={<AgentsGraphContainer />} />
                 <Route path="/agents/chat" element={<AgentsChat />} />
                 <Route path="/agents/threads" element={<AgentsThreads />} />
                 <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
@@ -63,9 +60,6 @@ function App() {
                 <Route path="/agents/memory" element={<AgentsMemoryManager />} />
 
                 {/* Entities */}
-                <Route path="/triggers" element={<TriggersListPage />} />
-                <Route path="/triggers/new" element={<EntityUpsertPage kind="trigger" mode="create" listPath="/triggers" />} />
-                <Route path="/triggers/:entityId/edit" element={<EntityUpsertPage kind="trigger" mode="edit" listPath="/triggers" />} />
                 <Route path="/tools" element={<ToolsListPage />} />
                 <Route path="/tools/new" element={<EntityUpsertPage kind="tool" mode="create" listPath="/tools" />} />
                 <Route path="/tools/:entityId/edit" element={<EntityUpsertPage kind="tool" mode="edit" listPath="/tools" />} />
@@ -100,10 +94,10 @@ function App() {
                   path="/memory/new"
                   element={(
                     <EntityUpsertPage
-                      kind="workspace"
+                      kind="memory"
                       mode="create"
                       listPath="/memory"
-                      templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+                      templateIncludeNames={INCLUDED_MEMORY_TEMPLATES}
                     />
                   )}
                 />
@@ -111,10 +105,10 @@ function App() {
                   path="/memory/:entityId/edit"
                   element={(
                     <EntityUpsertPage
-                      kind="workspace"
+                      kind="memory"
                       mode="edit"
                       listPath="/memory"
-                      templateIncludeNames={INCLUDED_MEMORY_WORKSPACE_TEMPLATES}
+                      templateIncludeNames={INCLUDED_MEMORY_TEMPLATES}
                     />
                   )}
                 />

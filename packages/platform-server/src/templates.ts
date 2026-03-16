@@ -6,7 +6,6 @@ import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { LocalMCPServerNode } from './nodes/mcp/localMcpServer.node';
 import { MemoryNode } from './nodes/memory/memory.node';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
-import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
 import { CallAgentTool } from './nodes/tools/call_agent/call_agent.node';
 import { FinishTool } from './nodes/tools/finish/finish.node';
 import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
@@ -104,15 +103,6 @@ export function registerDefaultTemplates(registry: TemplateRegistry): TemplateRe
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     RemindMeNode,
-  );
-  registry.register(
-    'slackTrigger',
-    {
-      title: 'Slack (Socket Mode)',
-      kind: 'trigger',
-      // capabilities/staticConfigSchema removed from palette per Issue #451
-    },
-    SlackTrigger,
   );
   registry.register(
     'agent',

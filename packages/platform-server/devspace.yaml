@@ -41,8 +41,6 @@ pipelines:
               env:
                 - name: NODE_ENV
                   value: development
-                - name: GRAPH_REPO_PATH
-                  value: /opt/app/data/graph
               resources:
                 requests:
                   cpu: 500m

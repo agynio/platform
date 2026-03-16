@@ -11,7 +11,6 @@ export interface NodeDef {
   data: {
     template: string; // template name registered in TemplateRegistry
     config?: Record<string, unknown>; // optional configuration passed via instance.setConfig
-    state?: Record<string, unknown>; // optional persisted runtime state (per-node)
   };
 }
 
@@ -108,7 +107,6 @@ export interface PersistedGraphNode {
   id: string;
   template: string;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
   position?: { x: number; y: number }; // UI hint, optional server side
 }
 export interface PersistedGraphEdge {
@@ -124,16 +122,4 @@ export interface PersistedGraph {
   updatedAt: string; // ISO timestamp
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
-  // Optional graph-level variables (Issue #543)
-  // Keys must be unique; values are plain strings.
-  variables?: Array<{ key: string; value: string }>;
 }
-export interface PersistedGraphUpsertRequest {
-  name: string;
-  version?: number; // expected version (undefined => create)
-  nodes: PersistedGraphNode[];
-  edges: PersistedGraphEdge[];
-  // Optional variables; if omitted, repositories must preserve existing values.
-  variables?: Array<{ key: string; value: string }>;
-}
-export type PersistedGraphUpsertResponse = PersistedGraph;

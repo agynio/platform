@@ -1,29 +1,33 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Http2SessionManager } from '@connectrpc/connect-node';
 
 import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
 import {
+  DEFAULT_SOCKET,
   RUNNER_SECRET,
   hasTcpDocker,
-  runnerAddressMissing,
-  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   type RunnerHandle,
 } from './helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
+const shouldSkip = process.env.SKIP_RUNNER_EXEC_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 
 describeOrSkip('runner gRPC exec cancellation integration', () => {
   let runner: RunnerHandle;
   let dockerClient: RunnerGrpcClient;
+  let sessionManager: Http2SessionManager | null = null;
   let containerId: string | null = null;
 
   beforeAll(async () => {
-    runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunner(socketPath);
+    const baseUrl = runner.grpcAddress.startsWith('http') ? runner.grpcAddress : `http://${runner.grpcAddress}`;
+    sessionManager = new Http2SessionManager(baseUrl);
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET, sessionManager });
   }, 120_000);
 
   afterAll(async () => {
@@ -39,6 +43,8 @@ describeOrSkip('runner gRPC exec cancellation integration', () => {
         // ignore cleanup failures
       }
     }
+    sessionManager?.abort();
+    sessionManager = null;
     await runner.close();
   });
 

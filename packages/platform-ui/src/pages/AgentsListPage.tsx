@@ -5,11 +5,10 @@ export function AgentsListPage() {
     <EntityListPage
       kind="agent"
       title="Agents"
-      description="Manage all agent templates available in your workspace."
+      description="Manage agents available to your team."
       listPath="/agents"
       createLabel="New agent"
       emptyLabel="No agents found. Use the button above to create one."
-      toolbarActions={[{ label: 'Open graph', to: '/agents/graph' }]}
     />
   );
 }

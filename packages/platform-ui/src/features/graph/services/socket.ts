@@ -1,12 +1,6 @@
 import { graphSocket } from '@/lib/graph/socket';
 import type { NodeStatusEvent } from '@/lib/graph/types';
 
-export interface NodeStateEvent {
-  nodeId: string;
-  state: Record<string, unknown>;
-  updatedAt: string;
-}
-
 function toRooms(nodeIds: string[]): string[] {
   return nodeIds
     .filter((id): id is string => typeof id === 'string' && id.length > 0)
@@ -30,16 +24,6 @@ function onNodeStatus(nodeId: string, handler: (event: NodeStatusEvent) => void)
   return graphSocket.onNodeStatus(nodeId, handler);
 }
 
-function onNodeState(nodeId: string, handler: (event: NodeStateEvent) => void) {
-  return graphSocket.onNodeState(nodeId, (payload) => {
-    handler({
-      nodeId: payload.nodeId,
-      updatedAt: payload.updatedAt,
-      state: payload.state ?? {},
-    });
-  });
-}
-
 function onConnected(handler: () => void) {
   return graphSocket.onConnected(handler);
 }
@@ -60,7 +44,6 @@ export const graphSocketService = {
   connect,
   subscribeToNodes,
   onNodeStatus,
-  onNodeState,
   onConnected,
   onReconnected,
   onDisconnected,

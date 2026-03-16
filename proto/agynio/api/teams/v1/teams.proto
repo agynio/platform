@@ -1,0 +1,619 @@
+syntax = "proto3";
+
+package agynio.api.teams.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/agynio/api/gen/agynio/api/teams/v1;teamsv1";
+
+// TeamsService manages team resources: agents, tools, MCP servers,
+// workspace configurations, memory buckets, variables, and attachments (relations).
+//
+// This is a control-plane service. It stores desired state;
+// other services reconcile toward it.
+service TeamsService {
+  // --- Agents ---
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
+  rpc GetAgent(GetAgentRequest) returns (GetAgentResponse);
+  rpc UpdateAgent(UpdateAgentRequest) returns (UpdateAgentResponse);
+  rpc DeleteAgent(DeleteAgentRequest) returns (DeleteAgentResponse);
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+
+  // --- Tools ---
+  rpc CreateTool(CreateToolRequest) returns (CreateToolResponse);
+  rpc GetTool(GetToolRequest) returns (GetToolResponse);
+  rpc UpdateTool(UpdateToolRequest) returns (UpdateToolResponse);
+  rpc DeleteTool(DeleteToolRequest) returns (DeleteToolResponse);
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+
+  // --- MCP Servers ---
+  rpc CreateMcpServer(CreateMcpServerRequest) returns (CreateMcpServerResponse);
+  rpc GetMcpServer(GetMcpServerRequest) returns (GetMcpServerResponse);
+  rpc UpdateMcpServer(UpdateMcpServerRequest) returns (UpdateMcpServerResponse);
+  rpc DeleteMcpServer(DeleteMcpServerRequest) returns (DeleteMcpServerResponse);
+  rpc ListMcpServers(ListMcpServersRequest) returns (ListMcpServersResponse);
+
+  // --- Workspace Configurations ---
+  rpc CreateWorkspaceConfiguration(CreateWorkspaceConfigurationRequest) returns (CreateWorkspaceConfigurationResponse);
+  rpc GetWorkspaceConfiguration(GetWorkspaceConfigurationRequest) returns (GetWorkspaceConfigurationResponse);
+  rpc UpdateWorkspaceConfiguration(UpdateWorkspaceConfigurationRequest) returns (UpdateWorkspaceConfigurationResponse);
+  rpc DeleteWorkspaceConfiguration(DeleteWorkspaceConfigurationRequest) returns (DeleteWorkspaceConfigurationResponse);
+  rpc ListWorkspaceConfigurations(ListWorkspaceConfigurationsRequest) returns (ListWorkspaceConfigurationsResponse);
+
+  // --- Memory Buckets ---
+  rpc CreateMemoryBucket(CreateMemoryBucketRequest) returns (CreateMemoryBucketResponse);
+  rpc GetMemoryBucket(GetMemoryBucketRequest) returns (GetMemoryBucketResponse);
+  rpc UpdateMemoryBucket(UpdateMemoryBucketRequest) returns (UpdateMemoryBucketResponse);
+  rpc DeleteMemoryBucket(DeleteMemoryBucketRequest) returns (DeleteMemoryBucketResponse);
+  rpc ListMemoryBuckets(ListMemoryBucketsRequest) returns (ListMemoryBucketsResponse);
+
+  // --- Variables ---
+  rpc CreateVariable(CreateVariableRequest) returns (CreateVariableResponse);
+  rpc GetVariable(GetVariableRequest) returns (GetVariableResponse);
+  rpc UpdateVariable(UpdateVariableRequest) returns (UpdateVariableResponse);
+  rpc DeleteVariable(DeleteVariableRequest) returns (DeleteVariableResponse);
+  rpc ListVariables(ListVariablesRequest) returns (ListVariablesResponse);
+  rpc ResolveVariable(ResolveVariableRequest) returns (ResolveVariableResponse);
+
+  // --- Attachments (no Update) ---
+  rpc CreateAttachment(CreateAttachmentRequest) returns (CreateAttachmentResponse);
+  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse);
+  rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse);
+  rpc ListAttachments(ListAttachmentsRequest) returns (ListAttachmentsResponse);
+}
+
+// ===========================================================================
+// Common
+// ===========================================================================
+
+// Metadata shared by every team resource.
+message EntityMeta {
+  string id = 1; // UUID
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+enum ToolType {
+  TOOL_TYPE_UNSPECIFIED = 0;
+  TOOL_TYPE_MANAGE = 1;
+  TOOL_TYPE_MEMORY = 2;
+  TOOL_TYPE_SHELL_COMMAND = 3;
+  TOOL_TYPE_SEND_MESSAGE = 4;
+  TOOL_TYPE_SEND_SLACK_MESSAGE = 5;
+  TOOL_TYPE_REMIND_ME = 6;
+  TOOL_TYPE_GITHUB_CLONE_REPO = 7;
+  TOOL_TYPE_CALL_AGENT = 8;
+}
+
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_AGENT = 1;
+  ENTITY_TYPE_TOOL = 2;
+  ENTITY_TYPE_MCP_SERVER = 3;
+  ENTITY_TYPE_WORKSPACE_CONFIGURATION = 4;
+  ENTITY_TYPE_MEMORY_BUCKET = 5;
+  ENTITY_TYPE_VARIABLE = 6;
+}
+
+enum AttachmentKind {
+  ATTACHMENT_KIND_UNSPECIFIED = 0;
+  ATTACHMENT_KIND_AGENT_TOOL = 1;
+  ATTACHMENT_KIND_AGENT_MEMORY_BUCKET = 2;
+  ATTACHMENT_KIND_AGENT_WORKSPACE_CONFIGURATION = 3;
+  ATTACHMENT_KIND_AGENT_MCP_SERVER = 4;
+  ATTACHMENT_KIND_MCP_SERVER_WORKSPACE_CONFIGURATION = 5;
+}
+
+enum MemoryBucketScope {
+  MEMORY_BUCKET_SCOPE_UNSPECIFIED = 0;
+  MEMORY_BUCKET_SCOPE_GLOBAL = 1;
+  MEMORY_BUCKET_SCOPE_PER_THREAD = 2;
+}
+
+enum WorkspacePlatform {
+  WORKSPACE_PLATFORM_UNSPECIFIED = 0;
+  WORKSPACE_PLATFORM_LINUX_AMD64 = 1;
+  WORKSPACE_PLATFORM_LINUX_ARM64 = 2;
+  WORKSPACE_PLATFORM_AUTO = 3;
+}
+
+enum AgentWhenBusy {
+  AGENT_WHEN_BUSY_UNSPECIFIED = 0;
+  AGENT_WHEN_BUSY_WAIT = 1;
+  AGENT_WHEN_BUSY_INJECT_AFTER_TOOLS = 2;
+}
+
+enum AgentProcessBuffer {
+  AGENT_PROCESS_BUFFER_UNSPECIFIED = 0;
+  AGENT_PROCESS_BUFFER_ALL_TOGETHER = 1;
+  AGENT_PROCESS_BUFFER_ONE_BY_ONE = 2;
+}
+
+enum McpToolFilterMode {
+  MCP_TOOL_FILTER_MODE_UNSPECIFIED = 0;
+  MCP_TOOL_FILTER_MODE_ALLOW = 1;
+  MCP_TOOL_FILTER_MODE_DENY = 2;
+}
+
+// ===========================================================================
+// Agent
+// ===========================================================================
+
+message AgentConfig {
+  string model = 1;
+  string system_prompt = 2;
+  int32 debounce_ms = 3;
+  AgentWhenBusy when_busy = 4;
+  AgentProcessBuffer process_buffer = 5;
+  bool send_final_response_to_thread = 6;
+  int32 summarization_keep_tokens = 7;
+  int32 summarization_max_tokens = 8;
+  bool restrict_output = 9;
+  string restriction_message = 10;
+  int32 restriction_max_injections = 11;
+  string name = 12;
+  string role = 13;
+}
+
+message Agent {
+  EntityMeta meta = 1;
+  string title = 2;
+  string description = 3;
+  AgentConfig config = 4;
+}
+
+message CreateAgentRequest {
+  string title = 1;
+  string description = 2;
+  AgentConfig config = 3; // required
+}
+
+message CreateAgentResponse {
+  Agent agent = 1;
+}
+
+message GetAgentRequest {
+  string id = 1; // UUID
+}
+
+message GetAgentResponse {
+  Agent agent = 1;
+}
+
+message UpdateAgentRequest {
+  string id = 1; // UUID
+  optional string title = 2;
+  optional string description = 3;
+  optional AgentConfig config = 4;
+}
+
+message UpdateAgentResponse {
+  Agent agent = 1;
+}
+
+message DeleteAgentRequest {
+  string id = 1; // UUID
+}
+
+message DeleteAgentResponse {}
+
+message ListAgentsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string query = 3;
+}
+
+message ListAgentsResponse {
+  repeated Agent agents = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// Tool
+// ===========================================================================
+
+message Tool {
+  EntityMeta meta = 1;
+  ToolType type = 2;
+  string name = 3;
+  string description = 4;
+  google.protobuf.Struct config = 5;
+}
+
+message CreateToolRequest {
+  ToolType type = 1;
+  string name = 2;
+  string description = 3;
+  google.protobuf.Struct config = 4;
+}
+
+message CreateToolResponse {
+  Tool tool = 1;
+}
+
+message GetToolRequest {
+  string id = 1;
+}
+
+message GetToolResponse {
+  Tool tool = 1;
+}
+
+message UpdateToolRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional google.protobuf.Struct config = 4;
+}
+
+message UpdateToolResponse {
+  Tool tool = 1;
+}
+
+message DeleteToolRequest {
+  string id = 1;
+}
+
+message DeleteToolResponse {}
+
+message ListToolsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  ToolType type = 3;
+}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// MCP Server
+// ===========================================================================
+
+message McpEnvItem {
+  string name = 1;
+  string value = 2;
+}
+
+message McpToolFilterRule {
+  string pattern = 1;
+}
+
+message McpToolFilter {
+  McpToolFilterMode mode = 1;
+  repeated McpToolFilterRule rules = 2;
+}
+
+message McpServerRestartConfig {
+  int32 max_attempts = 1;
+  int32 backoff_ms = 2;
+}
+
+message McpServerConfig {
+  string namespace = 1;
+  string command = 2;
+  string workdir = 3;
+  repeated McpEnvItem env = 4;
+  int32 request_timeout_ms = 5;
+  int32 startup_timeout_ms = 6;
+  int32 heartbeat_interval_ms = 7;
+  int32 stale_timeout_ms = 8;
+  McpServerRestartConfig restart = 9;
+  McpToolFilter tool_filter = 10;
+}
+
+message McpServer {
+  EntityMeta meta = 1;
+  string title = 2;
+  string description = 3;
+  McpServerConfig config = 4;
+}
+
+message CreateMcpServerRequest {
+  string title = 1;
+  string description = 2;
+  McpServerConfig config = 3;
+}
+
+message CreateMcpServerResponse {
+  McpServer mcp_server = 1;
+}
+
+message GetMcpServerRequest {
+  string id = 1;
+}
+
+message GetMcpServerResponse {
+  McpServer mcp_server = 1;
+}
+
+message UpdateMcpServerRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional McpServerConfig config = 4;
+}
+
+message UpdateMcpServerResponse {
+  McpServer mcp_server = 1;
+}
+
+message DeleteMcpServerRequest {
+  string id = 1;
+}
+
+message DeleteMcpServerResponse {}
+
+message ListMcpServersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMcpServersResponse {
+  repeated McpServer mcp_servers = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// Workspace Configuration
+// ===========================================================================
+
+message WorkspaceEnvItem {
+  string name = 1;
+  string value = 2;
+}
+
+message WorkspaceVolumeConfig {
+  bool enabled = 1;
+  string mount_path = 2;
+}
+
+message WorkspaceConfig {
+  string image = 1;
+  repeated WorkspaceEnvItem env = 2;
+  string initial_script = 3;
+  string cpu_limit = 4;
+  string memory_limit = 5;
+  WorkspacePlatform platform = 6;
+  bool enable_dind = 7;
+  int32 ttl_seconds = 8;
+  google.protobuf.Struct nix = 9;
+  WorkspaceVolumeConfig volumes = 10;
+}
+
+message WorkspaceConfiguration {
+  EntityMeta meta = 1;
+  string title = 2;
+  string description = 3;
+  WorkspaceConfig config = 4;
+}
+
+message CreateWorkspaceConfigurationRequest {
+  string title = 1;
+  string description = 2;
+  WorkspaceConfig config = 3;
+}
+
+message CreateWorkspaceConfigurationResponse {
+  WorkspaceConfiguration workspace_configuration = 1;
+}
+
+message GetWorkspaceConfigurationRequest {
+  string id = 1;
+}
+
+message GetWorkspaceConfigurationResponse {
+  WorkspaceConfiguration workspace_configuration = 1;
+}
+
+message UpdateWorkspaceConfigurationRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional WorkspaceConfig config = 4;
+}
+
+message UpdateWorkspaceConfigurationResponse {
+  WorkspaceConfiguration workspace_configuration = 1;
+}
+
+message DeleteWorkspaceConfigurationRequest {
+  string id = 1;
+}
+
+message DeleteWorkspaceConfigurationResponse {}
+
+message ListWorkspaceConfigurationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListWorkspaceConfigurationsResponse {
+  repeated WorkspaceConfiguration workspace_configurations = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// Memory Bucket
+// ===========================================================================
+
+message MemoryBucketConfig {
+  MemoryBucketScope scope = 1;
+  string collection_prefix = 2;
+}
+
+message MemoryBucket {
+  EntityMeta meta = 1;
+  string title = 2;
+  string description = 3;
+  MemoryBucketConfig config = 4;
+}
+
+message CreateMemoryBucketRequest {
+  string title = 1;
+  string description = 2;
+  MemoryBucketConfig config = 3;
+}
+
+message CreateMemoryBucketResponse {
+  MemoryBucket memory_bucket = 1;
+}
+
+message GetMemoryBucketRequest {
+  string id = 1;
+}
+
+message GetMemoryBucketResponse {
+  MemoryBucket memory_bucket = 1;
+}
+
+message UpdateMemoryBucketRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional MemoryBucketConfig config = 4;
+}
+
+message UpdateMemoryBucketResponse {
+  MemoryBucket memory_bucket = 1;
+}
+
+message DeleteMemoryBucketRequest {
+  string id = 1;
+}
+
+message DeleteMemoryBucketResponse {}
+
+message ListMemoryBucketsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMemoryBucketsResponse {
+  repeated MemoryBucket memory_buckets = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// Variable
+// ===========================================================================
+
+message Variable {
+  EntityMeta meta = 1;
+  string key = 2;
+  string value = 3;
+  string description = 4;
+}
+
+message CreateVariableRequest {
+  string key = 1;
+  string value = 2;
+  string description = 3;
+}
+
+message CreateVariableResponse {
+  Variable variable = 1;
+}
+
+message GetVariableRequest {
+  string id = 1;
+}
+
+message GetVariableResponse {
+  Variable variable = 1;
+}
+
+message UpdateVariableRequest {
+  string id = 1;
+  optional string key = 2;
+  optional string value = 3;
+  optional string description = 4;
+}
+
+message UpdateVariableResponse {
+  Variable variable = 1;
+}
+
+message DeleteVariableRequest {
+  string id = 1;
+}
+
+message DeleteVariableResponse {}
+
+message ListVariablesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string query = 3;
+}
+
+message ListVariablesResponse {
+  repeated Variable variables = 1;
+  string next_page_token = 2;
+}
+
+message ResolveVariableRequest {
+  string key = 1;
+}
+
+message ResolveVariableResponse {
+  string value = 1;
+  bool found = 2;
+}
+
+// ===========================================================================
+// Attachment (relation between entities; no Update)
+// ===========================================================================
+
+message Attachment {
+  EntityMeta meta = 1;
+  AttachmentKind kind = 2;
+  EntityType source_type = 3;
+  string source_id = 4;
+  EntityType target_type = 5;
+  string target_id = 6;
+}
+
+message CreateAttachmentRequest {
+  AttachmentKind kind = 1;
+  string source_id = 2;
+  string target_id = 3;
+}
+
+message CreateAttachmentResponse {
+  Attachment attachment = 1;
+}
+
+message GetAttachmentRequest {
+  string id = 1;
+}
+
+message GetAttachmentResponse {
+  Attachment attachment = 1;
+}
+
+message DeleteAttachmentRequest {
+  string id = 1;
+}
+
+message DeleteAttachmentResponse {}
+
+message ListAttachmentsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  EntityType source_type = 3;
+  string source_id = 4;
+  EntityType target_type = 5;
+  string target_id = 6;
+  AttachmentKind kind = 7;
+}
+
+message ListAttachmentsResponse {
+  repeated Attachment attachments = 1;
+  string next_page_token = 2;
+}

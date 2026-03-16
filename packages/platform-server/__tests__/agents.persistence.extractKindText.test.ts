@@ -61,11 +61,7 @@ import type { ResponseFunctionToolCall } from 'openai/resources/responses/respon
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
-
-const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
-const graphRepoStub = {
-  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
-} as any;
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const createLinkingStub = () =>
   ({
@@ -92,8 +88,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
   const svc = new AgentsPersistenceService(
     { getClient: () => ({}) } as any,
     metrics,
-    templateRegistryStub,
-    graphRepoStub,
+    createTeamsClientStub(),
     createRunEventsStub() as any,
     createLinkingStub(),
     eventsBusStub,
@@ -150,8 +145,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       metrics,
-      templateRegistryStub,
-      graphRepoStub,
+      createTeamsClientStub(),
       createRunEventsStub() as any,
       linking,
       eventsBusStub,
@@ -205,8 +199,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       metrics,
-      templateRegistryStub,
-      graphRepoStub,
+      createTeamsClientStub(),
       runEventsStub as any,
       linking,
       eventsBusStub,
@@ -268,8 +261,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       metrics,
-      templateRegistryStub,
-      graphRepoStub,
+      createTeamsClientStub(),
       runEventsStub as any,
       linking,
       eventsBusStub,

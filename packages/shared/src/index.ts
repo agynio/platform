@@ -4,8 +4,6 @@ export type {
   PersistedGraph,
   PersistedGraphNode,
   PersistedGraphEdge,
-  PersistedGraphUpsertRequest,
-  PersistedGraphUpsertResponse,
 } from '../../platform-server/src/shared/types/graph.types';
 
 export type {

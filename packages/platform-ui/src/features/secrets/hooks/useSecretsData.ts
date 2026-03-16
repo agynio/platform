@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import type { PersistedGraph } from '@agyn/shared';
 import * as api from '@/api/modules/graph';
 import { computeRequiredKeys, computeSecretsUnion } from '@/api/modules/graph';
 import type { SecretEntry } from '@/api/modules/graph';
+import { fetchTeamsGraphSnapshot } from '@/features/graph/services/teamsGraph';
 import { mapEntryToScreenSecret, toId, type ScreenSecret } from '../types';
 import { discoverVaultKeys } from '../utils/flatVault';
 
@@ -39,12 +39,12 @@ export interface SecretsData {
 
 export function useSecretsData(): SecretsData {
   const graphQuery = useQuery({
-    queryKey: ['graph', 'full'],
-    queryFn: () => api.graph.getFullGraph(),
+    queryKey: ['graph', 'teams'],
+    queryFn: () => fetchTeamsGraphSnapshot(),
   });
 
   const requiredKeys = useMemo(
-    () => (graphQuery.data ? computeRequiredKeys(graphQuery.data as PersistedGraph) : []),
+    () => (graphQuery.data ? computeRequiredKeys(graphQuery.data) : []),
     [graphQuery.data],
   );
 

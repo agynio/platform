@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { PassThrough } from 'node:stream';
-import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 import type { WorkspaceStdioSessionRequest } from '../src/workspace/runtime/workspace.runtime.provider';
 
@@ -96,7 +95,7 @@ describe('LocalMCPServer heartbeat behavior', () => {
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
     const provider = new BlockingWorkspaceProvider();
     const workspaceNode = new WorkspaceNodeStub(provider);
-    const server = new LocalMCPServerNode(envStub, {} as any, createModuleRefStub());
+    const server = new LocalMCPServerNode(envStub, {} as any);
     server.setContainerProvider(workspaceNode as unknown as typeof server['containerProvider']);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
 

@@ -12,7 +12,6 @@ const socketMocks = vi.hoisted(() => ({
   connect: vi.fn(),
   subscribeToNodes: vi.fn(),
   onNodeStatus: vi.fn(),
-  onNodeState: vi.fn(),
   onConnected: vi.fn(),
   onReconnected: vi.fn(),
   onDisconnected: vi.fn(),
@@ -35,7 +34,6 @@ const applySocketMockImplementations = vi.hoisted(() => () => {
       }
     };
   });
-  socketMocks.onNodeState.mockImplementation(() => () => {});
   socketMocks.onConnected.mockImplementation((handler: () => void) => {
     handlerStore.connected.push(handler);
     return () => {
@@ -72,7 +70,6 @@ vi.mock('../../services/socket', () => {
       connect: socketMocks.connect,
       subscribeToNodes: socketMocks.subscribeToNodes,
       onNodeStatus: socketMocks.onNodeStatus,
-      onNodeState: socketMocks.onNodeState,
       onConnected: socketMocks.onConnected,
       onReconnected: socketMocks.onReconnected,
       onDisconnected: socketMocks.onDisconnected,
@@ -97,7 +94,6 @@ describe('useNodeStatus', () => {
     socketMocks.subscribeToNodes.mockClear();
     apiMocks.fetchNodeStatus.mockClear();
     socketMocks.onNodeStatus.mockClear();
-    socketMocks.onNodeState.mockClear();
     socketMocks.onConnected.mockClear();
     socketMocks.onReconnected.mockClear();
     socketMocks.onDisconnected.mockClear();

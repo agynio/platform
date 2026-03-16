@@ -4,12 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { AgentsPersistenceService } from '../../src/agents/agents.persistence.service';
 import type { PrismaService } from '../../src/core/services/prisma.service';
 import type { ThreadsMetricsService } from '../../src/agents/threads.metrics.service';
-import type { TemplateRegistry } from '../../src/graph-core/templateRegistry';
-import type { GraphRepository } from '../../src/graph/graph.repository';
 import type { RunEventsService } from '../../src/events/run-events.service';
 import type { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
 import type { EventsBusService } from '../../src/events/events-bus.service';
 import { HumanMessage } from '@agyn/llm';
+import { createTeamsClientStub } from '../helpers/teamsGrpc.stub';
 
 describe('AgentsPersistenceService', () => {
   it('persists invocation messages as user role', async () => {
@@ -33,8 +32,6 @@ describe('AgentsPersistenceService', () => {
 
     const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
     const metrics = {} as unknown as ThreadsMetricsService;
-    const templateRegistry = {} as unknown as TemplateRegistry;
-    const graphRepository = {} as unknown as GraphRepository;
     const runEvents = {
       recordInvocationMessage: vi.fn().mockResolvedValue({ id: 'event-1' }),
     } as unknown as RunEventsService;
@@ -51,8 +48,7 @@ describe('AgentsPersistenceService', () => {
     const service = new AgentsPersistenceService(
       prismaService,
       metrics,
-      templateRegistry,
-      graphRepository,
+      createTeamsClientStub(),
       runEvents,
       callAgentLinking,
       eventsBus,

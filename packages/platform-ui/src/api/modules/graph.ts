@@ -1,5 +1,5 @@
 import { http } from '@/api/http';
-import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
+import type { TemplateSchema, NodeStatus, ReminderDTO } from '@/api/types/graph';
 import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { collectVaultRefs } from '@/lib/vault/collect';
 import { parseVaultRef, isValidVaultRef } from '@/lib/vault/parse';
@@ -52,11 +52,12 @@ export const graph = {
   writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
     http.post<{ mount: string; path: string; key: string; version: number }>(`/api/vault/kv/${encodeURIComponent(mount)}/write`, body),
 
-  // Node status/state
+  // Node status/tools
   getNodeStatus: (nodeId: string) => http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
-  getNodeState: (nodeId: string) => http.get<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`),
-  putNodeState: (nodeId: string, state: Record<string, unknown>) =>
-    http.put<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, { state }),
+  discoverTools: (nodeId: string) =>
+    http.post<{ tools: Array<{ name: string; description: string }>; updatedAt?: string }>(
+      `/api/graph/nodes/${encodeURIComponent(nodeId)}/discover-tools`,
+    ),
 
   // Dynamic config schema (404 -> null)
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
@@ -81,13 +82,7 @@ export const graph = {
   postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') =>
     http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
 
-  // Full graph
-  saveFullGraph: (g: PersistedGraphUpsertRequestUI) =>
-    http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, g),
-  getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
 };
-
-export type { PersistedGraphUpsertRequestUI };
 
 // Secrets helpers/types (authoritative definitions for Settings/Secrets)
 export type SecretKey = { mount: string; path: string; key: string };

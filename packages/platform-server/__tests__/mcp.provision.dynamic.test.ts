@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerTool } from '../src/nodes/mcp/localMcpServer.tool';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
-import { createModuleRefStub } from './helpers/module-ref.stub';
 import { WorkspaceProviderStub, WorkspaceNodeStub } from './helpers/workspace-provider.stub';
 
 class MockLogger {
@@ -9,7 +10,7 @@ class MockLogger {
   debug = vi.fn();
   error = vi.fn();
 }
-describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => {
+describe('LocalMCPServer provision/deprovision + toolFilter', () => {
   let server: LocalMCPServerNode;
   let logger: MockLogger;
 
@@ -19,7 +20,7 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
       resolveEnvItems: vi.fn(async () => ({})),
       resolveProviderEnv: vi.fn(async () => ({})),
     } as any;
-    server = new LocalMCPServerNode(envStub, {} as any, createModuleRefStub());
+    server = new LocalMCPServerNode(envStub, {} as any);
     (server as any).logger = logger;
     const provider = new WorkspaceProviderStub();
     const workspaceNode = new WorkspaceNodeStub(provider);
@@ -64,28 +65,17 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
     expect(server.status).toBe('not_ready');
   });
 
-  // Dynamic-config APIs removed; use setState(enabledTools) + listTools filtering.
-
-  it('setState(enabledTools) filters listTools output by raw names or namespaced', async () => {
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
-    // Preload cache with discovered tools (creates LocalMCPServerTool instances)
-    server.preloadCachedTools([ { name: 'toolA' } as any, { name: 'toolB' } as any ]);
-    let tools = server.listTools();
-    expect(tools).toEqual([]);
-
-    // Enable only toolA using raw name
-    await server.setState({ mcp: { enabledTools: ['toolA'] } });
-    tools = server.listTools();
-    expect(tools.map(t => t.name)).toEqual(['ns_toolA']);
-
-    // Enable only toolB using namespaced form
-    await server.setState({ mcp: { enabledTools: ['ns_toolB'] } });
-    tools = server.listTools();
-    expect(tools.map(t => t.name)).toEqual(['ns_toolB']);
-
-    // Empty array disables all
-    await server.setState({ mcp: { enabledTools: [] } });
-    tools = server.listTools();
-    expect(tools.length).toBe(0);
+  it('applies toolFilter rules when listing tools', async () => {
+    await server.setConfig({
+      namespace: 'ns',
+      command: 'cmd',
+      toolFilter: { mode: 'allow', rules: [{ pattern: 'toolA' }] },
+    } as McpServerConfig);
+    (server as any).toolsCache = [
+      new LocalMCPServerTool('toolA', 'A', z.object({}).strict(), server),
+      new LocalMCPServerTool('toolB', 'B', z.object({}).strict(), server),
+    ];
+    const tools = server.listTools();
+    expect(tools.map((t) => t.name)).toEqual(['ns_toolA']);
   });
 });

@@ -25,13 +25,6 @@ export interface TemplateSchema {
 }
 
 export interface ProvisionStatus { state: ProvisionState; details?: unknown }
-export interface NodeStatus { isPaused?: boolean; provisionStatus?: ProvisionStatus }
+export interface NodeStatus { provisionStatus?: ProvisionStatus }
 
 export interface ReminderDTO { id: string; threadId: string; note: string; at: string }
-
-export interface PersistedGraphUpsertRequestUI {
-  name?: string;
-  version?: number;
-  nodes: Array<{ id: string; position?: { x: number; y: number }; template: string; config?: Record<string, unknown> }>;
-  edges: Array<{ source: string; sourceHandle?: string; target: string; targetHandle?: string }>;
-}

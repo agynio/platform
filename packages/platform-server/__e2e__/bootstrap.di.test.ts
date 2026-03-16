@@ -2,10 +2,7 @@ import 'reflect-metadata';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { NestFactory } from '@nestjs/core';
-import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 
 import { AppModule } from '../src/bootstrap/app.module';
@@ -24,6 +21,7 @@ const REQUIRED_ENV = {
   LITELLM_MASTER_KEY: 'sk-test-master-key',
   AGENTS_DATABASE_URL:
     process.env.AGENTS_DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/agents_test?schema=public',
+  TEAMS_SERVICE_ADDR: 'teams:9090',
   DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
   DOCKER_RUNNER_PORT: '59999',
   DOCKER_RUNNER_SHARED_SECRET: 'dev-shared-secret',
@@ -37,13 +35,11 @@ const TEST_TIMEOUT_MS = 20_000;
 
 describe('Production bootstrap DI', () => {
   let savedEnv: Record<string, string | undefined> = {};
-  let graphRepoPath: string;
   let liteLLMServer: Server | undefined;
 
   beforeEach(async () => {
     savedEnv = {};
-    graphRepoPath = mkdtempSync(path.join(os.tmpdir(), 'platform-bootstrap-di-'));
-    const overrides = { ...REQUIRED_ENV, GRAPH_REPO_PATH: graphRepoPath } as Record<string, string>;
+    const overrides = { ...REQUIRED_ENV } as Record<string, string>;
     for (const [key, value] of Object.entries(overrides)) {
       if (!(key in savedEnv)) {
         savedEnv[key] = process.env[key];
@@ -76,7 +72,6 @@ describe('Production bootstrap DI', () => {
       }
     }
     savedEnv = {};
-    rmSync(graphRepoPath, { recursive: true, force: true });
   });
 
   it(

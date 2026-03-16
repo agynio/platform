@@ -29,7 +29,6 @@ export interface ProvisionStatus {
 }
 
 export interface NodeStatus {
-  isPaused?: boolean;
   provisionStatus?: ProvisionStatus;
   // dynamicConfigReady removed
 }

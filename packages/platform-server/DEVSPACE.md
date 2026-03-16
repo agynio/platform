@@ -27,9 +27,7 @@ and then attaches sync/ports/logs:
    creates subdirectories as root-owned `755`) and the startup script installs
    dependencies, generates protobuf and Prisma clients, and launches the dev
    server.
-5. The dev pod overrides `GRAPH_REPO_PATH` to `/opt/app/data/graph` so the
-   graph repository lives on the writable emptyDir mount.
-6. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
+5. On exit, the ArgoCD hook restores auto-sync for `platform-server`.
 
 Port `3010` is forwarded locally, so the API should be reachable at
 `http://localhost:3010` once the server reports ready.

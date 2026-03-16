@@ -12,7 +12,7 @@ describe('graph api client', () => {
     hoisted.postMock.mockReset();
     hoisted.getMock.mockImplementation(async (url: string) => {
       if (url === '/api/graph/templates') return [{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }];
-      if (String(url).includes('/status')) return { isPaused: false };
+      if (String(url).includes('/status')) return { provisionStatus: { state: 'not_ready' } };
       if (String(url).includes('/dynamic-config/schema')) return {};
       return {};
     });
@@ -24,7 +24,7 @@ describe('graph api client', () => {
   });
   it('getNodeStatus', async () => {
     const s = await api.getNodeStatus('n1');
-    expect(s.isPaused).toBe(false);
+    expect(s.provisionStatus?.state).toBe('not_ready');
   });
 
   it('getDynamicConfigSchema returns null for wrapper/empty', async () => {

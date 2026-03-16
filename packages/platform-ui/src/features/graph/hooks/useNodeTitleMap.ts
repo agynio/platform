@@ -3,7 +3,7 @@ import { useQuery, type QueryStatus } from '@tanstack/react-query';
 
 import { useTemplates } from '@/lib/graph/hooks';
 
-import { graphApiService } from '../services/api';
+import { fetchTeamsGraphSnapshot } from '../services/teamsGraph';
 import { mapPersistedGraphToNodes } from '../mappers';
 
 type NodeTitleEntry = readonly [string, string];
@@ -14,7 +14,7 @@ export function useNodeTitleMap() {
   const templatesQuery = useTemplates();
   const graphQuery = useQuery({
     queryKey: GRAPH_QUERY_KEY,
-    queryFn: () => graphApiService.fetchGraph(),
+    queryFn: () => fetchTeamsGraphSnapshot(),
     staleTime: 60_000,
   });
 

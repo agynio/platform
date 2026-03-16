@@ -37,8 +37,6 @@ export function useCreateVariable() {
       const code = extractErrorCode(error);
       if (code === 'DUPLICATE_KEY') {
         notifyError('Key already exists');
-      } else if (code === 'VERSION_CONFLICT') {
-        notifyError('Version conflict, please retry');
       } else {
         notifyError(code ?? 'Create failed');
       }
@@ -57,8 +55,6 @@ export function useUpdateVariable() {
       const code = extractErrorCode(error);
       if (code === 'BAD_VALUE') {
         notifyError('Value cannot be empty');
-      } else if (code === 'VERSION_CONFLICT') {
-        notifyError('Version conflict, please retry');
       } else {
         notifyError(code ?? 'Update failed');
       }
@@ -75,11 +71,7 @@ export function useDeleteVariable() {
     },
     onError: (error: unknown) => {
       const code = extractErrorCode(error);
-      if (code === 'VERSION_CONFLICT') {
-        notifyError('Version conflict, please retry');
-      } else {
-        notifyError(code ?? 'Delete failed');
-      }
+      notifyError(code ?? 'Delete failed');
     },
   });
 }

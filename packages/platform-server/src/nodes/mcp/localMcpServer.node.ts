@@ -8,13 +8,11 @@ import { ConfigService } from '../../core/services/config.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
 import { WorkspaceExecTransport } from './workspaceExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
-import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
-import { NodeStateService } from '../../graph/nodeState.service';
+import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult } from './types';
 import Node from '../base/Node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
-import { isEqual } from 'lodash-es';
-import { ModuleRef } from '@nestjs/core';
+import picomatch from 'picomatch';
 import { ReferenceValueSchema } from '../../utils/reference-schemas';
 
 const EnvItemSchema = z
@@ -24,6 +22,19 @@ const EnvItemSchema = z
   })
   .strict()
   .describe('Environment variable entry (static string or reference).');
+
+const ToolFilterRuleSchema = z
+  .object({
+    pattern: z.string().min(1),
+  })
+  .strict();
+
+const ToolFilterSchema = z
+  .object({
+    mode: z.enum(['allow', 'deny']),
+    rules: z.array(ToolFilterRuleSchema).default([]),
+  })
+  .strict();
 
 export const LocalMcpServerStaticConfigSchema = z.object({
   title: z.string().optional(),
@@ -49,6 +60,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
     })
     .optional()
     .describe('Restart strategy configuration (optional).'),
+  toolFilter: ToolFilterSchema.optional().describe('Optional tool allow/deny filter for MCP tools.'),
 });
 // .strict();
 
@@ -89,21 +101,15 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   private startRetryTimer?: NodeJS.Timeout;
   private dependencyTimeoutTimer?: NodeJS.Timeout;
   private emitter = new EventEmitter();
+  private toolFilterMatchers: Array<(name: string) => boolean> | null = null;
   // Debug / tracing counters
 
   // Node lifecycle state driven by base Node
   private _provInFlight: Promise<void> | null = null;
 
-  // Dynamic config: enabled tools (undefined => disabled by default)
-  // Tools are exposed only after enabledTools explicitly enumerates them.
-  private _globalStaleTimeoutMs = 0;
-  // Last seen enabled tools from state for change detection
-  private _lastEnabledTools?: string[];
-
   constructor(
     @Inject(EnvService) protected envService: EnvService,
     @Inject(ConfigService) protected configService: ConfigService,
-    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     super();
   }
@@ -111,19 +117,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   private formatError(error: unknown): string {
     if (error instanceof Error) return `${error.name}: ${error.message}`;
     return String(error);
-  }
-
-  private nodeStateService?: NodeStateService;
-
-  private getNodeStateService(): NodeStateService | undefined {
-    if (!this.nodeStateService) {
-      try {
-        this.nodeStateService = this.moduleRef.get(NodeStateService, { strict: false });
-      } catch {
-        this.nodeStateService = undefined;
-      }
-    }
-    return this.nodeStateService;
   }
 
   get namespace(): string {
@@ -139,6 +132,13 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     } as const;
   }
 
+  override async setConfig(cfg: z.infer<typeof LocalMcpServerStaticConfigSchema>): Promise<void> {
+    const parsed = LocalMcpServerStaticConfigSchema.parse(cfg ?? {});
+    this.toolFilterMatchers = this.buildToolFilterMatchers(parsed.toolFilter);
+    await super.setConfig(parsed);
+    this.notifyToolsUpdated(Date.now());
+  }
+
   /**
    * Create a LocalMCPServerTool instance from a McpTool.
    * If a delegate is provided, it is used (for discovered tools); otherwise, a fallback delegate is used (for preloaded tools).
@@ -149,45 +149,18 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     return new LocalMCPServerTool(tool.name, tool.description || 'MCP tool', inputSchema, this);
   }
 
-  preloadCachedTools(tools: McpTool[], updatedAt?: number | string | Date): void {
-    this.toolsCache = tools.map((t) => this.createLocalTool(t));
-    this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
-
-    if (updatedAt !== undefined) {
-      const ts =
-        typeof updatedAt === 'number'
-          ? updatedAt
-          : updatedAt instanceof Date
-            ? updatedAt.getTime()
-            : Date.parse(String(updatedAt));
-      if (Number.isFinite(ts)) this.lastToolsUpdatedAt = ts;
-    }
-    // Notify listeners with unified tools update event
-    this.notifyToolsUpdated(Date.now());
-  }
-
-  async setState(state: { mcp?: PersistedMcpState }): Promise<void> {
-    // Preload cached tools if present in state
-    if (state?.mcp && state.mcp.tools) {
-      const summaries = state.mcp.tools;
-      const updatedAt = state.mcp.toolsUpdatedAt;
+  private buildToolFilterMatchers(
+    filter: z.infer<typeof ToolFilterSchema> | undefined,
+  ): Array<(name: string) => boolean> | null {
+    if (!filter) return null;
+    if (!filter.rules.length) return [];
+    return filter.rules.map((rule) => {
       try {
-        this.preloadCachedTools(summaries, updatedAt);
-      } catch (e) {
-        this.logger.error(`Error during MCP cache preload for node ${this.nodeId}: ${this.formatError(e)}`);
+        return picomatch(rule.pattern);
+      } catch (_err) {
+        throw new Error(`invalid_mcp_tool_filter_pattern: ${rule.pattern}`);
       }
-    }
-    // Detect enabledTools changes in state.mcp (optional field)
-    const mcpState = state?.mcp as Record<string, unknown> | undefined;
-    const rawEnabled: unknown = mcpState ? (mcpState['enabledTools'] as unknown) : undefined;
-    const nextEnabled =
-      Array.isArray(rawEnabled) && rawEnabled.every((v) => typeof v === 'string')
-        ? (rawEnabled as string[])
-        : undefined;
-    if (!isEqual(this._lastEnabledTools, nextEnabled)) {
-      this._lastEnabledTools = nextEnabled ? [...nextEnabled] : undefined;
-      this.notifyToolsUpdated(Date.now());
-    }
+    });
   }
 
   /**
@@ -242,29 +215,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.logger.log(`[MCP:${this.config.namespace}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
       this.lastToolsUpdatedAt = Date.now();
-      // Persist state using NodeStateService (if available)
-      try {
-        const state: { mcp: PersistedMcpState } = {
-          mcp: {
-            tools: result.tools.map(
-              (t) =>
-                ({
-                  name: t.name,
-                  description: t.description,
-                  inputSchema: t.inputSchema,
-                  outputSchema: t.outputSchema,
-                }) as McpTool,
-            ),
-            toolsUpdatedAt: this.lastToolsUpdatedAt,
-          },
-        };
-        const nodeStateService = this.getNodeStateService();
-        if (nodeStateService) {
-          await nodeStateService.upsertNodeState(this.nodeId, state as Record<string, unknown>);
-        }
-      } catch (e) {
-        this.logger.error(`[MCP:${this.config.namespace}] Failed to persist state error=${this.formatError(e)}`);
-      }
       // Notify listeners with unified tools update event
       this.notifyToolsUpdated(this.lastToolsUpdatedAt || Date.now());
     } catch (err) {
@@ -307,54 +257,31 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     this.containerProvider = provider;
   }
 
+  getToolsSnapshot(): { tools: Array<{ name: string; description: string }>; updatedAt?: number } {
+    const tools = this.applyToolFilter(this.toolsCache ? [...this.toolsCache] : []);
+    return {
+      tools: tools.map((tool) => ({ name: tool.name, description: tool.description })),
+      updatedAt: this.lastToolsUpdatedAt,
+    };
+  }
+
   // Return legacy McpTool shape for interface compliance; callers needing function tools can access toolsCache directly.
   listTools(_force = false): LocalMCPServerTool[] {
-    // Passive: Only return cached tools filtered by enabledTools.
-    const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
-    const ns = this.namespace;
+    return this.applyToolFilter(this.toolsCache ? [...this.toolsCache] : []);
+  }
 
-    // Normalize a raw or namespaced enabledTool name to the runtime LocalMCPServerTool.name
-    const toRuntimeName = (name: string): string => {
-      const prefix = ns ? `${ns}_` : '';
-      if (prefix && name.startsWith(prefix)) return name; // already namespaced for this server
-      if (!prefix) return name; // no namespace -> runtime == raw
-      // Accept raw names and map to runtime namespaced form
-      return `${prefix}${name}`;
-    };
-
-    // Prefer NodeStateService snapshot
-    let enabledList: string[] | undefined;
-    try {
-      const snap = this.getNodeStateService()?.getSnapshot(this.nodeId) as
-        | { mcp?: { enabledTools?: string[] } }
-        | undefined;
-      if (snap && snap.mcp && Array.isArray(snap.mcp.enabledTools)) {
-        enabledList = [...snap.mcp.enabledTools];
-      }
-    } catch {
-      // ignore snapshot errors
+  private applyToolFilter(tools: LocalMCPServerTool[]): LocalMCPServerTool[] {
+    const filter = this.config?.toolFilter;
+    if (!filter) return tools;
+    const matchers = this.toolFilterMatchers ?? [];
+    if (matchers.length === 0) {
+      return filter.mode === 'allow' ? [] : tools;
     }
-
-    // Fallback to last enabledTools captured via setState if snapshot not ready
-    if (!enabledList && Array.isArray(this._lastEnabledTools)) {
-      enabledList = [...this._lastEnabledTools];
+    const matches = (tool: LocalMCPServerTool) => matchers.some((matcher) => matcher(tool.rawName));
+    if (filter.mode === 'allow') {
+      return tools.filter(matches);
     }
-
-    if (enabledList === undefined) {
-      return [];
-    }
-
-    const wantedRuntimeNames = new Set<string>(enabledList.map((n) => toRuntimeName(String(n))));
-    const availableNames = new Set(allTools.map((t) => t.name));
-    // Log and ignore unknown names
-    const unknown: string[] = Array.from(wantedRuntimeNames).filter((n) => !availableNames.has(n));
-    if (unknown.length) {
-      const availableList = Array.from(availableNames).join(',');
-      this.logger.log(
-        `[MCP:${ns}] enabledTools contains unknown tool(s); ignoring unknown=${unknown.join(',')} available=${availableList}`,
-      );
-    }
-    return allTools.filter((t) => wantedRuntimeNames.has(t.name));
+    return tools.filter((tool) => !matches(tool));
   }
 
   async callTool(

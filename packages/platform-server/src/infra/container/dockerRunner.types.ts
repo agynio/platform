@@ -62,11 +62,17 @@ export type InteractiveExecOptions = {
   demuxStderr?: boolean;
 };
 
+export type ExecInspectInfo = {
+  Running?: boolean;
+  ExitCode?: number | null;
+};
+
 export type InteractiveExecSession = {
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr?: NodeJS.ReadableStream;
   close: () => Promise<ExecResult>;
+  inspect: () => Promise<ExecInspectInfo>;
   execId: string;
   terminateProcessGroup: (reason: 'timeout' | 'idle_timeout') => Promise<void>;
 };

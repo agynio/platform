@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { Http2SessionManager } from '@connectrpc/connect-node';
 
 import { DockerWorkspaceRuntimeProvider } from '../../src/workspace/providers/docker.workspace.provider';
 import { WorkspaceNode, ContainerProviderStaticConfigSchema } from '../../src/nodes/workspace/workspace.node';
@@ -13,23 +14,23 @@ import { PrismaService } from '../../src/core/services/prisma.service';
 import { registerTestConfig, clearTestConfig } from '../helpers/config';
 import {
   RUNNER_SECRET,
+  DEFAULT_SOCKET,
   hasTcpDocker,
-  runnerAddressMissing,
-  runnerSecretMissing,
   socketMissing,
-  startDockerRunner,
+  startDockerRunnerProcess,
   startPostgres,
   runPrismaMigrations,
   type RunnerHandle,
   type PostgresHandle,
 } from '../helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
+const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1';
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe.sequential;
 
 describeOrSkip('Docker workspace reuse lifecycle', () => {
   let runner: RunnerHandle;
   let dockerClient: RunnerGrpcClient;
+  let sessionManager: Http2SessionManager | null = null;
   let dbHandle: PostgresHandle;
   let prismaService: PrismaService;
   let prismaClient: ReturnType<PrismaService['getClient']>;
@@ -43,8 +44,11 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     dbHandle = await startPostgres();
     await runPrismaMigrations(dbHandle.connectionString);
 
-    runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    const socketPath = socketMissing && hasTcpDocker ? '' : DEFAULT_SOCKET;
+    runner = await startDockerRunnerProcess(socketPath);
+    const baseUrl = runner.grpcAddress.startsWith('http') ? runner.grpcAddress : `http://${runner.grpcAddress}`;
+    sessionManager = new Http2SessionManager(baseUrl);
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET, sessionManager });
 
     clearTestConfig();
     const [grpcHost, grpcPort] = runner.grpcAddress.split(':');
@@ -105,6 +109,8 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     if (prismaClient) {
       await prismaClient.$disconnect();
     }
+    sessionManager?.abort();
+    sessionManager = null;
     if (runner) {
       await runner.close();
     }
@@ -112,7 +118,7 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
       await dbHandle.stop();
     }
     clearTestConfig();
-  }, 120_000);
+  }, 240_000);
 
   it('reuses the container across shell and MCP-style execs', async () => {
     const threadId = randomUUID();
@@ -135,7 +141,7 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     const finalRead = await finalHandle.exec(['sh', '-lc', 'cat /workspace/reuse.txt']);
     expect(finalRead.exitCode).toBe(0);
     expect(finalRead.stdout.trim()).toBe('shell-data');
-  }, 180_000);
+  }, 240_000);
 
   it('reuses the container across sequential shell execs', async () => {
     const threadId = randomUUID();

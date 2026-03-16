@@ -179,11 +179,9 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - LITELLM_MASTER_KEY — admin key for LiteLLM
 - Optional LLM:
   - OPENAI_API_KEY, OPENAI_BASE_URL
-- Graph store:
-  - GRAPH_REPO_PATH (default ./data/graph)
+- Graph metadata:
   - GRAPH_BRANCH (default main)
   - GRAPH_AUTHOR_NAME, GRAPH_AUTHOR_EMAIL (deprecated; retained for compatibility)
-  - GRAPH_LOCK_TIMEOUT_MS (default 5000)
 - Vault:
   - VAULT_ENABLED (default false), VAULT_ADDR (default http://localhost:8200), VAULT_TOKEN (default dev-root)
 - Workspace/Docker:
@@ -289,7 +287,7 @@ pnpm --filter @agyn/platform-server run prisma:generate
 
 ## API Docs
 - See docs/api/index.md for current HTTP and socket endpoints:
-  - /api/templates, /api/graph, /graph/templates, /graph/nodes/:nodeId/status, /api/agents/runs/:runId/events, /api/agents/context-items, dynamic-config schema, Vault proxy routes, Nix proxy routes, socket events.
+  - /api/templates, /graph/templates, /graph/nodes/:nodeId/status, /graph/nodes/:nodeId/discover-tools, /api/graph/variables, /api/agents/runs/:runId/events, /api/agents/context-items, Vault proxy routes, Nix proxy routes, socket events.
 - No OpenAPI/Swagger spec checked in; discover via docs/api/index.md and controllers under packages/platform-server/src/graph/ (GraphApiModule wiring).
 
 ## Deployment
@@ -346,5 +344,4 @@ Secrets handling:
 - Production Vault: dev auto-init script (vault/auto-init.sh) is not suitable; confirm production secret management approach and policies.
 - UI Storybook deployment: CI builds and smoke-tests Storybook, but no public hosting config is present. Confirm desired publishing workflow.
 - NCPS in production: ops/k8s manifests are examples; confirm production deployment/monitoring design.
-- Filesystem-backed graph store (GRAPH_REPO_PATH=./data/graph, GRAPH_BRANCH=main) assumes the path is writable and durable. Confirm persistence strategy in production (persistent volumes/NFS) and keep legacy git repos out of the configured path; the server now reads/writes directly to the working tree without migrations.
 - Confirm whether the general postgres service (5442) is used by other components or is purely for convenience; server uses agents-db (5443).

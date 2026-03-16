@@ -25,12 +25,6 @@ export type ReminderCountEvent = {
   threadId?: string;
 };
 
-export type NodeStateBusEvent = {
-  nodeId: string;
-  state: Record<string, unknown>;
-  updatedAtMs?: number;
-};
-
 export type ThreadBroadcast = {
   id: string;
   alias: string;
@@ -74,7 +68,6 @@ type EventsBusEvents = {
   tool_output_chunk: [ToolOutputChunkPayload];
   tool_output_terminal: [ToolOutputTerminalPayload];
   reminder_count: [ReminderCountEvent];
-  node_state: [NodeStateBusEvent];
   thread_created: [ThreadBroadcast];
   thread_updated: [ThreadBroadcast];
   message_created: [{ threadId: string; message: MessageBroadcast }];
@@ -139,17 +132,6 @@ export class EventsBusService implements OnModuleDestroy {
 
   emitReminderCount(payload: ReminderCountEvent): void {
     this.emitter.emit('reminder_count', payload);
-  }
-
-  subscribeToNodeState(listener: (payload: NodeStateBusEvent) => void): () => void {
-    this.emitter.on('node_state', listener);
-    return () => {
-      this.emitter.off('node_state', listener);
-    };
-  }
-
-  emitNodeState(payload: NodeStateBusEvent): void {
-    this.emitter.emit('node_state', payload);
   }
 
   subscribeToThreadCreated(listener: (thread: ThreadBroadcast) => void): () => void {

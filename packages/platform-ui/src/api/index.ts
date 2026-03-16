@@ -2,3 +2,4 @@
 export { http } from './http';
 export { graph } from './modules/graph';
 export * as nix from './modules/nix';
+export * as teamApi from './modules/teamApi';

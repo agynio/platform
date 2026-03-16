@@ -23,7 +23,6 @@ describe('Socket events', () => {
       subscribeToToolOutputChunk: () => () => {},
       subscribeToToolOutputTerminal: () => () => {},
       subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
       subscribeToThreadCreated: () => () => {},
       subscribeToThreadUpdated: () => () => {},
       subscribeToMessageCreated: () => () => {},
@@ -68,7 +67,6 @@ describe('Socket events', () => {
     const payload = graphEmitter?.mock.calls[0]?.[1];
     expect(payload).toMatchObject({ nodeId: 'n1', provisionStatus: { state: 'provisioning' } });
   });
-
   it('emits node_state via NodeStateService bridge', async () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
@@ -109,7 +107,6 @@ describe('Socket events', () => {
     expect(emitMap.get('graph')).toHaveBeenCalledWith('node_state', expect.objectContaining({ nodeId: 'n1', state: { k: 'v' } }));
     expect(emitMap.get('node:n1')).toHaveBeenCalledWith('node_state', expect.objectContaining({ nodeId: 'n1', state: { k: 'v' } }));
   });
-
   it('emits reminder count to graph and node rooms', async () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
@@ -121,7 +118,6 @@ describe('Socket events', () => {
       subscribeToToolOutputChunk: () => () => {},
       subscribeToToolOutputTerminal: () => () => {},
       subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
       subscribeToThreadCreated: () => () => {},
       subscribeToThreadUpdated: () => () => {},
       subscribeToMessageCreated: () => () => {},

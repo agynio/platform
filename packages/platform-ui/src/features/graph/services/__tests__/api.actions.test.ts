@@ -3,12 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { graphApiService } from '../api';
 
 const apiMocks = vi.hoisted(() => ({
-  getFullGraph: vi.fn(),
-  saveFullGraph: vi.fn(),
   getTemplates: vi.fn(),
   getNodeStatus: vi.fn(),
-  getNodeState: vi.fn(),
-  putNodeState: vi.fn(),
+  discoverTools: vi.fn(),
   listVaultMounts: vi.fn(),
   listVaultPaths: vi.fn(),
   listVaultKeys: vi.fn(),

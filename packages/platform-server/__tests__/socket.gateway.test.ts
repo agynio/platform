@@ -16,7 +16,6 @@ describe('GraphSocketGateway', () => {
       subscribeToToolOutputChunk: () => () => {},
       subscribeToToolOutputTerminal: () => () => {},
       subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
       subscribeToThreadCreated: () => () => {},
       subscribeToThreadUpdated: () => () => {},
       subscribeToMessageCreated: () => () => {},

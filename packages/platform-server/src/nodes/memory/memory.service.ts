@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { GraphRepository } from '../../graph/graph.repository';
+import { TeamsGraphSource } from '../../graph/teamsGraph.source';
 import {
   PostgresMemoryEntitiesRepository,
   type MemoryEntitiesRepositoryPort,
@@ -13,7 +13,7 @@ const VALID_SEGMENT = /^[A-Za-z0-9_. -]+$/;
 export class MemoryService {
   constructor(
     @Inject(PostgresMemoryEntitiesRepository) private readonly repo: MemoryEntitiesRepositoryPort,
-    @Inject(GraphRepository) private readonly graphRepo: GraphRepository,
+    @Inject(TeamsGraphSource) private readonly graphSource: TeamsGraphSource,
   ) {}
 
   normalizePath(rawPath: string, opts: { allowRoot?: boolean } = {}): string {
@@ -54,16 +54,16 @@ export class MemoryService {
     const rows = await this.repo.listDistinctNodeThreads();
     let graph = null;
     try {
-      graph = await this.graphRepo.get('main');
+      graph = await this.graphSource.load();
     } catch {
       graph = null;
     }
 
-    if (!graph) {
+    if (!graph || (graph.nodes.length === 0 && graph.edges.length === 0)) {
       return this.buildDocsFromPersistence(rows);
     }
 
-    return this.buildDocsFromGraph(graph.nodes ?? [], rows);
+    return this.buildDocsFromGraph(graph.nodes, rows);
   }
 
   private getSegments(path: string): string[] {

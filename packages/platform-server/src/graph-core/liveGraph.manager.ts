@@ -17,7 +17,7 @@ import type Node from '../nodes/base/Node';
 import { Errors } from '../graph/errors';
 import { PortsRegistry } from '../graph/ports.registry';
 import type { TemplatePortConfig } from '../graph/ports.types';
-import { GraphRepository } from '../graph/graph.repository';
+import { TeamsGraphSource, type TeamsGraphSnapshot } from '../graph/teamsGraph.source';
 import { TemplateRegistry } from './templateRegistry';
 import { ReferenceResolverService } from '../utils/reference-resolver.service';
 import { ResolveError } from '../utils/references';
@@ -44,10 +44,9 @@ export class LiveGraphRuntime {
     (ev: { nodeId: string; prev: NodeStatusState; next: NodeStatusState; at: number }) => void
   >();
   private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
-  private graphName = 'main';
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
-    @Inject(GraphRepository) private readonly graphs: GraphRepository,
+    @Inject(TeamsGraphSource) private readonly graphSource: TeamsGraphSource,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
     @Inject(ReferenceResolverService) private readonly referenceResolver: ReferenceResolverService,
   ) {
@@ -91,57 +90,43 @@ export class LiveGraphRuntime {
    * Does not throw on failure; logs and returns { applied: false }.
    */
   public async load(): Promise<{ applied: boolean; version?: number }> {
-    const name = 'main';
-    this.graphName = name;
-    const toRuntimeGraph = (saved: {
-      nodes: Array<{
-        id: string;
-        template: string;
-        config?: Record<string, unknown>;
-        state?: Record<string, unknown>;
-      }>;
-      edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-      version: number;
-    }) =>
-      ({
-        nodes: saved.nodes.map((n) => ({
-          id: n.id,
-          data: { template: n.template, config: n.config, state: n.state },
-        })),
-        edges: saved.edges.map((e) => ({
-          source: e.source,
-          sourceHandle: e.sourceHandle,
-          target: e.target,
-          targetHandle: e.targetHandle,
-        })),
-      }) as GraphDefinition;
+    const toRuntimeGraph = (snapshot: TeamsGraphSnapshot): GraphDefinition => ({
+      nodes: snapshot.nodes.map((node) => ({
+        id: node.id,
+        data: { template: node.template, config: node.config },
+      })),
+      edges: snapshot.edges.map((edge) => ({
+        source: edge.source,
+        sourceHandle: edge.sourceHandle,
+        target: edge.target,
+        targetHandle: edge.targetHandle,
+      })),
+    });
 
     try {
-      const existing = await this.graphs.get(name);
-      if (existing) {
-        this.logger.log(
-          `Applying persisted graph to live runtime ${JSON.stringify({
-            version: existing.version,
-            nodes: existing.nodes.length,
-            edges: existing.edges.length,
-          })}`,
-        );
-        await this.apply(toRuntimeGraph(existing));
-        this.logger.log('Initial persisted graph applied successfully');
-        return { applied: true, version: existing.version };
-      } else {
-        this.logger.log('No persisted graph found; starting with empty runtime graph.');
+      const snapshot = await this.graphSource.load();
+      if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
+        this.logger.log('No graph snapshot found; starting with empty runtime graph.');
         return { applied: false };
       }
+      this.logger.log(
+        `Applying graph snapshot to live runtime ${JSON.stringify({
+          nodes: snapshot.nodes.length,
+          edges: snapshot.edges.length,
+        })}`,
+      );
+      await this.apply(toRuntimeGraph(snapshot));
+      this.logger.log('Initial graph snapshot applied successfully');
+      return { applied: true };
     } catch (e) {
       if (e instanceof GraphError) {
         const cause = e && typeof e === 'object' && 'cause' in e ? (e as { cause?: unknown }).cause : undefined;
         this.logger.error(
-          `Failed to apply initial persisted graph ${JSON.stringify({ message: e.message, cause: String(cause) })}`,
+          `Failed to apply initial graph snapshot ${JSON.stringify({ message: e.message, cause: String(cause) })}`,
         );
       }
       this.logger.error(
-        `Failed to apply initial persisted graph ${JSON.stringify(
+        `Failed to apply initial graph snapshot ${JSON.stringify(
           e instanceof Error
             ? { name: e.name, message: e.message, stack: e.stack }
             : {
@@ -160,15 +145,6 @@ export class LiveGraphRuntime {
     if (this.state.lastGraph) {
       const node = this.state.lastGraph.nodes.find((n) => n.id === id);
       if (node) node.data.config = cfg;
-    }
-  }
-
-  // Update persisted runtime snapshot state for a node (typed helper)
-  updateNodeState(id: string, state: Record<string, unknown>): void {
-    if (!this.state.lastGraph) return;
-    const node = this.state.lastGraph.nodes.find((n) => n.id === id);
-    if (node) {
-      node.data.state = state;
     }
   }
 
@@ -193,12 +169,6 @@ export class LiveGraphRuntime {
     const inst = this.state.nodes.get(id)?.instance;
     const st = inst?.status;
     return st ? { provisionStatus: { state: st } } : {};
-  }
-
-  /** Return the last known persisted runtime state snapshot for a node. */
-  getNodeStateSnapshot(id: string): Record<string, unknown> | undefined {
-    const node = this.state.lastGraph?.nodes.find((n) => n.id === id);
-    return node?.data?.state as Record<string, unknown> | undefined;
   }
 
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
@@ -260,7 +230,7 @@ export class LiveGraphRuntime {
         // non-fatal
       }
     }
-    // 2b. Dynamic config removed: use node state mutations in future.
+    // 2b. Dynamic config removed.
 
     // 3. Remove edges (reverse if needed) BEFORE removing nodes
     this.logger.debug('Remove edges');
@@ -280,9 +250,8 @@ export class LiveGraphRuntime {
       await this.disposeNode(nodeId).catch((err) => pushError(err as GraphError));
     }
 
-    // Persist next graph snapshot early so dependent services (e.g., NodeStateService)
-    // can read initial state during first edge attachment and provisioning.
-    // This ensures boot-time agent↔MCP sync uses the persisted state.
+    // Persist next graph snapshot early so dependent services
+    // can read graph metadata during first edge attachment and provisioning.
     this.state.lastGraph = next;
 
     // 5. Add edges
@@ -404,7 +373,6 @@ export class LiveGraphRuntime {
         );
         live.config = cleanedConfig;
       }
-      await created.setState(node.data.state ?? {});
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched
@@ -463,7 +431,6 @@ export class LiveGraphRuntime {
   private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const { output } = await this.referenceResolver.resolve<Record<string, unknown>>(config, {
-        graphName: this.graphName,
         basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
       });
       return output;

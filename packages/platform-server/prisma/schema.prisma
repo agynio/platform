@@ -21,15 +21,6 @@ model ConversationState {
   @@unique([threadId, nodeId])
 }
 
-// Local variable overrides (single-user/single-graph model)
-model VariableLocal {
-  id        Int      @id @default(autoincrement())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model LiteLLMVirtualKey {
   id        Int      @id @default(autoincrement())
   alias     String   @unique

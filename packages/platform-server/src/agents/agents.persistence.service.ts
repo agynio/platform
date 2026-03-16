@@ -6,18 +6,21 @@ import {
   ToolCallMessage,
   ToolCallOutputMessage,
 } from '@agyn/llm';
+import { create } from '@bufbuild/protobuf';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type MessageKind, type PrismaClient, type RunMessageType, type RunStatus, type ThreadStatus } from '@prisma/client';
 import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { PrismaService } from '../core/services/prisma.service';
-import { TemplateRegistry } from '../graph-core/templateRegistry';
-import { GraphRepository } from '../graph/graph.repository';
-import type { PersistedGraphNode } from '../shared/types/graph.types';
+import type { Agent } from '../proto/gen/agynio/api/teams/v1/teams_pb';
+import { ListAgentsRequestSchema } from '../proto/gen/agynio/api/teams/v1/teams_pb';
+import { TEAMS_GRPC_CLIENT } from '../teams/teamsGrpc.token';
+import type { TeamsGrpcClient } from '../teams/teamsGrpc.client';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { coerceRole } from '../llm/services/messages.normalization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
+import { listAllPages, readString } from '../teams/teamsGrpc.pagination';
 import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 
@@ -58,8 +61,7 @@ export class AgentsPersistenceService {
   constructor(
     @Inject(PrismaService) private prismaService: PrismaService,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
-    @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
-    @Inject(GraphRepository) private readonly graphs: GraphRepository,
+    @Inject(TEAMS_GRPC_CLIENT) private readonly teamsClient: TeamsGrpcClient,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
@@ -1259,71 +1261,57 @@ export class AgentsPersistenceService {
     );
     if (!threadIds || threadIds.length === 0) return descriptors;
 
-    const graph = await this.graphs.get('main');
-    if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) return descriptors;
-
-    const computeDescriptor = (node: PersistedGraphNode): AgentDescriptor => {
-      const config = (node.config as Record<string, unknown> | undefined) ?? undefined;
-      const rawName = typeof config?.['name'] === 'string' ? (config['name'] as string) : undefined;
-      const name = rawName?.trim();
-      const rawRole = typeof config?.['role'] === 'string' ? (config['role'] as string) : undefined;
-      const role = rawRole?.trim();
-
-      const rawTitle = typeof config?.['title'] === 'string' ? (config['title'] as string) : undefined;
-      const configTitle = rawTitle?.trim();
-      const templateMeta = this.templateRegistry.getMeta(node.template);
-      const templateTitleRaw = templateMeta?.title ?? node.template;
-      const templateTitle = typeof templateTitleRaw === 'string' ? templateTitleRaw.trim() : undefined;
-      const profileFallback =
-        name && name.length > 0 && role && role.length > 0
-          ? `${name} (${role})`
-          : name && name.length > 0
-            ? name
-            : role && role.length > 0
-              ? role
-              : undefined;
-      const resolvedTitle =
-        configTitle && configTitle.length > 0
-          ? configTitle
-          : profileFallback && profileFallback.length > 0
-            ? profileFallback
-            : templateTitle && templateTitle.length > 0
-              ? templateTitle
-              : fallback;
-
-      const descriptor: AgentDescriptor = { title: resolvedTitle };
-      if (name && name.length > 0) {
-        descriptor.name = name;
-      }
-      if (role && role.length > 0) {
-        descriptor.role = role;
-      }
-      return descriptor;
-    };
-
-    const agentNodes = graph.nodes.filter((node) => {
-      const meta = this.templateRegistry.getMeta(node.template);
-      if (meta) return meta.kind === 'agent';
-      return node.template === 'agent';
-    });
-    if (agentNodes.length === 0) return descriptors;
-
-    const nodeById = new Map<string, PersistedGraphNode>(agentNodes.map((node) => [node.id, node]));
-
     const threads = await this.prisma.thread.findMany({
       where: { id: { in: threadIds } },
       select: { id: true, assignedAgentNodeId: true },
     });
 
+    const assignedIds = new Set<string>();
     for (const thread of threads) {
-      const assignedId = typeof thread.assignedAgentNodeId === 'string' ? thread.assignedAgentNodeId.trim() : '';
+      const assignedId = readString(thread.assignedAgentNodeId);
+      if (assignedId) assignedIds.add(assignedId);
+    }
+    if (assignedIds.size === 0) return descriptors;
+
+    const agents = await this.listAllTeamsAgents();
+    if (agents.length === 0) return descriptors;
+
+    const agentById = new Map<string, Agent>();
+    for (const agent of agents) {
+      const id = readString(agent.meta?.id);
+      if (!id) continue;
+      agentById.set(id, agent);
+    }
+
+    for (const thread of threads) {
+      const assignedId = readString(thread.assignedAgentNodeId);
       if (!assignedId) continue;
-      const node = nodeById.get(assignedId);
-      if (!node) continue;
-      descriptors[thread.id] = computeDescriptor(node);
+      const agent = agentById.get(assignedId);
+      if (!agent) continue;
+      descriptors[thread.id] = this.buildAgentDescriptor(agent, fallback);
     }
 
     return descriptors;
+  }
+
+  private async listAllTeamsAgents(): Promise<Agent[]> {
+    return listAllPages((pageToken, pageSize) =>
+      this.teamsClient
+        .listAgents(create(ListAgentsRequestSchema, { pageSize, pageToken: pageToken ?? '' }))
+        .then((response) => ({ items: response.agents, nextPageToken: response.nextPageToken })),
+    );
+  }
+
+  private buildAgentDescriptor(agent: Agent, fallback: string): AgentDescriptor {
+    const name = readString(agent.config?.name);
+    const role = readString(agent.config?.role);
+    const title = readString(agent.title);
+    const profileFallback = name && role ? `${name} (${role})` : name ?? role;
+    const resolvedTitle = title ?? profileFallback ?? fallback;
+    const descriptor: AgentDescriptor = { title: resolvedTitle };
+    if (name) descriptor.name = name;
+    if (role) descriptor.role = role;
+    return descriptor;
   }
 
   private getRunEventDelegate(tx: Prisma.TransactionClient): RunEventDelegate | undefined {

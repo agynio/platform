@@ -23,10 +23,16 @@ import type {
   TemplateOption,
 } from '@/features/entities/types';
 import type { GraphNodeConfig, GraphPersistedEdge } from '@/features/graph/types';
-import { useMcpNodeState } from '@/lib/graph/hooks';
-import { listTargetsByEdge, sanitizeConfigForPersistence } from '@/features/entities/api/graphEntities';
+import { useMcpTools } from '@/lib/graph/hooks';
+import {
+  EXCLUDED_WORKSPACE_TEMPLATES,
+  TEAM_ATTACHMENT_KIND,
+  listTargetsByEdge,
+  sanitizeConfigForPersistence,
+} from '@/features/entities/api/teamEntities';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { getUuid } from '@/utils/getUuid';
+import type { TeamAttachmentKind } from '@/api/types/team';
 
 type EntityFormValues = {
   template: string;
@@ -54,6 +60,7 @@ type RelationOwnerRole = GraphRelationOwnerRole;
 interface RelationCandidateFilter {
   kinds?: GraphEntityKind[];
   templateNames?: string[];
+  excludeTemplateNames?: string[];
 }
 
 interface RelationAppliesTo {
@@ -72,6 +79,7 @@ interface RelationFieldDefinition {
   mode: RelationSelectionMode;
   candidateFilter: RelationCandidateFilter;
   placeholder?: string;
+  attachmentKind: TeamAttachmentKind;
 }
 
 interface RelationOption {
@@ -80,18 +88,6 @@ interface RelationOption {
 }
 
 const RELATION_FIELD_DEFINITIONS: RelationFieldDefinition[] = [
-  {
-    id: 'slackTriggerAgent',
-    label: 'Agent destination',
-    description: 'Routes Slack trigger events to the selected agent.',
-    appliesTo: { templateNames: ['slackTrigger'] },
-    ownerRole: 'source',
-    ownerHandle: 'subscribe',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { kinds: ['agent'] },
-    placeholder: 'Select an agent',
-  },
   {
     id: 'agentTools',
     label: 'Tools',
@@ -102,6 +98,7 @@ const RELATION_FIELD_DEFINITIONS: RelationFieldDefinition[] = [
     peerHandle: '$self',
     mode: 'multi',
     candidateFilter: { kinds: ['tool'] },
+    attachmentKind: TEAM_ATTACHMENT_KIND.agentTool,
   },
   {
     id: 'agentMcpServers',
@@ -113,101 +110,45 @@ const RELATION_FIELD_DEFINITIONS: RelationFieldDefinition[] = [
     peerHandle: '$self',
     mode: 'multi',
     candidateFilter: { kinds: ['mcp'] },
+    attachmentKind: TEAM_ATTACHMENT_KIND.agentMcpServer,
   },
   {
-    id: 'agentMemoryConnector',
-    label: 'Memory connector',
-    description: 'Bind the agent to a memory connector.',
+    id: 'agentWorkspaceConfiguration',
+    label: 'Workspace configuration',
+    description: 'Select the workspace configuration for this agent.',
     appliesTo: { templateKinds: ['agent'] },
-    ownerRole: 'target',
+    ownerRole: 'source',
+    ownerHandle: 'workspace',
+    peerHandle: '$self',
+    mode: 'single',
+    candidateFilter: { kinds: ['workspace'], excludeTemplateNames: Array.from(EXCLUDED_WORKSPACE_TEMPLATES) },
+    placeholder: 'Select a workspace configuration',
+    attachmentKind: TEAM_ATTACHMENT_KIND.agentWorkspaceConfiguration,
+  },
+  {
+    id: 'agentMemoryBuckets',
+    label: 'Memory buckets',
+    description: 'Attach memory buckets this agent can access.',
+    appliesTo: { templateKinds: ['agent'] },
+    ownerRole: 'source',
     ownerHandle: 'memory',
     peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { templateNames: ['memoryConnector'] },
-    placeholder: 'Select a memory connector',
-  },
-  {
-    id: 'shellToolWorkspace',
-    label: 'Workspace',
-    description: 'Provide the workspace for this Shell tool.',
-    appliesTo: { templateNames: ['shellTool'] },
-    ownerRole: 'target',
-    ownerHandle: 'workspace',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { kinds: ['workspace'] },
-    placeholder: 'Select a workspace',
-  },
-  {
-    id: 'githubCloneWorkspace',
-    label: 'Workspace',
-    description: 'Provide the workspace for this GitHub clone tool.',
-    appliesTo: { templateNames: ['githubCloneRepoTool'] },
-    ownerRole: 'target',
-    ownerHandle: 'workspace',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { kinds: ['workspace'] },
-    placeholder: 'Select a workspace',
-  },
-  {
-    id: 'memoryToolMemory',
-    label: 'Memory workspace',
-    description: 'Select the memory backing this tool.',
-    appliesTo: { templateNames: ['memoryTool'] },
-    ownerRole: 'target',
-    ownerHandle: '$memory',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { templateNames: ['memory'] },
-    placeholder: 'Select a memory',
-  },
-  {
-    id: 'manageToolAgents',
-    label: 'Managed agents',
-    description: 'Pick agents that can be orchestrated by this tool.',
-    appliesTo: { templateNames: ['manageTool'] },
-    ownerRole: 'source',
-    ownerHandle: 'agent',
-    peerHandle: '$self',
     mode: 'multi',
-    candidateFilter: { kinds: ['agent'] },
-  },
-  {
-    id: 'callAgentToolAgent',
-    label: 'Agent',
-    description: 'Select the agent to call.',
-    appliesTo: { templateNames: ['callAgentTool'] },
-    ownerRole: 'source',
-    ownerHandle: 'agent',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { kinds: ['agent'] },
-    placeholder: 'Select an agent',
+    candidateFilter: { templateNames: ['memory'] },
+    attachmentKind: TEAM_ATTACHMENT_KIND.agentMemoryBucket,
   },
   {
     id: 'mcpServerWorkspace',
-    label: 'Workspace',
-    description: 'Select the workspace hosting this MCP server.',
-    appliesTo: { templateNames: ['mcpServer'] },
-    ownerRole: 'target',
+    label: 'Workspace configuration',
+    description: 'Select the workspace configuration hosting this MCP server.',
+    appliesTo: { templateKinds: ['mcp'] },
+    ownerRole: 'source',
     ownerHandle: 'workspace',
     peerHandle: '$self',
     mode: 'single',
-    candidateFilter: { kinds: ['workspace'] },
-    placeholder: 'Select a workspace',
-  },
-  {
-    id: 'memoryConnectorMemory',
-    label: 'Memory workspace',
-    description: 'Select the memory backing this connector.',
-    appliesTo: { templateNames: ['memoryConnector'] },
-    ownerRole: 'target',
-    ownerHandle: '$memory',
-    peerHandle: '$self',
-    mode: 'single',
-    candidateFilter: { templateNames: ['memory'] },
-    placeholder: 'Select a memory',
+    candidateFilter: { kinds: ['workspace'], excludeTemplateNames: Array.from(EXCLUDED_WORKSPACE_TEMPLATES) },
+    placeholder: 'Select a workspace configuration',
+    attachmentKind: TEAM_ATTACHMENT_KIND.mcpServerWorkspaceConfiguration,
   },
 ];
 
@@ -220,7 +161,7 @@ const NODE_KIND_TO_ENTITY_KIND: Record<NodeViewKind, GraphEntityKind> = {
 };
 
 function matchesCandidateFilter(node: GraphNodeConfig, filter: RelationCandidateFilter): boolean {
-  if (!filter.kinds && !filter.templateNames) {
+  if (!filter.kinds && !filter.templateNames && !filter.excludeTemplateNames) {
     return true;
   }
   if (filter.kinds && filter.kinds.length > 0) {
@@ -231,6 +172,11 @@ function matchesCandidateFilter(node: GraphNodeConfig, filter: RelationCandidate
   }
   if (filter.templateNames && filter.templateNames.length > 0) {
     if (!filter.templateNames.includes(node.template)) {
+      return false;
+    }
+  }
+  if (filter.excludeTemplateNames && filter.excludeTemplateNames.length > 0) {
+    if (filter.excludeTemplateNames.includes(node.template)) {
       return false;
     }
   }
@@ -292,6 +238,7 @@ function toNodeKind(rawKind?: string | GraphEntityKind | null): NodeViewKind {
       return 'Tool';
     case 'mcp':
       return 'MCP';
+    case 'memory':
     case 'workspace':
     case 'service':
     default:
@@ -593,24 +540,15 @@ export function EntityUpsertForm({
   const mcpStateNodeId = nodeKind === 'MCP' && mode === 'edit' ? entity?.id ?? null : null;
   const {
     tools: mcpTools,
-    enabledTools: mcpEnabledTools,
-    setEnabledTools: setMcpEnabledTools,
+    updatedAt: mcpToolsUpdatedAt,
+    discoverTools: discoverMcpTools,
     isLoading: mcpToolsLoading,
-  } = useMcpNodeState(mcpStateNodeId);
+  } = useMcpTools(mcpStateNodeId);
 
-  const handleToggleMcpTool = useCallback(
-    (toolName: string, enabled: boolean) => {
-      if (!mcpStateNodeId) return;
-      const current = new Set(mcpEnabledTools ?? []);
-      if (enabled) {
-        current.add(toolName);
-      } else {
-        current.delete(toolName);
-      }
-      setMcpEnabledTools(Array.from(current));
-    },
-    [mcpEnabledTools, mcpStateNodeId, setMcpEnabledTools],
-  );
+  const handleDiscoverMcpTools = useCallback(() => {
+    if (!mcpStateNodeId) return;
+    void discoverMcpTools();
+  }, [discoverMcpTools, mcpStateNodeId]);
 
   const handleViewConfigChange = useCallback(
     (partial: Partial<NodeConfig>) => {
@@ -736,8 +674,8 @@ export function EntityUpsertForm({
           ensureSecretKeys,
           ensureVariableKeys,
           tools: mcpTools,
-          enabledTools: mcpEnabledTools,
-          onToggleTool: handleToggleMcpTool,
+          toolsUpdatedAt: mcpToolsUpdatedAt,
+          onDiscoverTools: handleDiscoverMcpTools,
           toolsLoading: mcpToolsLoading,
           nodeId: nodeIdForView,
           graphNodes: safeGraphNodes,
@@ -819,8 +757,8 @@ export function EntityUpsertForm({
     safeGraphNodes,
     safeGraphEdges,
     mcpTools,
-    mcpEnabledTools,
-    handleToggleMcpTool,
+    mcpToolsUpdatedAt,
+    handleDiscoverMcpTools,
     mcpToolsLoading,
   ]);
 
@@ -866,15 +804,17 @@ export function EntityUpsertForm({
               mode: definition.mode,
               selections: normalizedSelections,
               ownerId: entity?.id,
+              attachmentKind: definition.attachmentKind,
             } satisfies GraphEntityRelationInput;
           });
 
     const payload: GraphEntityUpsertInput = {
       id: entity?.id,
+      entityKind: kind,
       template: templateName,
       title: payloadTitle,
       config: payloadConfig,
-      relations: relationPayload.length > 0 ? relationPayload : undefined,
+      relations: relationDefinitions.length > 0 ? relationPayload : undefined,
     } satisfies GraphEntityUpsertInput;
 
     try {

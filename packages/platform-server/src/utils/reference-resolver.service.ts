@@ -1,27 +1,20 @@
+import { create } from '@bufbuild/protobuf';
 import { Inject, Injectable } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import type { ResolveOptions, ResolveResult, Providers } from './references';
 import { resolveReferences, ResolveError } from './references';
+import { ResolveVariableRequestSchema } from '../proto/gen/agynio/api/teams/v1/teams_pb';
 import { VaultService } from '../vault/vault.service';
-import { GraphVariablesService } from '../graph/services/graphVariables.service';
+import { TEAMS_GRPC_CLIENT } from '../teams/teamsGrpc.token';
+import type { TeamsGrpcClient } from '../teams/teamsGrpc.client';
 
 @Injectable()
 export class ReferenceResolverService {
   constructor(
-    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
     @Inject(VaultService) private readonly vaultService: VaultService,
+    @Inject(TEAMS_GRPC_CLIENT) private readonly teamsClient: TeamsGrpcClient,
   ) {}
 
-  private getVariablesService(): GraphVariablesService | undefined {
-    try {
-      return this.moduleRef.get(GraphVariablesService, { strict: false });
-    } catch {
-      return undefined;
-    }
-  }
-
   private buildProviders(
-    graphName: string | undefined,
     overrides: Partial<Providers> | undefined,
     basePath?: string,
   ): Providers {
@@ -35,14 +28,17 @@ export class ReferenceResolverService {
       return this.vaultService.getSecret({ mount: ref.mount ?? 'secret', path: ref.path, key: ref.key });
     };
     const variable = async (ref: { name: string }) => {
-      const variablesService = this.getVariablesService();
-      if (!variablesService) {
-        throw new ResolveError('provider_missing', 'GraphVariablesService unavailable', {
+      if (!this.teamsClient) {
+        throw new ResolveError('provider_missing', 'TeamsGrpcClient unavailable', {
           path: basePath ?? '/variable',
           source: 'variable',
         });
       }
-      return variablesService.resolveValue(graphName ?? 'main', ref.name);
+      const request = create(ResolveVariableRequestSchema, { key: ref.name });
+      const response = await this.teamsClient.resolveVariable(request);
+      if (!response?.found) return undefined;
+      const value = response.value?.trim?.() ?? response.value;
+      return value && value.length > 0 ? value : undefined;
     };
     return {
       secret,
@@ -53,10 +49,10 @@ export class ReferenceResolverService {
 
   async resolve<T>(
     input: T,
-    opts?: ResolveOptions & { graphName?: string; providers?: Partial<Providers> },
+    opts?: ResolveOptions & { providers?: Partial<Providers> },
   ): Promise<ResolveResult<T>> {
-    const { graphName, providers: overrides, ...options } = opts || {};
-    const providers = this.buildProviders(graphName, overrides, options.basePath);
+    const { providers: overrides, ...options } = opts || {};
+    const providers = this.buildProviders(overrides, options.basePath);
     return resolveReferences(input, providers, options);
   }
 }

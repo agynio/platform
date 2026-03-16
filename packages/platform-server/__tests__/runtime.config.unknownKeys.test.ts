@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { GraphRepository } from '../src/graph/graph.repository.js';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source.js';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
@@ -10,6 +10,7 @@ import { ModuleRef } from '@nestjs/core';
 import Node from '../src/nodes/base/Node';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/memory.node';
 import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 type StrictAgentConfig = z.infer<typeof AgentStaticConfigSchema>;
 
@@ -40,21 +41,13 @@ const makeRuntime = (
   const templates = new TemplateRegistry(moduleRef);
   templates.register('Memory', { title: 'Memory', kind: 'tool' }, MemoryNode as any);
   templates.register('StrictAgent', { title: 'Strict Agent', kind: 'agent' }, StrictAgentNode as any);
-  class StubRepo extends GraphRepository {
-    async initIfNeeded(): Promise<void> {}
-    async get(): Promise<any> {
-      return null;
-    }
-    async upsert(): Promise<any> {
-      throw new Error('not-implemented');
-    }
-    async upsertNodeState(): Promise<void> {}
-  }
+  const graphSource = new TeamsGraphSource(createTeamsClientStub());
+  vi.spyOn(graphSource, 'load').mockResolvedValue({ nodes: [], edges: [] });
   const resolver = {
     resolve: async (input: unknown) =>
       (resolveImpl ? resolveImpl(input) : ({ output: input, report: {} as unknown })),
   };
-  const runtime = new LiveGraphRuntime(templates, new StubRepo(), moduleRef as any, resolver as any);
+  const runtime = new LiveGraphRuntime(templates, graphSource, moduleRef as any, resolver as any);
   return runtime;
 };
 
@@ -82,25 +75,6 @@ describe('runtime config unknown keys handling', () => {
     const inst = runtime.getNodeInstance('bad') as MemoryNode;
     const ports = inst.getPortConfig();
     expect(Object.keys((ports as any).sourcePorts || {})).toContain('$self');
-  });
-
-  // dynamicConfig fully removed; replace test to assert state persistence path
-  it('node state is persisted via updateNodeState', async () => {
-    const runtime = makeRuntime();
-    const g: GraphDefinition = {
-      nodes: [
-        {
-          id: 'n2',
-          data: { template: 'Memory', config: { scope: 'global' }, state: { info: 'x' } },
-        },
-      ],
-      edges: [],
-    };
-    const res = await runtime.apply(g);
-    expect(res.errors.length).toBe(0);
-    // state is available in lastGraph snapshot
-    const nodes = runtime.getNodes();
-    expect(nodes.find((n) => n.id === 'n2')).toBeTruthy();
   });
 
   it('updates live config on config update path', async () => {

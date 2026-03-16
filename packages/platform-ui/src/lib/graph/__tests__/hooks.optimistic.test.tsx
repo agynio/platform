@@ -9,7 +9,7 @@ import type { NodeStatusEvent } from '../../graph/types';
 vi.mock('@/api/modules/graph', () => ({
   graph: {
     postNodeAction: vi.fn(async () => {}),
-    getNodeStatus: vi.fn(async () => ({ isPaused: false, provisionStatus: { state: 'not_ready' } })),
+    getNodeStatus: vi.fn(async () => ({ provisionStatus: { state: 'not_ready' } })),
   },
 }));
 

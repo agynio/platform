@@ -1,10 +1,10 @@
 # Graph UI Builder
 
 Data flow
-- TemplatesProvider loads templates from `/graph/templates` (alias of `/api/templates`). Components consume capabilities to render controls.
+- TemplatesProvider loads templates from `/graph/templates` (alias of `/api/templates`). Components use kind/ports metadata (capability flags are not included).
 - Initial node status fetched via `GET /graph/nodes/:id/status`.
 - Realtime updates: listen to Socket.IO on the default namespace for `node_status` events. Do not poll when sockets are available.
-- For dynamic-configurable nodes (e.g., MCP server), fetch JSON Schema via `GET /graph/nodes/:id/dynamic-config/schema` and render a dynamic form when `dynamicConfigReady` is true.
+- For MCP server nodes, refresh tool lists via `POST /graph/nodes/:id/discover-tools` and use the response to update tool selection UI.
 - Refer to docs/graph/status-updates.md for event shapes and sequencing.
 
 Configuration

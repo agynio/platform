@@ -15,6 +15,53 @@ vi.mock('@/lib/notify', () => ({
   notifyError: (...args: unknown[]) => notifyMocks.error(...args),
 }));
 
+type TeamToolStub = {
+  id: string;
+  type:
+    | 'manage'
+    | 'memory'
+    | 'shell_command'
+    | 'send_message'
+    | 'send_slack_message'
+    | 'remind_me'
+    | 'github_clone_repo'
+    | 'call_agent';
+  config: Record<string, unknown>;
+  name?: string;
+  description?: string;
+};
+
+function registerTeamGraph(tools: TeamToolStub[]) {
+  const now = new Date().toISOString();
+  const toolItems = tools.map((tool) => ({
+    id: tool.id,
+    createdAt: now,
+    updatedAt: now,
+    type: tool.type,
+    name: tool.name ?? null,
+    description: tool.description ?? null,
+    config: tool.config,
+  }));
+  const perPage = Math.max(toolItems.length, 1);
+  const toolPayload = { items: toolItems, page: 1, perPage, total: toolItems.length };
+  const emptyPayload = { items: [], page: 1, perPage: 1, total: 0 };
+
+  server.use(
+    http.get(abs('/apiv2/team/v1/agents'), () => HttpResponse.json(emptyPayload)),
+    http.get(abs('/apiv2/team/v1/tools'), () => HttpResponse.json(toolPayload)),
+    http.get(abs('/apiv2/team/v1/mcp-servers'), () => HttpResponse.json(emptyPayload)),
+    http.get(abs('/apiv2/team/v1/workspace-configurations'), () => HttpResponse.json(emptyPayload)),
+    http.get(abs('/apiv2/team/v1/memory-buckets'), () => HttpResponse.json(emptyPayload)),
+    http.get(abs('/apiv2/team/v1/attachments'), () => HttpResponse.json(emptyPayload)),
+    http.get('*/apiv2/team/v1/agents', () => HttpResponse.json(emptyPayload)),
+    http.get('*/apiv2/team/v1/tools', () => HttpResponse.json(toolPayload)),
+    http.get('*/apiv2/team/v1/mcp-servers', () => HttpResponse.json(emptyPayload)),
+    http.get('*/apiv2/team/v1/workspace-configurations', () => HttpResponse.json(emptyPayload)),
+    http.get('*/apiv2/team/v1/memory-buckets', () => HttpResponse.json(emptyPayload)),
+    http.get('*/apiv2/team/v1/attachments', () => HttpResponse.json(emptyPayload)),
+  );
+}
+
 describe('Settings/Secrets page', () => {
   beforeAll(() => server.listen());
   afterAll(() => server.close());
@@ -25,20 +72,18 @@ describe('Settings/Secrets page', () => {
   });
 
   it('allows creating missing secrets and updates counts', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
-            { id: 'n2', template: 'sendSlackMessageTool', config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'github_clone_repo',
+        config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } },
+      },
+      {
+        id: 'tool-2',
+        type: 'send_slack_message',
+        config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } },
+      },
+    ]);
 
     let ghKeys: string[] = [];
     let slackKeys: string[] = [];
@@ -108,19 +153,13 @@ describe('Settings/Secrets page', () => {
   });
 
   it('shows banner when Vault unavailable and still lists graph-required keys', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'sendSlackMessageTool', config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'send_slack_message',
+        config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } },
+      },
+    ]);
     server.use(http.get(abs('/api/vault/mounts'), () => new HttpResponse(null, { status: 500 })));
 
     render(
@@ -134,19 +173,13 @@ describe('Settings/Secrets page', () => {
   });
 
   it('prevents renaming secrets and requires a value before saving', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'github_clone_repo',
+        config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } },
+      },
+    ]);
     const vaultValues = new Map<string, string>([['secret/github/GH_TOKEN', 'existing-secret']]);
     server.use(
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
@@ -231,19 +264,13 @@ describe('Settings/Secrets page', () => {
   });
 
   it('shows a warning when reading an existing secret value fails', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'github_clone_repo',
+        config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } },
+      },
+    ]);
     server.use(
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
       http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github'] })),
@@ -262,19 +289,13 @@ describe('Settings/Secrets page', () => {
   });
 
   it('treats 404 value reads as placeholders without showing a warning', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'github_clone_repo',
+        config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } },
+      },
+    ]);
     server.use(
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
       http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github'] })),
@@ -303,20 +324,18 @@ describe('Settings/Secrets page', () => {
   });
 
   it('retries hydration and surfaces aggregated failure counts', async () => {
-    server.use(
-      http.get(abs('/api/graph'), () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          nodes: [
-            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
-            { id: 'n2', template: 'sendSlackMessageTool', config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } } },
-          ],
-          edges: [],
-        }),
-      ),
-    );
+    registerTeamGraph([
+      {
+        id: 'tool-1',
+        type: 'github_clone_repo',
+        config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } },
+      },
+      {
+        id: 'tool-2',
+        type: 'send_slack_message',
+        config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } },
+      },
+    ]);
 
     let readAttempts = 0;
     server.use(

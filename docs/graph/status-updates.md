@@ -7,15 +7,13 @@ Transport: socket.io
 - Payload:
   {
     nodeId: string,
-    isPaused?: boolean,
     provisionStatus?: { state: string; [k: string]: unknown },
-    dynamicConfigReady?: boolean,
-    updatedAt: string
+    updatedAt?: string
   }
 
 Client guidance
 - Connect to the default namespace and subscribe to `node_status`.
-- Server emits `node_status` for relevant changes: pause/resume, provision status updates, dynamic-config readiness.
+- Server emits `node_status` for provision status changes.
 - Initial render can still use HTTP GET /graph/nodes/:nodeId/status; subsequent updates should come via socket.io push.
 
 Example (client)
@@ -27,38 +25,29 @@ socket.on('connect', () => {
 });
 
 socket.on('node_status', (payload) => {
-  // { nodeId, isPaused?, provisionStatus?, dynamicConfigReady?, updatedAt }
+  // { nodeId, provisionStatus?, updatedAt }
   updateUI(payload);
 });
 
 Notes
-- HTTP endpoints remain for actions (pause/resume, provision/deprovision) and configuration updates.
+- HTTP endpoints remain for actions (provision/deprovision).
 - Remove any polling loops (e.g., 2s intervals) for status; rely on socket events.
 
-Config persistence
-- Graph configuration changes persist via POST /api/graph (full-graph updates).
-- The per-node dynamic-config save endpoint was removed; only the schema endpoint remains for rendering purposes.
+Graph source and persistence
+- Graph configuration is sourced from the Teams service; the platform no longer exposes a `/api/graph` snapshot endpoint.
+- UI edits to layout are local-only; the backend does not accept full-graph writes.
+- Node state is not persisted; node status reflects runtime provisioning only.
+- Graph variables are managed via the Teams service and exposed via `/api/graph/variables`.
+- MCP tool lists refresh via `POST /api/graph/nodes/:nodeId/discover-tools`.
 
-## Template Capabilities & Static Config (Updated)
+## Template Schema (Updated)
 
-Each template now advertises its capabilities and optional static configuration schema via the `/api/templates` and `/graph/templates` endpoints. UI palette entries can introspect:
+The `/api/templates` and `/graph/templates` endpoints return the palette schema:
 
-- `capabilities.pausable`: Node supports pause/resume (triggers, agents).
-- `capabilities.provisionable`: Node exposes provision/deprovision lifecycle (Slack trigger, MCP server).
-- `capabilities.staticConfigurable`: Node accepts an initial static config that is applied through `setConfig` (agent, container provider, call_agent tool, MCP server).
-- `capabilities.dynamicConfigurable`: Node exposes a dynamic runtime config surface (MCP server tool enable/disable) once `dynamicConfigReady` is true.
+- `name`, `title`, `kind`
+- `sourcePorts`, `targetPorts`
 
-Static config schemas (all templates now expose one – some are currently empty placeholders to allow forward-compatible UI forms):
-- `simpleAgent`: title, systemPrompt, summarization options.
-- `containerProvider`: image, env map.
-- `callAgentTool`: description, name override.
-- `mcpServer`: namespace, command, workdir, timeouts, restart strategy.
-- `shellTool`: (empty object for now).
-- `githubCloneRepoTool`: (empty object for now).
-- `sendSlackMessageTool`: (empty object for now).
-- `slackTrigger`: debounceMs, waitForBusy (note: presently setConfig is a no-op; values must be supplied at creation time until runtime reconfiguration is implemented).
-
-Dynamic config (currently only MCP server) becomes available after initial tool discovery; UI should check `dynamicConfigReady` before rendering its form.
+Capability flags and config schemas are not included in the palette response.
 
 Wiring timing and run state visibility
 - During server bootstrap, globalThis.liveGraphRuntime and globalThis.__agentRunsService must be assigned before applying any persisted graph to the runtime.

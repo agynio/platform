@@ -45,10 +45,8 @@ export function useNodeAction(nodeId: string | null | undefined) {
       const optimistic: Partial<NodeStatus> = {};
       if (action === 'provision') {
         optimistic.provisionStatus = { state: 'provisioning' } as NodeStatus['provisionStatus'];
-        optimistic.isPaused = false;
       } else {
         optimistic.provisionStatus = { state: 'deprovisioning' } as NodeStatus['provisionStatus'];
-        optimistic.isPaused = false;
       }
 
       qc.setQueryData<NodeStatus>(key, { ...(previous ?? {}), ...optimistic });

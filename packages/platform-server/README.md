@@ -3,17 +3,11 @@
 Runtime for graph-driven agents, tool adapters, triggers, and memory. See docs for architecture.
 
 Graph persistence
-- Configure via env:
-  - `GRAPH_REPO_PATH`: filesystem root for the working tree (default `./data/graph`).
-  - `GRAPH_BRANCH`: logical branch label retained for compatibility/telemetry (default `main`).
-  - `GRAPH_AUTHOR_NAME` / `GRAPH_AUTHOR_EMAIL`: optional metadata forwarded to audit logs.
-  - `GRAPH_LOCK_TIMEOUT_MS`: file-lock acquisition timeout (default `5000`).
-- On startup the server ensures `GRAPH_REPO_PATH` exists with `nodes/`, `edges/`, `variables.yaml`, and `graph.meta.yaml`. There is no dataset indirection or Git requirement; `.git` directories are ignored if present.
-- `/api/graph` semantics remain the same (GET to read, POST to upsert). Writes continue to use optimistic locking via the `version` field and acquire a lock file named `.<basename>.graph.lock` next to `GRAPH_REPO_PATH` before writing. Each write builds a staged working tree in a sibling directory, fsyncs it, and atomically swaps it into place so readers only see committed graphs; old trees move to `.graph-backup-*` temporarily and are deleted immediately.
-- Error responses:
-   - `409 VERSION_CONFLICT` with `{ error, current }` when the supplied version is stale.
-   - `409 LOCK_TIMEOUT` if the repository lock cannot be acquired within the configured timeout.
-   - `500 PERSIST_FAILED` when filesystem writes fail unexpectedly; the in-flight changes are rolled back to the last committed state.
+- Graph configuration is sourced from the Teams service; `/api/graph` is GET-only and returns the latest snapshot.
+- Configure the Teams gRPC endpoint via `TEAMS_SERVICE_ADDR`.
+- Node runtime state persists in Postgres (`GraphNodeState`) and is merged into the snapshot on read.
+- Graph variables persist in Postgres (`GraphVariable`) with local overrides in `VariableLocal`; manage them via `/api/graph/variables`.
+- Legacy `GRAPH_*` env vars remain accepted for compatibility but are ignored.
 
 ## Networking and cache
 
@@ -87,11 +81,6 @@ At runtime the node calls `EnvService.resolveProviderEnv`, which delegates to `R
 - Unresolved references throw `env_reference_unresolved` and include the JSON Pointer path (e.g. `/env/API_KEY/value`) in the error details.
 
 The resolved overlay is merged with any base environment and forwarded to Docker exec sessions for both discovery and tool calls, ensuring MCP servers receive the same env regardless of execution path.
-
-Storage layout (format: 2)
-- Repository root: `<GRAPH_REPO_PATH>` contains `graph.meta.yaml`, `variables.yaml`, `nodes/`, and `edges/`.
-- Filenames remain `encodeURIComponent(id)`; edge ids are deterministic `<src>-<srcHandle>__<tgt>-<tgtHandle>`.
-- Writes stage a complete working tree in a sibling `.graph-staging-*` directory, atomically swap it into `<GRAPH_REPO_PATH>`, and delete the previous tree (which briefly lives at `.graph-backup-*`). The advisory lock file lives beside the repo path as `.<basename>.graph.lock`, and `.git` directories are moved back into place after each swap if present.
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.
@@ -197,9 +186,8 @@ Set the flag while running targeted tests or during local debugging to immediate
   - `pnpm --filter @agyn/platform-server prisma generate`
 - For production deployments, apply migrations with `prisma migrate deploy` as part of your release process.
 
-Messaging (Slack-only v1)
+Messaging (channel adapters)
 
-- `send_message` routes replies to Slack using `Thread.channel` (descriptor written by `SlackTrigger`) when a channel node is registered, and falls back to persisting the reply when no channel node exists (e.g., web-created threads).
+- `send_message` routes replies using the `Thread.channel` descriptor when a channel node is registered, and falls back to persisting the reply when no channel node exists (e.g., web-created threads).
 - Runs triggered via `send_message` emit only `tool_execution` run events; no additional `invocation_message` entry is created for the persisted transport message.
-- SlackTrigger requires bot_token in node config; token is resolved during provision; no global Slack config or tokens.
 - No other adapters are supported in v1; attachments/ephemeral not supported.

@@ -19,7 +19,6 @@ describe('GraphSocketGateway metrics coalescing', () => {
       subscribeToToolOutputChunk: () => () => {},
       subscribeToToolOutputTerminal: () => () => {},
       subscribeToReminderCount: () => () => {},
-      subscribeToNodeState: () => () => {},
       subscribeToThreadCreated: () => () => {},
       subscribeToThreadUpdated: () => () => {},
       subscribeToMessageCreated: () => () => {},

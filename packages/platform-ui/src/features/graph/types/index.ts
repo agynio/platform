@@ -1,7 +1,6 @@
 import type { NodeKind } from '@/components/Node';
 import type { SavingStatus } from '@/components/SavingStatusControl';
 import type { PersistedGraph, PersistedGraphEdge, PersistedGraphNode } from '@agyn/shared';
-import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 
 export type GraphNodeStatus =
   | 'not_ready'
@@ -16,7 +15,6 @@ export interface GraphNodeRuntime {
     state: GraphNodeStatus;
     details?: unknown;
   };
-  isPaused?: boolean;
 }
 
 export interface GraphNodeCapabilities {
@@ -45,7 +43,6 @@ export interface GraphNodeConfig {
   y: number;
   status: GraphNodeStatus;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
   runtime?: GraphNodeRuntime;
   capabilities?: GraphNodeCapabilities;
   ports: GraphNodePorts;
@@ -56,7 +53,6 @@ export interface GraphNodeUpdate {
   title?: string;
   status?: GraphNodeStatus;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
   runtime?: Partial<GraphNodeRuntime>;
   x?: number;
   y?: number;
@@ -82,5 +78,3 @@ export interface GraphSaveState {
   status: GraphSavingStatus;
   error: GraphSaveError | null;
 }
-
-export type GraphUpsertRequest = PersistedGraphUpsertRequestUI;

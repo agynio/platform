@@ -14,47 +14,21 @@ Templates
     curl http://localhost:3010/api/templates
     ```
 
-Graph state (filesystem-backed)
-- GET `/api/graph`
-  - 200: Persisted graph document: `{ name, version, updatedAt, nodes, edges }`
-  - Example:
-    ```bash
-    curl http://localhost:3010/api/graph
-    ```
-- POST `/api/graph`
-  - Body: `PersistedGraphUpsertRequest` → `{ name='main', version, nodes, edges }`
-  - Headers (optional): `x-graph-author-name`, `x-graph-author-email` are retained for compatibility but no longer influence persistence.
-  - Success: returns updated persisted graph `{ name, version, updatedAt, nodes, edges }`
-  - Errors (status → body):
-    - 409 `{ error: 'VERSION_CONFLICT', current?: PersistedGraph }`
-    - 409 `{ error: 'LOCK_TIMEOUT' }`
-    - 409 `{ error: 'MCP_COMMAND_MUTATION_FORBIDDEN' }` (enum value GraphErrorCode.McpCommandMutationForbidden)
-    - 500 `{ error: 'PERSIST_FAILED' }`
-    - 400 `{ error: 'Bad Request' | string }` (includes deterministic edge check; see notes)
-  - Notes:
-    - A provided `edge.id` must match the deterministic id `${source}-${sourceHandle}__${target}-${targetHandle}`. If it doesn't, the server returns `400` with `{ error: 'Edge id mismatch: expected <id> got <id>' }`.
-    - Persistence failures surface as `500 { error: 'PERSIST_FAILED' }`.
-    - Lock acquisition timeout surfaces as `409 { error: 'LOCK_TIMEOUT' }`.
-  - Example:
-    ```bash
-    curl -X POST http://localhost:3010/api/graph \
-      -H 'content-type: application/json' \
-      -H 'x-graph-author-name: Jane Dev' \
-      -H 'x-graph-author-email: jane@example.com' \
-      -d '{"name":"main","version":1,"nodes":[],"edges":[]}'
-    ```
-
 Templates alias
 - GET `/graph/templates` → same as `/api/templates`
 
 Node status and actions
 - GET `/graph/nodes/:nodeId/status`
-  - 200: `{ isPaused?, provisionStatus?, dynamicConfigReady? }`
+  - 200: `{ provisionStatus? }`
 - POST `/graph/nodes/:nodeId/actions`
-  - Body: `{ action: 'pause'|'resume'|'provision'|'deprovision' }`
+  - Body: `{ action: 'provision'|'deprovision' }`
   - 204: no body on success; server also emits a `node_status` socket event
   - 400 `{ error: 'unknown_action' }`
   - 500 `{ error: string }`
+ - POST `/graph/nodes/:nodeId/discover-tools`
+  - 200 `{ tools: Array<{ name: string; description?: string }>, updatedAt?: string }`
+  - 400 `{ error: 'node_not_mcp' }`
+  - 404 `{ error: 'node_not_found' }`
 
 Agent runs timeline
 - GET `/api/agents/runs/:runId/events`
@@ -75,12 +49,6 @@ Context items
   - 200 `{ items: Array<{ id, role, contentText, contentJson, metadata, sizeBytes, createdAt }> }`
   - Empty `ids` returns `{ items: [] }`.
 
-Dynamic-config schema (read-only)
-- GET `/graph/nodes/:nodeId/dynamic-config/schema`
-  - 200: `{ ready: boolean, schema?: JSONSchema }`
-  - 404: `{ error: 'node_not_found' }`
-  - 500: `{ error: 'dynamic_config_schema_error' | string }`
-
 Vault proxy (enabled only when VAULT_ENABLED=true)
 - GET `/api/vault/mounts` → `{ items: string[] }`
 - GET `/api/vault/kv/:mount/paths?prefix=` → `{ items: string[] }`
@@ -93,13 +61,12 @@ Vault proxy (enabled only when VAULT_ENABLED=true)
 
 Sockets
 - Default namespace (no custom path)
-  - Event `node_status`: `{ nodeId, isPaused?, provisionStatus?, dynamicConfigReady?, updatedAt }`
-  - Event `node_config`: `{ nodeId, config, dynamicConfig, version }` (emitted after successful /api/graph save with changes)
+  - Event `node_status`: `{ nodeId, provisionStatus?, updatedAt? }`
   - See docs/graph/status-updates.md and docs/ui/graph/index.md
 
 Notes
 - Route handlers surface structured errors and emit socket events on state changes.
-- The filesystem store enforces deterministic edge IDs and uses a dataset-scoped file lock plus atomic writes.
+- Graph snapshots are sourced from the Teams service; the platform no longer exposes `/api/graph`.
 - MCP mutation guard prevents unsafe changes to MCP commands.
 - Error codes align with the error envelope described above.
 Nix proxy

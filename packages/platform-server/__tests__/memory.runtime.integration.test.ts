@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { SystemMessage } from '@agyn/llm';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
@@ -7,7 +7,7 @@ import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import Node from '../src/nodes/base/Node';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import {
   MemoryConnectorNode,
   type MemoryConnectorStaticConfig,
@@ -16,6 +16,7 @@ import { PostgresMemoryEntitiesRepository } from '../src/nodes/memory/memory.rep
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import type { MemoryScope } from '../src/nodes/memory/memory.types';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 const createMemoryService = (prisma: PrismaClient) =>
   new MemoryService(new PostgresMemoryEntitiesRepository({ getClient: () => prisma } as any), { get: async () => null } as any);
@@ -111,22 +112,13 @@ function makeRuntime(
   const templates = new TemplateRegistry(moduleRef as import('@nestjs/core').ModuleRef);
   templates.register('callModel', { title: 'CallModel', kind: 'tool' }, TestCallModelNode);
   templates.register('memory', { title: 'Memory', kind: 'tool' }, MemoryConnectorNode);
-
-  class StubRepo extends GraphRepository {
-    async initIfNeeded(): Promise<void> {}
-    async get(): Promise<null> {
-      return null;
-    }
-    async upsert(): Promise<never> {
-      throw new Error('not-implemented');
-    }
-    async upsertNodeState(): Promise<void> {}
-  }
+  const graphSource = new TeamsGraphSource(createTeamsClientStub());
+  vi.spyOn(graphSource, 'load').mockResolvedValue({ nodes: [], edges: [] });
   // Cast moduleRef back to real ModuleRef type for LiveGraphRuntime ctor compatibility
   const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
   const runtime = new LiveGraphRuntime(
     templates,
-    new StubRepo(),
+    graphSource,
     moduleRef as import('@nestjs/core').ModuleRef,
     resolver as any,
   );

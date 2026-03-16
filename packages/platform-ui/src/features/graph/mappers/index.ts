@@ -3,15 +3,12 @@ import type {
   GraphNodeConfig,
   GraphNodeStatus,
   GraphPersisted,
-  GraphPersistedEdge,
   GraphPersistedNode,
-  GraphUpsertRequest,
 } from '../types';
 
 export interface GraphNodeMetadata {
   template: string;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
   position?: { x: number; y: number };
 }
 
@@ -125,11 +122,9 @@ export function mapPersistedGraphToNodes(
     const position = normalizePosition(node.position);
     const title = deriveTitle(node, tpl);
     const config = node.config ? { ...(node.config as Record<string, unknown>) } : undefined;
-    const state = node.state ? { ...(node.state as Record<string, unknown>) } : undefined;
     metadata.set(node.id, {
       template: node.template,
       config,
-      state,
       position,
     });
     const ports = {
@@ -145,7 +140,6 @@ export function mapPersistedGraphToNodes(
       y: position.y,
       status: DEFAULT_STATUS,
       config,
-      state,
       runtime: undefined,
       capabilities: deriveCapabilities(tpl),
       ports,
@@ -156,28 +150,19 @@ export function mapPersistedGraphToNodes(
   return { nodes, metadata };
 }
 
-interface BuildSavePayloadOptions {
-  name: string;
-  version?: number;
-  nodes: GraphNodeConfig[];
-  metadata: Map<string, GraphNodeMetadata>;
-  edges: GraphPersistedEdge[];
-}
-
 export interface BuildGraphNodeFromTemplateOptions {
   id: string;
   position: { x: number; y: number };
   title?: string;
   status?: GraphNodeStatus;
   config?: Record<string, unknown>;
-  state?: Record<string, unknown>;
 }
 
 export function buildGraphNodeFromTemplate(
   template: TemplateSchema,
   options: BuildGraphNodeFromTemplateOptions,
 ): { node: GraphNodeConfig; metadata: GraphNodeMetadata } {
-  const { id, position, status: desiredStatus, config: initialConfig, state: initialState } = options;
+  const { id, position, status: desiredStatus, config: initialConfig } = options;
   const rawTitle = typeof options.title === 'string' ? options.title.trim() : '';
   const fallbackTitle = typeof template.title === 'string' && template.title.trim().length > 0
     ? template.title.trim()
@@ -187,7 +172,6 @@ export function buildGraphNodeFromTemplate(
   const status = desiredStatus ?? DEFAULT_STATUS;
 
   const config = initialConfig ? { ...initialConfig } : undefined;
-  const state = initialState ? { ...initialState } : undefined;
   const ports: GraphNodeConfig['ports'] = {
     inputs: toPortList(template?.targetPorts),
     outputs: toPortList(template?.sourcePorts),
@@ -202,7 +186,6 @@ export function buildGraphNodeFromTemplate(
     y: Number.isFinite(position.y) ? position.y : 0,
     status,
     config,
-    state,
     runtime: undefined,
     capabilities: deriveCapabilities(template),
     ports,
@@ -212,7 +195,6 @@ export function buildGraphNodeFromTemplate(
   const metadata: GraphNodeMetadata = {
     template: template.name,
     config: config ? { ...config } : undefined,
-    state: state ? { ...state } : undefined,
     position: {
       x: Number.isFinite(position.x) ? position.x : 0,
       y: Number.isFinite(position.y) ? position.y : 0,
@@ -220,38 +202,4 @@ export function buildGraphNodeFromTemplate(
   } satisfies GraphNodeMetadata;
 
   return { node, metadata };
-}
-
-function toPersistedNode(node: GraphNodeConfig, meta: GraphNodeMetadata): GraphPersistedNode {
-  const position = {
-    x: Number.isFinite(node.x) ? node.x : meta.position?.x ?? 0,
-    y: Number.isFinite(node.y) ? node.y : meta.position?.y ?? 0,
-  };
-  return {
-    id: node.id,
-    template: meta.template,
-    position,
-    config: meta.config ? { ...meta.config } : undefined,
-    state: meta.state ? { ...meta.state } : undefined,
-  } satisfies GraphPersistedNode;
-}
-
-export function buildGraphSavePayload(options: BuildSavePayloadOptions): GraphUpsertRequest {
-  const { name, version, nodes, metadata, edges } = options;
-  const persistedNodes: GraphPersistedNode[] = nodes.map((node) => {
-    const meta = metadata.get(node.id);
-    if (!meta) {
-      throw new Error(`Missing metadata for node ${node.id}`);
-    }
-    return toPersistedNode(node, meta);
-  });
-
-  const persistedEdges = edges.map((edge) => ({ ...edge }));
-
-  return {
-    name,
-    version,
-    nodes: persistedNodes,
-    edges: persistedEdges,
-  } satisfies GraphUpsertRequest;
 }
