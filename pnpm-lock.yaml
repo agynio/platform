@@ -161,7 +161,7 @@ importers:
         specifier: ^11.2.0
         version: 11.2.0
       '@grpc/grpc-js':
-        specifier: ^1.11.1
+        specifier: ^1.12.2
         version: 1.14.0
       '@langchain/core':
         specifier: 1.0.1
