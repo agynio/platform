@@ -17,7 +17,7 @@ import type Node from '../nodes/base/Node';
 import { Errors } from '../graph/errors';
 import { PortsRegistry } from '../graph/ports.registry';
 import type { TemplatePortConfig } from '../graph/ports.types';
-import { GraphRepository } from '../graph/graph.repository';
+import { TeamsGraphSource, type TeamsGraphSnapshot } from '../graph/teamsGraph.source';
 import { TemplateRegistry } from './templateRegistry';
 import { ReferenceResolverService } from '../utils/reference-resolver.service';
 import { ResolveError } from '../utils/references';
@@ -46,7 +46,7 @@ export class LiveGraphRuntime {
   private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
-    @Inject(GraphRepository) private readonly graphs: GraphRepository,
+    @Inject(TeamsGraphSource) private readonly graphSource: TeamsGraphSource,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
     @Inject(ReferenceResolverService) private readonly referenceResolver: ReferenceResolverService,
   ) {
@@ -90,53 +90,43 @@ export class LiveGraphRuntime {
    * Does not throw on failure; logs and returns { applied: false }.
    */
   public async load(): Promise<{ applied: boolean; version?: number }> {
-    const toRuntimeGraph = (saved: {
-      nodes: Array<{
-        id: string;
-        template: string;
-        config?: Record<string, unknown>;
-      }>;
-      edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-      version: number;
-    }) =>
-      ({
-        nodes: saved.nodes.map((n) => ({
-          id: n.id,
-          data: { template: n.template, config: n.config },
-        })),
-        edges: saved.edges.map((e) => ({
-          source: e.source,
-          sourceHandle: e.sourceHandle,
-          target: e.target,
-          targetHandle: e.targetHandle,
-        })),
-      }) as GraphDefinition;
+    const toRuntimeGraph = (snapshot: TeamsGraphSnapshot): GraphDefinition => ({
+      nodes: snapshot.nodes.map((node) => ({
+        id: node.id,
+        data: { template: node.template, config: node.config },
+      })),
+      edges: snapshot.edges.map((edge) => ({
+        source: edge.source,
+        sourceHandle: edge.sourceHandle,
+        target: edge.target,
+        targetHandle: edge.targetHandle,
+      })),
+    });
 
     try {
-      const existing = await this.graphs.load();
-      if (existing.nodes.length === 0 && existing.edges.length === 0) {
-        this.logger.log('No persisted graph found; starting with empty runtime graph.');
+      const snapshot = await this.graphSource.load();
+      if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
+        this.logger.log('No graph snapshot found; starting with empty runtime graph.');
         return { applied: false };
       }
       this.logger.log(
-        `Applying persisted graph to live runtime ${JSON.stringify({
-          version: existing.version,
-          nodes: existing.nodes.length,
-          edges: existing.edges.length,
+        `Applying graph snapshot to live runtime ${JSON.stringify({
+          nodes: snapshot.nodes.length,
+          edges: snapshot.edges.length,
         })}`,
       );
-      await this.apply(toRuntimeGraph(existing));
-      this.logger.log('Initial persisted graph applied successfully');
-      return { applied: true, version: existing.version };
+      await this.apply(toRuntimeGraph(snapshot));
+      this.logger.log('Initial graph snapshot applied successfully');
+      return { applied: true };
     } catch (e) {
       if (e instanceof GraphError) {
         const cause = e && typeof e === 'object' && 'cause' in e ? (e as { cause?: unknown }).cause : undefined;
         this.logger.error(
-          `Failed to apply initial persisted graph ${JSON.stringify({ message: e.message, cause: String(cause) })}`,
+          `Failed to apply initial graph snapshot ${JSON.stringify({ message: e.message, cause: String(cause) })}`,
         );
       }
       this.logger.error(
-        `Failed to apply initial persisted graph ${JSON.stringify(
+        `Failed to apply initial graph snapshot ${JSON.stringify(
           e instanceof Error
             ? { name: e.name, message: e.message, stack: e.stack }
             : {

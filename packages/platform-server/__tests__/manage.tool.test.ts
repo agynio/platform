@@ -11,7 +11,7 @@ import { ConfigService, configSchema } from '../src/core/services/config.service
 import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import type { LiveNode } from '../src/graph/liveGraph.types';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import type { LLMContext } from '../src/llm/types';
@@ -21,6 +21,7 @@ import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 import { runnerConfigDefaults } from './helpers/config';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async init(): Promise<void> {}
@@ -472,21 +473,16 @@ describe('ManageTool graph wiring', () => {
       .register('agent', { title: 'Agent', kind: 'agent' }, FakeAgentWithTools)
       .register('manageTool', { title: 'Manage', kind: 'tool' }, ManageToolNode);
 
+    const teamsGraphSourceStub = new TeamsGraphSource(createTeamsClientStub());
+    vi.spyOn(teamsGraphSourceStub, 'load').mockResolvedValue({ nodes: [], edges: [] });
+
     const runtimeModule = await Test.createTestingModule({
       providers: [
         LiveGraphRuntime,
         { provide: TemplateRegistry, useValue: registry },
         {
-          provide: GraphRepository,
-          useValue: {
-            load: async () => ({
-              name: 'main',
-              version: 0,
-              updatedAt: new Date().toISOString(),
-              nodes: [],
-              edges: [],
-            }),
-          },
+          provide: TeamsGraphSource,
+          useValue: teamsGraphSourceStub,
         },
         { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
         { provide: ModuleRef, useValue: moduleRef },

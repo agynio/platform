@@ -21,12 +21,13 @@ import { GithubService } from '../src/infra/github/github.client';
 import { PRService } from '../src/infra/github/pr.usecase';
 import { ArchiveService } from '../src/infra/archive/archive.service';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { buildConfigInput } from './helpers/config';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 process.env.LLM_PROVIDER = 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -189,15 +190,8 @@ if (!shouldRunDbTests) {
         toSchema: vi.fn().mockResolvedValue([]),
       } satisfies Partial<TemplateRegistry>;
 
-      const graphRepositoryStub = {
-        load: vi.fn().mockResolvedValue({
-          name: 'main',
-          version: 0,
-          updatedAt: new Date().toISOString(),
-          nodes: [],
-          edges: [],
-        }),
-      } satisfies Partial<GraphRepository>;
+      const teamsGraphSourceStub = new TeamsGraphSource(createTeamsClientStub());
+      vi.spyOn(teamsGraphSourceStub, 'load').mockResolvedValue({ nodes: [], edges: [] });
 
       const builder = Test.createTestingModule({
         imports: [GraphApiModule, GatewayModule],
@@ -231,7 +225,7 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(PRService).useFactory(() => makeStub({}));
       builder.overrideProvider(ArchiveService).useFactory(() => makeStub({}));
       builder.overrideProvider(TemplateRegistry).useFactory(() => templateRegistryStub as TemplateRegistry);
-      builder.overrideProvider(GraphRepository).useFactory(() => graphRepositoryStub as GraphRepository);
+      builder.overrideProvider(TeamsGraphSource).useFactory(() => teamsGraphSourceStub);
       builder.overrideProvider(GraphSocketGateway).useValue({
         emitThreadCreated: vi.fn(),
         emitThreadUpdated: vi.fn(),

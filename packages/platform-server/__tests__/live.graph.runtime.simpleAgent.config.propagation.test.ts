@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
@@ -10,6 +10,7 @@ import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
 import { createDockerClientStub } from './helpers/dockerClient.stub';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 // PrismaService removed from test harness; use minimal DI stubs
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentNode } from '../src/nodes/agent/agent.node';
@@ -93,19 +94,10 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       .then((module) => {
         const moduleRef = module.get(ModuleRef);
         const registry = buildTemplateRegistry({ moduleRef });
-        class StubRepo extends GraphRepository {
-          async load() {
-            return {
-              name: 'main',
-              version: 0,
-              updatedAt: new Date().toISOString(),
-              nodes: [],
-              edges: [],
-            };
-          }
-        }
+        const graphSource = new TeamsGraphSource(createTeamsClientStub());
+        vi.spyOn(graphSource, 'load').mockResolvedValue({ nodes: [], edges: [] });
         const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-        const runtime = new LiveGraphRuntime(registry, new StubRepo(), moduleRef, resolver as any);
+        const runtime = new LiveGraphRuntime(registry, graphSource, moduleRef, resolver as any);
         return { runtime };
       });
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { GraphRepository } from '../src/graph/graph.repository.js';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source.js';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
@@ -10,6 +10,7 @@ import { ModuleRef } from '@nestjs/core';
 import Node from '../src/nodes/base/Node';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/memory.node';
 import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 type StrictAgentConfig = z.infer<typeof AgentStaticConfigSchema>;
 
@@ -40,22 +41,13 @@ const makeRuntime = (
   const templates = new TemplateRegistry(moduleRef);
   templates.register('Memory', { title: 'Memory', kind: 'tool' }, MemoryNode as any);
   templates.register('StrictAgent', { title: 'Strict Agent', kind: 'agent' }, StrictAgentNode as any);
-  class StubRepo extends GraphRepository {
-    async load() {
-      return {
-        name: 'main',
-        version: 0,
-        updatedAt: new Date().toISOString(),
-        nodes: [],
-        edges: [],
-      };
-    }
-  }
+  const graphSource = new TeamsGraphSource(createTeamsClientStub());
+  vi.spyOn(graphSource, 'load').mockResolvedValue({ nodes: [], edges: [] });
   const resolver = {
     resolve: async (input: unknown) =>
       (resolveImpl ? resolveImpl(input) : ({ output: input, report: {} as unknown })),
   };
-  const runtime = new LiveGraphRuntime(templates, new StubRepo(), moduleRef as any, resolver as any);
+  const runtime = new LiveGraphRuntime(templates, graphSource, moduleRef as any, resolver as any);
   return runtime;
 };
 

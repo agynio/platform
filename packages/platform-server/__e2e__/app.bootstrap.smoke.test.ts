@@ -20,12 +20,13 @@ import { VaultService } from '../src/vault/vault.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMSettingsService } from '../src/settings/llm/llmSettings.service';
 import { runnerConfigDefaults } from '../__tests__/helpers/config';
+import { createTeamsClientStub } from '../__tests__/helpers/teamsGrpc.stub';
 import { DOCKER_CLIENT, type DockerClient } from '../src/infra/container/dockerClient.token';
 import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
 import { VolumeGcService } from '../src/infra/container/volumeGc.job';
@@ -53,7 +54,7 @@ type BootstrapStubs = {
   agentsPersistenceStub: Partial<AgentsPersistenceService>;
   threadsMetricsStub: Partial<ThreadsMetricsService>;
   vaultStub: Partial<VaultService>;
-  graphRepositoryStub: Record<string, unknown>;
+  teamsGraphSourceStub: TeamsGraphSource;
   templateRegistryStub: TemplateRegistry;
   liveGraphRuntimeStub: LiveGraphRuntime;
   llmProvisionerStub: LLMProvisioner;
@@ -141,17 +142,8 @@ const createBootstrapStubs = (): BootstrapStubs => {
     listKvV2Mounts: vi.fn().mockResolvedValue([]),
   } satisfies Partial<VaultService>;
 
-  const graphRepositoryStub = {
-    initIfNeeded: vi.fn().mockResolvedValue(undefined),
-    get: vi.fn().mockResolvedValue(null),
-    upsert: vi.fn().mockResolvedValue({
-      name: 'main',
-      version: 0,
-      updatedAt: new Date(0).toISOString(),
-      nodes: [],
-      edges: [],
-    }),
-  } satisfies Record<string, unknown>;
+  const teamsGraphSourceStub = new TeamsGraphSource(createTeamsClientStub());
+  vi.spyOn(teamsGraphSourceStub, 'load').mockResolvedValue({ nodes: [], edges: [] });
 
   const templateRegistryStub = {
     register: vi.fn().mockReturnThis(),
@@ -198,7 +190,7 @@ const createBootstrapStubs = (): BootstrapStubs => {
     agentsPersistenceStub,
     threadsMetricsStub,
     vaultStub,
-    graphRepositoryStub,
+    teamsGraphSourceStub,
     templateRegistryStub,
     liveGraphRuntimeStub,
     llmProvisionerStub,
@@ -234,8 +226,8 @@ const applyBootstrapOverrides = (
     .useValue(stubs.threadsMetricsStub as ThreadsMetricsService)
     .overrideProvider(VaultService)
     .useValue(stubs.vaultStub as VaultService)
-    .overrideProvider(GraphRepository)
-    .useValue(stubs.graphRepositoryStub as unknown as GraphRepository)
+    .overrideProvider(TeamsGraphSource)
+    .useValue(stubs.teamsGraphSourceStub)
     .overrideProvider(TemplateRegistry)
     .useValue(stubs.templateRegistryStub)
     .overrideProvider(LiveGraphRuntime)

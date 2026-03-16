@@ -4,37 +4,29 @@ import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import Node from '../src/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle
 import { ModuleRef } from '@nestjs/core';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 
 class ModuleRefStub {
   create<T>(Cls: new (...args: any[]) => T): T {
     return new Cls();
   }
 }
-import { GraphRepository } from '../src/graph/graph.repository';
-class StubRepo extends GraphRepository {
-  async load() {
-    return {
-      name: 'main',
-      version: 0,
-      updatedAt: new Date().toISOString(),
-      nodes: [],
-      edges: [],
-    };
-  }
-}
 function makeRuntimeAndRegistry() {
   const moduleRef = new ModuleRefStub() as ModuleRef;
   const registry = new TemplateRegistry(moduleRef);
+  const graphSource = new TeamsGraphSource(createTeamsClientStub());
+  vi.spyOn(graphSource, 'load').mockResolvedValue({ nodes: [], edges: [] });
   const runtime = new LiveGraphRuntime(
     registry,
-    new StubRepo(),
+    graphSource,
     moduleRef,
     { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) } as any,
   );
   return { registry, runtime };
 }
 
-describe('Runtime helpers and GraphRepository API surfaces', () => {
+describe('Runtime helpers and graph source API surfaces', () => {
   it('provision/deprovision + status work against live nodes', async () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
@@ -91,7 +83,7 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
       edges: [],
     });
 
-    // Template schema via registry directly (GraphRepository now stateless for templates only)
+    // Template schema via registry directly
     const templates = await registry.toSchema();
     const dynEntry = templates.find((t) => t.name === 'dyn');
     expect(dynEntry).toBeTruthy();

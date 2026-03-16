@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
 import { DOCKER_CLIENT } from '../src/infra/container/dockerClient.token';
@@ -12,11 +12,12 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { ModuleRef } from '@nestjs/core';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
-import { GraphRepository } from '../src/graph/graph.repository';
+import { TeamsGraphSource } from '../src/graph/teamsGraph.source';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
+import { createTeamsClientStub } from './helpers/teamsGrpc.stub';
 import {
   WorkspaceProvider,
   type WorkspaceProviderCapabilities,
@@ -167,6 +168,9 @@ class StubLLMProvisioner extends LLMProvisioner {
 
 describe('Graph MCP integration', () => {
   it('constructs graph with mcpServer template without error (deferred start)', async () => {
+    const teamsGraphSourceStub = new TeamsGraphSource(createTeamsClientStub());
+    vi.spyOn(teamsGraphSourceStub, 'load').mockResolvedValue({ nodes: [], edges: [] });
+
     const module = await Test.createTestingModule({
       providers: [
         { provide: DOCKER_CLIENT, useValue: createDockerClientStub() },
@@ -185,7 +189,7 @@ describe('Graph MCP integration', () => {
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         TemplateRegistry,
         LiveGraphRuntime,
-        GraphRepository,
+        { provide: TeamsGraphSource, useValue: teamsGraphSourceStub },
         {
           provide: AgentsPersistenceService,
           useValue: {
@@ -202,20 +206,8 @@ describe('Graph MCP integration', () => {
     const moduleRef = module.get(ModuleRef);
 
     const templateRegistry = buildTemplateRegistry({ moduleRef });
-    class GraphRepoStub implements Pick<GraphRepository, 'load'> {
-      async load() {
-        return {
-          name: 'main',
-          version: 0,
-          updatedAt: new Date().toISOString(),
-          nodes: [],
-          edges: [],
-        };
-      }
-    }
-
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-    const runtime = new LiveGraphRuntime(templateRegistry, new GraphRepoStub(), moduleRef, resolver as any);
+    const runtime = new LiveGraphRuntime(templateRegistry, teamsGraphSourceStub, moduleRef, resolver as any);
 
     const graph: GraphDefinition = {
       nodes: [

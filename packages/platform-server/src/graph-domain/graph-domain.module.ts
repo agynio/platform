@@ -5,9 +5,7 @@ import { InfraModule } from '../infra/infra.module';
 import { EnvModule } from '../env/env.module';
 import { LLMModule } from '../llm/llm.module';
 import { VaultModule } from '../vault/vault.module';
-import { GraphRepository } from '../graph/graph.repository';
 import { TeamsGraphSource } from '../graph/teamsGraph.source';
-import { TeamsGraphRepository } from '../graph/teamsGraph.repository';
 import { NodesModule } from '../nodes/nodes.module';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
@@ -27,11 +25,6 @@ import { TeamsModule } from '../teams/teams.module';
     ThreadCleanupCoordinator,
     RemindersService,
     TeamsGraphSource,
-    TeamsGraphRepository,
-    {
-      provide: GraphRepository,
-      useExisting: TeamsGraphRepository,
-    },
     AgentsPersistenceService,
   ],
   exports: [
@@ -40,7 +33,7 @@ import { TeamsModule } from '../teams/teams.module';
     InfraModule,
     VaultModule,
     LLMModule,
-    GraphRepository,
+    TeamsGraphSource,
     NodesModule,
     AgentsPersistenceService,
     ThreadCleanupCoordinator,
