@@ -26,7 +26,7 @@ Intended use cases:
 - Operating a local development environment with supporting infra.
 
 ## Repository Structure
-- docker-compose.yml — Development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, cAdvisor, Prometheus, Grafana.
+  - docker-compose.yml — Development infra: Postgres, agents-db, Vault (+ auto-init), NCPS, LiteLLM, Redis, notifications, notifications-gateway, cAdvisor, Prometheus, Grafana.
 - .github/workflows/
   - ci.yml — Linting, tests (server/UI), Storybook build + smoke, type-check build steps.
   - docker-ghcr.yml — Build and publish platform-server and platform-ui images to GHCR.
@@ -122,7 +122,8 @@ pnpm install
 ```bash
 docker compose up -d
 # Starts postgres (5442), agents-db (5443), vault (8200), ncps (8501),
-# litellm (127.0.0.1:4000)
+# litellm (127.0.0.1:4000), redis (6379), notifications (9090),
+# notifications-gateway (3011), docker-runner (50051)
 # Optional monitoring (prometheus/grafana) lives in docker-compose.monitoring.yml.
 # Enable with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
@@ -195,6 +196,8 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_RUNNER_CONNECT_RETRY_JITTER_MS (default 250)
   - DOCKER_RUNNER_CONNECT_PROBE_INTERVAL_MS (default 30000 while runner is healthy)
   - DOCKER_RUNNER_CONNECT_MAX_RETRIES (default 0 → unlimited background retries)
+- Notifications:
+  - NOTIFICATIONS_GRPC_ADDR (optional; e.g. notifications:9090 or localhost:9090)
 - Volume GC:
   - VOLUME_GC_ENABLED (default true)
   - VOLUME_GC_INTERVAL_MS (default 60000)

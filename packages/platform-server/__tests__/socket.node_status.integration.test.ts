@@ -28,7 +28,14 @@ describe('Gateway node_status integration', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub as any, eventsBusStub as any);
+    const notificationsPublisher = { publish: async () => {} };
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metricsStub as any,
+      prismaStub as any,
+      eventsBusStub as any,
+      notificationsPublisher as any,
+    );
     gateway.init({ server: fastify.server });
     const node = new DummyNode();
     node.init({ nodeId: 'nX' });

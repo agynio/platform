@@ -10,6 +10,7 @@ How these docs are organized
 Index
 - Product Spec: [product-spec.md](product-spec.md)
 - API Reference: [api/index.md](api/index.md)
+  - Realtime notifications: socket payloads are published via the notifications service and served by notifications-gateway when running docker-compose.yml.
 - Graph
   - Teams graph source & status updates: [graph/status-updates.md](graph/status-updates.md)
   - Legacy filesystem store (deprecated): [graph/fs-store.md](graph/fs-store.md)

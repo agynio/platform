@@ -17,6 +17,7 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { DockerRunnerStatusService } from '../src/infra/container/dockerRunnerStatus.service';
+import { NotificationsPublisher } from '../src/notifications/notifications.publisher';
 import {
   WorkspaceProvider,
   type WorkspaceKey,
@@ -220,6 +221,12 @@ class TerminalSessionsServiceStub {
   }
 }
 
+class NotificationsPublisherStub {
+  async publish(): Promise<void> {
+    return;
+  }
+}
+
 type RunEventRecordStub = {
   id: string;
   runId: string;
@@ -323,6 +330,7 @@ describe('Socket gateway real server handshakes', () => {
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
         { provide: WorkspaceProvider, useClass: WorkspaceProviderStub },
         { provide: DockerRunnerStatusService, useValue: runnerStatusStub },
+        { provide: NotificationsPublisher, useClass: NotificationsPublisherStub },
         EventsBusService,
         RunEventsService,
       ],

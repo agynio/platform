@@ -30,7 +30,14 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     gateway.init({ server: fastify.server });
 
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
@@ -60,7 +67,46 @@ describe('Socket events', () => {
     const payload = graphEmitter?.mock.calls[0]?.[1];
     expect(payload).toMatchObject({ nodeId: 'n1', provisionStatus: { state: 'provisioning' } });
   });
-
+  it('emits node_state via NodeStateService bridge', async () => {
+    const adapter = new FastifyAdapter();
+    const fastify = adapter.getInstance();
+    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as unknown as PrismaService;
+    const metrics = new ThreadsMetricsService(prismaStub as any);
+    const eventsBusStub = {
+      subscribeToRunEvents: () => () => {},
+      subscribeToToolOutputChunk: () => () => {},
+      subscribeToToolOutputTerminal: () => () => {},
+      subscribeToReminderCount: () => () => {},
+      subscribeToNodeState: () => () => {},
+      subscribeToThreadCreated: () => () => {},
+      subscribeToThreadUpdated: () => () => {},
+      subscribeToMessageCreated: () => () => {},
+      subscribeToRunStatusChanged: () => () => {},
+      subscribeToThreadMetrics: () => () => {},
+      subscribeToThreadMetricsAncestors: () => () => {},
+    };
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
+    gateway.init({ server: fastify.server });
+    const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
+    const toSpy = vi.fn((room: string) => {
+      if (!emitMap.has(room)) emitMap.set(room, vi.fn());
+      return { emit: emitMap.get(room)! };
+    });
+    (gateway as any).io = { to: toSpy };
+    gateway.emitNodeState('n1', { k: 'v' });
+    expect(toSpy).toHaveBeenCalledWith('graph');
+    expect(toSpy).toHaveBeenCalledWith('node:n1');
+    expect(emitMap.get('graph')).toHaveBeenCalledWith('node_state', expect.objectContaining({ nodeId: 'n1', state: { k: 'v' } }));
+    expect(emitMap.get('node:n1')).toHaveBeenCalledWith('node_state', expect.objectContaining({ nodeId: 'n1', state: { k: 'v' } }));
+  });
   it('emits reminder count to graph and node rooms', async () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
@@ -79,7 +125,14 @@ describe('Socket events', () => {
       subscribeToThreadMetrics: () => () => {},
       subscribeToThreadMetricsAncestors: () => () => {},
     };
-    const gateway = new GraphSocketGateway(runtimeStub, metrics, prismaStub, eventsBusStub as any);
+    const notificationsPublisher = { publish: vi.fn() } as any;
+    const gateway = new GraphSocketGateway(
+      runtimeStub,
+      metrics,
+      prismaStub,
+      eventsBusStub as any,
+      notificationsPublisher,
+    );
     gateway.init({ server: fastify.server });
     const emitMap = new Map<string, ReturnType<typeof vi.fn>>();
     const toSpy = vi.fn((room: string) => {

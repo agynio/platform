@@ -18,6 +18,7 @@ import {
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../events/run-events.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { PrismaService } from '../core/services/prisma.service';
+import { NotificationsPublisher } from '../notifications/notifications.publisher';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -40,6 +41,14 @@ export const NodeStatusEventSchema = z
   })
   .strict();
 export type NodeStatusEvent = z.infer<typeof NodeStatusEventSchema>;
+
+export const NodeStateEventSchema = z
+  .object({
+    nodeId: z.string(),
+    state: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type NodeStateEvent = z.infer<typeof NodeStateEventSchema>;
 
 // RemindMe: active reminder count event
 export const ReminderCountSocketEventSchema = z
@@ -106,6 +115,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(NotificationsPublisher) private readonly notifications: NotificationsPublisher,
   ) {}
 
   onModuleInit(): void {
@@ -434,7 +444,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   };
 
   private broadcast<T extends { nodeId: string }>(
-    event: 'node_status' | 'node_reminder_count',
+    event: 'node_status' | 'node_reminder_count' | 'node_state',
     payload: T,
     schema: z.ZodType<T>,
   ) {
@@ -463,6 +473,15 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   // Note: node-level subscription handled via runtime.subscribe()
+
+  /** Emit node_state event for node state updates. */
+  emitNodeState(nodeId: string, state: Record<string, unknown>): void {
+    const payload: NodeStateEvent = {
+      nodeId,
+      state,
+    };
+    this.broadcast('node_state', payload, NodeStateEventSchema);
+  }
 
   /** Emit node_reminder_count event for RemindMe tool nodes when registry changes. */
   emitReminderCount(nodeId: string, count: number, updatedAtMs?: number): void {
@@ -655,18 +674,21 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     event: string,
     payload: unknown,
   ) {
-    if (!this.io || rooms.length === 0) return;
-    for (const room of rooms) {
-      try {
-        this.io.to(room).emit(event, payload);
-      } catch (error) {
-        const errPayload =
-          error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
-        this.logger.warn(
-          `GraphSocketGateway: emit error ${this.formatContext({ event, room, error: errPayload })}`,
-        );
+    if (rooms.length === 0) return;
+    if (this.io) {
+      for (const room of rooms) {
+        try {
+          this.io.to(room).emit(event, payload);
+        } catch (error) {
+          const errPayload =
+            error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
+          this.logger.warn(
+            `GraphSocketGateway: emit error ${this.formatContext({ event, room, error: errPayload })}`,
+          );
+        }
       }
     }
+    void this.notifications.publish(event, rooms, payload);
   }
 
   private formatContext(context: Record<string, unknown>): string {

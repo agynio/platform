@@ -225,6 +225,7 @@ export const configSchema = z.object({
     }),
   ncpsAuthHeader: z.string().optional(),
   ncpsAuthToken: z.string().optional(),
+  notificationsGrpcAddr: z.string().min(1).optional(),
   agentsDatabaseUrl: z.string().min(1, 'Agents database connection string is required'),
   // CORS origins (comma-separated in env; parsed to string[])
   corsOrigins: z
@@ -525,6 +526,9 @@ export class ConfigService implements Config {
   get ncpsAuthToken(): string | undefined {
     return this.params.ncpsAuthToken;
   }
+  get notificationsGrpcAddr(): string | undefined {
+    return this.params.notificationsGrpcAddr;
+  }
   get agentsDatabaseUrl(): string {
     return this.params.agentsDatabaseUrl;
   }
@@ -603,6 +607,7 @@ export class ConfigService implements Config {
       ncpsRotationGraceMinutes: process.env.NCPS_ROTATION_GRACE_MINUTES,
       ncpsAuthHeader: process.env.NCPS_AUTH_HEADER,
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
+      notificationsGrpcAddr: ConfigService.coerceString(process.env.NOTIFICATIONS_GRPC_ADDR),
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
       corsOrigins: process.env.CORS_ORIGINS,
       volumeGcSweepTimeoutMs: process.env.VOLUME_GC_SWEEP_TIMEOUT_MS,
