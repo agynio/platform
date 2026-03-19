@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { credentials, Metadata } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
-import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '../../src/proto/grpc.js';
+import { RunnerServiceGrpcClient } from '../../src/proto/grpc.js';
 import { ReadyRequestSchema } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';

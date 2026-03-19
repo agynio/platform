@@ -9,7 +9,6 @@ import {
   type ClientReadableStream,
   type ServiceError,
 } from '@grpc/grpc-js';
-import { create, type DescMessage, type MessageInitShape, type MessageShape } from '@bufbuild/protobuf';
 import { Logger } from '@nestjs/common';
 import { ContainerHandle } from './container.handle';
 import type {
@@ -92,6 +91,7 @@ import {
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
 } from '../../proto/grpc.js';
 import { containerOptsToStartWorkloadRequest } from './workload.grpc';
+import { createMessage } from '../proto.utils';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 
@@ -120,11 +120,6 @@ const sanitizeInfraMessage = (message: string): string => {
     .join(', ');
   return sanitized.replace(/\s{2,}/g, ' ').trim();
 };
-
-const createMessage = <Desc extends DescMessage>(
-  schema: Desc,
-  init?: MessageInitShape<Desc>,
-): MessageShape<Desc> => create(schema, init) as MessageShape<Desc>;
 
 const extractSanitizedServiceErrorMessage = (error: ServiceError): { sanitized: string; raw: string } => {
   const rawDetails = typeof error.details === 'string' ? error.details : '';

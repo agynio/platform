@@ -1,4 +1,3 @@
-import { create, type DescMessage, type MessageInitShape, type MessageShape } from '@bufbuild/protobuf';
 import {
   ContainerSpec,
   ContainerSpecSchema,
@@ -13,6 +12,7 @@ import {
   VolumeSpecSchema,
 } from '../../proto/gen/agynio/api/runner/v1/runner_pb.js';
 import type { ContainerOpts, SidecarOpts } from './dockerRunner.types';
+import { createMessage } from '../proto.utils';
 
 const PROP_AUTO_REMOVE = 'auto_remove';
 const PROP_NETWORK_MODE = 'network_mode';
@@ -25,11 +25,6 @@ const PROP_TTL_SECONDS = 'ttl_seconds';
 const PROP_PLATFORM = 'platform';
 
 const isNonEmptyString = (value: string | undefined | null): value is string => typeof value === 'string' && value.length > 0;
-
-const createMessage = <Desc extends DescMessage>(
-  schema: Desc,
-  init?: MessageInitShape<Desc>,
-): MessageShape<Desc> => create(schema, init) as MessageShape<Desc>;
 
 const normalizeEnv = (env?: ContainerOpts['env']): EnvVar[] => {
   if (!env) return [];
