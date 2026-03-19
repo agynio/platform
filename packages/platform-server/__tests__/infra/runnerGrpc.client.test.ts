@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { ClientDuplexStream } from '@grpc/grpc-js';
 import { Metadata, status } from '@grpc/grpc-js';
-import { NonceCache, verifyAuthHeaders } from '../../src/infra/container/auth';
-import { RUNNER_SERVICE_TOUCH_WORKLOAD_PATH } from '../../src/proto/grpc.js';
 import type { RunnerServiceGrpcClientInstance } from '../../src/proto/grpc.js';
 
 import {
@@ -21,8 +19,8 @@ class MockClientStream<Req = unknown> extends EventEmitter {
 }
 
 describe('RunnerGrpcClient', () => {
-  it('sends signed runner metadata on touchLastUsed calls', async () => {
-    const client = new RunnerGrpcClient({ address: 'grpc://runner', sharedSecret: 'test-secret' });
+  it('sends empty runner metadata on touchLastUsed calls', async () => {
+    const client = new RunnerGrpcClient({ address: 'grpc://runner' });
     const captured: { metadata?: Metadata } = {};
 
     const touchStub = vi.fn((_: unknown, metadata: Metadata, maybeOptions?: unknown, maybeCallback?: (err: Error | null) => void) => {
@@ -40,26 +38,11 @@ describe('RunnerGrpcClient', () => {
 
     expect(touchStub).toHaveBeenCalledTimes(1);
     expect(captured.metadata).toBeInstanceOf(Metadata);
-
-    const headers: Record<string, string> = {};
-    const metadataMap = captured.metadata?.getMap() ?? {};
-    for (const [key, value] of Object.entries(metadataMap)) {
-      headers[key] = Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
-    }
-
-    const verification = verifyAuthHeaders({
-      headers,
-      method: 'POST',
-      path: RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
-      body: '',
-      secret: 'test-secret',
-      nonceCache: new NonceCache(),
-    });
-    expect(verification.ok).toBe(true);
+    expect(Object.keys(captured.metadata?.getMap() ?? {})).toHaveLength(0);
   });
 
   it('sanitizes infra details from gRPC errors', async () => {
-    const client = new RunnerGrpcClient({ address: 'grpc://runner', sharedSecret: 'secret' });
+    const client = new RunnerGrpcClient({ address: 'grpc://runner' });
     const error = Object.assign(new Error('Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:50051'), {
       code: status.DEADLINE_EXCEEDED,
       details: 'Deadline exceeded after 305.002s,LB pick: 0.001s,remote_addr=172.21.0.3:50051',
@@ -89,7 +72,6 @@ describe('RunnerGrpcExecClient', () => {
     );
     const execClient = new RunnerGrpcExecClient({
       address: 'grpc://runner',
-      sharedSecret: 'secret',
       client: { exec: execStub } as unknown as RunnerServiceGrpcClientInstance,
     });
 

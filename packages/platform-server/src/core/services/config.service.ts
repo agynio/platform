@@ -63,10 +63,6 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
-  dockerRunnerSharedSecret: z
-    .string()
-    .min(1, 'DOCKER_RUNNER_SHARED_SECRET is required')
-    .transform((value) => value.trim()),
   dockerRunnerTimeoutMs: z
     .union([z.string(), z.number()])
     .default('30000')
@@ -383,10 +379,6 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
-  get dockerRunnerSharedSecret(): string {
-    return this.params.dockerRunnerSharedSecret;
-  }
-
   get dockerRunnerTimeoutMs(): number {
     return this.params.dockerRunnerTimeoutMs;
   }
@@ -429,10 +421,6 @@ export class ConfigService implements Config {
 
   getDockerRunnerGrpcAddress(): string {
     return `${this.dockerRunnerGrpcHost}:${this.dockerRunnerGrpcPort}`;
-  }
-
-  getDockerRunnerSharedSecret(): string {
-    return this.dockerRunnerSharedSecret;
   }
 
   getDockerRunnerTimeoutMs(): number {
@@ -584,7 +572,6 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
-      dockerRunnerSharedSecret: process.env.DOCKER_RUNNER_SHARED_SECRET,
       dockerRunnerTimeoutMs: process.env.DOCKER_RUNNER_TIMEOUT_MS,
       dockerRunnerGrpcHost: process.env.DOCKER_RUNNER_GRPC_HOST,
       dockerRunnerGrpcPort: dockerRunnerPortEnv,

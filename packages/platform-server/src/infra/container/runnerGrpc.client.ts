@@ -9,9 +9,7 @@ import {
   type ClientReadableStream,
   type ServiceError,
 } from '@grpc/grpc-js';
-import { create } from '@bufbuild/protobuf';
 import { Logger } from '@nestjs/common';
-import { buildAuthHeaders } from './auth';
 import { ContainerHandle } from './container.handle';
 import type {
   ContainerInspectInfo,
@@ -93,6 +91,7 @@ import {
   RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
 } from '../../proto/grpc.js';
 import { containerOptsToStartWorkloadRequest } from './workload.grpc';
+import { createMessage } from '../proto.utils';
 import { ExecIdleTimeoutError, ExecTimeoutError } from '../../utils/execTimeout';
 import type { DockerClient } from './dockerClient.token';
 
@@ -148,29 +147,24 @@ export class DockerRunnerRequestError extends Error {
 
 type RunnerClientConfig = {
   address: string;
-  sharedSecret: string;
   requestTimeoutMs?: number;
 };
 
 export class RunnerGrpcClient implements DockerClient {
   private readonly client: RunnerServiceGrpcClientInstance;
   private readonly execClient: RunnerGrpcExecClient;
-  private readonly sharedSecret: string;
   private readonly requestTimeoutMs: number;
   private readonly endpoint: string;
   private readonly logger = new Logger(RunnerGrpcClient.name);
 
   constructor(config: RunnerClientConfig) {
     if (!config.address) throw new Error('RunnerGrpcClient requires address');
-    if (!config.sharedSecret) throw new Error('RunnerGrpcClient requires shared secret');
-    this.sharedSecret = config.sharedSecret;
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
     this.endpoint = config.address;
     this.client = new RunnerServiceGrpcClient(config.address, credentials.createInsecure());
     this.execClient = new RunnerGrpcExecClient({
       client: this.client,
       address: config.address,
-      sharedSecret: config.sharedSecret,
       defaultDeadlineMs: this.requestTimeoutMs,
       resolveTimeout: (options) => this.resolveExecRequestTimeout(options),
       logger: this.logger,
@@ -182,7 +176,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async checkConnectivity(): Promise<{ status: string }> {
-    const request = create(ReadyRequestSchema, {});
+    const request = createMessage(ReadyRequestSchema, {});
     const response = await this.unary<ReadyRequest, ReadyResponse>(
       RUNNER_SERVICE_READY_PATH,
       request,
@@ -195,7 +189,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async touchLastUsed(containerId: string): Promise<void> {
-    const request = create(TouchWorkloadRequestSchema, { workloadId: containerId });
+    const request = createMessage(TouchWorkloadRequestSchema, { workloadId: containerId });
     await this.unary<TouchWorkloadRequest, unknown>(
       RUNNER_SERVICE_TOUCH_WORKLOAD_PATH,
       request,
@@ -260,7 +254,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async streamContainerLogs(containerId: string, options?: LogsStreamOptions): Promise<LogsStreamSession> {
-    const request = create(StreamWorkloadLogsRequestSchema, {
+    const request = createMessage(StreamWorkloadLogsRequestSchema, {
       workloadId: containerId,
       follow: options?.follow ?? true,
       since: this.normalizeSince(options?.since),
@@ -314,7 +308,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
-    const request = create(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSec });
+    const request = createMessage(StopWorkloadRequestSchema, { workloadId: containerId, timeoutSec });
     await this.unary<StopWorkloadRequest, unknown>(
       RUNNER_SERVICE_STOP_WORKLOAD_PATH,
       request,
@@ -332,7 +326,7 @@ export class RunnerGrpcClient implements DockerClient {
     containerId: string,
     options?: boolean | { force?: boolean; removeVolumes?: boolean },
   ): Promise<void> {
-    const request = create(RemoveWorkloadRequestSchema, {
+    const request = createMessage(RemoveWorkloadRequestSchema, {
       workloadId: containerId,
       force: typeof options === 'boolean' ? options : options?.force ?? false,
       removeVolumes: typeof options === 'boolean' ? options : options?.removeVolumes ?? false,
@@ -351,7 +345,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async getContainerLabels(containerId: string): Promise<Record<string, string> | undefined> {
-    const request = create(GetWorkloadLabelsRequestSchema, { workloadId: containerId });
+    const request = createMessage(GetWorkloadLabelsRequestSchema, { workloadId: containerId });
     const response = await this.unary<GetWorkloadLabelsRequest, GetWorkloadLabelsResponse>(
       RUNNER_SERVICE_GET_WORKLOAD_LABELS_PATH,
       request,
@@ -374,7 +368,7 @@ export class RunnerGrpcClient implements DockerClient {
     labels: Record<string, string>,
     options?: { all?: boolean },
   ): Promise<ContainerHandle[]> {
-    const request = create(FindWorkloadsByLabelsRequestSchema, {
+    const request = createMessage(FindWorkloadsByLabelsRequestSchema, {
       labels,
       all: options?.all ?? false,
     });
@@ -391,7 +385,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async listContainersByVolume(volumeName: string): Promise<string[]> {
-    const request = create(ListWorkloadsByVolumeRequestSchema, { volumeName });
+    const request = createMessage(ListWorkloadsByVolumeRequestSchema, { volumeName });
     const response = await this.unary<ListWorkloadsByVolumeRequest, ListWorkloadsByVolumeResponse>(
       RUNNER_SERVICE_LIST_WORKLOADS_BY_VOLUME_PATH,
       request,
@@ -404,7 +398,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
-    const request = create(RemoveVolumeRequestSchema, {
+    const request = createMessage(RemoveVolumeRequestSchema, {
       volumeName,
       force: options?.force ?? false,
     });
@@ -435,7 +429,7 @@ export class RunnerGrpcClient implements DockerClient {
     options: { path: string },
   ): Promise<void> {
     const payload = await this.toBuffer(data);
-    const request = create(PutArchiveRequestSchema, {
+    const request = createMessage(PutArchiveRequestSchema, {
       workloadId: containerId,
       path: options.path,
       tarPayload: payload,
@@ -455,7 +449,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async inspectContainer(containerId: string): Promise<ContainerInspectInfo> {
-    const request = create(InspectWorkloadRequestSchema, { workloadId: containerId });
+    const request = createMessage(InspectWorkloadRequestSchema, { workloadId: containerId });
     const response = await this.unary<InspectWorkloadRequest, InspectWorkloadResponse>(
       RUNNER_SERVICE_INSPECT_WORKLOAD_PATH,
       request,
@@ -468,7 +462,7 @@ export class RunnerGrpcClient implements DockerClient {
   }
 
   async getEventsStream(options: { since?: number; filters?: DockerEventFilters }): Promise<NodeJS.ReadableStream> {
-    const request = create(StreamEventsRequestSchema, {
+    const request = createMessage(StreamEventsRequestSchema, {
       since: this.normalizeSince(options?.since),
       filters: this.toEventFilters(options?.filters),
     });
@@ -536,7 +530,7 @@ export class RunnerGrpcClient implements DockerClient {
         .map((value: unknown) => String(value))
         .filter((value: string) => value.length > 0);
       if (!normalized.length) continue;
-      result.push(create(EventFilterSchema, { key, values: normalized }));
+      result.push(createMessage(EventFilterSchema, { key, values: normalized }));
     }
     return result;
   }
@@ -572,13 +566,8 @@ export class RunnerGrpcClient implements DockerClient {
     return { deadline: new Date(Date.now() + timeout) };
   }
 
-  private createMetadata(path: string): Metadata {
-    const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret: this.sharedSecret });
-    const metadata = new Metadata();
-    for (const [key, value] of Object.entries(headers)) {
-      metadata.set(key, value);
-    }
-    return metadata;
+  private createMetadata(_path: string): Metadata {
+    return new Metadata();
   }
 
   private translateServiceError(error: ServiceError, context?: { path?: string }): DockerRunnerRequestError {
@@ -737,7 +726,6 @@ type ExecTimeoutResolver = (options?: Pick<ExecOptions, 'timeoutMs' | 'idleTimeo
 
 export class RunnerGrpcExecClient {
   private readonly client: RunnerServiceGrpcClientInstance;
-  private readonly sharedSecret: string;
   private readonly defaultDeadlineMs?: number;
   private readonly resolveTimeout?: ExecTimeoutResolver;
   private readonly interactiveStreams = new Map<string, ClientDuplexStream<ExecRequest, ExecResponse>>();
@@ -745,14 +733,12 @@ export class RunnerGrpcExecClient {
 
   constructor(options: {
     address: string;
-    sharedSecret: string;
     defaultDeadlineMs?: number;
     resolveTimeout?: ExecTimeoutResolver;
     client?: RunnerServiceGrpcClientInstance;
     logger?: Logger;
   }) {
     this.client = options.client ?? new RunnerServiceGrpcClient(options.address, credentials.createInsecure());
-    this.sharedSecret = options.sharedSecret;
     this.defaultDeadlineMs = options.defaultDeadlineMs;
     this.resolveTimeout = options.resolveTimeout;
     this.logger = options.logger;
@@ -789,8 +775,8 @@ export class RunnerGrpcExecClient {
       stdinClosed = true;
       try {
         call.write(
-          create(ExecRequestSchema, {
-            msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
+          createMessage(ExecRequestSchema, {
+            msg: { case: 'stdin', value: createMessage(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
           }),
         );
       } catch {
@@ -1068,8 +1054,8 @@ export class RunnerGrpcExecClient {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding as BufferEncoding);
           if (buffer.length > 0) {
             call.write(
-              create(ExecRequestSchema, {
-                msg: { case: 'stdin', value: create(ExecStdinSchema, { data: buffer, eof: false }) },
+              createMessage(ExecRequestSchema, {
+                msg: { case: 'stdin', value: createMessage(ExecStdinSchema, { data: buffer, eof: false }) },
               }),
             );
           }
@@ -1082,8 +1068,8 @@ export class RunnerGrpcExecClient {
       final: (callback: (error?: Error | null) => void) => {
         try {
           call.write(
-            create(ExecRequestSchema, {
-              msg: { case: 'stdin', value: create(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
+            createMessage(ExecRequestSchema, {
+              msg: { case: 'stdin', value: createMessage(ExecStdinSchema, { data: new Uint8Array(), eof: true }) },
             }),
           );
           call.end();
@@ -1187,7 +1173,9 @@ export class RunnerGrpcExecClient {
     const cols = Math.max(0, Math.floor(size.cols));
     const rows = Math.max(0, Math.floor(size.rows));
     try {
-      call.write(create(ExecRequestSchema, { msg: { case: 'resize', value: create(ExecResizeSchema, { cols, rows }) } }));
+      call.write(
+        createMessage(ExecRequestSchema, { msg: { case: 'resize', value: createMessage(ExecResizeSchema, { cols, rows }) } }),
+      );
     } catch (error) {
       throw new DockerRunnerRequestError(
         0,
@@ -1205,7 +1193,7 @@ export class RunnerGrpcExecClient {
       typeof deadlineMs === 'number' && deadlineMs > 0
         ? { deadline: new Date(Date.now() + deadlineMs) }
         : undefined;
-    const request = create(CancelExecutionRequestSchema, { executionId, force });
+    const request = createMessage(CancelExecutionRequestSchema, { executionId, force });
     return new Promise<boolean>((resolve, reject) => {
       const callback = (err: ServiceError | null, response?: CancelExecutionResponse) => {
         if (err) {
@@ -1222,13 +1210,8 @@ export class RunnerGrpcExecClient {
     });
   }
 
-  private createMetadata(path: string): Metadata {
-    const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret: this.sharedSecret });
-    const metadata = new Metadata();
-    for (const [key, value] of Object.entries(headers)) {
-      metadata.set(key, value);
-    }
-    return metadata;
+  private createMetadata(_path: string): Metadata {
+    return new Metadata();
   }
 
   private createStartRequest(params: {
@@ -1244,12 +1227,12 @@ export class RunnerGrpcExecClient {
     const env = this.normalizeEnv(execOpts.env ?? interactiveOpts.env);
     const timeoutMs = this.toBigInt(execOpts.timeoutMs);
     const idleTimeoutMs = this.toBigInt(execOpts.idleTimeoutMs);
-    const start = create(ExecStartRequestSchema, {
+    const start = createMessage(ExecStartRequestSchema, {
       requestId: randomUUID(),
       targetId: params.containerId,
       commandArgv,
       commandShell,
-      options: create(ExecOptionsSchema, {
+      options: createMessage(ExecOptionsSchema, {
         workdir: execOpts.workdir ?? interactiveOpts.workdir ?? undefined,
         env,
         timeoutMs: timeoutMs && timeoutMs > 0n ? timeoutMs : undefined,
@@ -1260,7 +1243,7 @@ export class RunnerGrpcExecClient {
         separateStderr: interactiveOpts.demuxStderr ?? true,
       }),
     });
-    return create(ExecRequestSchema, { msg: { case: 'start', value: start } });
+    return createMessage(ExecRequestSchema, { msg: { case: 'start', value: start } });
   }
 
   private extractRequestedTimeouts(start: ExecRequest): { timeoutMs?: number; idleTimeoutMs?: number } {

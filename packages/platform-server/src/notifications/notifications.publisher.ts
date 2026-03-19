@@ -1,7 +1,8 @@
-import { create, type JsonObject } from '@bufbuild/protobuf';
+import { type JsonObject } from '@bufbuild/protobuf';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { NotificationsGrpcClient } from './notifications.grpc.client';
 import { PublishRequestSchema } from '../proto/gen/agynio/api/notifications/v1/notifications_pb.js';
+import { createMessage } from '../infra/proto.utils';
 
 const NOTIFICATIONS_SOURCE = 'platform-server';
 
@@ -19,7 +20,7 @@ export class NotificationsPublisher {
     if (!jsonPayload) return;
 
     try {
-      const request = create(PublishRequestSchema, {
+      const request = createMessage(PublishRequestSchema, {
         event,
         rooms,
         payload: jsonPayload,

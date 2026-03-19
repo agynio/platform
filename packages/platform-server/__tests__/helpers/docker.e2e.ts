@@ -6,12 +6,9 @@ import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { credentials, Metadata } from '@grpc/grpc-js';
 import { create } from '@bufbuild/protobuf';
-
-import { NonceCache, buildAuthHeaders } from '../../src/infra/container/auth';
-import { RunnerServiceGrpcClient, RUNNER_SERVICE_READY_PATH } from '../../src/proto/grpc.js';
+import { RunnerServiceGrpcClient } from '../../src/proto/grpc.js';
 import { ReadyRequestSchema } from '../../src/proto/gen/agynio/api/runner/v1/runner_pb.js';
 
-export const RUNNER_SECRET = process.env.DOCKER_RUNNER_SHARED_SECRET ?? '';
 export const DEFAULT_SOCKET = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock';
 export const hasTcpDocker = Boolean(process.env.DOCKER_HOST);
 export const socketMissing = !fs.existsSync(DEFAULT_SOCKET);
@@ -20,8 +17,6 @@ const runnerPort = process.env.DOCKER_RUNNER_GRPC_PORT ?? process.env.DOCKER_RUN
 export const runnerAddress =
   process.env.DOCKER_RUNNER_GRPC_ADDRESS ?? (runnerHost && runnerPort ? `${runnerHost}:${runnerPort}` : undefined);
 export const runnerAddressMissing = !runnerAddress;
-export const runnerSecretMissing = !RUNNER_SECRET;
-const readinessNonceCache = new NonceCache();
 
 export type RunnerHandle = {
   grpcAddress: string;
@@ -34,20 +29,20 @@ export type PostgresHandle = {
 };
 
 export async function startDockerRunner(): Promise<RunnerHandle> {
-  if (!runnerAddress || !RUNNER_SECRET) {
-    throw new Error('DOCKER_RUNNER_GRPC_ADDRESS and DOCKER_RUNNER_SHARED_SECRET are required to run docker e2e tests.');
+  if (!runnerAddress) {
+    throw new Error('DOCKER_RUNNER_GRPC_ADDRESS is required to run docker e2e tests.');
   }
-  await waitForRunnerReadyOnAddress(runnerAddress, RUNNER_SECRET);
+  await waitForRunnerReadyOnAddress(runnerAddress);
   return {
     grpcAddress: runnerAddress,
     close: async () => undefined,
   };
 }
 
-async function waitForRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promise<void> {
+async function waitForRunnerReady(client: RunnerServiceGrpcClient): Promise<void> {
   await waitFor(async () => {
     try {
-      await callRunnerReady(client, secret);
+      await callRunnerReady(client);
       return true;
     } catch {
       return false;
@@ -55,18 +50,18 @@ async function waitForRunnerReady(client: RunnerServiceGrpcClient, secret: strin
   }, { timeoutMs: 30_000, intervalMs: 250 });
 }
 
-async function waitForRunnerReadyOnAddress(address: string, secret: string): Promise<void> {
+async function waitForRunnerReadyOnAddress(address: string): Promise<void> {
   const client = new RunnerServiceGrpcClient(address, credentials.createInsecure());
   try {
-    await waitForRunnerReady(client, secret);
+    await waitForRunnerReady(client);
   } finally {
     client.close();
   }
 }
 
-function callRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promise<void> {
+function callRunnerReady(client: RunnerServiceGrpcClient): Promise<void> {
   const request = create(ReadyRequestSchema, {});
-  const metadata = authMetadata(secret, RUNNER_SERVICE_READY_PATH);
+  const metadata = new Metadata();
   return new Promise<void>((resolve, reject) => {
     client.ready(request, metadata, (err) => {
       if (err) {
@@ -76,17 +71,6 @@ function callRunnerReady(client: RunnerServiceGrpcClient, secret: string): Promi
       }
     });
   });
-}
-
-function authMetadata(secret: string, path: string): Metadata {
-  const nonce = randomUUID();
-  readinessNonceCache.add(nonce);
-  const headers = buildAuthHeaders({ method: 'POST', path, body: '', secret, nonce });
-  const metadata = new Metadata();
-  for (const [key, value] of Object.entries(headers)) {
-    metadata.set(key, value);
-  }
-  return metadata;
 }
 
 export async function startPostgres(): Promise<PostgresHandle> {

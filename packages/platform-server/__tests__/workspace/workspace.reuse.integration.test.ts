@@ -12,10 +12,8 @@ import { ContainerRegistry } from '../../src/infra/container/container.registry'
 import { PrismaService } from '../../src/core/services/prisma.service';
 import { registerTestConfig, clearTestConfig } from '../helpers/config';
 import {
-  RUNNER_SECRET,
   hasTcpDocker,
   runnerAddressMissing,
-  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   startPostgres,
@@ -24,7 +22,7 @@ import {
   type PostgresHandle,
 } from '../helpers/docker.e2e';
 
-const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
+const shouldSkip = process.env.SKIP_WORKSPACE_REUSE_E2E === '1' || runnerAddressMissing;
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe.sequential;
 
 describeOrSkip('Docker workspace reuse lifecycle', () => {
@@ -44,12 +42,11 @@ describeOrSkip('Docker workspace reuse lifecycle', () => {
     await runPrismaMigrations(dbHandle.connectionString);
 
     runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress });
 
     clearTestConfig();
     const [grpcHost, grpcPort] = runner.grpcAddress.split(':');
     const configService = registerTestConfig({
-      dockerRunnerSharedSecret: RUNNER_SECRET,
       dockerRunnerGrpcHost: grpcHost ?? '127.0.0.1',
       dockerRunnerGrpcPort: grpcPort ? Number(grpcPort) : undefined,
       agentsDatabaseUrl: dbHandle.connectionString,
