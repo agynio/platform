@@ -1,9 +1,14 @@
-import { create, type JsonObject } from '@bufbuild/protobuf';
+import { create, type DescMessage, type JsonObject, type MessageInitShape, type MessageShape } from '@bufbuild/protobuf';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { NotificationsGrpcClient } from './notifications.grpc.client';
 import { PublishRequestSchema } from '../proto/gen/agynio/api/notifications/v1/notifications_pb.js';
 
 const NOTIFICATIONS_SOURCE = 'platform-server';
+
+const createMessage = <Desc extends DescMessage>(
+  schema: Desc,
+  init?: MessageInitShape<Desc>,
+): MessageShape<Desc> => create(schema, init) as MessageShape<Desc>;
 
 @Injectable()
 export class NotificationsPublisher {
@@ -19,7 +24,7 @@ export class NotificationsPublisher {
     if (!jsonPayload) return;
 
     try {
-      const request = create(PublishRequestSchema, {
+      const request = createMessage(PublishRequestSchema, {
         event,
         rooms,
         payload: jsonPayload,

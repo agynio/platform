@@ -190,7 +190,6 @@ Key environment variables (server) from packages/platform-server/.env.example an
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - DOCKER_RUNNER_GRPC_HOST (default docker-runner)
   - DOCKER_RUNNER_GRPC_PORT (default 50051; DOCKER_RUNNER_PORT is accepted as an alias)
-  - DOCKER_RUNNER_SHARED_SECRET (required HMAC credential)
   - DOCKER_RUNNER_TIMEOUT_MS (optional request timeout; default 30000)
   - DOCKER_RUNNER_OPTIONAL (default true; set to false to keep fail-fast bootstrap)
   - DOCKER_RUNNER_CONNECT_RETRY_BASE_DELAY_MS (default 500)

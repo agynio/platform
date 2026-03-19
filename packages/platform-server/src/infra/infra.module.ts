@@ -47,7 +47,6 @@ import { HealthController } from './health/health.controller';
       useFactory: (config: ConfigService) =>
         new RunnerGrpcClient({
           address: config.getDockerRunnerGrpcAddress(),
-          sharedSecret: config.getDockerRunnerSharedSecret(),
           requestTimeoutMs: config.getDockerRunnerTimeoutMs(),
         }),
       inject: [ConfigService],

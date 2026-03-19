@@ -26,7 +26,6 @@ const REQUIRED_ENV = {
     process.env.AGENTS_DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/agents_test?schema=public',
   DOCKER_RUNNER_GRPC_HOST: '127.0.0.1',
   DOCKER_RUNNER_PORT: '59999',
-  DOCKER_RUNNER_SHARED_SECRET: 'dev-shared-secret',
   DOCKER_RUNNER_OPTIONAL: 'true',
   CONTAINERS_CLEANUP_ENABLED: 'false',
   VOLUME_GC_ENABLED: 'false',

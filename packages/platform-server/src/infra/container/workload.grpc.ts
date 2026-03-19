@@ -1,4 +1,4 @@
-import { create } from '@bufbuild/protobuf';
+import { create, type DescMessage, type MessageInitShape, type MessageShape } from '@bufbuild/protobuf';
 import {
   ContainerSpec,
   ContainerSpecSchema,
@@ -26,19 +26,24 @@ const PROP_PLATFORM = 'platform';
 
 const isNonEmptyString = (value: string | undefined | null): value is string => typeof value === 'string' && value.length > 0;
 
+const createMessage = <Desc extends DescMessage>(
+  schema: Desc,
+  init?: MessageInitShape<Desc>,
+): MessageShape<Desc> => create(schema, init) as MessageShape<Desc>;
+
 const normalizeEnv = (env?: ContainerOpts['env']): EnvVar[] => {
   if (!env) return [];
   if (Array.isArray(env)) {
     return env
       .map((entry: string) => {
         const idx = entry.indexOf('=');
-        if (idx === -1) return create(EnvVarSchema, { name: entry, value: '' });
-        return create(EnvVarSchema, { name: entry.slice(0, idx), value: entry.slice(idx + 1) });
+        if (idx === -1) return createMessage(EnvVarSchema, { name: entry, value: '' });
+        return createMessage(EnvVarSchema, { name: entry.slice(0, idx), value: entry.slice(idx + 1) });
       })
       .filter((item) => item.name.length > 0);
   }
   return Object.entries(env)
-    .map(([name, value]: [string, unknown]) => create(EnvVarSchema, { name, value: String(value) }))
+    .map(([name, value]: [string, unknown]) => createMessage(EnvVarSchema, { name, value: String(value) }))
     .filter((item: EnvVar) => item.name.length > 0);
 };
 
@@ -91,14 +96,14 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
       if (!parsed) continue;
       const name = ensureVolumeSpecName('bind', ++volumeIndex);
       const isReadOnly = parsed.options.includes('ro');
-      const spec = create(VolumeSpecSchema, {
+      const spec = createMessage(VolumeSpecSchema, {
         name,
         kind: VolumeKind.NAMED,
         persistentName: parsed.source,
         additionalProperties:
           parsed.options.length > 0 ? { [PROP_BIND_OPTIONS]: parsed.options.join(',') } : {},
       });
-      const mount = create(VolumeMountSchema, {
+      const mount = createMessage(VolumeMountSchema, {
         volume: name,
         mountPath: parsed.destination,
         readOnly: isReadOnly,
@@ -111,13 +116,13 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
     for (const path of opts.anonymousVolumes) {
       if (!isNonEmptyString(path)) continue;
       const name = ensureVolumeSpecName('ephemeral', ++volumeIndex);
-      const spec = create(VolumeSpecSchema, {
+      const spec = createMessage(VolumeSpecSchema, {
         name,
         kind: VolumeKind.EPHEMERAL,
         persistentName: '',
         additionalProperties: {},
       });
-      const mount = create(VolumeMountSchema, {
+      const mount = createMessage(VolumeMountSchema, {
         volume: name,
         mountPath: path,
         readOnly: false,
@@ -126,7 +131,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
     }
   }
 
-  const main = create(ContainerSpecSchema, {
+  const main = createMessage(ContainerSpecSchema, {
     image: opts.image ?? '',
     name: opts.name ?? '',
     cmd: opts.cmd ?? [],
@@ -152,13 +157,13 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
       for (const path of sidecar.anonymousVolumes) {
         if (!isNonEmptyString(path)) continue;
         const name = ensureVolumeSpecName('ephemeral', ++volumeIndex);
-        const spec = create(VolumeSpecSchema, {
+        const spec = createMessage(VolumeSpecSchema, {
           name,
           kind: VolumeKind.EPHEMERAL,
           persistentName: '',
           additionalProperties: {},
         });
-        const mount = create(VolumeMountSchema, {
+        const mount = createMessage(VolumeMountSchema, {
           volume: name,
           mountPath: path,
           readOnly: false,
@@ -167,7 +172,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
       }
     }
 
-    return create(ContainerSpecSchema, {
+    return createMessage(ContainerSpecSchema, {
       image: sidecar.image ?? '',
       name: '',
       cmd: sidecar.cmd ?? [],
@@ -194,7 +199,7 @@ export const containerOptsToStartWorkloadRequest = (opts: ContainerOpts): StartW
     requestAdditional[PROP_PLATFORM] = opts.platform;
   }
 
-  return create(StartWorkloadRequestSchema, {
+  return createMessage(StartWorkloadRequestSchema, {
     main,
     sidecars,
     volumes,

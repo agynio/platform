@@ -351,7 +351,6 @@ describe('App bootstrap smoke test', () => {
         DOCKER_RUNNER_GRPC_HOST: process.env.DOCKER_RUNNER_GRPC_HOST,
         DOCKER_RUNNER_PORT: process.env.DOCKER_RUNNER_PORT,
         DOCKER_RUNNER_GRPC_PORT: process.env.DOCKER_RUNNER_GRPC_PORT,
-        DOCKER_RUNNER_SHARED_SECRET: process.env.DOCKER_RUNNER_SHARED_SECRET,
         DOCKER_RUNNER_OPTIONAL: process.env.DOCKER_RUNNER_OPTIONAL,
         VOLUME_GC_ENABLED: process.env.VOLUME_GC_ENABLED,
         VOLUME_GC_INTERVAL_MS: process.env.VOLUME_GC_INTERVAL_MS,
@@ -361,7 +360,6 @@ describe('App bootstrap smoke test', () => {
       process.env.DOCKER_RUNNER_GRPC_HOST = '127.0.0.1';
       process.env.DOCKER_RUNNER_PORT = '59999';
       delete process.env.DOCKER_RUNNER_GRPC_PORT;
-      process.env.DOCKER_RUNNER_SHARED_SECRET = 'shared-secret';
       process.env.DOCKER_RUNNER_OPTIONAL = 'true';
       process.env.VOLUME_GC_ENABLED = 'true';
       process.env.VOLUME_GC_INTERVAL_MS = '25';

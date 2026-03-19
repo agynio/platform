@@ -4,15 +4,13 @@ import { RunnerGrpcClient } from '../src/infra/container/runnerGrpc.client';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { DockerWorkspaceRuntimeProvider } from '../src/workspace/providers/docker.workspace.provider';
 
-const RUNNER_SECRET_OVERRIDE = process.env.DOCKER_RUNNER_SHARED_SECRET_OVERRIDE;
-const RUNNER_SECRET = RUNNER_SECRET_OVERRIDE ?? process.env.DOCKER_RUNNER_SHARED_SECRET;
 const RUNNER_ADDRESS_OVERRIDE = process.env.DOCKER_RUNNER_GRPC_ADDRESS;
 const RUNNER_HOST = process.env.DOCKER_RUNNER_GRPC_HOST ?? process.env.DOCKER_RUNNER_HOST;
 const RUNNER_PORT = process.env.DOCKER_RUNNER_GRPC_PORT ?? process.env.DOCKER_RUNNER_PORT;
 
 const resolvedRunnerAddress =
   RUNNER_ADDRESS_OVERRIDE ?? (RUNNER_HOST && RUNNER_PORT ? `${RUNNER_HOST}:${RUNNER_PORT}` : undefined);
-const shouldRunTests = Boolean(RUNNER_SECRET && resolvedRunnerAddress);
+const shouldRunTests = Boolean(resolvedRunnerAddress);
 const TEST_IMAGE = 'ghcr.io/agynio/devcontainer:latest';
 const THREAD_ID = `grpc-exec-${Date.now()}`;
 const TEST_TIMEOUT_MS = 30_000;
@@ -30,7 +28,7 @@ const describeRunner = shouldRunTests ? describe : describe.skip;
 
 describeRunner('DockerWorkspaceRuntimeProvider exec over gRPC runner', () => {
   beforeAll(async () => {
-    runnerClient = new RunnerGrpcClient({ address: resolvedRunnerAddress!, sharedSecret: RUNNER_SECRET! });
+    runnerClient = new RunnerGrpcClient({ address: resolvedRunnerAddress! });
     provider = new DockerWorkspaceRuntimeProvider(runnerClient, registry);
 
     const ensure = await provider.ensureWorkspace(

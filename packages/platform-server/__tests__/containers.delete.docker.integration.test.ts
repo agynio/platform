@@ -17,10 +17,8 @@ import { PrismaClient as Prisma } from '@prisma/client';
 
 import {
   DEFAULT_SOCKET,
-  RUNNER_SECRET,
   hasTcpDocker,
   runnerAddressMissing,
-  runnerSecretMissing,
   socketMissing,
   startDockerRunner,
   startPostgres,
@@ -33,7 +31,7 @@ import {
 Reflect.defineMetadata('design:paramtypes', [PrismaService, ContainerAdminService, ConfigService], ContainersController);
 Reflect.defineMetadata('design:paramtypes', [Object, ContainerRegistry], ContainerAdminService);
 
-const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1' || runnerAddressMissing || runnerSecretMissing;
+const shouldSkip = process.env.SKIP_DOCKER_DELETE_E2E === '1' || runnerAddressMissing;
 
 const describeOrSkip = shouldSkip || (socketMissing && !hasTcpDocker) ? describe.skip : describe;
 
@@ -80,7 +78,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner integration', () => {
     await registry.ensureIndexes();
 
     runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
@@ -290,7 +288,7 @@ describeOrSkip('DELETE /api/containers/:id docker runner external process integr
     await registry.ensureIndexes();
 
     runner = await startDockerRunner();
-    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress, sharedSecret: RUNNER_SECRET });
+    dockerClient = new RunnerGrpcClient({ address: runner.grpcAddress });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ContainersController],
