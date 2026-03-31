@@ -153,6 +153,7 @@ Server listens on PORT (default 3010; see packages/platform-server/src/index.ts 
   - Use published images from GHCR (see .github/workflows/docker-ghcr.yml):
     - ghcr.io/agynio/platform-server
     - ghcr.io/agynio/platform-ui
+  - docker-runner is built and deployed from https://github.com/agynio/docker-runner
 - Example: server (env must include AGENTS_DATABASE_URL, LITELLM_BASE_URL, LITELLM_MASTER_KEY; optionally set LLM_PROVIDER):
 ```bash
 docker run --rm -p 3010:3010 \
