@@ -268,11 +268,16 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-dev-salt-1234}
       DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
-      STORE_MODEL_IN_DB: "True"
       UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
       UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
       PORT: "4000"
       HOST: "0.0.0.0"
+    volumes:
+      - type: bind
+        source: ./ops/litellm/proxy_config.yaml
+        target: /tmp/proxy_config.yaml
+        read_only: true
+    command: ["--config", "/tmp/proxy_config.yaml"]
     depends_on:
       litellm-db:
         condition: service_healthy
@@ -294,7 +299,7 @@ services:
       start_period: 10s
     networks:
       - agents_net
-      
+
 volumes:
   vault-file:
     driver: local
