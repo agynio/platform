@@ -25,7 +25,7 @@ Agyn is an open-source platform that moves agents from laptops to company infras
 
 ```bash
 git clone https://github.com/agynio/bootstrap.git
-cd agyn-bootstrap
+cd bootstrap
 ./apply.sh
 ```
 
@@ -76,7 +76,7 @@ Each agent is a first-class citizen:
 
 - [Website](https://agyn.io)
 - [Blog](https://agyn.io/blog)
-- [Discord]([https://discord.gg/PLACEHOLDER](https://discord.com/invite/eQKYwnNqRX))
+- [Discord](https://discord.com/invite/eQKYwnNqRX)
 
 ## License
 
