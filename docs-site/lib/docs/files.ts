@@ -2,7 +2,7 @@ import "server-only";
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { ASSETS_DIRNAME, DOC_EXTENSION, DOCS_ROOT, META_FILENAME } from "./paths";
+import { ASSETS_DIRNAME, DOC_EXTENSIONS, DOCS_ROOT, META_FILENAME } from "./paths";
 import type { MetaFile } from "./types";
 
 export async function findDocFiles(directory = DOCS_ROOT): Promise<string[]> {
@@ -21,7 +21,7 @@ export async function findDocFiles(directory = DOCS_ROOT): Promise<string[]> {
       continue;
     }
 
-    if (entry.isFile() && entry.name.endsWith(DOC_EXTENSION)) {
+    if (entry.isFile() && DOC_EXTENSIONS.some((extension) => entry.name.endsWith(extension))) {
       files.push(entryPath);
     }
   }
@@ -31,7 +31,7 @@ export async function findDocFiles(directory = DOCS_ROOT): Promise<string[]> {
 
 export function sourcePathToSlug(sourcePath: string): string[] {
   const relativePath = path.relative(DOCS_ROOT, sourcePath);
-  const withoutExtension = relativePath.slice(0, -DOC_EXTENSION.length);
+  const withoutExtension = removeDocExtension(relativePath);
   const segments = withoutExtension.split(path.sep);
 
   if (segments.length === 1 && segments[0] === "index") {
@@ -47,13 +47,13 @@ export function sourcePathToSlug(sourcePath: string): string[] {
 
 export function slugToSourceCandidates(slug: string[]): string[] {
   if (slug.length === 0) {
-    return [path.join(DOCS_ROOT, `index${DOC_EXTENSION}`)];
+    return DOC_EXTENSIONS.map((extension) => path.join(DOCS_ROOT, `index${extension}`));
   }
 
-  return [
-    path.join(DOCS_ROOT, ...slug, `index${DOC_EXTENSION}`),
-    path.join(DOCS_ROOT, `${path.join(...slug)}${DOC_EXTENSION}`),
-  ];
+  return DOC_EXTENSIONS.flatMap((extension) => [
+    path.join(DOCS_ROOT, ...slug, `index${extension}`),
+    path.join(DOCS_ROOT, `${path.join(...slug)}${extension}`),
+  ]);
 }
 
 export function slugToHref(slug: string[]): string {
@@ -98,4 +98,14 @@ function parseMetaFile(rawMeta: unknown, metaPath: string): MetaFile {
   }
 
   return meta;
+}
+
+function removeDocExtension(relativePath: string): string {
+  const extension = DOC_EXTENSIONS.find((docExtension) => relativePath.endsWith(docExtension));
+
+  if (!extension) {
+    throw new Error(`${relativePath} must use a supported docs extension`);
+  }
+
+  return relativePath.slice(0, -extension.length);
 }
