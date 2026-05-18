@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "validate": "NODE_OPTIONS='--conditions react-server' tsx scripts/validate-docs.ts"
+    "validate": "npm run validate:links && NODE_OPTIONS='--conditions react-server' tsx scripts/validate-docs.ts",
+    "validate:links": "NODE_OPTIONS='--conditions react-server' tsx scripts/validate-link-rewrites.ts"
   },
   "dependencies": {
     "@markdoc/markdoc": "^0.5.4",

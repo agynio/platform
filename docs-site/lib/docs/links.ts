@@ -2,7 +2,7 @@ import path from "node:path";
 import { DOC_EXTENSIONS, DOCS_ROOT } from "./paths";
 
 export function rewriteRelativeDocHref(href: string, sourcePath: string): string {
-  if (!isRelativeHref(href)) {
+  if (!isLocalRelativeHref(href)) {
     return href;
   }
 
@@ -34,8 +34,18 @@ export function validateNoRootRelativeLinks(content: string, sourcePath: string)
   throw new Error(`${sourcePath} contains root-relative docs links: ${renderedLinks}`);
 }
 
-function isRelativeHref(href: string): boolean {
-  return href.startsWith("./") || href.startsWith("../");
+function isLocalRelativeHref(href: string): boolean {
+  return (
+    href !== "" &&
+    !href.startsWith("#") &&
+    !href.startsWith("/") &&
+    !href.startsWith("//") &&
+    !hasUriScheme(href)
+  );
+}
+
+function hasUriScheme(href: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(href);
 }
 
 function splitHref(href: string): { pathname: string; suffix: string } {
