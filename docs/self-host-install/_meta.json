@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "README",
+    "prerequisites",
+    "quick-bootstrap",
+    "production-install",
+    "first-admin",
+    "upgrades",
+    "uninstall"
+  ]
+}

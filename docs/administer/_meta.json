@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "README",
+    "console-overview",
+    "cluster-administration",
+    "organizations",
+    "members",
+    "agents",
+    "agent-roles",
+    "mcp-servers",
+    "skills",
+    "hooks",
+    "environment-variables",
+    "init-scripts",
+    "volumes",
+    "llm-providers",
+    "models",
+    "secret-providers",
+    "secrets",
+    "image-pull-secrets",
+    "runners",
+    "apps",
+    "reminders-app",
+    "telegram-connector",
+    "monitoring",
+    "terraform"
+  ]
+}

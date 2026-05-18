@@ -1,5 +1,0 @@
-{
-  "title": "Deploy",
-  "order": 2,
-  "pages": ["README", "quick-bootstrap", "prerequisites", "production-helm"]
-}

@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "README",
+    "install",
+    "auth-oidc",
+    "networking-ziti",
+    "agents",
+    "llm-calls",
+    "mcp-tools",
+    "tracing",
+    "faq"
+  ]
+}

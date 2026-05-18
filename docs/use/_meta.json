@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "README",
+    "chat",
+    "inline-media",
+    "charts-diagrams",
+    "files",
+    "reminders",
+    "run-timeline",
+    "tracing-app",
+    "usage",
+    "port-exposure",
+    "devices",
+    "api-tokens"
+  ]
+}

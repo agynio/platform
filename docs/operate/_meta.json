@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "README",
+    "architecture",
+    "networking",
+    "identity",
+    "authorization",
+    "runners",
+    "scaling",
+    "backup-disaster-recovery",
+    "upgrades",
+    "monitoring",
+    "security",
+    "logging-audit"
+  ]
+}

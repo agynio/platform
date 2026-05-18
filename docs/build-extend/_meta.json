@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "README",
+    "gateway-api",
+    "terraform-provider",
+    "mcp-servers",
+    "files-mcp",
+    "agent-clis",
+    "agynd",
+    "agyn-cli",
+    "apps"
+  ]
+}

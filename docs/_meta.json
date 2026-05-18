@@ -1,11 +1,13 @@
 {
   "pages": [
     "README",
-    "getting-started",
-    "deploy",
-    "configure",
-    "use-agyn",
+    "introduction",
+    "self-host-install",
+    "administer",
+    "use",
+    "build-extend",
+    "operate",
     "reference",
-    "help"
+    "troubleshooting"
   ]
 }

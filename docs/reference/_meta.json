@@ -1,5 +1,12 @@
 {
-  "title": "Reference",
-  "order": 5,
-  "pages": ["README", "service-catalog"]
+  "pages": [
+    "README",
+    "glossary",
+    "service-catalog",
+    "api",
+    "terraform",
+    "helm-values",
+    "limits",
+    "versions"
+  ]
 }
