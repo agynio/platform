@@ -34,11 +34,7 @@ export function sourcePathToSlug(sourcePath: string): string[] {
   const withoutExtension = removeDocExtension(relativePath);
   const segments = withoutExtension.split(path.sep);
 
-  if (segments.length === 1 && segments[0] === "index") {
-    return [];
-  }
-
-  if (segments.at(-1) === "index") {
+  if (isDirectoryIndex(segments)) {
     return segments.slice(0, -1);
   }
 
@@ -47,11 +43,11 @@ export function sourcePathToSlug(sourcePath: string): string[] {
 
 export function slugToSourceCandidates(slug: string[]): string[] {
   if (slug.length === 0) {
-    return DOC_EXTENSIONS.map((extension) => path.join(DOCS_ROOT, `index${extension}`));
+    return DOC_EXTENSIONS.map((extension) => path.join(DOCS_ROOT, `README${extension}`));
   }
 
   return DOC_EXTENSIONS.flatMap((extension) => [
-    path.join(DOCS_ROOT, ...slug, `index${extension}`),
+    path.join(DOCS_ROOT, ...slug, `README${extension}`),
     path.join(DOCS_ROOT, `${path.join(...slug)}${extension}`),
   ]);
 }
@@ -108,4 +104,8 @@ function removeDocExtension(relativePath: string): string {
   }
 
   return relativePath.slice(0, -extension.length);
+}
+
+function isDirectoryIndex(segments: string[]): boolean {
+  return segments.at(-1) === "README";
 }

@@ -1,5 +1,8 @@
 {
   "title": "Getting Started",
   "order": 1,
-  "pages": ["index", "first-agent"]
+  "pages": [
+    "README",
+    "first-agent"
+  ]
 }
