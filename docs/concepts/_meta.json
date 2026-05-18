@@ -1,0 +1,5 @@
+{
+  "title": "Concepts",
+  "order": 2,
+  "pages": ["README", "agents", "sandboxes", "tools-and-mcps"]
+}
