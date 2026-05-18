@@ -20,4 +20,4 @@ The bootstrap stack installs charts such as `agynio/charts/gateway`, `agents`, `
 
 The platform charts repository wraps those workloads into `agyn-platform` and `agyn-apps` umbrella charts.
 
-Use [Microservices catalog](./microservices-catalog.md) for service-level repository links.
+Use [Microservices catalog](./services.md) for service-level repository links.
