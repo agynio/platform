@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "README",
+    "getting-started",
+    "deploy",
+    "configure",
+    "use-agyn",
+    "reference",
+    "help"
+  ]
+}

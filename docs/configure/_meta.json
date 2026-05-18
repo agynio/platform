@@ -1,0 +1,5 @@
+{
+  "title": "Configure",
+  "order": 3,
+  "pages": ["README", "console", "agents", "llm-providers-models", "secrets", "runners", "terraform" ]
+}
