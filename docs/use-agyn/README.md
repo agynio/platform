@@ -16,4 +16,4 @@ The product model is organization-scoped: organizations contain agents, models, 
 - [Manage organizations](./manage-organizations.md) covers membership and role boundaries.
 - [Observe workloads](./observe-workloads.md) shows where to inspect runtime behavior.
 
-The product is backed by services described in [Microservices catalog](../reference/services.md).
+The product is backed by services described in [Microservices catalog](../reference/service-catalog.md).

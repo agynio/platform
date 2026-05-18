@@ -22,4 +22,4 @@ Files stores metadata and creates pre-signed object URLs; agents access file con
 
 Notifications fan out state changes and Tracing captures OTLP spans.
 
-For service-by-service details, see [Microservices catalog](../reference/services.md).
+For service-by-service details, see [Microservices catalog](../reference/service-catalog.md).

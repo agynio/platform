@@ -1,5 +1,5 @@
 {
   "title": "Reference",
   "order": 6,
-  "pages": ["README", "terraform-resources", "services", "repository-map"]
+  "pages": ["README", "terraform-resources", "service-catalog", "repository-map"]
 }

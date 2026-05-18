@@ -13,7 +13,7 @@ Use them when you need exact resource names, service responsibilities, or reposi
 ## Pages
 
 - [Terraform resources](./terraform-resources.md) summarizes provider resources and examples.
-- [Microservices catalog](./services.md) lists platform services with repository links.
+- [Microservices catalog](./service-catalog.md) lists platform services with repository links.
 - [Repository map](./repository-map.md) shows where implementation and deployment code lives.
 
 For task-focused instructions, use [Guides](../guides/README.md).
