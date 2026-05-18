@@ -1,0 +1,5 @@
+{
+  "title": "Getting Started",
+  "order": 1,
+  "pages": ["README", "install-local", "open-the-console", "deploy-your-first-agent"]
+}

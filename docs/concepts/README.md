@@ -1,19 +1,20 @@
 ---
 title: Concepts
-description: Understand the core building blocks in Agyn.
-order: 2
+description: Learn the architecture and product model behind Agyn.
+order: 5
 ---
 
 # Concepts
 
-Agyn models agents as managed infrastructure instead of one-off scripts.
+Agyn is a Kubernetes-native AI agent orchestrator.
 
-The platform separates agent identity, execution, tooling, and controls.
+It manages agents that communicate with humans and each other through threaded conversations.
 
-## Core ideas
+Tools are provided through MCP, and authorization is relationship-based through OpenFGA.
 
-- [Agents](./agents.md) are the deployable units users interact with.
-- [Sandboxes](./sandboxes.md) isolate execution and runtime state.
-- [Tools and MCPs](./tools-and-mcps.md) connect agents to external systems.
+## Read next
 
-These concepts are designed to make agents observable, governable, and repeatable.
+- [System overview](./system-overview.md) summarizes the service graph.
+- [Control and data plane](./control-and-data-plane.md) explains service responsibilities.
+- [Agents and workloads](./agents-and-workloads.md) explains desired state and runtime state.
+- [Authorization and identity](./authorization-and-identity.md) explains access control.

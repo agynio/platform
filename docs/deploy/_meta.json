@@ -1,0 +1,5 @@
+{
+  "title": "Deploy",
+  "order": 4,
+  "pages": ["README", "bootstrap-stacks", "helm-charts", "routing-and-domains", "production-secrets"]
+}

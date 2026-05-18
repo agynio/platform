@@ -1,19 +1,18 @@
 ---
 title: Guides
-description: Follow task-focused workflows for operating Agyn.
-order: 3
+description: Task-focused examples for configuring and deploying Agyn.
+order: 7
 ---
 
 # Guides
 
-Guides show how to complete common platform tasks after the first deployment.
-
-Each guide focuses on one operator or developer workflow.
+Guides combine product workflows with concrete snippets from Agyn repositories.
 
 ## Available guides
 
-- [Connect tools](./connect-tools.md) adds MCP integrations to an agent.
-- [Set budgets](./set-budgets.md) creates visibility and spend limits.
-- [Review activity](./review-activity.md) checks what an agent has done.
+- [Connect MCP tools](./connect-mcp-tools.md) attaches a tool sidecar to an agent.
+- [Configure a private model provider](./configure-private-model-provider.md) maps an upstream model into Agyn.
+- [Install with Helm](./install-with-helm.md) uses the platform charts repository.
+- [Create a Vault-backed secret](./create-vault-backed-secret.md) keeps sensitive values outside prompts.
 
-Use these with the [Reference](../reference/README.md) pages when you need exact field details.
+For underlying resource schemas, read [Terraform resources](../reference/terraform-resources.md).

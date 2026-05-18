@@ -1,0 +1,5 @@
+{
+  "title": "Use Agyn",
+  "order": 2,
+  "pages": ["README", "chat-with-agents", "manage-organizations", "observe-workloads"]
+}

@@ -1,0 +1,5 @@
+{
+  "title": "Configure",
+  "order": 3,
+  "pages": ["README", "models-and-providers", "agents", "tools-mcp-and-secrets", "runners"]
+}

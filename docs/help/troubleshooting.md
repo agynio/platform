@@ -1,21 +1,23 @@
 ---
 title: Troubleshooting
-description: Diagnose common Agyn deployment and runtime issues.
+description: Check common failures in local and deployed Agyn environments.
 order: 1
 ---
 
 # Troubleshooting
 
-Most issues fall into deployment, configuration, tool, or runtime categories.
+If bootstrap fails, confirm `terraform` and `kubectl` are installed and on `PATH`.
 
-Work from the platform outward before changing agent behavior.
+If Kubernetes access fails, inspect `stacks/k8s/.kube/agyn-local-kubeconfig.yaml` and merge kubeconfig again.
 
-## Checks
+If a URL does not load, confirm the `DOMAIN` and `PORT` used during `./apply.sh`.
 
-1. Confirm the agent resource exists and is enabled.
-2. Verify the sandbox image can be pulled by the runtime environment.
-3. Check that required MCP servers are configured and reachable.
-4. Review recent activity logs for tool or model errors.
-5. Confirm budget limits have not blocked the run.
+If platform APIs fail, check the Gateway route and service health.
 
-For expected settings, review [Configuration](../reference/configuration.md).
+If an agent does not start, check the agent resource, model name, runner registration, and runner capabilities.
+
+If a tool fails, inspect the MCP image, command, environment, and attached secrets.
+
+If model calls fail, verify the LLM provider endpoint, token, protocol, and model remote name.
+
+If access is denied, inspect organization membership, agent roles, app installation permissions, and OpenFGA tuples.

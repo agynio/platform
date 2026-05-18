@@ -1,18 +1,17 @@
 ---
 title: Help
-description: Resolve common issues and find support paths.
-order: 5
+description: Troubleshoot local installs, routes, validation, and workload issues.
+order: 8
 ---
 
 # Help
 
-Help pages collect operational advice for teams running Agyn.
-
-Start here when a deployment, tool, or agent run does not behave as expected.
+Start with the failing layer: local tools, Terraform stack, Kubernetes route, platform service, or workload runtime.
 
 ## Pages
 
-- [Troubleshooting](./troubleshooting.md) lists common checks.
-- [FAQ](./faq.md) answers early adoption questions.
+- [Troubleshooting](./troubleshooting.md) provides a practical check order.
+- [Known local URLs](./known-local-urls.md) lists bootstrap defaults.
+- [Validation](./validation.md) shows docs and chart validation commands.
 
-If you are still setting up, return to [Start](../start/README.md).
+For deployment details, see [Deploy](../deploy/README.md).

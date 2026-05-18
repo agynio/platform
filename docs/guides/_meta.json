@@ -1,5 +1,5 @@
 {
   "title": "Guides",
-  "order": 3,
-  "pages": ["README", "connect-tools", "set-budgets", "review-activity"]
+  "order": 7,
+  "pages": ["README", "connect-mcp-tools", "configure-private-model-provider", "install-with-helm", "create-vault-backed-secret"]
 }

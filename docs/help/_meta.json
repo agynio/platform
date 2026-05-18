@@ -1,5 +1,5 @@
 {
   "title": "Help",
-  "order": 5,
-  "pages": ["README", "troubleshooting", "faq"]
+  "order": 8,
+  "pages": ["README", "troubleshooting", "known-local-urls", "validation"]
 }

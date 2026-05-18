@@ -1,21 +1,27 @@
 ---
 title: Agyn Documentation
-description: Build, deploy, and operate AI agents on Agyn.
+description: Product documentation for installing, configuring, deploying, and operating Agyn.
 order: 0
 ---
 
 # Agyn Documentation
 
-Agyn helps teams ship AI agents to company infrastructure with enterprise controls.
+Agyn is a Kubernetes-native AI agent platform for deploying agents with organization-scoped control, threaded chat, tools, secrets, and observability.
 
-Use these docs to move from a first deployment to a production operating model.
+The docs are grounded in the public Agyn repositories:
 
-## Start here
+- `agynio/bootstrap` for local and reference installation workflows.
+- `agynio/platform-charts` for Helm-based platform and app deployments.
+- `agynio/terraform-provider-agyn` for API-managed resources.
+- `agynio/architecture` for service boundaries and product concepts.
 
-- [Start](./start/README.md) explains the fastest path to a working agent.
-- [Concepts](./concepts/README.md) defines the core platform model.
-- [Guides](./guides/README.md) walks through common operating tasks.
-- [Reference](./reference/README.md) collects configuration details.
-- [Help](./help/README.md) covers troubleshooting and support paths.
+## Where to start
 
-If this is your first time using Agyn, begin with [Deploy your first agent](./start/deploy-your-first-agent.md).
+- [Getting started](./getting-started/README.md) gets a local stack running.
+- [Use Agyn](./use-agyn/README.md) explains day-to-day product workflows.
+- [Configure](./configure/README.md) covers organizations, models, agents, tools, and secrets.
+- [Deploy](./deploy/README.md) covers bootstrap, Helm, routing, and production concerns.
+- [Concepts](./concepts/README.md) explains the control plane and data plane.
+- [Reference](./reference/README.md) includes Terraform and service catalogs.
+- [Guides](./guides/README.md) provides task-focused examples.
+- [Help](./help/README.md) lists checks for common failures.
