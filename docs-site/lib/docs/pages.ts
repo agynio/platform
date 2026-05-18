@@ -3,6 +3,7 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import { findDocFiles, slugToHref, slugToSourceCandidates, sourcePathToSlug } from "./files";
 import { parseDocument } from "./frontmatter";
+import { validateNoRootRelativeLinks } from "./links";
 import { transformMarkdoc } from "./markdoc";
 import type { DocPage, DocRoute } from "./types";
 
@@ -11,6 +12,7 @@ export async function getAllDocRoutes(): Promise<DocRoute[]> {
   const routes = await Promise.all(
     sourcePaths.map(async (sourcePath) => {
       const rawDocument = await fs.readFile(sourcePath, "utf8");
+      validateNoRootRelativeLinks(rawDocument, sourcePath);
       const { frontmatter } = parseDocument(rawDocument, sourcePath);
       const slug = sourcePathToSlug(sourcePath);
 
@@ -34,6 +36,7 @@ export async function getDocPage(slug: string[]): Promise<DocPage | null> {
   }
 
   const rawDocument = await fs.readFile(sourcePath, "utf8");
+  validateNoRootRelativeLinks(rawDocument, sourcePath);
   const { content, frontmatter } = parseDocument(rawDocument, sourcePath);
 
   return {

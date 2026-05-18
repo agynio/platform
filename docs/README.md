@@ -10,7 +10,7 @@ Agyn helps teams ship AI agents to company infrastructure with the controls ente
 
 ## Start here
 
-- [Getting Started](/getting-started)
-- [Deploy your first agent](/getting-started/first-agent)
+- [Getting Started](./getting-started/README.md)
+- [Deploy your first agent](./getting-started/first-agent.md)
 
 Use these starter pages as the source of truth for customer-facing documentation.

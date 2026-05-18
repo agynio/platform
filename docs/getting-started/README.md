@@ -16,4 +16,4 @@ This section will guide you through installing Agyn, opening the console, and pr
 
 ## Next step
 
-Continue with [Deploy your first agent](/getting-started/first-agent).
+Continue with [Deploy your first agent](./first-agent.md).

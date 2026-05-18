@@ -1,4 +1,4 @@
-import type { RenderableTreeNode } from "@markdoc/markdoc";
+import type { RenderableTreeNodes } from "@markdoc/markdoc";
 
 export type Frontmatter = {
   title: string;
@@ -14,7 +14,7 @@ export type DocRoute = {
 };
 
 export type DocPage = DocRoute & {
-  content: RenderableTreeNode;
+  content: RenderableTreeNodes;
 };
 
 export type NavItem = {
