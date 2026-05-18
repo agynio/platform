@@ -6,6 +6,8 @@ You built the agent. Now how do you let the rest of the company use it — witho
 
 Agyn is an open-source platform that moves agents from laptops to company infrastructure with the controls enterprises need.
 
+![Agyn Tour](agyn-tour.webp)
+
 ## Why Agyn
 
 | Problem | Agyn |
