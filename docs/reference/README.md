@@ -1,19 +1,17 @@
 ---
 title: Reference
-description: Look up repositories, resources, services, and implementation details.
-order: 6
+description: Reference material for Agyn services and repositories.
+order: 5
 ---
 
 # Reference
 
-Reference pages collect stable facts from Agyn architecture and source repositories.
-
-Use them when you need exact resource names, service responsibilities, or repository entry points.
+Reference pages collect stable implementation facts.
 
 ## Pages
 
-- [Terraform resources](./terraform-resources.md) summarizes provider resources and examples.
-- [Microservices catalog](./service-catalog.md) lists platform services with repository links.
-- [Repository map](./repository-map.md) shows where implementation and deployment code lives.
+- [Service catalog](./service-catalog.md) lists platform services, apps, runtime components, schemas, and deployment repositories.
 
-For task-focused instructions, use [Guides](../guides/README.md).
+## Expected outcome
+
+Use reference pages when you need to connect product behavior to a service or repository.

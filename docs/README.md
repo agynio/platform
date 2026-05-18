@@ -1,27 +1,25 @@
 ---
 title: Agyn Documentation
-description: Product documentation for installing, configuring, deploying, and operating Agyn.
+description: Task-driven documentation for installing, configuring, using, and operating Agyn.
 order: 0
 ---
 
 # Agyn Documentation
 
-Agyn is a Kubernetes-native AI agent platform for deploying agents with organization-scoped control, threaded chat, tools, secrets, and observability.
+Agyn is a Kubernetes-native platform for running AI agents with organization-scoped access, private networking, model routing, tools, files, and observability.
 
-The docs are grounded in the public Agyn repositories:
+The docs are organized around the work you are trying to do.
 
-- `agynio/bootstrap` for local and reference installation workflows.
-- `agynio/platform-charts` for Helm-based platform and app deployments.
-- `agynio/terraform-provider-agyn` for API-managed resources.
-- `agynio/architecture` for service boundaries and product concepts.
+## Install tracks
 
-## Where to start
+- **Quick install for development and demos:** use `agynio/bootstrap` to create a local reference environment.
+- **Production install:** use `agynio/platform-charts` with your own Istio, OpenZiti, OpenFGA, OIDC, databases, S3, and Kubernetes Secrets.
 
-- [Getting started](./getting-started/README.md) gets a local stack running.
-- [Use Agyn](./use-agyn/README.md) explains day-to-day product workflows.
-- [Configure](./configure/README.md) covers organizations, models, agents, tools, and secrets.
-- [Deploy](./deploy/README.md) covers bootstrap, Helm, routing, and production concerns.
-- [Concepts](./concepts/README.md) explains the control plane and data plane.
-- [Reference](./reference/README.md) includes Terraform and service catalogs.
-- [Guides](./guides/README.md) provides task-focused examples.
-- [Help](./help/README.md) lists checks for common failures.
+## Sections
+
+- [Getting started](./getting-started/README.md) gives the shortest path to a working local stack.
+- [Deploy](./deploy/README.md) explains quick bootstrap and production Helm installs.
+- [Configure](./configure/README.md) covers the Console, agents, models, secrets, runners, and Terraform automation.
+- [Use Agyn](./use-agyn/README.md) covers chat, run inspection, usage, files, media, and port exposure.
+- [Reference](./reference/README.md) contains the service catalog.
+- [Help](./help/README.md) provides troubleshooting checks.

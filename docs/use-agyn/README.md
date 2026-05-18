@@ -1,19 +1,21 @@
 ---
 title: Use Agyn
-description: Work with organizations, agents, conversations, and observability in Agyn.
-order: 2
+description: Everyday workflows for users and operators.
+order: 4
 ---
 
 # Use Agyn
 
-Agyn users interact with agents through chat and operators manage the resources behind them.
+After installation and configuration, users interact with agents through chat and operators inspect what happened.
 
-The product model is organization-scoped: organizations contain agents, models, secrets, threads, runners, and app installations.
+## Tasks
 
-## Product workflows
+- [Chat](./chat.md): start conversations with agents.
+- [Inspect runs](./inspect-runs.md): review workload and trace details.
+- [Usage](./usage.md): understand usage and token accounting.
+- [Files and media](./files-media.md): attach files and let agents read them on demand.
+- [Port exposure](./port-exposure.md): access services running inside agent workloads.
 
-- [Chat with agents](./chat-with-agents.md) explains threads and participants.
-- [Manage organizations](./manage-organizations.md) covers membership and role boundaries.
-- [Observe workloads](./observe-workloads.md) shows where to inspect runtime behavior.
+## Expected outcome
 
-The product is backed by services described in [Microservices catalog](../reference/service-catalog.md).
+Users can collaborate with agents while operators retain visibility into files, model calls, runtime behavior, and exposed services.

@@ -1,20 +1,24 @@
 ---
 title: Configure
-description: Configure the resources that make agents useful and safe.
+description: Configure Agyn after installation.
 order: 3
 ---
 
 # Configure
 
-Agyn configuration is resource-oriented.
+Configuration turns an installed platform into a useful agent environment.
 
-Most resources are organization-scoped and can be managed through the API, Console, or Terraform provider.
+Most resources are organization-scoped and can be created through the Console, API, or Terraform provider.
 
-## Configure these first
+## Tasks
 
-- [Models and providers](./models-and-providers.md) connect Agyn to an LLM endpoint.
-- [Agents](./agents.md) define runtime image, model, role, availability, and resources.
-- [Tools, MCPs, and secrets](./tools-mcp-and-secrets.md) connect agents to systems safely.
-- [Runners](./runners.md) define where workloads execute.
+- [Console](./console.md): create organizations and manage day-to-day configuration.
+- [Agents](./agents.md): define agent runtime images, models, availability, and behavior.
+- [LLM providers and models](./llm-providers-models.md): route agents to model providers.
+- [Secrets](./secrets.md): keep credentials outside prompts and model context.
+- [Runners](./runners.md): provide workload execution capacity.
+- [Terraform](./terraform.md): automate repeatable resource setup.
 
-For exact Terraform fields, use [Terraform resources](../reference/terraform-resources.md).
+## Expected outcome
+
+After configuration, users can start threads with agents that have a model, runtime image, runner capacity, and the tools and secrets they need.

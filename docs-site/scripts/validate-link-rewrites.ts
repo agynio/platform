@@ -4,16 +4,16 @@ import { rewriteRelativeDocHref } from "../lib/docs/links";
 import { DOCS_ROOT } from "../lib/docs/paths";
 
 const rootReadme = path.join(DOCS_ROOT, "README.md");
-const startReadme = path.join(DOCS_ROOT, "start", "README.md");
+const deployReadme = path.join(DOCS_ROOT, "deploy", "README.md");
 
 const rewriteCases: Array<[string, string, string]> = [
-  ["start/README.md", rootReadme, "/start"],
-  ["start/", rootReadme, "/start"],
-  ["README.md", startReadme, "/start"],
-  ["../README.md", startReadme, "/"],
-  ["./deploy-your-first-agent.md", startReadme, "/start/deploy-your-first-agent"],
-  ["deploy-your-first-agent.md#deploy", startReadme, "/start/deploy-your-first-agent#deploy"],
-  ["deploy-your-first-agent.md?view=full", startReadme, "/start/deploy-your-first-agent?view=full"],
+  ["deploy/README.md", rootReadme, "/deploy"],
+  ["deploy/", rootReadme, "/deploy"],
+  ["README.md", deployReadme, "/deploy"],
+  ["../README.md", deployReadme, "/"],
+  ["./quick-bootstrap.md", deployReadme, "/deploy/quick-bootstrap"],
+  ["quick-bootstrap.md#steps", deployReadme, "/deploy/quick-bootstrap#steps"],
+  ["quick-bootstrap.md?view=full", deployReadme, "/deploy/quick-bootstrap?view=full"],
 ];
 
 for (const [href, sourcePath, expectedHref] of rewriteCases) {
@@ -25,7 +25,7 @@ const passthroughCases = [
   "http://agyn.io",
   "mailto:hello@agyn.io",
   "#start-here",
-  "/start",
+  "/deploy",
   "agyn-tour.webp",
 ];
 

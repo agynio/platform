@@ -1,25 +1,43 @@
 ---
 title: Getting Started
-description: Install Agyn locally, open the product, and create the first agent.
+description: Get Agyn running quickly with the bootstrap development install path.
 order: 1
 ---
 
 # Getting Started
 
-The fastest path is the `agynio/bootstrap` repository.
+Use this path when you want Agyn running for development, demos, or evaluation.
 
-It provisions the local Kubernetes stack, system dependencies, routing, data services, and Agyn platform components with Terraform.
+It uses `agynio/bootstrap`, which provisions Kubernetes, system dependencies, routing, data services, platform services, apps, and Ziti with Terraform.
 
-## Requirements
+## Steps
 
-- `terraform`
-- `kubectl`
-- A local environment that can run the Kubernetes stack defined by `bootstrap/stacks/k8s`
+1. Clone bootstrap:
 
-## Flow
+   ```sh
+   git clone https://github.com/agynio/bootstrap.git
+   cd bootstrap
+   ```
 
-1. [Install locally](./install-local.md) with `./apply.sh`.
-2. [Open the console](./open-the-console.md) at `https://agyn.dev:2496/`.
-3. [Deploy your first agent](./deploy-your-first-agent.md) using the Terraform provider shape.
+2. Run the installer:
 
-For architecture context, read [System overview](../concepts/system-overview.md).
+   ```sh
+   chmod +x apply.sh
+   ./apply.sh
+   ```
+
+3. For non-interactive defaults, run:
+
+   ```sh
+   ./apply.sh -y
+   ```
+
+4. Open the product at `https://agyn.dev:2496/`.
+
+## Expected outcome
+
+You should have a local Agyn environment with platform UI, Gateway API, Argo CD, OpenFGA, routing, databases, apps, and the default Kubernetes runner.
+
+Default URLs include `https://agyn.dev:2496/`, `https://agyn.dev:2496/api`, `https://argocd.agyn.dev:2496/`, and `https://openfga-playground.agyn.dev:2496/`.
+
+For install details, see [Quick bootstrap](../deploy/quick-bootstrap.md).

@@ -1,17 +1,17 @@
 ---
 title: Help
-description: Troubleshoot local installs, routes, validation, and workload issues.
-order: 8
+description: Troubleshooting entry point for Agyn installs and workloads.
+order: 6
 ---
 
 # Help
 
-Start with the failing layer: local tools, Terraform stack, Kubernetes route, platform service, or workload runtime.
+Use Help when an install, configuration change, or agent run does not produce the expected result.
 
-## Pages
+## Start here
 
-- [Troubleshooting](./troubleshooting.md) provides a practical check order.
-- [Known local URLs](./known-local-urls.md) lists bootstrap defaults.
-- [Validation](./validation.md) shows docs and chart validation commands.
+- [Troubleshooting](./troubleshooting.md) provides a layered checklist.
 
-For deployment details, see [Deploy](../deploy/README.md).
+## Expected outcome
+
+You should identify the failing layer before changing configuration: prerequisites, Helm values, routing, identity, authorization, runner capacity, model routing, tools, or files.

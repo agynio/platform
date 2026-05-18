@@ -1,5 +1,0 @@
-{
-  "title": "Concepts",
-  "order": 5,
-  "pages": ["README", "system-overview", "control-and-data-plane", "agents-and-workloads", "authorization-and-identity"]
-}

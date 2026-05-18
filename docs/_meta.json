@@ -2,12 +2,10 @@
   "pages": [
     "README",
     "getting-started",
-    "use-agyn",
-    "configure",
     "deploy",
-    "concepts",
+    "configure",
+    "use-agyn",
     "reference",
-    "guides",
     "help"
   ]
 }

@@ -1,21 +1,25 @@
 ---
 title: Deploy
-description: Deploy Agyn with bootstrap Terraform or Helm charts.
-order: 4
+description: Choose the right Agyn install path for development or production.
+order: 2
 ---
 
 # Deploy
 
-Agyn is deployed to Kubernetes.
+Agyn has two install tracks.
 
-There are two public deployment entry points:
+## Quick install for development and demos
 
-- `agynio/bootstrap` provisions a local/reference environment with Terraform stacks.
-- `agynio/platform-charts` provides Helm umbrella charts for platform and apps workloads.
+Use [Quick bootstrap](./quick-bootstrap.md) when you want a complete reference environment and can accept local defaults.
 
-## Deployment sections
+The bootstrap repository owns Terraform stacks for Kubernetes, system dependencies, routing, data, platform services, apps, and Ziti.
 
-- [Bootstrap stacks](./bootstrap-stacks.md) explains the Terraform stack order.
-- [Helm charts](./helm-charts.md) explains `agyn-platform` and `agyn-apps`.
-- [Routing and domains](./routing-and-domains.md) lists default local URLs and hostnames.
-- [Production secrets](./production-secrets.md) shows secret-first chart configuration.
+## Production install with Helm
+
+Use [Production Helm](./production-helm.md) when you already operate Kubernetes and want explicit control over dependencies and secrets.
+
+Production installs require the [prerequisites](./prerequisites.md): Istio, OpenZiti, OpenFGA, OIDC, databases, S3-compatible storage, and Kubernetes Secrets.
+
+## Expected outcome
+
+After deployment, operators should have the Console, Gateway API, chat surface, default runner, private networking, authorization, model routing, files, traces, and app infrastructure available.

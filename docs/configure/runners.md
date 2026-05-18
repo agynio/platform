@@ -1,27 +1,32 @@
 ---
 title: Runners
-description: Register workload executors and route agents to runtime capacity.
-order: 4
+description: Register capacity for executing agent workloads.
+order: 5
 ---
 
 # Runners
 
 Runners execute agent workloads.
 
-The Runners service stores runner registrations, labels, capabilities, identity IDs, service tokens, and workload state.
+The default Kubernetes runner is installed by the quick bootstrap path and by the `agyn-apps` Helm chart.
+
+## Steps
+
+1. Register a runner for the cluster or organization.
+2. Store the returned service token securely.
+3. Deploy the runner workload with labels and capabilities that match your environment.
+4. Confirm the runner appears healthy before starting agents.
+5. Add capabilities only when the runtime can actually satisfy them.
+
+## Minimal Terraform shape
 
 ```hcl
-resource "agyn_runner" "example" {
-  name            = "example-runner"
-  organization_id = agyn_organization.example.id
-  labels = {
-    region = "us-east-1"
-  }
+resource "agyn_runner" "default" {
+  name = "default-k8s-runner"
+  labels = { region = "us-east-1" }
 }
 ```
 
-`service_token` is returned as a sensitive value and is used by the runner deployment.
+## Expected outcome
 
-The default Kubernetes runner is deployed by the apps stack in `agynio/bootstrap` and by the `agyn-apps` Helm chart.
-
-Capabilities let orchestrators route workloads only to runners that can satisfy the agent request.
+The Agents Orchestrator can route work to a registered runner that advertises the capabilities required by the agent.

@@ -1,23 +1,30 @@
 ---
 title: Troubleshooting
-description: Check common failures in local and deployed Agyn environments.
+description: Diagnose common Agyn deployment and runtime issues.
 order: 1
 ---
 
 # Troubleshooting
 
-If bootstrap fails, confirm `terraform` and `kubectl` are installed and on `PATH`.
+Work from infrastructure toward the agent.
 
-If Kubernetes access fails, inspect `stacks/k8s/.kube/agyn-local-kubeconfig.yaml` and merge kubeconfig again.
+## Install checks
 
-If a URL does not load, confirm the `DOMAIN` and `PORT` used during `./apply.sh`.
+1. For bootstrap, confirm `terraform` and `kubectl` are installed.
+2. Confirm kubeconfig was merged from `stacks/k8s/.kube/agyn-local-kubeconfig.yaml`.
+3. Confirm the expected domain and port match your `DOMAIN` and `PORT` values.
+4. For Helm, confirm Istio, OpenZiti, OpenFGA, OIDC, DBs, S3, and Secrets exist first.
+5. Render charts with `helm template` before applying production values.
 
-If platform APIs fail, check the Gateway route and service health.
+## Runtime checks
 
-If an agent does not start, check the agent resource, model name, runner registration, and runner capabilities.
+1. Confirm the organization, model provider, model, and agent exist.
+2. Confirm a runner is registered and advertises required capabilities.
+3. Confirm agent image and init image can be pulled.
+4. Check traces for LLM or tool errors.
+5. Check MCP command, environment, volumes, and secrets.
+6. Check OpenFGA relationships when access is denied.
 
-If a tool fails, inspect the MCP image, command, environment, and attached secrets.
+## Expected outcome
 
-If model calls fail, verify the LLM provider endpoint, token, protocol, and model remote name.
-
-If access is denied, inspect organization membership, agent roles, app installation permissions, and OpenFGA tuples.
+The failing layer should be clear enough to decide whether to adjust infrastructure, Helm values, platform configuration, or agent/tool setup.
