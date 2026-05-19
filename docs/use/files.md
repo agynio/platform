@@ -54,7 +54,7 @@ Files are scoped to the conversation. Participants in the conversation can read;
 
 Deleting a message that contains an attachment removes the attachment from the message but does not delete the underlying file. The file remains in storage and continues to be referenced by anything else that pointed to the same `file_id`.
 
-If you need to fully purge a file, ask your organization admin — they have access to bulk-delete in [Administer → Monitoring → Storage](../administer/monitoring.md#storage).
+The Console does not currently expose file management. To fully purge a file, an operator with cluster access can delete the object directly from the S3 bucket and the matching row in the Files service database.
 
 ## Related
 
