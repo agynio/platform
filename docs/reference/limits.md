@@ -86,11 +86,11 @@ Hard and soft limits enforced by the platform. Many are configurable in the Helm
 
 ## Adjusting limits
 
-Soft limits configurable in the chart `values.yaml` typically live under `<service>.limits.<name>`. Check the per-service README in `agynio/platform-charts` for the exact path.
+Soft limits configurable per service live in that service's chart values — bootstrap renders them inline in `stacks/platform/main.tf` (look for `<service>_values`). For an off-bootstrap install, pull the chart with `helm pull oci://ghcr.io/agynio/charts/<service>` and read its `values.yaml`.
 
 Hard limits (file size, ENV total size) are platform-design choices and cannot be overridden — they reflect Kubernetes ceilings or platform-side guarantees we don't want to weaken.
 
 ## Related
 
 - [Operate → Scaling](../operate/scaling.md)
-- [Reference → Helm values](./helm-values.md)
+- [Reference → Bootstrap variables and chart values](./helm-values.md)

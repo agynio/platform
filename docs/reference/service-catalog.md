@@ -70,8 +70,9 @@ Every microservice, app, CLI, runtime image, runner, and deployment artifact. Us
 |---|---|---|
 | API | Protobuf schemas for every service. | [agynio/api](https://github.com/agynio/api) |
 | Terraform provider | Manages platform resources via Gateway. | [agynio/terraform-provider-agyn](https://github.com/agynio/terraform-provider-agyn) |
-| Bootstrap | Local development install (k3d + Terraform). | [agynio/bootstrap](https://github.com/agynio/bootstrap) |
-| Platform Charts | Production Helm umbrella charts. | [agynio/platform-charts](https://github.com/agynio/platform-charts) |
+| Bootstrap | Install path — k3d + Terraform stacks. Used for both dev and production. | [agynio/bootstrap](https://github.com/agynio/bootstrap) |
+| Service Helm charts | Per-service charts (one chart per platform service). Consumed by bootstrap today. | `ghcr.io/agynio/charts/<service>` |
+| Platform Charts | Centralized umbrella chart, in preparation. Will replace per-service deployment in bootstrap once stable. | [agynio/platform-charts](https://github.com/agynio/platform-charts) |
 | Architecture | Architecture and product documentation. | [agynio/architecture](https://github.com/agynio/architecture) |
 
 ## How to use this catalog

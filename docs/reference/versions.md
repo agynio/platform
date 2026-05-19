@@ -26,19 +26,19 @@ The platform ships as a coordinated set of services. Use this table to verify th
 
 ## Inter-service compatibility
 
-Within a chart release, all platform services are pinned to compatible versions. You should not mix-and-match service versions outside what the chart specifies.
+Within a bootstrap release, all platform services are pinned to compatible versions in `stacks/platform/variables.tf`. You should not mix-and-match service versions outside what the bootstrap revision specifies.
 
 | Surface | Compatibility window |
 |---|---|
 | Gateway API (external) | One minor version. A v1.3.x client works with v1.3.x and v1.4.x Gateway. |
 | Internal RPCs | Pinned per release. Inter-service RPCs are not stable across minor versions. |
-| Authorization model | Pinned per release. Model migrations run as part of `helm upgrade`. |
+| Authorization model | Pinned per release. Model migrations run when the `platform` stack is re-applied. |
 | Terraform provider | One minor version. v1.3.x provider works with v1.3.x and v1.4.x platform. |
 | `agyn` CLI | One minor version. |
 | Runners (k8s-runner) | One minor version. The runner protocol is stable within a window. |
 | Apps (Reminders, Telegram Connector, custom) | One minor version. Apps may need upgrades for major releases. |
 
-Mixing service versions outside the pinned set is unsupported. The chart upgrade mechanism handles compatibility automatically.
+Mixing service versions outside the bootstrap-pinned set is unsupported. Upgrading bootstrap upgrades the matching service set.
 
 ## Agent CLI compatibility
 

@@ -1,108 +1,129 @@
 ---
 title: Upgrades
-description: Upgrade Agyn and run data migrations safely.
+description: How to upgrade the platform installed via bootstrap.
 order: 5
 ---
 
 # Upgrades
 
-Agyn ships as a versioned set of Helm charts. Database migrations are owned by each service and run automatically on chart upgrade.
+Bootstrap pins every service to a specific Helm chart version in the `platform` stack's locals. Upgrading means: pull a newer bootstrap revision (or bump the versions yourself), re-run `apply.sh`, and let Argo CD reconcile.
+
+There is no single `helm upgrade agyn-platform` step today — upgrades are stack-by-stack, service-by-service. A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will eventually replace per-service deployment in bootstrap; it is not used today.
 
 ## Read the release notes
 
-Every release includes notes describing breaking changes, new resources, and migration scope. Check them before upgrading any environment.
+Every meaningful change to the bootstrap or to a platform service ships with notes on the relevant repository:
 
-- Release notes live on the [`platform-charts` releases page](https://github.com/agynio/platform-charts/releases).
-- Architectural deltas worth knowing about are tracked in the architecture repo under `changes/`.
+- Bootstrap-level: [`agynio/bootstrap`](https://github.com/agynio/bootstrap) commits and releases.
+- Per-service: each `agynio/<service>` repository has its own releases.
+- Architecture changes are tracked in [`agynio/architecture`](https://github.com/agynio/architecture) under `changes/`.
+
+Check them before upgrading.
 
 ## Pre-upgrade checks
 
-1. **Take a fresh backup.** See [Operate → Backup & DR](../operate/backup-disaster-recovery.md). At minimum: Postgres dump + OpenFGA store export + S3 bucket inventory.
-2. **Drain agent workloads.** New agent workloads should not start during a service rollout. Either pause the [Agents Orchestrator](../operate/architecture.md#agents-orchestrator) deployment or wait for a quiet period.
-3. **Note current chart version.** `helm list -n agyn` to confirm.
+1. **Take a fresh backup.** See [Operate → Backup & DR](../operate/backup-disaster-recovery.md). At minimum: Postgres dumps + OpenFGA store export.
+2. **Drain agent workloads.** New workloads shouldn't start during a service rollout. Either pause the [Agents Orchestrator](../operate/architecture.md#agents-orchestrator) deployment or wait for a quiet period.
+3. **Note the current state.** `git rev-parse HEAD` in the bootstrap clone, and `helm list -A` for service versions in the cluster.
 
 ## Upgrade
 
 ```sh
-helm repo update
-helm upgrade agyn-platform agyn/platform \
-  --namespace agyn \
-  --values values.yaml \
-  --version <target-version>
+cd bootstrap
+git pull
+./apply.sh
 ```
 
-The chart:
+`apply.sh` re-applies every stack. Each stack's Terraform compares its declared chart version against what's in the cluster:
 
-1. Applies new CRDs and Authorization model migrations.
-2. Rolls each service one at a time. Each service runs its own DB migrations on startup before serving traffic.
-3. Re-creates configuration that comes from chart values (e.g. Ziti service definitions).
-4. Restarts deployments.
+- **Platform service charts**: the `platform` stack updates Argo CD `Application` revisions. Argo CD pulls the new chart, applies it, and rolling-restarts the service. Each service runs its own DB migrations on startup.
+- **Apps (Reminders, Telegram Connector, k8s-runner)**: the `apps` stack updates their Argo CD applications the same way.
+- **Stacks that build CRDs or core infrastructure** (Istio, OpenZiti, cert-manager): only re-applied if their versions changed in the corresponding stack.
 
-Watch progress:
+Watch progress in Argo CD: `https://argocd.agyn.dev:2496/`. Each `Application` flips from `Progressing` to `Synced + Healthy`.
+
+You can also watch from the cluster:
 
 ```sh
-watch kubectl get deploy -n agyn
+watch kubectl get applications -n argocd
+watch kubectl get deploy -A
 ```
 
-A healthy rollout shows every deployment with `AVAILABLE == DESIRED` and no `CrashLoopBackOff` pods.
+A healthy upgrade ends with every Application `Synced + Healthy` and every Deployment at full replicas.
 
 ## Verify
 
-After the upgrade:
+After the rollout:
 
-1. Sign into the Console and check the cluster admin context loads.
+1. Sign in to the Console.
 2. Open an organization and confirm Agents, Runners, and Apps pages load.
-3. Send a test message in an existing conversation. The agent should start, respond, and idle out as before.
+3. Send a test message in an existing conversation. The agent should start, respond, and idle out.
 4. Check Tracing for the new run.
 
 If any of these fail, see [Rollback](#rollback).
 
 ## Resuming agent traffic
 
-If you paused the Agents Orchestrator pre-upgrade:
+If you scaled the Agents Orchestrator down for the upgrade:
 
 ```sh
-kubectl scale deployment agents-orchestrator -n agyn --replicas=1
+kubectl scale deploy agents-orchestrator -n agyn --replicas=1
 ```
 
 Agent workloads for any threads with unread messages will start within one reconciliation tick.
 
 ## Rollback
 
-Helm rollback is safe as long as no destructive DB migrations ran in the new version. Release notes call out migrations that cannot be reverted.
+For most patches and minor service upgrades, you can roll back by checking out the previous bootstrap revision and re-applying:
 
 ```sh
-helm rollback agyn-platform <previous-revision> -n agyn
+git checkout <previous-revision>
+./apply.sh
 ```
 
-If a destructive migration ran:
+Argo CD picks up the older chart versions and rolls services back. Each service's DB migrations are designed to be backwards-compatible within one minor version — but **destructive migrations exist** and are called out in service release notes. If a release ran a non-reversible migration, Helm/Argo CD rollback alone is not enough:
 
-1. Stop all platform services.
-2. Restore Postgres from your pre-upgrade backup.
-3. Restore OpenFGA from its pre-upgrade export.
-4. Re-deploy the previous chart version.
+1. Stop the affected services.
+2. Restore Postgres / OpenFGA from your pre-upgrade backup.
+3. Re-deploy the previous revision.
+
+This is why pre-upgrade backups are non-negotiable.
+
+## Per-service upgrades
+
+If you want to upgrade a single service (e.g. patch a hotfix without touching the rest), edit the version in `stacks/platform/main.tf` or the per-service variables, then run only the `platform` stack:
+
+```sh
+terraform -chdir=stacks/platform apply
+```
+
+Argo CD reconciles only the changed Application.
 
 ## Authorization model migrations
 
-The OpenFGA authorization model is versioned separately from the platform chart. Upgrades that change the model run the new model version as part of the chart upgrade. Both versions remain queryable until you finalize the migration:
+The OpenFGA authorization model ships with the `platform` stack. When a release changes the model, re-applying the platform stack writes the new model version. Old tuples that reference removed relations are migrated by the service that owns them — never delete tuples by hand.
+
+You can verify the active model:
 
 ```sh
-fga model write --store-id $FGA_STORE_ID --file new-model.json
+fga model list --store-id <store-id>
 ```
 
-The platform reads the latest model by default. Old tuples that referenced removed relations are migrated by the upgrade job — never delete tuples manually.
+Get the store ID from `https://openfga.agyn.dev:2496/` or the Authorization deployment's environment.
 
-## Application upgrades
+## Production considerations
 
-Apps (Reminders, Telegram Connector, third-party apps) upgrade independently. Each app's chart has its own release notes. Some apps share authorization tuples with the platform — read the app's release notes before upgrading across major versions.
+For production installs:
 
-## Runner upgrades
-
-Cluster-scoped runners deployed with the platform upgrade automatically. Org-scoped runners deployed separately (in your own clusters or namespaces) need their own upgrade. Runner protocol compatibility is documented per release; you do not need to upgrade runners on every platform release.
+- Maintain separate Terraform state per environment (`backend "s3" {}` or similar).
+- Stage upgrades in a non-prod environment first.
+- Use `-target` to roll a single stack if you need surgical changes.
+- Document your rollback drill — it's much faster than reading these docs at 3 AM.
 
 ## Related
 
+- [Quick bootstrap](./quick-bootstrap.md)
 - [Production install](./production-install.md)
+- [Uninstall](./uninstall.md)
 - [Operate → Backup & DR](../operate/backup-disaster-recovery.md)
-- [Operate → Upgrades](../operate/upgrades.md) — deeper operator view.
-- [Reference → Versions](../reference/versions.md)
+- [Operate → Upgrades](../operate/upgrades.md)

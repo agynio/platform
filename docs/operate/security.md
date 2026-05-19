@@ -59,19 +59,16 @@ The two most important: the **browser ↔ Gateway** boundary (the user-facing at
 
 ## Network policies
 
-The platform charts include sample `NetworkPolicy` manifests. Enable them:
+`NetworkPolicy` is **not** enabled by default in bootstrap. The k3d cluster ships without a NetworkPolicy controller, and bootstrap does not author them.
 
-```sh
-helm upgrade agyn-platform agyn/platform -n agyn \
-  --set networkPolicies.enabled=true
-```
-
-Default policies:
+For production, run a NetworkPolicy controller (Calico, Cilium, etc.) and add policies that match your trust model. A sensible baseline:
 
 - **Agent pods** can only reach the Ziti sidecar. No direct internet.
-- **LLM Proxy** can reach configured providers' egress IP ranges (configure via `llmProxy.allowedEgressCidrs`).
+- **LLM Proxy** can reach configured providers' egress IP ranges.
 - **Platform services** can only reach other in-cluster services and their configured databases / Redis.
 - **OpenFGA** is reachable only from the Authorization service.
+
+Author these as `NetworkPolicy` manifests against your cluster — there are no canned ones in the bootstrap today.
 
 Tune per-environment — DR replicas and observability tooling may need exceptions.
 

@@ -1,149 +1,103 @@
 ---
-title: Helm values reference
-description: Pointer to platform-charts values documentation.
+title: Bootstrap variables and chart values
+description: Where install-time configuration lives.
 order: 5
 ---
 
-# Helm values reference
+# Bootstrap variables and chart values
 
-The platform installs via the `agynio/platform-charts` umbrella chart, which composes per-service charts. Each chart has its own `values.yaml` with documented defaults. This page is a pointer to the full reference and a summary of the values you most commonly touch.
+Configuration happens at two levels today:
 
-## Where the docs live
+1. **Bootstrap Terraform variables** — what `apply.sh` passes to the stacks. These tune install-wide things like domain, port, OIDC, and image versions.
+2. **Per-service Helm charts** — each platform service ships its own chart at `ghcr.io/agynio/charts/<service>` with its own values. Bootstrap renders values for each chart inline in `stacks/platform/main.tf`.
 
-- **Chart repo:** [agynio/platform-charts](https://github.com/agynio/platform-charts).
-- **Per-chart README:** `charts/<service>/README.md` in the repo.
-- **Auto-generated values reference:** rendered from `values.schema.json` on each release.
+A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will replace per-service deployment in bootstrap once it stabilizes. It is not in use today — bootstrap is still the source of truth for chart wiring.
 
-## Common values
+This page is a pointer to both current levels.
 
-### Global
+## Bootstrap-level variables
 
-```yaml
-global:
-  domain: agyn.example.com          # public domain
-  tlsSecretName: agyn-tls           # cert-manager-issued cert
-  image:
-    registry: ghcr.io/agynio
-    pullPolicy: IfNotPresent
+`apply.sh` reads these from the environment (or prompts you for them in interactive mode):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DOMAIN` | `agyn.dev` | Base domain for every platform hostname. |
+| `PORT` | `2496` | Host port for ingress traffic. |
+| `OIDC_ISSUER_URL` | mock-IdP URL | OIDC issuer the platform validates ID tokens against. |
+| `OIDC_CLIENT_ID` | mock client | OIDC client ID. |
+| `OIDC_CLIENT_SECRET` | mock secret | OIDC client secret. |
+| `TRACING_APP_OIDC_CLIENT_ID` | unset (falls back to `OIDC_CLIENT_ID`) | Separate OIDC client for the Tracing app, if you use one. |
+| `ADMIN_OIDC_SUBJECT` | `admin@agyn.io` | OIDC subject of the user granted cluster admin. |
+| `GHCR_USERNAME`, `GHCR_TOKEN` | unset | Credentials for private GHCR pulls. |
+
+Defaults are baked into `apply.sh`; override them before running. See [Quick bootstrap](../self-host-install/quick-bootstrap.md).
+
+## Per-stack Terraform variables
+
+Each stack has its own `variables.tf`. Useful ones:
+
+### `stacks/k8s`
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `cluster_name` | `agyn-local` | k3d cluster name. |
+| `servers` | `1` | Server node count. |
+| `agents` | `2` | Agent node count. |
+| `k3s_version` | `v1.34.3-k3s1` | k3s image tag. |
+| `api_port` | `6443` | Host port for Kubernetes API. |
+
+### `stacks/platform`
+
+Pinned chart versions for every platform service, plus override slots for the image tag if you want to test an unreleased build. Search `chart_version` and `image_tag` in `stacks/platform/variables.tf` for the full list.
+
+### `stacks/apps`
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `admin_oidc_subject` | `admin@agyn.io` | Same value `ADMIN_OIDC_SUBJECT` controls — overridden by env var when bootstrap runs. |
+| `reminders_*`, `telegram_connector_*`, `k8s_runner_*` | versioned | App chart versions and image tags. |
+
+## Per-service Helm chart values
+
+Every platform service has its own chart at `ghcr.io/agynio/charts/<service>`. Bootstrap renders the values inline in `stacks/platform/main.tf` (look for `<service>_values = yamlencode({ ... })`).
+
+If you want to consume a chart directly without bootstrap, the chart's `values.yaml` is the canonical reference. Pull the chart and read it:
+
+```sh
+helm pull oci://ghcr.io/agynio/charts/<service> --version <version> --untar
+cat <service>/values.yaml
+cat <service>/README.md   # when present
 ```
 
-### OIDC
+Common per-service values include image repository/tag, replica count, resource limits, sidecar configuration, OpenZiti enrollment, and database / Redis URLs.
 
-```yaml
-oidc:
-  existingSecret: agyn-platform-oidc   # Secret with issuer / clientId / clientSecret
-```
+## Bootstrap-only secrets and identities
 
-### Postgres
+The `data` stack generates several passwords with `random_password` (Postgres, OpenFGA, MinIO). The `platform` stack mints additional credentials including the `cluster_admin_api_token`. These are stored in Terraform state.
 
-```yaml
-postgres:
-  existingSecret: agyn-platform-postgres  # Secret with per-service DSNs
-```
+For production, override the password variables and source them from your secret manager rather than letting Terraform generate them.
 
-### Redis
-
-```yaml
-redis:
-  existingSecret: agyn-platform-redis    # Secret with `url`
-```
-
-### S3
-
-```yaml
-s3:
-  existingSecret: agyn-platform-s3       # Secret with bucket / region / accessKey / secretKey
-```
-
-### OpenZiti
-
-```yaml
-ziti:
-  existingSecret: agyn-platform-ziti     # Secret with controllerUrl / cert / key
-```
-
-### OpenFGA
-
-```yaml
-openfga:
-  existingSecret: agyn-platform-openfga  # Secret with apiUrl / storeId / apiToken
-```
-
-### Bootstrap admin (first install only)
-
-```yaml
-bootstrap:
-  adminOidcSubject: <your OIDC sub>
-  adminEmail: you@example.com
-  adminName: Platform Admin
-```
-
-### Per-service resource overrides
-
-Every service supports the standard pattern:
-
-```yaml
-gateway:
-  replicaCount: 3
-  resources:
-    limits:
-      cpu: 1000m
-      memory: 1Gi
-    requests:
-      cpu: 100m
-      memory: 256Mi
-  autoscaling:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 70
-```
-
-Apply the same shape under `chat`, `threads`, `agents`, `runners`, `llmProxy`, `tracing`, etc.
-
-### Network policies
-
-```yaml
-networkPolicies:
-  enabled: true
-```
-
-### Monitoring
-
-```yaml
-monitoring:
-  serviceMonitor:
-    enabled: true     # requires Prometheus Operator
-```
-
-## Per-service Secrets
-
-The platform expects you to pre-create these Secrets in the `agyn` namespace:
-
-| Secret | Keys |
+| Variable | Source |
 |---|---|
-| `agyn-platform-oidc` | `issuer`, `clientId`, `clientSecret` |
-| `agyn-platform-postgres` | `users_dsn`, `organizations_dsn`, `agents_dsn`, `threads_dsn`, `runners_dsn`, `tracing_dsn`, `apps_dsn`, `metering_dsn`, `secrets_dsn`, `identity_dsn` |
-| `agyn-platform-redis` | `url` |
-| `agyn-platform-s3` | `bucket`, `region`, `accessKey`, `secretKey` |
-| `agyn-platform-ziti` | `controllerUrl`, `client.crt`, `client.key` |
-| `agyn-platform-openfga` | `apiUrl`, `storeId`, `apiToken` |
+| `platform_db_password` | `stacks/platform/variables.tf` — generate or supply. |
+| `openfga_db_password` | `stacks/data/variables.tf`. |
+| `minio_root_password` | `stacks/data/variables.tf`. |
+| `argocd_admin_password` | `stacks/platform/variables.tf`. |
 
-The exact keys and structure are documented in the chart repo's `examples/values-production.yaml`.
+## Where to look in code
 
-## Sample values files
-
-The chart repo includes:
-
-- `examples/values-dev.yaml` — minimal, for evaluation.
-- `examples/values-production.yaml` — full production setup with all the values pinned.
-- `examples/values-hardened.yaml` — production + network policies + restricted PSS.
-
-Start from the closest match and override.
+| Want to change… | Edit |
+|---|---|
+| The default domain or port | `apply.sh` (defaults), or set `DOMAIN` / `PORT` env vars. |
+| Which stacks run | `apply.sh` — comment out the `run_stack` lines you don't need. |
+| Image versions / chart versions | `stacks/<stack>/variables.tf`. |
+| Values passed to a service chart | `stacks/platform/main.tf` (look for `<service>_values`). |
+| OIDC defaults baked into `apply.sh` | `apply.sh` (`DEFAULT_OIDC_*`). |
+| Bootstrap admin's user record | `stacks/apps/main.tf` (`agyn_user.admin`). |
 
 ## Related
 
+- [Self-host install → Prerequisites](../self-host-install/prerequisites.md)
+- [Self-host install → Quick bootstrap](../self-host-install/quick-bootstrap.md)
 - [Self-host install → Production install](../self-host-install/production-install.md)
 - [Operate → Architecture overview](../operate/architecture.md)
-- [Operate → Networking](../operate/networking.md)
-- [Operate → Security](../operate/security.md)

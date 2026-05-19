@@ -63,10 +63,11 @@ The `service_token` output is a sensitive Terraform value. Feed it to your runne
 
 ## Enroll the runner
 
-After registration, deploy the runner. The platform-provided [k8s-runner](https://github.com/agynio/k8s-runner) is the default Kubernetes implementation:
+After registration, deploy the runner. The platform-provided [k8s-runner](https://github.com/agynio/k8s-runner) is the default Kubernetes implementation. Bootstrap installs one in-cluster automatically — for additional runners, install the chart directly from OCI:
 
 ```sh
-helm install team-runner agyn/k8s-runner \
+helm install team-runner oci://ghcr.io/agynio/charts/k8s-runner \
+  --version <chart-version> \
   --namespace agyn-runners --create-namespace \
   --set serviceToken=<token> \
   --set gateway.url=https://gateway.agyn.example.com

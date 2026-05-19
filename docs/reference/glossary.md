@@ -103,8 +103,8 @@ Same terms as in [Introduction → Concepts](../introduction/concepts.md), plus 
 | **Chat app** | Browser chat UI. |
 | **Tracing app** | Browser run-inspection UI. |
 | **k8s-runner** | Default Kubernetes runner implementation. |
-| **bootstrap** | Local development install via Terraform + k3d. |
-| **platform-charts** | Production Helm umbrella charts. |
+| **bootstrap** | Install path — `agynio/bootstrap`. k3d cluster + Terraform stacks for every platform service. |
+| **platform-charts** | Centralized umbrella Helm chart at `agynio/platform-charts`. In preparation; will replace per-service deployment in bootstrap once stable. |
 | **terraform-provider-agyn** | Terraform provider for the Gateway API. |
 | **agynio/api** | Protobuf schemas for every service. |
 

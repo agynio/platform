@@ -54,7 +54,7 @@ The user authenticated but has no organization. By design, new users have no acc
 
 ## Cluster admin role missing after first install
 
-See [Self-host install → First admin](../self-host-install/first-admin.md). The bootstrap step that binds your OIDC subject to cluster admin may have failed silently if `bootstrap.adminOidcSubject` was wrong.
+See [Self-host install → First admin](../self-host-install/first-admin.md). The bootstrap binds the OIDC subject set in `ADMIN_OIDC_SUBJECT` (default `admin@agyn.io`); if your real IdP issues a different `sub` for you, you won't be cluster admin until you re-apply the `apps` stack with the correct value.
 
 ## API token authentication fails
 

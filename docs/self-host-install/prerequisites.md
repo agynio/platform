@@ -1,114 +1,89 @@
 ---
 title: Prerequisites
-description: What you need before installing Agyn, by install path.
+description: What you need before installing Agyn.
 order: 1
 ---
 
 # Prerequisites
 
-Requirements differ by install path. The bootstrap path provisions almost everything for you; the production path expects you to bring proven infrastructure.
+The quick bootstrap is the only fully-documented install path today. Production install (your own cluster, real OIDC, real domain) reuses the same stacks with overridden variables — the same prerequisites apply, plus a few extras called out at the end.
 
-## For the quick bootstrap path
+## Tools
 
-For local development and demos. Bootstrap creates a k3d cluster on your machine and installs every dependency.
-
-### Tools
-
-| Tool | Minimum version | Notes |
+| Tool | Minimum | Required for |
 |---|---|---|
-| Docker | 24+ | Container runtime. k3d runs Kubernetes inside Docker. |
-| `kubectl` | 1.27+ | Match your cluster version. |
-| `k3d` | Latest | Bundled by bootstrap if missing on most setups. |
-| Terraform | 1.6+ | Used to provision the cluster and apply manifests. |
-| Git | Any modern version | To clone the bootstrap repo. |
+| Docker | 24+ | Hosting the local k3d cluster. Must be running. |
+| Terraform | 1.6+ | Provisioning every stack. |
+| `kubectl` | 1.27+ | Optional. Needed only if you want bootstrap to merge the generated kubeconfig into `~/.kube/config` and for interacting with the cluster afterward. |
 
-### Resources
+You do **not** need `k3d` installed separately — the Terraform `k3d` provider creates the cluster.
 
-| Resource | Minimum |
+You do **not** need `git` to run bootstrap, only to clone it.
+
+## Operating system
+
+`apply.sh` and the CA cert installer support **macOS** (Darwin) and **Linux** (Debian/Ubuntu, RHEL/Fedora/CentOS, Alpine). Windows is not supported — use WSL2.
+
+## Resources
+
+Bootstrap provisions a k3d cluster with 1 server + 2 agent nodes plus every platform service. Give Docker enough headroom; cramped Docker is the most common bootstrap failure.
+
+Suggested minimum: **6 vCPU, 12 GB RAM, 30 GB free disk**. Lower works for a partial bring-up but you will hit pod evictions.
+
+## Ports
+
+Bootstrap exposes two ports on the host:
+
+| Port | Used by |
 |---|---|
-| CPU | 4 cores |
-| Memory | 8 GB free |
-| Disk | 30 GB free |
+| `2496` | Ingress — everything reachable at `https://*.agyn.dev:2496/`. Override with `PORT`. |
+| `6443` | Kubernetes API server. Used by `kubectl` after kubeconfig merge. |
 
-### DNS
+Both must be free before you start.
 
-Bootstrap adds `agyn.dev` entries to your `/etc/hosts` automatically (with sudo). If you cannot modify hosts, set up your own DNS pointing `*.agyn.dev` to `127.0.0.1`.
+## DNS
 
-### Network
+`agyn.dev` and its subdomains resolve to `127.0.0.1` automatically — no `/etc/hosts` edits required. The bootstrap does not modify your hosts file.
 
-Bootstrap publishes the platform on `https://agyn.dev:2496/`. Make sure ports `2496` and `6443` are free.
+If you set a custom domain via `DOMAIN`, you are responsible for making it resolve to `127.0.0.1` (typically by adding host entries yourself or pointing public DNS at loopback).
 
-## For the production install path
+## OIDC
 
-Bring your own infrastructure. Agyn does not provision any of these for you in production.
+The bootstrap defaults to a public mock OIDC issuer (`mockauth.dev`) so first-run sign-in works out of the box. The default admin sign-in user is `admin@agyn.io`. No real IdP is needed for evaluation.
 
-### Kubernetes cluster
+To use a real IdP, override these environment variables before running `apply.sh`:
 
-| Requirement | Notes |
-|---|---|
-| Version | 1.27+ recommended. |
-| Node sizing | Plan for at least 3 nodes, 4 vCPU and 16 GB each. Agent workloads scale horizontally — size for peak concurrent agents. |
-| Storage class | A default StorageClass supporting `ReadWriteOnce` PVCs for agent volumes. |
-| Ingress | Istio mesh — Agyn services communicate through Istio with `AuthorizationPolicy` for internal RPC gating. |
+- `OIDC_ISSUER_URL`
+- `OIDC_CLIENT_ID`
+- `OIDC_CLIENT_SECRET`
+- `ADMIN_OIDC_SUBJECT` — OIDC subject that should be granted cluster admin (default `admin@agyn.io`)
+- `TRACING_APP_OIDC_CLIENT_ID` — only if you use a separate client for the Tracing app
 
-### Identity provider (OIDC)
+See [Quick bootstrap](./quick-bootstrap.md) for the full sequence.
 
-Users sign into the Console with OIDC. Any standards-compliant IdP works (Auth0, Okta, Keycloak, Google, etc.). You will need:
+## Optional: GHCR access for private charts
 
-- An OIDC client with **Authorization Code + PKCE** enabled.
-- A configured redirect URI for your Console hostname (e.g. `https://console.agyn.example.com/auth/callback`).
-- The issuer URL, client ID, and (if required) client secret.
+Bootstrap pulls service Helm charts and images from `ghcr.io/agynio/*`. Most are public. If your install requires authenticated pulls (private fork, internal mirror), set:
 
-Users are auto-provisioned on first login via the IdP's UserInfo endpoint.
+- `GHCR_USERNAME`
+- `GHCR_TOKEN`
 
-### Object storage
+Skip these for the standard install.
 
-Files uploaded into conversations are stored in S3-compatible object storage.
+## Production install — extra notes
 
-- Any S3-compatible provider (AWS S3, GCS via S3 interop, MinIO, Wasabi, etc.).
-- One bucket dedicated to Agyn.
-- Access key and secret with `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, and presigned URL support.
+Today, production deployments reuse the bootstrap Terraform stacks with their own variables. A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will eventually replace per-service deployment in bootstrap, but it is not in use today. In addition to the above you will want:
 
-### Databases
+- **Your own Kubernetes cluster** instead of k3d. Skip the `k8s` stack and point the Kubernetes / Helm providers at your existing cluster.
+- **A real OIDC IdP** with `Authorization Code + PKCE` enabled.
+- **A real DNS domain** with a wildcard or specific entries pointing to your ingress.
+- **A real TLS certificate** (cert-manager + Let's Encrypt, or your CA) replacing the locally-generated wildcard cert.
+- **External Postgres, Redis, S3, OpenFGA, OpenZiti** if you don't want the embedded versions the `data` and `deps` stacks deploy.
 
-| Database | Used by | Notes |
-|---|---|---|
-| PostgreSQL 14+ | Threads, Users, Identity, Organizations, Agents, Runners, Tracing, Apps Service, Metering, OpenFGA | One Postgres instance with separate databases per service is typical. Tracing is the highest-volume database — size accordingly. |
-| Redis 6+ | Notifications (pub/sub), short-lived caches | A managed Redis or a single in-cluster instance. |
-
-### OpenZiti
-
-Agyn uses [OpenZiti](https://openziti.io) as a private overlay network for agent workloads, LLM Proxy, and user-device port exposure.
-
-You need an OpenZiti controller and at least one router reachable from the cluster. You can deploy these inside the cluster or use a managed deployment. The Agyn Ziti Management service handles all identity, service, and policy operations through the controller's Edge Management API.
-
-### OpenFGA
-
-Authorization is backed by [OpenFGA](https://openfga.dev), a ReBAC engine. The Authorization model is published with the platform charts.
-
-- OpenFGA service reachable from the cluster.
-- A PostgreSQL database for OpenFGA (separate from platform Postgres or shared).
-
-### Secrets material
-
-Have these ready before running `helm install`:
-
-- `agyn-platform-postgres` — DSNs for each service database.
-- `agyn-platform-redis` — Redis connection string.
-- `agyn-platform-s3` — bucket name, region, access key, secret key.
-- `agyn-platform-oidc` — issuer, client ID, client secret.
-- `agyn-platform-ziti` — controller URL and admin certificate/key.
-- `agyn-platform-openfga` — OpenFGA service URL and API token.
-
-The exact Secret names and keys are documented in the `platform-charts` repo. See [Reference → Helm values](../reference/helm-values.md).
-
-### TLS
-
-You need a valid TLS certificate for `console.<your-domain>`, `gateway.<your-domain>`, and `chat.<your-domain>`, or a wildcard. Issue with cert-manager + Let's Encrypt, or with your own ACME provider.
+A polished production install path is still maturing — open an issue on [`agynio/bootstrap`](https://github.com/agynio/bootstrap) if you are running into specific gaps.
 
 ## Related
 
 - [Quick bootstrap](./quick-bootstrap.md)
 - [Production install](./production-install.md)
 - [Operate → Architecture overview](../operate/architecture.md)
-- [Operate → Security](../operate/security.md)

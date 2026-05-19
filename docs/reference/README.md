@@ -14,6 +14,6 @@ Lookup material — definitions, catalogs, links to authoritative schema sources
 - [Service catalog](./service-catalog.md) — every service, what it does, what repo it lives in.
 - [API contracts](./api.md) — links to the Protobuf schemas in `agynio/api`.
 - [Terraform provider](./terraform.md) — pointer to the provider's full resource reference.
-- [Helm values](./helm-values.md) — pointer to platform-charts values.
+- [Bootstrap variables and chart values](./helm-values.md) — where install-time configuration lives.
 - [Limits and quotas](./limits.md) — what's bounded and by how much.
 - [Versions](./versions.md) — what runs with what.

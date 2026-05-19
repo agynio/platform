@@ -41,8 +41,8 @@ If the Ziti sidecar isn't there at all, the runner is not injecting it. Check th
 
 Ziti Management's logs show `failed to connect to controller`:
 
-- **`agyn-platform-ziti` Secret missing or wrong.** Verify the controller URL is reachable from inside the cluster.
-- **Controller certificate expired.** Rotate by updating the Secret and restarting `ziti-management`.
+- **Ziti controller endpoint or admin credentials wrong** in the Ziti Management deployment's environment / mounted secrets. Verify the controller URL (`https://ziti-mgmt.<domain>:<port>/edge/management/v1/version`) is reachable from inside the cluster.
+- **Controller certificate expired.** Rotate, then restart `ziti-management`.
 - **Network policy blocking egress.** Allow Ziti Management to reach the controller.
 
 ## Istio mTLS errors

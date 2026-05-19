@@ -161,8 +161,9 @@ Both are flagged in their service docs.
 | `agynio/reminders` | Reminders app. |
 | `agynio/telegram-connector` | Telegram bridge app. |
 | `agynio/terraform-provider-agyn` | Terraform provider. |
-| `agynio/platform-charts` | Helm umbrella charts. |
-| `agynio/bootstrap` | Local development bootstrap. |
+| `agynio/bootstrap` | Bootstrap — k3d + Terraform stacks. Source of install today. |
+| `ghcr.io/agynio/charts/*` | Per-service Helm charts (OCI). Consumed by bootstrap today. |
+| `agynio/platform-charts` | Centralized umbrella chart, in preparation. Will replace per-service deployment in bootstrap once stable. |
 
 See [Reference → Service catalog](../reference/service-catalog.md) for a customer-facing version of the same list.
 

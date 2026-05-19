@@ -19,15 +19,13 @@ Every platform service exposes Prometheus metrics on `:8080/metrics` (or the por
 - **DB metrics** — open connections, idle connections, query latency.
 - **Custom service metrics** — see each service's metrics page in its repo.
 
-The platform charts include `ServiceMonitor` resources for Prometheus Operator. With kube-prometheus-stack installed:
+Per-service charts ship `ServiceMonitor` resources for Prometheus Operator behind a value flag. With kube-prometheus-stack installed, set the flag in the relevant `<service>_values` block in `stacks/platform/main.tf` (look for `monitoring` or `serviceMonitor`) and re-apply the platform stack:
 
 ```sh
-helm upgrade agyn-platform agyn/platform \
-  -n agyn \
-  --set monitoring.serviceMonitor.enabled=true
+terraform -chdir=stacks/platform apply
 ```
 
-Metrics start showing up in Prometheus within a few scrape intervals.
+Argo CD reconciles each service and the `ServiceMonitor` resources appear. Metrics start showing up in Prometheus within a few scrape intervals.
 
 ## Health checks
 

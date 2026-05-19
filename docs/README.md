@@ -23,7 +23,7 @@ These docs are organized around what you are trying to do.
 ## Sections
 
 - **[Introduction](./introduction/README.md)** — what Agyn is, core concepts, architecture at a glance.
-- **[Self-host install](./self-host-install/README.md)** — install Agyn on your own Kubernetes cluster with bootstrap (dev) or platform-charts (production). Skip this section if you use Agyn Cloud.
+- **[Self-host install](./self-host-install/README.md)** — install Agyn on your own Kubernetes cluster with the bootstrap Terraform stacks. Skip this section if you use Agyn Cloud.
 - **[Administer](./administer/README.md)** — configure your organization, agents, models, secrets, runners, tools, and apps. Console UI and Terraform side by side.
 - **[Use](./use/README.md)** — everyday workflows: chat with agents, attach files, inspect runs, see usage, expose ports, manage API tokens.
 - **[Build & extend](./build-extend/README.md)** — Gateway API, Terraform provider, MCP server authoring, agent CLI choice, apps development.

@@ -60,7 +60,7 @@ You can inspect the OpenFGA store directly with the `fga` CLI for debugging. The
 
 ## OpenFGA store and model versioning
 
-OpenFGA stores tuples in PostgreSQL. The model itself is versioned — `helm upgrade` writes new model versions when the schema changes. Old tuples that reference removed relations are migrated by the upgrade job.
+OpenFGA stores tuples in PostgreSQL. The model itself is versioned — re-applying the `platform` Terraform stack writes new model versions when the schema changes. Old tuples that reference removed relations are migrated by the service that owns them.
 
 To list models:
 

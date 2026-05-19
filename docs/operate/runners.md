@@ -19,8 +19,11 @@ Both kinds register the same way — only the `organization_id` differs. Cluster
 
 ## Deploy the platform-provided k8s-runner
 
+Bootstrap installs an in-cluster k8s-runner automatically as part of the `apps` stack. To deploy additional runners (different cluster, separate node pool, isolated namespace), install the chart directly from its OCI repository:
+
 ```sh
-helm install acme-runner agyn/k8s-runner \
+helm install acme-runner oci://ghcr.io/agynio/charts/k8s-runner \
+  --version <chart-version> \
   --namespace agyn-runners --create-namespace \
   --values runner-values.yaml
 ```
