@@ -25,7 +25,6 @@ An organization can install apps from the apps catalog (public apps) or from int
 6. Approve the requested permissions.
 7. Save.
 
-![Apps tab with install dialog](../_assets/console/apps/install.png)
 
 The app moves to the **Installed** tab. It can now participate in conversations in this organization.
 
@@ -60,7 +59,6 @@ Permissions declared in `permissions` must match the app's required permissions.
    - **Audit log** — a ring buffer of the last 1000 events the app emitted (paginated).
 3. Edit configuration or permissions in place.
 
-![Installed app detail with config, permissions, audit log](../_assets/console/apps/installation-detail.png)
 
 Changes apply on the app's next state sync — typically within seconds.
 
@@ -105,7 +103,6 @@ Apps your organization owns appear in the **Published** tab. You can publish app
    - **Configuration schema** — JSON schema describing the configuration fields users will fill in.
 4. Save.
 
-![Publish app dialog](../_assets/console/apps/publish.png)
 
 The Console returns a **service token** — copy it now, it's not retrievable later. Provide it to the running app so it can enroll.
 

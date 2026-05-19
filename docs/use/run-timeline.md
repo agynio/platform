@@ -26,7 +26,6 @@ Two entry points:
 2. Click **View trace** on any agent message.
 3. The Run Timeline opens, scrolled to the events that produced that message.
 
-![View trace link on agent message](../_assets/console/chat/view-trace.png)
 
 ### From the Tracing app
 
@@ -44,7 +43,6 @@ The Run Timeline is a three-region layout:
 - **Left sidebar** — paginated event list.
 - **Main area** — the selected event's detail.
 
-![Run Timeline three-region layout](../_assets/console/tracing/timeline-layout.png)
 
 ## Event types
 
@@ -83,7 +81,6 @@ The fullest view — what the agent told the LLM and what the LLM said back:
 - **Context** — the full prompt the model saw, paginated: system prompts, messages, tool results, memory, summaries. New context items since the previous LLM event are highlighted.
 - **Raw response** — the provider's JSON, collapsible.
 
-![LLM Call event detail](../_assets/console/tracing/llm-event.png)
 
 ### Tool Execution
 
@@ -94,7 +91,6 @@ The fullest view — what the agent told the LLM and what the LLM said back:
 - **Error details** if the tool failed.
 - Raw data, collapsible.
 
-![Tool execution event with terminal output](../_assets/console/tracing/tool-event.png)
 
 ### Summarization
 

@@ -19,7 +19,6 @@ Any authenticated user can create an organization. The creator automatically bec
 3. Enter a **Name**.
 4. Save. The Console switches to the new organization's context.
 
-![Create organization dialog from context switcher](../_assets/console/organizations/create.png)
 
 ### With Terraform
 
@@ -38,7 +37,6 @@ On apply, the calling identity (the user behind the Terraform token) is granted 
 1. Console → **Organization → Overview** (`/organizations/<org>`).
 2. Edit the organization name. Click **Save**.
 
-![Organization overview tab](../_assets/console/organizations/overview.png)
 
 The overview also shows summary counts (agents, members, runners, apps) at a glance.
 

@@ -15,7 +15,6 @@ Files attached to a conversation are uploaded to the platform's file storage, re
 3. The Chat app uploads each file with a progress bar. Once uploaded, the file appears as an attachment in your draft message.
 4. Send the message.
 
-![Composer with file attachment](../_assets/console/chat/file-attached.png)
 
 Each attachment becomes part of the message. After sending, every participant sees it inline (for [media types](./inline-media.md)) or as a download card.
 

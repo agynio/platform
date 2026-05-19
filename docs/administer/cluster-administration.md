@@ -21,7 +21,6 @@ The Users page lists every user the platform has ever seen — anyone who has si
    - View OIDC subject (read-only — set by the IdP).
    - See active sessions and API tokens.
 
-![Users list and detail view](../_assets/console/cluster-admin/users.png)
 
 Users are auto-provisioned on their first OIDC login. You do not create user records manually.
 
@@ -52,7 +51,6 @@ Cluster-scoped runners host workloads for every organization on the platform. Ea
 4. Save. The Console shows a one-time service token. Copy it now — it is not retrievable later.
 5. Apply the token as a Kubernetes Secret in the runner's namespace so the runner can enroll at startup.
 
-![Register cluster runner dialog with service token](../_assets/console/cluster-admin/register-runner.png)
 
 The runner's **Status** transitions from `pending` → `enrolled` once the runner connects.
 
@@ -83,7 +81,6 @@ The Organizations page lets you see every org on the platform — useful for cap
 2. The list shows name, member count, agent count, creation date.
 3. Click an org for its detail page: rename, change ownership, or delete.
 
-![Organizations admin list](../_assets/console/cluster-admin/organizations.png)
 
 Cluster admins inherit owner-level access to every organization. You can switch the context switcher to any org and operate as an owner.
 

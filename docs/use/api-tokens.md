@@ -21,7 +21,6 @@ Format: `agyn_<44 characters>` (256 bits of entropy, base62-encoded). The `agyn_
    - **Expiration** — optional. Without it, the token is long-lived.
 4. Save. The Console shows the token **once**. Copy it now — it cannot be retrieved later.
 
-![API tokens page with new token dialog](../_assets/console/api-tokens/new-token.png)
 
 Tokens are stored hashed on the platform — only the prefix and metadata are visible after creation.
 

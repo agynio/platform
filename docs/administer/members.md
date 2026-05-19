@@ -20,7 +20,6 @@ An organization member is a user who has accepted membership in the organization
    - `member` — can chat with agents and access ones they have per-agent roles on. No Console access.
 5. Send the invite.
 
-![Members tab with invite dialog](../_assets/console/organizations/members-invite.png)
 
 The invite appears in the invitee's user menu under **Pending invites**. Until they accept, their membership status is `pending`. After acceptance, it becomes `active`.
 
@@ -46,7 +45,6 @@ Terraform-managed memberships skip the invite/accept flow when the caller has cl
 2. Use the **Role** dropdown in the detail pane to switch between `owner` and `member`.
 3. Confirm. The change applies immediately.
 
-![Member detail with role dropdown](../_assets/console/organizations/members-role.png)
 
 ### With Terraform
 

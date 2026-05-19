@@ -25,7 +25,6 @@ Either kind can be referenced from an [agent ENV](./environment-variables.md), a
    - **Value** — the secret value. Masked after save.
 4. Save.
 
-![Secrets tab with new secret dialog](../_assets/console/secrets/new-secret.png)
 
 ### With Terraform
 
@@ -52,7 +51,6 @@ Source the value from your Terraform variables / CI secret manager. The value is
    - **Remote path** — provider-specific identifier (e.g. for Vault KV v2: `kv/data/prod/stripe-api-key`, key `value`).
 3. Save.
 
-![Remote secret reference](../_assets/console/secrets/new-remote-secret.png)
 
 The platform never stores the value itself — it stores only the reference, and resolves the value each time a workload starts.
 

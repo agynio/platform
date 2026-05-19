@@ -23,7 +23,6 @@ Pick an organization, then pick a run, then drill into the [Run Timeline](./run-
 
 The Home page lists every organization you have access to. If you only belong to one organization, the Tracing app auto-navigates into it.
 
-![Tracing home — organizations list](../_assets/console/tracing/home.png)
 
 ## Organization page
 
@@ -39,7 +38,6 @@ The organization page lists every recent run, newest first, paginated.
 
 Click a run to open the [Run Timeline](./run-timeline.md).
 
-![Tracing organization page — recent runs](../_assets/console/tracing/organization.png)
 
 The page subscribes to real-time updates — new runs appear at the top and status/duration update in place.
 
@@ -51,7 +49,6 @@ The Tracing app's breadcrumb sits in the top-left. Each segment is a dropdown:
 - **Organization** — on the org page and the run page. Lists every org you can access; the current one is highlighted; selecting another navigates to it.
 - **Run** — on the run page only. Static label (the agent name and start time).
 
-![Tracing breadcrumb with organization dropdown](../_assets/console/tracing/breadcrumb.png)
 
 ## Finding a specific run
 

@@ -31,7 +31,6 @@ Chat is a list-detail UI:
 
 Above the conversation list: the Agyn logo and your user button.
 
-![Chat layout: conversation list, conversation detail](../_assets/console/chat/layout.png)
 
 ## Start a conversation
 
@@ -43,7 +42,6 @@ Above the conversation list: the Agyn logo and your user button.
 
 The conversation is created and selected. A short summary is auto-generated from the first message; you can edit it later.
 
-![New conversation composer](../_assets/console/chat/new-conversation.png)
 
 ## Conversation list
 

@@ -40,7 +40,6 @@ The exact event list is versioned in the [API contracts](../reference/api.md). N
    - **Init scripts** — pre-start setup.
 4. Save.
 
-![Agent Hooks tab](../_assets/console/agents/hooks.png)
 
 ### With Terraform
 

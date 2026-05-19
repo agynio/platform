@@ -30,7 +30,6 @@ Organization owners hold owner-level capabilities on every agent in their organi
 4. Search for an identity (user, app, or another agent in the same organization).
 5. Pick a role and save.
 
-![Agent Roles tab](../_assets/console/agents/roles.png)
 
 The assignment takes effect immediately. The target identity sees the agent appear in chat composers and can start conversations with it.
 

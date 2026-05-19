@@ -22,7 +22,6 @@ You need at least one [LLM provider](./llm-providers.md) before you can register
    - **Remote model name** — the provider's model ID (e.g. `gpt-4o-2024-08-06`).
 4. Save.
 
-![Models tab with new model dialog](../_assets/console/llm/new-model.png)
 
 The model now appears in the Models list and is selectable when creating or editing an agent.
 
@@ -61,7 +60,6 @@ Verifying the model works end-to-end (credentials, endpoint, model name) without
 3. The Console sends `Hello, world` to the model through the LLM Proxy and displays the response.
 4. Errors (auth, model-not-found, rate limit) are shown verbatim from the provider's response.
 
-![Model detail with Test action](../_assets/console/llm/test-model.png)
 
 The Test call hits the same LLM Proxy that agents use, so a successful test means real agents can call the model.
 

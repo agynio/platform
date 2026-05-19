@@ -22,7 +22,6 @@ Reminders attached to a conversation appear in the conversation detail:
 2. Look for the **Reminders** section in the right side of the detail pane (or under the conversation header on narrow screens).
 3. Each entry shows the reminder text, the scheduled time, and a **Cancel** action.
 
-![Reminders panel in conversation detail](../_assets/console/chat/reminders.png)
 
 Reminders for other conversations are not shown here — open the relevant conversation to see them.
 

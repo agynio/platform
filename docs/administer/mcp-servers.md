@@ -35,7 +35,6 @@ Add an MCP server when you want the agent to do something the LLM cannot do alon
    - **Image pull secrets** — credentials for private registries.
 4. Save. The MCP is added to the agent's spec. The next workload includes it as a sidecar.
 
-![Agent MCPs tab with add dialog](../_assets/console/agents/mcps.png)
 
 The agent CLI is notified of the new MCP on its next startup. Workloads already running with the old config keep the old MCP set until they restart.
 

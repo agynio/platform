@@ -26,7 +26,6 @@ The Console uses three regions:
 - **Sidebar** — navigation within the current context. Changes based on the selected context.
 - **Main area** — page content. No page-level headers — the page title is in the top bar.
 
-![Console layout — top bar with context switcher, sidebar, main area](../_assets/console/overview/layout.png)
 
 ### Top bar
 

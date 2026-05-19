@@ -30,7 +30,6 @@ If your agents use container images from a private registry (your company's GHCR
    - For remote: pick a provider and remote path.
 4. Save.
 
-![Image pull secret create form](../_assets/console/secrets/new-image-pull-secret.png)
 
 ### With Terraform
 
@@ -72,7 +71,6 @@ Image pull secrets only take effect once attached. Attach them on the resource t
 3. Pick one or more image pull secrets.
 4. Save.
 
-![Agent image pull secrets tab](../_assets/console/agents/image-pull-secrets.png)
 
 The runner uses every attached image pull secret when pulling that resource's image. The first credential that matches the image's registry succeeds; others are ignored.
 

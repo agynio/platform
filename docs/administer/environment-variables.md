@@ -32,7 +32,6 @@ ENVs belong to an agent, MCP server, or hook — not to the organization. Set th
 3. Type the **Name** and **Value**.
 4. Save.
 
-![Agent ENVs tab](../_assets/console/agents/envs.png)
 
 Plain ENVs are stored in cleartext in the platform database. Do not use them for credentials.
 
@@ -56,7 +55,6 @@ resource "agyn_agent_env" "log_level" {
 4. Set the **Name** the container will see (e.g. `STRIPE_API_KEY`).
 5. Save.
 
-![Secret-backed ENV reference](../_assets/console/agents/envs-secret.png)
 
 The Console shows secret-backed ENVs with a key icon. The resolved value is never displayed — only the secret name and reference.
 

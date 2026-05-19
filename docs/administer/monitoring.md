@@ -35,7 +35,6 @@ The list shows each running or recently completed workload:
 | **Started** | Workload start time. |
 | **Duration** | Time since start. |
 
-![Activity Workloads tab](../_assets/console/monitoring/workloads.png)
 
 Filter by agent, runner, status, or start time. Sort by any column. Filters are server-side and survive pagination.
 
@@ -47,7 +46,6 @@ Click a row to open the detail panel:
 - **Container list** — init containers first, then the main container, then sidecars. Each shows name, role, image, current state, runtime reason (e.g. `ContainerCreating`, `Running`, `OOMKilled`), exit code, restart count.
 - **Log viewer** — last 1000 lines of the selected container's logs, plus a follow toggle for real-time streaming. Empty state if the container no longer exists.
 
-![Workload detail with log viewer](../_assets/console/monitoring/workload-detail.png)
 
 ### Stop a workload
 
@@ -73,7 +71,6 @@ The list shows every provisioned volume instance:
 
 Filter by status, runner, or what kind of resource the volume is attached to.
 
-![Activity Storage tab](../_assets/console/monitoring/storage.png)
 
 A volume instance has the same lifetime as the workload that holds it, unless the volume definition is shared across multiple workloads on the same thread.
 
@@ -97,7 +94,6 @@ Every conversation in the organization, listed read-only. Useful for:
 | **Status** | `active`, `archived`, `degraded`. |
 | **Created** | First message timestamp. |
 
-![Activity Threads tab](../_assets/console/monitoring/threads.png)
 
 Click a row to open the thread detail — paginated message history, newest first, read-only. You cannot post or modify; for that, join the conversation as a participant in Chat.
 
@@ -114,7 +110,6 @@ A one-page dashboard of four sections:
 - **Storage** — Storage-GB-hours. Top agents.
 - **Platform** — threads created, messages sent.
 
-![Usage dashboard](../_assets/console/monitoring/usage.png)
 
 Time range selector at the top: 24 hours, 7 days, 30 days, or custom. Granularity (5-minute / 1-hour / 6-hour / 1-day buckets) is chosen automatically based on range.
 

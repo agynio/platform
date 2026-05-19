@@ -33,7 +33,6 @@ To check or install:
 3. If it is already installed, the install button is replaced with **Open installation**. Skip to [Verify](#verify).
 4. If not, click **Install**. The app requires `thread:create` and `message:send` permissions on the organization. Approve and save.
 
-![Reminders app installation](../_assets/console/apps/reminders-install.png)
 
 ### With Terraform
 

@@ -41,7 +41,6 @@ For `custom_headers`, you cannot set `Host`, `Content-Length`, `Connection`, or 
    - **Credentials** — the API key (for `bearer` / `x_api_key`) or a header map (for `custom_headers`). Credentials are masked after save; click the eye icon to reveal.
 4. Save.
 
-![LLM Providers tab with new provider dialog](../_assets/console/llm/new-provider.png)
 
 The Console hides the credential value after the first save. To rotate it, click **Edit**, paste the new key, and save again.
 

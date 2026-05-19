@@ -14,7 +14,6 @@ Console → **Activity → Usage** (`/organizations/<org>/activity/usage`).
 
 The view is a single scrollable page with four sections — LLM, Compute, Storage, Platform — and a time range selector at the top.
 
-![Usage dashboard](../_assets/console/monitoring/usage.png)
 
 ## Time range
 

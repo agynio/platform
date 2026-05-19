@@ -37,7 +37,6 @@ If none of those apply, just store the value locally — it is encrypted at rest
    - **Token** — a Vault token with read access to the paths you will reference. Masked after save.
 4. Save.
 
-![Secret Providers tab](../_assets/console/secrets/new-provider.png)
 
 ### With Terraform
 

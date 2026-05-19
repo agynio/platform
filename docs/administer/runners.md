@@ -38,7 +38,6 @@ If you have none of these, use the platform's cluster-scoped runner.
    - **Capabilities** — list of capability names (e.g. `docker`, `gpu`). Workloads requesting a capability only run on runners that advertise it.
 4. Save. The Console shows a one-time **service token**. Copy it now — it is not retrievable later.
 
-![Register org runner with service token](../_assets/console/runners/register.png)
 
 The runner's **Status** is `pending` until it enrolls.
 
@@ -99,7 +98,6 @@ If no runner qualifies, the workload fails to schedule with an error naming the 
    - Active workloads on this runner.
    - The OpenZiti service name (`runner-<id>`).
 
-![Runner detail page](../_assets/console/runners/detail.png)
 
 ## Edit labels or capabilities
 

@@ -19,7 +19,6 @@ You enroll devices once. After that, running the Ziti tunnel client on the devic
 3. Enter a device name (e.g. `mac-laptop`, `gh-actions-runner`).
 4. Save. The Console returns a one-time enrollment **JWT**. Copy it now — it cannot be retrieved later.
 
-![Devices page with add dialog](../_assets/console/devices/add.png)
 
 The device shows as **Pending** until you enroll it. After enrollment, it flips to **Enrolled**.
 

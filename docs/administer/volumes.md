@@ -34,7 +34,6 @@ You inspect instances under [Monitoring → Storage](./monitoring.md#storage).
    - **Mount path** — where the volume is mounted in the container (e.g. `/workspace`).
 4. Save.
 
-![Volumes list and new volume dialog](../_assets/console/volumes/new-volume.png)
 
 ### With Terraform
 
@@ -59,7 +58,6 @@ Volumes by themselves do nothing — you must attach them to an agent, MCP serve
 3. Pick a volume and the target container (the agent itself, one of its MCPs, or one of its hooks).
 4. Save.
 
-![Volume attachments tab](../_assets/console/agents/volume-attachments.png)
 
 Attachments take effect on the next workload start.
 

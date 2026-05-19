@@ -28,7 +28,6 @@ Before creating an agent, you need:
 3. Fill in the fields described below.
 4. Click **Create**. The agent is created and you are redirected to its detail page.
 
-![New agent form](../_assets/console/agents/new-agent.png)
 
 #### Required fields
 
@@ -53,7 +52,6 @@ Before creating an agent, you need:
 
 After creation, the **agent detail page** opens. Sub-resources (MCPs, hooks, skills, ENVs, init scripts, volumes, image pull secret attachments) are configured as tabs on this page.
 
-![Agent detail page with sub-resource tabs](../_assets/console/agents/detail-tabs.png)
 
 ### With Terraform
 

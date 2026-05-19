@@ -29,7 +29,6 @@ The Telegram Connector is an app that translates between Telegram chats and Agyn
    - `message:send` — post replies back.
 5. Save.
 
-![Telegram Connector install with bot token](../_assets/console/apps/telegram-install.png)
 
 The connector validates the bot token. If invalid, the install fails with the Telegram API error.
 

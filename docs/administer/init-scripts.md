@@ -26,7 +26,6 @@ Init scripts run with the runtime container's user and have access to all ENVs (
 4. Set **Order** if you have multiple scripts — lower numbers run first.
 5. Save.
 
-![Agent Init Scripts tab](../_assets/console/agents/init-scripts.png)
 
 ### With Terraform
 

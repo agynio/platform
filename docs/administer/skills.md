@@ -23,7 +23,6 @@ A skill is a named text fragment — typically a prompt snippet or a domain guid
    - **Body** — the skill content. Markdown is preserved as-is.
 4. Save.
 
-![Agent Skills tab](../_assets/console/agents/skills.png)
 
 ### With Terraform
 
