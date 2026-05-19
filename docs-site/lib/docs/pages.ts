@@ -38,13 +38,15 @@ export async function getDocPage(slug: string[]): Promise<DocPage | null> {
   const rawDocument = await fs.readFile(sourcePath, "utf8");
   validateNoRootRelativeLinks(rawDocument, sourcePath);
   const { content, frontmatter } = parseDocument(rawDocument, sourcePath);
+  const { content: tree, headings } = transformMarkdoc(content, sourcePath);
 
   return {
     slug,
     href: slugToHref(slug),
     sourcePath,
     frontmatter,
-    content: transformMarkdoc(content, sourcePath),
+    content: tree,
+    headings,
   };
 }
 

@@ -13,8 +13,15 @@ export type DocRoute = {
   frontmatter: Frontmatter;
 };
 
+export type Heading = {
+  id: string;
+  text: string;
+  level: number;
+};
+
 export type DocPage = DocRoute & {
   content: RenderableTreeNodes;
+  headings: Heading[];
 };
 
 export type NavItem = {

@@ -2,6 +2,9 @@ import Markdoc from "@markdoc/markdoc";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import React from "react";
+import { ArticleToc } from "@/app/_components/article-toc";
+import { CodeBlock } from "@/app/_components/code-block";
+import { Mermaid } from "@/app/_components/mermaid";
 import { getAllDocRoutes, getDocPage } from "@/lib/docs/pages";
 
 type PageProps = {
@@ -42,5 +45,17 @@ export default async function DocPage({ params }: PageProps) {
     notFound();
   }
 
-  return Markdoc.renderers.react(page.content, React, { components: {} });
+  const rendered = Markdoc.renderers.react(page.content, React, {
+    components: {
+      CodeBlock,
+      Mermaid,
+    },
+  });
+
+  return (
+    <>
+      <article className="docs-article">{rendered}</article>
+      <ArticleToc headings={page.headings} />
+    </>
+  );
 }

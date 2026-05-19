@@ -29,7 +29,7 @@ export default async function RootLayout({
             </Link>
             <SidebarNav items={navigation} />
           </aside>
-          <main className="docs-content">{children}</main>
+          <main className="docs-main">{children}</main>
         </div>
       </body>
     </html>
