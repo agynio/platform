@@ -31,6 +31,8 @@ cd bootstrap
 
 Open the console. Create an org. Deploy your first agent.
 
+Want a ready-made fleet to play with? Apply [`agynio/demo-agent`](https://github.com/agynio/demo-agent) — a Terraform config that provisions a support, marketing, and data-engineer agent in one command.
+
 For production installs, see [Self-host install](./docs/self-host-install/README.md).
 
 ## Define agents as code

@@ -73,6 +73,7 @@ Every microservice, app, CLI, runtime image, runner, and deployment artifact. Us
 | Bootstrap | Install path — k3d + Terraform stacks. Used for both dev and production. | [agynio/bootstrap](https://github.com/agynio/bootstrap) |
 | Service Helm charts | Per-service charts (one chart per platform service). Consumed by bootstrap today. | `ghcr.io/agynio/charts/<service>` |
 | Platform Charts | Centralized umbrella chart, in preparation. Will replace per-service deployment in bootstrap once stable. | [agynio/platform-charts](https://github.com/agynio/platform-charts) |
+| Demo Agent | Sample Terraform config that provisions a fleet of demo agents (support, marketing, data engineer). Useful as a starting point and as a copy-paste reference. | [agynio/demo-agent](https://github.com/agynio/demo-agent) |
 | Architecture | Architecture and product documentation. | [agynio/architecture](https://github.com/agynio/architecture) |
 
 ## How to use this catalog

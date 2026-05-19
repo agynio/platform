@@ -87,6 +87,21 @@ Open the Console URL and sign in with `admin@agyn.io` (the default admin) via th
 
 If you set `ADMIN_OIDC_SUBJECT` to your own subject before running `apply.sh`, sign in as that user instead.
 
+## Provision a demo fleet
+
+To populate the platform with a ready-made set of agents instead of clicking through the Console, use [`agynio/demo-agent`](https://github.com/agynio/demo-agent) — a Terraform config that provisions a `support`, `marketing`, and `data_engineer` agent against an OpenAI-backed model:
+
+```sh
+git clone https://github.com/agynio/demo-agent.git
+cd demo-agent
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars: organization_id, api_token, openai_token
+terraform init
+terraform apply
+```
+
+Get the `organization_id` from your Console URL and the `api_token` from **User menu → API Tokens → Create token**. After apply, the three agents show up in Chat ready to talk to.
+
 ## Kubeconfig
 
 If you confirmed the kubeconfig merge (or ran with `-y`), `~/.kube/config` now includes the `agyn-local` context:

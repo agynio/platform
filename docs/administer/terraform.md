@@ -8,6 +8,8 @@ order: 23
 
 Everything you can do in the Console you can also do with the [`agynio/terraform-provider-agyn`](https://github.com/agynio/terraform-provider-agyn) Terraform provider. This page is the admin entry point — for the developer's full reference, see [Build & extend → Terraform provider](../build-extend/terraform-provider.md).
 
+For a working starting point, look at [`agynio/demo-agent`](https://github.com/agynio/demo-agent) — a complete Terraform config that provisions a fleet of demo agents (support, marketing, data engineer) with their MCPs, volumes, and an OpenAI-backed model. Forking it is the fastest way to learn the provider's shape.
+
 ## When Terraform helps
 
 - You manage multiple organizations, environments, or clusters and want consistent configuration across them.
