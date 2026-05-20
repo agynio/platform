@@ -21,7 +21,11 @@ You built the agent. Now how do you let the rest of the company use it — witho
 | Locked to one vendor | Agent-agnostic, model-agnostic |
 | Can't scale | Horizontal scaling, auto-termination on idle |
 
-## Get running in 15 minutes
+## Getting Started
+
+![Getting Started](getting_started.png)
+
+### Deploy a cluster in 15 minutes
 
 ```bash
 git clone --branch latest https://github.com/agynio/bootstrap.git
