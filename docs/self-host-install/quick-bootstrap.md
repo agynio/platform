@@ -17,7 +17,7 @@ Confirm you have the [prerequisites](./prerequisites.md): Docker running, Terraf
 ## Install
 
 ```sh
-git clone https://github.com/agynio/bootstrap.git
+git clone --branch latest https://github.com/agynio/bootstrap.git
 cd bootstrap
 chmod +x apply.sh
 ./apply.sh

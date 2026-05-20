@@ -24,7 +24,7 @@ You built the agent. Now how do you let the rest of the company use it — witho
 ## Get running in 15 minutes
 
 ```bash
-git clone https://github.com/agynio/bootstrap.git
+git clone --branch latest https://github.com/agynio/bootstrap.git
 cd bootstrap
 ./apply.sh
 ```

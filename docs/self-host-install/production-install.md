@@ -42,7 +42,7 @@ Until that lands, treat this page as the honest description of how to get there 
 Once you have your cluster, DNS, OIDC, and any external services ready:
 
 ```sh
-git clone https://github.com/agynio/bootstrap.git
+git clone --branch latest https://github.com/agynio/bootstrap.git
 cd bootstrap
 
 # Set the things production needs to differ on:
