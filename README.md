@@ -92,7 +92,7 @@ Full architecture: [docs/operate/architecture.md](./docs/operate/architecture.md
 
 | Video | What it shows |
 |---|---|
-| <a href="https://www.youtube.com/watch?v=v97sy17_w3A"><img src="https://img.youtube.com/vi/v97sy17_w3A/mqdefault.jpg" width="280" alt="Agyn demo"></a> | **Agyn in 5 minutes** — From clean cluster to a working agent answering a chat message. End-to-end tour. |
+| <a href="https://www.youtube.com/watch?v=v97sy17_w3A"><img src="https://img.youtube.com/vi/v97sy17_w3A/mqdefault.jpg" width="280" alt="Agyn demo"></a> | **Agyn in 3 minutes** — From clean cluster to a working agent answering a chat message. End-to-end tour. |
 | *Coming soon* | **Deploying agents with Terraform** — Define an agent fleet as code, apply it, talk to them. |
 | *Coming soon* | **Inspecting a run with Tracing** — Every LLM call, every tool execution, every context decision. |
 
