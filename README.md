@@ -21,6 +21,28 @@ You built the agent. Now how do you let the rest of the company use it — witho
 | Locked to one vendor | Agent-agnostic, model-agnostic |
 | Can't scale | Horizontal scaling, auto-termination on idle |
 
+## How Agyn Compares
+
+An **open-source, self-hosted alternative** to Google AX, AWS Bedrock AgentCore, and Claude Code Cloud for running AI agents in production with full control over security and configuration.
+
+| Capability | Agyn | Google AX | AWS AgentCore | Claude Code Cloud | kagent | Copilot Studio |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Self-hostable | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{green}✓}$ | ${\color{red}✗}$ |
+| Run any agent container | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{red}✗}$ |
+| Declarative config (IaC) | ${\color{green}✓}$ (Terraform) | ${\color{green}✓}$ (YAML) | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{green}✓}$ (CRDs) | ${\color{red}✗}$ |
+| Serverless (scale-to-zero) | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{green}✓}$ |
+| MCP servers isolation | ${\color{green}✓}$ | ${\color{red}✗}$ | -- | -- | ${\color{red}✗}$ | -- |
+| Secrets never reach LLM | ${\color{green}✓}$ | ${\color{red}✗}$ | -- | -- | ${\color{red}✗}$ | -- |
+| Zero-trust networking | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{red}✗}$ | ${\color{red}✗}$ |
+| Per-conversation sandboxing | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{green}✓}$ | ${\color{red}✗}$ | ${\color{green}✓}$ |
+
+### Coming from...
+
+- **Google AX?** — AX sandboxes conversations but not tools from the agent; Agyn isolates each MCP server in its own container and runs any agent without protocol adaptation. Comes with pre-built Claude Code and Codex agents out of the box.
+- **AWS AgentCore?** — Agyn gives you the same serverless execution, self-hosted, with Terraform config and zero-trust access to internal services.
+- **Claude Code Cloud?** — Agyn runs Claude Code as one of many agent containers on your own infrastructure with per-tool credential isolation.
+- **kagent?** — Agyn adds serverless scale-to-zero, agent-agnostic containers, and security isolation beyond Kubernetes RBAC.
+
 ## Getting Started
 
 ![Getting Started](getting_started.png)
