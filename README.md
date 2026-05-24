@@ -8,7 +8,7 @@
 
 ![Agyn Tour](agyn-tour.webp)
 
-You built the agent. Now how do you let the rest of the company use it — without exposing secrets, blowing budgets, or losing control? Agyn is an open-source, Kubernetes-native platform that moves agents from laptops to company infrastructure with the controls enterprises need.
+You built the agent. Now how do you let the rest of the company use it — without exposing secrets, blowing budgets, or losing control? Agyn is an open-source, Kubernetes-native agent orchestration platform. Run any AI agent (Claude Code, Codex, custom) at scale with serverless execution, Terraform-managed configuration, and zero-trust networking where credentials never reach the LLM context.
 
 ## Why Agyn
 
