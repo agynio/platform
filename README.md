@@ -99,14 +99,14 @@ terraform init && terraform apply
 
 See the [Terraform provider](./docs/build-extend/terraform-provider.md) reference for every resource.
 
-## How it works
+## How Agyn runs agents
 
-Each agent is a first-class citizen:
-
-- **Isolated sandbox** — own container, filesystem, env vars, secrets
-- **MCPs in separate containers** — full process isolation per tool
-- **Observability built in** — token usage, compute, activity logs
-- **Auto-scaling** — agents spin up on demand, terminate on idle
+- **Serverless runtime** — agents spawn on message, scale to zero on idle. No always-on compute.
+- **Any agent container** — Claude Code, Codex, or your own. No protocol adaptation required.
+- **MCP servers in separate containers** — each tool gets its own filesystem and process tree. Credentials are injected only into the tool that needs them, never into the agent.
+- **Zero-trust networking** — every agent gets its own x509 identity. Deny-by-default access to internal services.
+- **Declarative config** — define agents and their harness in Terraform. Version-controlled, peer-reviewed, automated.
+- **Observability** — token usage, compute, tracing, activity logs.
 
 Full architecture: [docs/operate/architecture.md](./docs/operate/architecture.md).
 
