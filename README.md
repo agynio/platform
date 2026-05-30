@@ -155,6 +155,10 @@ Full list with descriptions: [docs/reference/service-catalog.md](./docs/referenc
 - [Blog](https://agyn.io/blog)
 - [Discord](https://discord.com/invite/eQKYwnNqRX)
 
+## Research
+
+- [Agyn: An Open-Source Platform for AI Agents with Scalable On-Demand Execution, Agent Definition as a Code, and Zero-Trust Access](https://arxiv.org/abs/2605.27575) (arXiv:2605.27575)
+
 ## Contributing
 
 Good places to start:
