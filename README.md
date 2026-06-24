@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/_assets/agyn-logo.svg" alt="Agyn" width="162">
+</p>
+
 # Agyn
 
 > Ship AI agents to your company. Safely.
