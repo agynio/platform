@@ -1,14 +1,12 @@
 <p align="center">
-  <img src="docs/_assets/agyn-logo.svg" alt="Agyn" width="162">
+  <img src="docs/_assets/agyn-logo.svg" alt="Agyn" width="486">
 </p>
 
-# Agyn
-
-> Ship AI agents to your company. Safely.
-
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue)](https://www.gnu.org/licenses/agpl-3.0)
-[![GitHub stars](https://img.shields.io/github/stars/agynio/platform?style=social)](https://github.com/agynio/platform/stargazers)
-[![Discord](https://img.shields.io/discord/1474017426898157618?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.com/invite/eQKYwnNqRX)
+<p align="center">
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue" alt="License: AGPL v3"></a>
+  <a href="https://github.com/agynio/platform/stargazers"><img src="https://img.shields.io/github/stars/agynio/platform?style=social" alt="GitHub stars"></a>
+  <a href="https://discord.com/invite/eQKYwnNqRX"><img src="https://img.shields.io/discord/1474017426898157618?label=Discord&logo=discord&logoColor=white&color=5865F2" alt="Discord"></a>
+</p>
 
 ![Agyn Tour](agyn-tour.webp)
 
