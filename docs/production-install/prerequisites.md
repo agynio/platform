@@ -56,7 +56,7 @@ For the first sign-in to claim cluster admin reliably, the IdP should also mark 
 
 ## Registry access
 
-Charts and images come from `ghcr.io/agynio/*`. Most are public; configure a pull secret if your install mirrors them privately.
+None. Charts and images are published publicly at `ghcr.io/agynio/*` and pull anonymously — no credentials, no pull secret.
 
 ## Related
 
