@@ -21,24 +21,9 @@ Both charts live at `oci://ghcr.io/agynio/charts`.
 
 ## 1. Prerequisites
 
-The umbrella can bundle some dependencies or defer to ones you already run. Anything bundled is enabled by default, so an install that already has these **must turn them off explicitly** — otherwise the chart deploys a second copy and, in the S3 case, overwrites the credentials secret.
+The cluster, DNS, TLS, OIDC, and the dependencies the charts expect to find — including which of them ship inside the umbrella and which are already switched on. See [Prerequisites](./prerequisites.md).
 
-| Dependency | Bundled | Disable with | Notes |
-|---|---|---|---|
-| Postgres | yes | `postgres.enabled=false` | One database per service. Externally: create them and publish DSNs in the database secret. |
-| Object storage | yes (MinIO) | `minio.enabled=false` | Also set `s3.createSecret=false` when you manage the credentials secret yourself, or the chart replaces it with MinIO's root user. |
-| OpenFGA + its database | yes | `openfga.enabled=false`, `openfga-db.enabled=false` | Connection details go under `platform.openfga`; the top-level key is the bundled subchart. |
-| NATS | no (`nats.enabled=false`) | — | Enable it, or point at your own. Required: `networks` exits without it, and `apps`, `users` and `agents-orchestrator` degrade silently. |
-| OpenZiti controller + router | **no** | — | Install separately from the OpenZiti charts. The platform assumes a working overlay. |
-| cert-manager | **no** | — | Issues the ingress certificate. |
-| Ingress (Istio) | **no** | — | Either bring your own routing or use `platform.ingress.enabled=true`. |
-
-Also required:
-
-- **An OIDC provider.** Set `platform.oidc.issuerUrl`, `clientId`, and `audience`. If your IdP implements [RFC 8707 resource indicators](https://datatracker.ietf.org/doc/html/rfc8707), the SPAs must request the audience and the gateway must read profile claims from the token rather than UserInfo — see [Troubleshooting → Auth & OIDC](../troubleshooting/auth-oidc.md).
-- **A DNS name and TLS certificate** per public host.
-
-> **Certificates and connection reuse.** Give the ingress certificate only the hosts it actually serves. A `*.example.com` wildcard is also valid for hosts served by *other* gateways, and browsers coalesce HTTP/2 connections when one certificate covers both names and they resolve to the same address. The reused connection keeps the route table chosen by the original SNI, so requests for the sibling host match nothing and get a bare 404 with no CORS headers — intermittently, once a connection has been idle and reused.
+The one that most often bites: a component that ships in the chart **and** defaults to on will be deployed a second time on a cluster that already runs it.
 
 ## 2. `agyn-platform`
 
