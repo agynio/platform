@@ -69,6 +69,7 @@ These terms have the same meaning everywhere they appear in the product and in t
 
 | Term | Definition |
 |------|------------|
+| **Gateway** | The platform's external API surface. Every client application — Console, Chat, the CLI — reaches the platform through it. |
 | **Runner** | A registered execution environment that hosts agent workloads. Cluster-scoped runners serve all organizations; org-scoped runners serve one organization. |
 | **Workload** | A running agent process — pod + sidecars + volumes — provisioned on a runner. |
 | **Container** | An individual container within a workload, accessible via terminal logs. |
