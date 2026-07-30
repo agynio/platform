@@ -28,7 +28,7 @@ Some components ship inside the umbrella as subcharts; others you must install y
 | Postgres | yes | **no** | `postgres.enabled` |
 | Object storage (MinIO) | yes | **yes** | `minio.enabled` |
 | OpenFGA | yes | **yes** | `openfga.enabled` |
-| NATS | yes | **no** | `nats.enabled` |
+| NATS | yes | **yes** | `nats.enabled` |
 | OpenZiti controller + router | **no** | — | install from the OpenZiti charts |
 | cert-manager | **no** | — | install separately |
 | Ingress (Istio) | **no** | — | or use `platform.ingress.enabled` |
@@ -36,7 +36,7 @@ Some components ship inside the umbrella as subcharts; others you must install y
 What that means in practice:
 
 - **Already running Postgres, object storage or OpenFGA?** Turn off the ones that are on — `minio.enabled=false`, `openfga.enabled=false` — or the chart deploys a second copy alongside yours. With MinIO also set `s3.createSecret=false`, otherwise the chart rewrites the object-storage credentials secret with MinIO's root user and the files service starts authenticating as the wrong identity.
-- **NATS is off but not optional.** Enable it, or point the platform at your own. `networks` exits without it, and `apps`, `users` and `agents-orchestrator` degrade quietly rather than failing.
+- **NATS is on because the platform requires it.** `networks` exits without an event bus, and `apps`, `users` and `agents-orchestrator` lose group sync quietly rather than failing. Running your own means disabling this one and overriding the endpoint.
 - **Postgres is off by default**, so an install that wants the bundled one has to ask for it. External databases are configured by publishing DSNs in the database secret.
 - **OpenFGA's own database** is a matter for whichever OpenFGA you run — the umbrella does not ship one.
 
