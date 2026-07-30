@@ -4,6 +4,7 @@
     "prerequisites",
     "quick-bootstrap",
     "production-install",
+    "helm-install",
     "first-admin",
     "upgrades",
     "uninstall"

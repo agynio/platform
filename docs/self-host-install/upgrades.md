@@ -8,7 +8,9 @@ order: 5
 
 Bootstrap pins every service to a specific Helm chart version in the `platform` stack's locals. Upgrading means: pull a newer bootstrap revision (or bump the versions yourself), re-run `apply.sh`, and let Argo CD reconcile.
 
-There is no single `helm upgrade agyn-platform` step today — upgrades are stack-by-stack, service-by-service. A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will eventually replace per-service deployment in bootstrap; it is not used today.
+Bootstrap upgrades are stack-by-stack, service-by-service, because it deploys each service from its own chart.
+
+An umbrella install upgrades differently: bump the chart version and let it roll. The provisioning between the charts is idempotent and does not need repeating — it exits early once the runner token exists — but a new chart version can add a dependency that was not enabled before, so re-read [Helm install → Prerequisites](./helm-install.md#1-prerequisites) when the umbrella's major or minor version moves.
 
 ## Read the release notes
 

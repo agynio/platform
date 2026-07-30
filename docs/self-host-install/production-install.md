@@ -6,11 +6,9 @@ order: 3
 
 # Production install
 
-**Today**, production installs reuse the same Terraform stacks that the [quick bootstrap](./quick-bootstrap.md) runs, with overridden variables and (usually) without the `k8s` stack that provisions the local k3d cluster. Bootstrap deploys each platform service from its own chart.
+Production installs deploy the umbrella charts at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) — `agyn-platform` for the control plane and `agyn-apps` for the workload layer — with a provisioning step between them. See [Helm install](./helm-install.md) for the phases, what each chart expects to already exist, and what that middle step has to do.
 
-A centralized umbrella Helm chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will eventually replace per-service deployment in bootstrap, making the production path cleaner. It is not production-ready yet — bootstrap is the canonical install path.
-
-Until that lands, treat this page as the honest description of how to get there with what exists today.
+This page covers what changes when the target is a real cluster rather than the [quick bootstrap](./quick-bootstrap.md)'s k3d. The Terraform stacks in [`agynio/bootstrap`](https://github.com/agynio/bootstrap) remain the reference for a single-command local bring-up, and deploy each service from its own chart rather than the umbrella.
 
 ## What "production" actually means here
 
@@ -90,7 +88,7 @@ After everything applies cleanly:
 ## What's still rough
 
 - No supported way to skip the bootstrap's in-cluster Postgres / MinIO / OpenFGA without editing the stack code. Externalizing those today is a fork-and-modify exercise.
-- Today bootstrap deploys each platform service from its own chart at `ghcr.io/agynio/charts/<service>`. A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will replace per-service deployment in bootstrap once it stabilizes. It is not production-ready yet — bootstrap is still the canonical install today.
+- Bootstrap still deploys each platform service from its own chart at `ghcr.io/agynio/charts/<service>` rather than the umbrella, so the two paths differ in what they deploy and in how the provisioning between the charts is performed.
 - Upgrades and rollbacks for production are not yet documented for an externalized data plane. For now, snapshot and restore at the database level.
 
 We are actively working to make this story cleaner. Feedback and contributions on [`agynio/bootstrap`](https://github.com/agynio/bootstrap) and [`agynio/platform-charts`](https://github.com/agynio/platform-charts) are welcome.

@@ -72,7 +72,7 @@ Skip these for the standard install.
 
 ## Production install — extra notes
 
-Today, production deployments reuse the bootstrap Terraform stacks with their own variables. A centralized umbrella chart at [`agynio/platform-charts`](https://github.com/agynio/platform-charts) is in preparation and will eventually replace per-service deployment in bootstrap, but it is not in use today. In addition to the above you will want:
+Production deployments install the umbrella charts at [`agynio/platform-charts`](https://github.com/agynio/platform-charts); [Helm install](./helm-install.md) lists what those charts expect to already exist and what has to happen between them. In addition to the above you will want:
 
 - **Your own Kubernetes cluster** instead of k3d. Skip the `k8s` stack and point the Kubernetes / Helm providers at your existing cluster.
 - **A real OIDC IdP** with `Authorization Code + PKCE` enabled.

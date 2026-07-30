@@ -14,12 +14,14 @@ Agyn runs on Kubernetes. There are two install paths:
 |---|---|
 | **Quick bootstrap** | Local development, demos, evaluation. Provisions a complete k3d cluster with every dependency via Terraform and Argo CD. One command. |
 | **Production install** | Real deployments. Reuses the same Terraform stacks against your own cluster, OIDC, and DNS, with the in-cluster Postgres / S3 / OpenFGA optionally replaced by managed services. |
+| **Helm install** | Installing from the umbrella charts directly, whatever drives them. Describes the phases and the provisioning step between the two charts. |
 
 ## Pages
 
 - [Prerequisites](./prerequisites.md) — what you need before installing.
 - [Quick bootstrap](./quick-bootstrap.md) — one-command install for development and demos.
 - [Production install](./production-install.md) — bring bootstrap up against your own cluster, OIDC, and domain.
+- [Helm install](./helm-install.md) — install from the umbrella charts, including the provisioning step between them.
 - [First admin](./first-admin.md) — how the cluster admin user is provisioned at install.
 - [Upgrades](./upgrades.md) — upgrade the platform installed via bootstrap.
 - [Uninstall](./uninstall.md) — remove Agyn cleanly.
