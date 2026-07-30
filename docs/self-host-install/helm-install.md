@@ -6,16 +6,16 @@ order: 4
 
 # Helm install
 
-Agyn ships as two umbrella charts, and installing it is **not** two `helm install` commands. Between them sits a provisioning step that cannot be expressed in a chart, because it needs a running control plane to talk to.
+Agyn ships as two umbrella charts, and installing it is **not** two `helm install` commands. Between them sits a provisioning step that acts on things the charts do not own — the OpenZiti controller, and the platform API the first chart has just started.
 
 | Phase | What it does |
 |---|---|
 | 1. [Prerequisites](#1-prerequisites) | Cluster-level dependencies the charts expect to already exist |
 | 2. [`agyn-platform`](#2-agyn-platform) | The control plane — the services behind the API |
-| 3. [Provisioning](#3-provisioning) | Overlay authorization, cluster admin, runner registration |
+| 3. [Provisioning](#3-provisioning) | Overlay authorization, then sign in and enroll the runner |
 | 4. [`agyn-apps`](#4-agyn-apps) | The workload layer — the runner that executes agents |
 
-Order matters. The overlay must be authorized before the platform can use it, and the runner must be registered before `agyn-apps` starts, because the chart mounts a token that step produces.
+Order matters. The overlay must be authorized before the platform can use it, and the runner must be enrolled before `agyn-apps` starts, because the chart mounts a token that step produces.
 
 Both charts live at `oci://ghcr.io/agynio/charts`.
 
@@ -61,7 +61,7 @@ Wait for the control plane to be ready before continuing.
 
 ## 3. Provisioning
 
-Nothing here fits in a chart: it needs the API that phase 2 just started. The reference implementation is the two Jobs in [`agynio/bundle-vm`](https://github.com/agynio/bundle-vm) (`deploy/manifests/48-ziti-provision.yaml` and `50-apps-provision.yaml`); a Terraform install does the same with the OpenZiti and Kubernetes providers.
+Only the first step here is unattended. The rest is done from the Console, because enrolling a runner needs a signed-in admin and produces a token shown only once. Nothing here fits in a chart: it acts on the API that phase 2 just started, and on the OpenZiti controller, which the chart does not own. The reference implementation is the two Jobs in [`agynio/bundle-vm`](https://github.com/agynio/bundle-vm) (`deploy/manifests/48-ziti-provision.yaml` and `50-apps-provision.yaml`); a Terraform install does the same with the OpenZiti and Kubernetes providers.
 
 ### 3a. Authorize the overlay
 
@@ -87,40 +87,38 @@ Then the service policies. Each runner gets its own service at registration, so 
 
 Add the equivalent Bind/Dial pairs for the platform's own overlay services (`gateway`, `llm-proxy`, `tracing`, app and egress services) as you deploy them. A policy that names a service with `@` fails to apply until that service exists; role-attribute policies are inert until something matches.
 
-### 3b. Bootstrap the cluster admin
+### 3b. Become cluster admin
 
-Registering the first runner requires an authenticated caller, and at this point no human admin exists. The gateway accepts a bootstrap token for exactly this:
+Sign in to the Console. The first account to sign in claims cluster admin — see [First admin](./first-admin.md) — so no credential has to be created by hand.
 
-1. Generate a token and give the gateway `CLUSTER_ADMIN_TOKEN` and `CLUSTER_ADMIN_IDENTITY_ID`.
-2. Write the OpenFGA tuple granting it cluster admin:
+Set `FIRST_ADMIN_EMAIL` on the Users service before anyone signs in, so the claim is bound to a known address rather than to whoever arrives first. It is honoured only when the IdP marks the address verified; without that, anyone able to register under the operator's address would take the cluster.
 
-   ```
-   user=identity:<CLUSTER_ADMIN_IDENTITY_ID>  relation=admin  object=cluster:global
-   ```
+The claim is one-shot. It is a single record, so it is not reopened by deleting the admin, or by deleting every admin. If you lose the account, recover through [First admin → Recovery](./first-admin.md#recovery) rather than expecting a second sign-in to grant the role.
 
-Prefer the chart's secret-reference form over passing the token by value, so it is not readable by anyone who can read the Deployment.
+### 3c. Enroll the runner
 
-### 3c. Register the runner
+In the Console, with the Cluster Administration context selected: **Runners → Enroll runner**. Give it a name (`k8s-runner`) and optionally labels such as `type=kubernetes`.
 
-Call the gateway as that admin:
+The service token is **shown once**, at creation. Copy it before leaving the dialog — it is minted by the Runners service, is the only credential the runner can present, and cannot be regenerated or read back later.
 
-```sh
-curl -sS "$GATEWAY/agynio.api.gateway.v1.RunnersGateway/RegisterRunner" \
-  -H "Authorization: Bearer $CLUSTER_ADMIN_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"name":"k8s-runner","labels":{"type":"kubernetes"},"capabilities":["docker"]}'
-```
-
-Store the returned `serviceToken` as the secret `agyn-apps` mounts:
+Store it as the secret `agyn-apps` mounts:
 
 ```sh
 kubectl -n platform create secret generic k8s-runner-service-token \
   --from-literal=token="$SERVICE_TOKEN"
 ```
 
-The token is minted by the Runners service and is the only credential the runner can present — it cannot be generated ahead of time. Make this step idempotent by exiting early when the secret already exists.
-
 Optionally also create an organization, and an LLM provider and model, if you want the install usable immediately.
+
+#### Automating this instead
+
+An install that must complete before any human signs in cannot use the Console, and cannot use the first-admin claim either — spending it on an automation identity leaves no claim for the operator. For that case the gateway accepts a bootstrap credential: set `CLUSTER_ADMIN_TOKEN` and `CLUSTER_ADMIN_IDENTITY_ID`, and write the matching tuple:
+
+```
+user=identity:<CLUSTER_ADMIN_IDENTITY_ID>  relation=admin  object=cluster:global
+```
+
+Then call `RunnersGateway/RegisterRunner` with that token and store the `serviceToken` as above. Point the chart at an existing Secret rather than passing the token by value, so it is not readable by anyone who can read the Deployment. Make the step idempotent by exiting early when the secret already exists.
 
 ## 4. `agyn-apps`
 
@@ -158,10 +156,11 @@ A healthy runner reports `RUNNER_STATUS_ENROLLED`, and its log shows the gRPC se
 |---|---|
 | `service not found in ziti network` | No Bind policy — the service exists but is invisible (3a) |
 | `NO_EDGE_ROUTERS_AVAILABLE` | Only one half of the router grant was created (3a) |
-| `SERVICE_TOKEN is required when ZITI_ENABLED is true` | Runner not registered, or `env` overridden without re-declaring it (3c, phase 2 note) |
+| `SERVICE_TOKEN is required when ZITI_ENABLED is true` | Runner not enrolled, or `env` overridden without re-declaring it (3c, phase 2 note) |
 | `produced zero addresses` | The named service has no endpoints — usually a component that was never enabled |
 | Empty `OPENFGA_API_URL` | Connection details set on the top-level `openfga` key instead of `platform.openfga` |
 | Files stop authenticating after an upgrade | Bundled MinIO re-created the S3 credentials secret — see `s3.createSecret` |
+| Console shows no Cluster Administration | The first-admin claim went to another account, or `FIRST_ADMIN_EMAIL` is set and the IdP did not mark the address verified (3b) |
 
 ## Related
 

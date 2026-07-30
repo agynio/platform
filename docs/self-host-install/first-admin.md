@@ -6,9 +6,21 @@ order: 4
 
 # First admin
 
-The bootstrap provisions the first cluster admin automatically. This page explains how, what variables control it, and how to recover if you end up locked out.
+The first cluster admin is provisioned automatically. There are two mechanisms, depending on how you installed. This page explains both, and how to recover if you end up locked out.
+
+## The first-admin claim
+
+On a chart install nobody creates the admin: the **first account provisioned** claims the role. The Users service grants cluster admin during provisioning, then records the claim.
+
+`FIRST_ADMIN_EMAIL` narrows who that can be. Leave it unset and whoever signs in first takes the cluster — fine for a laptop, wrong for anything reachable. Set it, and only that address claims the role.
+
+A configured address is honoured **only when the IdP marks it verified**. Without that check anyone able to register under the operator's address would take the cluster, so an unverified address never claims — if your IdP does not send `email_verified`, the claim can never be made and no one gets the role.
+
+The claim is **one-shot**. It is recorded as a single row, deliberately not tied to the user: deleting the admin does not reopen it, and neither does deleting every admin. Plan a second admin early — see [You need a second cluster admin](#you-need-a-second-cluster-admin) — because a lost sole admin is a recovery exercise, not another sign-in.
 
 ## How bootstrap binds cluster admin
+
+Bootstrap does not rely on the claim. It pre-creates the admin instead:
 
 The `apps` stack creates an `agyn_user` Terraform resource with `cluster_role = "admin"` and an `oidc_subject` taken from the `ADMIN_OIDC_SUBJECT` environment variable (default `admin@agyn.io`):
 
@@ -107,6 +119,7 @@ Once you are signed in as yourself:
 
 - [Quick bootstrap](./quick-bootstrap.md)
 - [Production install](./production-install.md)
+- [Helm install](./helm-install.md)
 - [Administer → Console overview](../administer/console-overview.md)
 - [Operate → Identity](../operate/identity.md)
 - [Operate → Authorization](../operate/authorization.md)
