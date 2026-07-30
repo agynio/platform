@@ -111,12 +111,12 @@ Wait for everything to be `Ready 1/1` before assuming Gateway is broken. First-t
 
 It's safe to re-run `./apply.sh` after fixing an issue. Each stack's `terraform apply` is idempotent. Argo CD applications converge to their declared state.
 
-If a partial install is genuinely broken and you want a clean slate, see [Uninstall — quick reset](../self-host-install/uninstall.md#quick-reset-keep-your-laptop-tidy).
+If a partial install is genuinely broken and you want a clean slate, see [Uninstall — quick reset](../production-install/uninstall.md#quick-reset-keep-your-laptop-tidy).
 
 ## Related
 
-- [Self-host install → Prerequisites](../self-host-install/prerequisites.md)
-- [Self-host install → Quick bootstrap](../self-host-install/quick-bootstrap.md)
-- [Self-host install → Production install](../self-host-install/production-install.md)
+- [Production installation → Prerequisites](../production-install/prerequisites.md)
+- [Local installation](../local-install/install.md)
+- [Production installation → Install](../production-install/install.md)
 - [Operate → Logging & audit](../operate/logging-audit.md)
 - [Operate → Monitoring](../operate/monitoring.md)

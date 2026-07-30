@@ -31,17 +31,17 @@ You are an organization admin. Assume Agyn is already installed on a cluster (or
 5. [Administer → Secrets](../administer/secrets.md) — set up credentials your agents need.
 6. [Administer → Runners](../administer/runners.md) — pick where your agents run (or use a cluster-scoped runner).
 7. [Administer → Agents](../administer/agents.md) — create your first agent.
-8. Optional: [Administer → Apps](../administer/apps.md), [Administer → MCP servers](../administer/mcp-tools.md), [Administer → Terraform](../administer/terraform.md).
+8. Optional: [Administer → Apps](../administer/apps.md), [Administer → MCP servers](../administer/mcp-servers.md), [Administer → Terraform](../administer/terraform.md).
 
 ## I am installing Agyn on a Kubernetes cluster
 
 You are a platform operator.
 
 1. [What is Agyn](./what-is-agyn.md) and [Architecture at a glance](./architecture.md).
-2. [Self-host install → Prerequisites](../self-host-install/prerequisites.md).
-3. For dev/demo: [Self-host install → Quick bootstrap](../self-host-install/quick-bootstrap.md).
-4. For production: [Self-host install → Production install](../self-host-install/production-install.md).
-5. [Self-host install → First admin](../self-host-install/first-admin.md) — claim the cluster admin role.
+2. [Production installation → Prerequisites](../production-install/prerequisites.md).
+3. For dev/demo: [Local installation](../local-install/install.md).
+4. For production: [Production installation → Install](../production-install/install.md).
+5. [Production installation → First admin](../production-install/first-admin.md) — claim the cluster admin role.
 6. [Operate → Architecture overview](../operate/architecture.md), [Networking](../operate/networking.md), [Identity](../operate/identity.md), [Authorization](../operate/authorization.md).
 7. [Operate → Backup & DR](../operate/backup-disaster-recovery.md), [Upgrades](../operate/upgrades.md), [Security](../operate/security.md).
 

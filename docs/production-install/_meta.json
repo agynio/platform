@@ -2,9 +2,7 @@
   "pages": [
     "README",
     "prerequisites",
-    "quick-bootstrap",
-    "production-install",
-    "helm-install",
+    "install",
     "first-admin",
     "upgrades",
     "uninstall"

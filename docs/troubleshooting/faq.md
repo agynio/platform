@@ -14,7 +14,7 @@ Yes. The platform services, runtime, and tooling are AGPL-3.0 — see the `LICEN
 
 **Is there a hosted version?**
 
-Not yet. Self-hosting is the only path today. When hosted Agyn launches, the Self-host install section of these docs will be marked optional.
+Not yet. Self-hosting is the only path today. When hosted Agyn launches, the installation sections of these docs will be marked optional.
 
 **Which models can my agents use?**
 

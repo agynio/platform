@@ -18,7 +18,7 @@ Same terms as in [Introduction → Concepts](../introduction/concepts.md), plus 
 | **Runner** | Identity that hosts workloads. Cluster- or org-scoped. | [Administer → Runners](../administer/runners.md), [Operate → Runners](../operate/runners.md) |
 | **App** | Independently deployed service that participates in conversations as itself. | [Administer → Apps](../administer/apps.md), [Build & extend → Apps](../build-extend/apps.md) |
 | **Organization** | Multi-tenant boundary grouping users, agents, models, secrets, runners, apps. | [Administer → Organizations](../administer/organizations.md) |
-| **Cluster admin** | Platform-wide administrative role. | [Self-host install → First admin](../self-host-install/first-admin.md), [Administer → Cluster administration](../administer/cluster-administration.md) |
+| **Cluster admin** | Platform-wide administrative role. | [Production installation → First admin](../production-install/first-admin.md), [Administer → Cluster administration](../administer/cluster-administration.md) |
 | **Organization owner** | Per-organization administrative role. | [Administer → Organizations](../administer/organizations.md) |
 | **Organization member** | Non-owner participant. No Console access. | [Administer → Members](../administer/members.md) |
 | **Agent role** | Per-agent grant: `owner`, `maintainer`, `participant`. | [Administer → Agent roles](../administer/agent-roles.md) |

@@ -6,7 +6,7 @@ order: 2
 
 # Cluster administration
 
-This page covers tasks restricted to cluster admins. Switch to the **Cluster Administration** context in the Console (top-right context switcher) to access these views. If you do not see this context, you do not have the cluster admin role — see [Self-host install → First admin](../self-host-install/first-admin.md).
+This page covers tasks restricted to cluster admins. Switch to the **Cluster Administration** context in the Console (top-right context switcher) to access these views. If you do not see this context, you do not have the cluster admin role — see [Production installation → First admin](../production-install/first-admin.md).
 
 ## Manage platform users
 
@@ -106,7 +106,7 @@ Apps published as cluster-wide become available to every organization. Most apps
 
 ## Related
 
-- [Self-host install → First admin](../self-host-install/first-admin.md)
+- [Production installation → First admin](../production-install/first-admin.md)
 - [Runners](./runners.md) — per-org runner registration.
 - [Apps](./apps.md) — per-org app management.
 - [Operate → Identity](../operate/identity.md)

@@ -54,7 +54,7 @@ The user authenticated but has no organization. By design, new users have no acc
 
 ## Cluster admin role missing after first install
 
-See [Self-host install → First admin](../self-host-install/first-admin.md). The bootstrap binds the OIDC subject set in `ADMIN_OIDC_SUBJECT` (default `admin@agyn.io`); if your real IdP issues a different `sub` for you, you won't be cluster admin until you re-apply the `apps` stack with the correct value.
+See [Production installation → First admin](../production-install/first-admin.md). The bootstrap binds the OIDC subject set in `ADMIN_OIDC_SUBJECT` (default `admin@agyn.io`); if your real IdP issues a different `sub` for you, you won't be cluster admin until you re-apply the `apps` stack with the correct value.
 
 ## API token authentication fails
 
@@ -78,5 +78,5 @@ The Console and Chat apps store sessions in browser localStorage. If sessions va
 ## Related
 
 - [Operate → Identity](../operate/identity.md)
-- [Self-host install → First admin](../self-host-install/first-admin.md)
+- [Production installation → First admin](../production-install/first-admin.md)
 - [Use → API tokens](../use/api-tokens.md)

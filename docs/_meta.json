@@ -2,7 +2,8 @@
   "pages": [
     "README",
     "introduction",
-    "self-host-install",
+    "local-install",
+    "production-install",
     "administer",
     "use",
     "build-extend",

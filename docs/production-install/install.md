@@ -165,8 +165,7 @@ A healthy runner reports `RUNNER_STATUS_ENROLLED`, and its log shows the gRPC se
 ## Related
 
 - [Prerequisites](./prerequisites.md)
-- [Quick bootstrap](./quick-bootstrap.md)
-- [Production install](./production-install.md)
+- [Local installation](../local-install/README.md)
 - [First admin](./first-admin.md)
 - [Troubleshooting → Networking & Ziti](../troubleshooting/networking-ziti.md)
 - [Troubleshooting → Auth & OIDC](../troubleshooting/auth-oidc.md)

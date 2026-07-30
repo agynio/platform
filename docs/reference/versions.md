@@ -87,6 +87,6 @@ Pre-1.0 versions are supported on a best-effort basis. We encourage upgrading on
 
 ## Related
 
-- [Self-host install → Upgrades](../self-host-install/upgrades.md)
+- [Production installation → Upgrades](../production-install/upgrades.md)
 - [Operate → Upgrades](../operate/upgrades.md)
 - [Reference → Helm values](./helm-values.md)

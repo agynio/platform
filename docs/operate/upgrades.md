@@ -6,7 +6,7 @@ order: 8
 
 # Upgrades
 
-For the basic upgrade procedure, see [Self-host install → Upgrades](../self-host-install/upgrades.md). This page covers the operator concerns: rollout strategy, schema migrations, compatibility, rollback.
+For the basic upgrade procedure, see [Production installation → Upgrades](../production-install/upgrades.md). This page covers the operator concerns: rollout strategy, schema migrations, compatibility, rollback.
 
 ## Versioning
 
@@ -149,6 +149,6 @@ If you manage Argo CD configuration outside bootstrap:
 
 ## Related
 
-- [Self-host install → Upgrades](../self-host-install/upgrades.md)
+- [Production installation → Upgrades](../production-install/upgrades.md)
 - [Backup & DR](./backup-disaster-recovery.md)
 - [Architecture overview](./architecture.md)

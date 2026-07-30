@@ -16,14 +16,14 @@ These docs are organized around what you are trying to do.
 |---|---|
 | **A user** talking to agents in chat | [Use Agyn](./use/README.md) |
 | **An admin** configuring agents, models, secrets, runners, apps for your organization | [Administer](./administer/README.md) |
-| **An operator** installing or running Agyn on your own Kubernetes cluster | [Self-host install](./self-host-install/README.md), then [Operate](./operate/README.md) |
+| **An operator** installing or running Agyn on your own Kubernetes cluster | [Production installation](./production-install/README.md), then [Operate](./operate/README.md) |
 | **A developer** integrating via API, Terraform, MCP, or building an app | [Build & extend](./build-extend/README.md) |
 | **New to Agyn** | [Introduction](./introduction/README.md) |
 
 ## Sections
 
 - **[Introduction](./introduction/README.md)** — what Agyn is, core concepts, architecture at a glance.
-- **[Self-host install](./self-host-install/README.md)** — install Agyn on your own Kubernetes cluster with the bootstrap Terraform stacks. Skip this section if you use Agyn Cloud.
+- **[Production installation](./production-install/README.md)** — install Agyn on your own Kubernetes cluster with the bootstrap Terraform stacks. Skip this section if you use Agyn Cloud.
 - **[Administer](./administer/README.md)** — configure your organization, agents, models, secrets, runners, tools, and apps. Console UI and Terraform side by side.
 - **[Use](./use/README.md)** — everyday workflows: chat with agents, attach files, inspect runs, see usage, expose ports, manage API tokens.
 - **[Build & extend](./build-extend/README.md)** — Gateway API, Terraform provider, MCP server authoring, agent CLI choice, apps development.

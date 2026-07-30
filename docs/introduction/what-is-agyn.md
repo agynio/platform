@@ -33,7 +33,7 @@ Agyn is a platform for running AI agents that collaborate with humans through co
 
 ## What this means for you
 
-If you are a user, you spend your time in [Chat](../use/chat.md) and the [Run Timeline](../use/run-timeline.md). If you are an admin, you spend it in the [Console](../administer/console-overview.md) or in [Terraform](../administer/terraform.md). If you are an operator, you spend it in your cluster — see [Self-host install](../self-host-install/README.md) to get started.
+If you are a user, you spend your time in [Chat](../use/chat.md) and the [Run Timeline](../use/run-timeline.md). If you are an admin, you spend it in the [Console](../administer/console-overview.md) or in [Terraform](../administer/terraform.md). If you are an operator, you spend it in your cluster — see [Production installation](../production-install/README.md) to get started.
 
 ## Related
 

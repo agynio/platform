@@ -6,7 +6,7 @@ order: 6
 
 # Operate
 
-This section is for platform operators running Agyn on their own Kubernetes. It assumes you've already installed Agyn — see [Self-host install](../self-host-install/README.md) for first deployment.
+This section is for platform operators running Agyn on their own Kubernetes. It assumes you've already installed Agyn — see [Production installation](../production-install/README.md) for first deployment.
 
 The pages here cover what happens after install: the system architecture in detail, networking, identity and authorization, runner operations, scaling, backups, upgrades, monitoring, security, and logging.
 

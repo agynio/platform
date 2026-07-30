@@ -30,7 +30,7 @@ This page is a pointer to both current levels.
 | `ADMIN_OIDC_SUBJECT` | `admin@agyn.io` | OIDC subject of the user granted cluster admin. |
 | `GHCR_USERNAME`, `GHCR_TOKEN` | unset | Credentials for private GHCR pulls. |
 
-Defaults are baked into `apply.sh`; override them before running. See [Quick bootstrap](../self-host-install/quick-bootstrap.md).
+Defaults are baked into `apply.sh`; override them before running. See [Quick bootstrap](../local-install/install.md).
 
 ## Per-stack Terraform variables
 
@@ -97,7 +97,7 @@ For production, override the password variables and source them from your secret
 
 ## Related
 
-- [Self-host install → Prerequisites](../self-host-install/prerequisites.md)
-- [Self-host install → Quick bootstrap](../self-host-install/quick-bootstrap.md)
-- [Self-host install → Production install](../self-host-install/production-install.md)
+- [Production installation → Prerequisites](../production-install/prerequisites.md)
+- [Local installation](../local-install/install.md)
+- [Production installation → Install](../production-install/install.md)
 - [Operate → Architecture overview](../operate/architecture.md)
