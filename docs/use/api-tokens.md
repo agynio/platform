@@ -45,8 +45,11 @@ provider "agyn" {
 For the [`agyn` CLI](../build-extend/agyn-cli.md):
 
 ```sh
-agyn login --gateway https://gateway.agyn.example.com --token "$AGYN_TOKEN"
+agyn profile set default --gateway-url https://gateway.agyn.example.com
+echo "$AGYN_TOKEN" | agyn auth set-token
 ```
+
+`agyn auth set-token` reads the token from stdin, or prompts for it on a terminal — it is never passed as an argument, so it stays out of shell history.
 
 ## Authorization
 

@@ -125,7 +125,7 @@ Filter Gateway logs by `identity_id` and the affected method. Look for `code: "P
 
 ### "An agent is stuck"
 
-1. Find the workload ID — Console → Activity → Workloads, or `agyn workloads list -o json`.
+1. Find the workload ID in the Console — Operations → Workloads.
 2. Filter Orchestrator logs by `workload_id` over the suspect time range.
 3. Filter Runner logs the same way.
 4. Inspect the workload's pod logs directly: `kubectl logs -n agyn-workloads <pod> -c <container>`.

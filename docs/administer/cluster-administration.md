@@ -34,7 +34,7 @@ resource "agyn_cluster_admin" "platform_admin" {
 }
 ```
 
-You can find a user's `identity_id` in the Console (Users → detail) or via `agyn users list`.
+You can find a user's `identity_id` in the Console (Users → detail).
 
 ## Manage cluster-scoped runners
 

@@ -127,7 +127,7 @@ Runner-level observability:
 
 - **Pods**: `kubectl -n agyn-runners get pods -l app=k8s-runner` for the runner itself.
 - **Workload pods**: `kubectl -n agyn-workloads get pods` for the agent pods the runner created.
-- **Runners service**: `agyn runners list -o json` for state from the platform's perspective.
+- **Runners service**: the Console's Runners section for state from the platform's perspective — enrollment status, labels, and the workloads currently on each runner.
 - **Tracing**: every workload's lifecycle generates spans you can see in the Tracing service.
 
 If a runner stops reporting, the orchestrator marks its workloads `failed` with reason `runtime_lost` after a grace period.
