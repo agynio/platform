@@ -10,7 +10,7 @@ Agyn ships as two umbrella charts, and installing it is **not** two `helm instal
 
 | Phase | What it does |
 |---|---|
-| 1. [Prerequisites](#1-prerequisites) | Cluster-level dependencies the charts expect to already exist |
+| 1. [Prerequisites](#1-prerequisites) | Cluster-level dependencies the charts expect to already exist, plus optional [workload isolation](#workload-isolation-optional-recommended) |
 | 2. [`agyn-platform`](#2-agyn-platform) | The control plane — the services behind the API |
 | 3. [Provisioning](#3-provisioning) | Overlay authorization, then sign in and enroll the runner |
 | 4. [`agyn-apps`](#4-agyn-apps) | The workload layer — the runner that executes agents |
@@ -24,6 +24,45 @@ Both charts live at `oci://ghcr.io/agynio/charts`.
 The cluster, DNS, TLS, OIDC, and the dependencies the charts expect to find — including which of them ship inside the umbrella and which are already switched on. See [Prerequisites](./prerequisites.md).
 
 The one that most often bites: a component that ships in the chart **and** defaults to on will be deployed a second time on a cluster that already runs it.
+
+### Workload isolation *(optional, recommended)*
+
+By default the runner executes agent workloads with `docker = rootless`: the workload shares the node's kernel, and its isolation is the container boundary. Kata Containers with Firecracker gives each workload its own kernel in a microVM instead, so a kernel escape reaches the microVM rather than the node. Skip this and everything still works — only the isolation is weaker.
+
+Do it here, before the platform is running. Installing Kata restarts containerd on each node, so on an empty cluster it costs nothing — on a live one it evicts whatever is already scheduled there.
+
+The runner side is a single value, set later in [phase 4](#4-agyn-apps):
+
+| Setting | Value |
+|---|---|
+| `CAPABILITY_IMPLEMENTATIONS` | `{"docker":"kata-fc"}` |
+
+The runner stamps `runtimeClassName: kata-fc` on each workload pod, and its RuntimeClass pins those pods to nodes that actually have Kata. Nodes without it simply keep running `rootless` workloads, so a partial rollout is safe.
+
+Node requirements:
+
+| | |
+|---|---|
+| **Virtualization** | `/dev/kvm` on the node. On a cloud VM that means nested virtualization is enabled |
+| **Snapshotter** | containerd's `devmapper`, backed by a thin pool you create. Firecracker hot-plugs the rootfs as a block device and cannot use overlayfs |
+| **Disk** | Kata's artifacts are ~1 GB and its installer image ~1.6 GB. Point `installationPrefix` at a disk with room; the default `/opt/kata` is the root filesystem |
+| **inotify** | Raise `fs.inotify.max_user_instances`; each microVM shim consumes instances and the stock 128 runs out quickly |
+
+Two things bite on a stock node:
+
+- If containerd's `config.toml` declares no runtimes, it is running on built-in defaults. Installing Kata makes that map explicit and **drops `runc` from it**, so the CRI plugin fails to load and the node goes `NotReady`. Declare `runc` explicitly alongside the Kata runtime.
+- Runtimes must all live in one file. containerd merges an imported drop-in by replacing whole maps, so a `runtimes` table in a drop-in silently discards the ones in `config.toml`.
+
+Installing Kata restarts containerd on the node, so roll it out one node at a time.
+
+Verify with a pod that reports a guest kernel different from the node's:
+
+```sh
+kubectl run kata-check --image=alpine:3.20 --restart=Never \
+  --overrides='{"spec":{"runtimeClassName":"kata-fc"}}' -- uname -r
+```
+
+`/dev/kvm` is **not** available inside these microVMs — Firecracker does not expose nested virtualization. Workloads that need it must stay on `rootless`.
 
 ## 2. `agyn-platform`
 
@@ -105,43 +144,6 @@ user=identity:<CLUSTER_ADMIN_IDENTITY_ID>  relation=admin  object=cluster:global
 
 Then call `RunnersGateway/RegisterRunner` with that token and store the `serviceToken` as above. Point the chart at an existing Secret rather than passing the token by value, so it is not readable by anyone who can read the Deployment. Make the step idempotent by exiting early when the secret already exists.
 
-### 3d. Workload isolation *(optional, recommended)*
-
-By default the runner executes agent workloads with `docker = rootless`: the workload shares the node's kernel, and its isolation is the container boundary. Kata Containers with Firecracker gives each workload its own kernel in a microVM instead, so a kernel escape reaches the microVM rather than the node. Skip this and everything still works — only the isolation is weaker.
-
-Install Kata on the nodes that will run workloads, then set the runner's implementation:
-
-| Setting | Value |
-|---|---|
-| `CAPABILITY_IMPLEMENTATIONS` | `{"docker":"kata-fc"}` |
-
-The runner stamps `runtimeClassName: kata-fc` on each workload pod. Install Kata **before** switching, or workloads fail to schedule.
-
-Node requirements:
-
-| | |
-|---|---|
-| **Virtualization** | `/dev/kvm` on the node. On a cloud VM that means nested virtualization is enabled |
-| **Snapshotter** | containerd's `devmapper`, backed by a thin pool you create. Firecracker hot-plugs the rootfs as a block device and cannot use overlayfs |
-| **Disk** | Kata's artifacts are ~1 GB and its installer image ~1.6 GB. Point `installationPrefix` at a disk with room; the default `/opt/kata` is the root filesystem |
-| **inotify** | Raise `fs.inotify.max_user_instances`; each microVM shim consumes instances and the stock 128 runs out quickly |
-
-Two things bite on a stock node:
-
-- If containerd's `config.toml` declares no runtimes, it is running on built-in defaults. Installing Kata makes that map explicit and **drops `runc` from it**, so the CRI plugin fails to load and the node goes `NotReady`. Declare `runc` explicitly alongside the Kata runtime.
-- Runtimes must all live in one file. containerd merges an imported drop-in by replacing whole maps, so a `runtimes` table in a drop-in silently discards the ones in `config.toml`.
-
-Installing Kata restarts containerd on the node, so roll it out one node at a time.
-
-Verify with a pod that reports a guest kernel different from the node's:
-
-```sh
-kubectl run kata-check --image=alpine:3.20 --restart=Never \
-  --overrides='{"spec":{"runtimeClassName":"kata-fc"}}' -- uname -r
-```
-
-`/dev/kvm` is **not** available inside these microVMs — Firecracker does not expose nested virtualization. Workloads that need it must stay on `rootless`.
-
 ## 4. `agyn-apps`
 
 ```sh
@@ -179,11 +181,11 @@ A healthy runner reports `RUNNER_STATUS_ENROLLED`, and its log shows the gRPC se
 | `service not found in ziti network` | No Bind policy — the service exists but is invisible (3a) |
 | `NO_EDGE_ROUTERS_AVAILABLE` | Only one half of the router grant was created (3a) |
 | `SERVICE_TOKEN is required when ZITI_ENABLED is true` | Runner not enrolled, or `env` overridden without re-declaring it (3c, phase 2 note) |
-| Node `NotReady`, `container runtime is down` after installing Kata | `runc` dropped from containerd's runtime map; CRI will not load (3d) |
-| `no runtime for "kata-fc" is configured` | Runtimes split across `config.toml` and a drop-in — the import replaced the map (3d) |
-| `Image and initrd path cannot be both set` | Kata's generated path config sets both; drop one (3d) |
-| `Creating watcher returned error too many open files` | `fs.inotify.max_user_instances` too low for the number of microVMs (3d) |
-| `snapshotter devmapper was not found` | Thin pool absent when containerd started; create it first, then restart containerd (3d) |
+| Node `NotReady`, `container runtime is down` after installing Kata | `runc` dropped from containerd's runtime map; CRI will not load (1) |
+| `no runtime for "kata-fc" is configured` | Runtimes split across `config.toml` and a drop-in — the import replaced the map (1) |
+| `Image and initrd path cannot be both set` | Kata's generated path config sets both; drop one (1) |
+| `Creating watcher returned error too many open files` | `fs.inotify.max_user_instances` too low for the number of microVMs (1) |
+| `snapshotter devmapper was not found` | Thin pool absent when containerd started; create it first, then restart containerd (1) |
 | `produced zero addresses` | The named service has no endpoints — usually a component that was never enabled |
 | Empty `OPENFGA_API_URL` | Connection details set on the top-level `openfga` key instead of `platform.openfga` |
 | Files stop authenticating after an upgrade | Bundled MinIO re-created the S3 credentials secret — see `s3.createSecret` |
