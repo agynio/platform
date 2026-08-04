@@ -16,7 +16,6 @@
     "models",
     "secret-providers",
     "secrets",
-    "image-pull-secrets",
     "runners",
     "apps",
     "reminders-app",

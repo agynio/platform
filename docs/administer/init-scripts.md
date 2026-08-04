@@ -18,7 +18,7 @@ Init scripts run with the runtime container's user and have access to all ENVs (
 
 ### In the Console
 
-1. Open the resource's **Init scripts** tab (agent, MCP, or hook).
+1. Open the resource's **Init scripts** tab (agent or MCP).
 2. Click **Add init script**.
 3. Set:
    - **Name** — used in logs.

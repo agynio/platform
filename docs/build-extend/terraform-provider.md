@@ -49,8 +49,6 @@ provider "agyn" {
 | `agyn_agent_init_script` | Init script on an agent or MCP. |
 | `agyn_volume` | Volume definition. |
 | `agyn_agent_volume_attachment` | Attaches a volume to an agent or MCP. |
-| `agyn_image_pull_secret` | Image pull secret. |
-| `agyn_agent_image_pull_secret_attachment` | Attaches an image pull secret to an agent or MCP. |
 | `agyn_llm_provider` | LLM provider. |
 | `agyn_llm_model` | LLM model mapping. |
 | `agyn_secret_provider` | External secret store (Vault, etc.). |

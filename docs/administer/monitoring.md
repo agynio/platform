@@ -66,7 +66,7 @@ The list shows every provisioned volume instance:
 | **Name** | The volume definition's name. |
 | **Size** | Disk size in GB. |
 | **Used** | Actual disk used (refreshed periodically). |
-| **Attached to** | The container holding it open — agent / MCP / hook / `unattached`. Shows the first attachment and `+N more` if multiple. |
+| **Attached to** | The container holding it open — agent / MCP / `unattached`. Shows the first attachment and `+N more` if multiple. |
 | **Status** | `provisioning`, `active`, `deprovisioning`, `deleted`, `failed`. |
 
 Filter by status, runner, or what kind of resource the volume is attached to.

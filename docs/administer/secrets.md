@@ -73,7 +73,6 @@ Secrets are useful only when referenced. The main consumers:
 
 - **ENVs** on agents or MCP servers. See [Environment variables](./environment-variables.md).
 - **LLM provider credentials**. See [LLM providers](./llm-providers.md).
-- **Image pull secrets** when the underlying password lives in a provider. See [Image pull secrets](./image-pull-secrets.md).
 
 ## Rotate a secret
 
@@ -88,7 +87,7 @@ Workloads already running keep their injected value until restart. Stop the work
 
 ## Delete a secret
 
-Deleting a secret breaks any ENV, LLM provider, or image pull secret that references it. The Console lists references before allowing the delete.
+Deleting a secret breaks any ENV, LLM provider, or image that references it. The Console lists references before allowing the delete.
 
 ## Authorization
 
@@ -100,5 +99,4 @@ Deleting a secret breaks any ENV, LLM provider, or image pull secret that refere
 
 - [Secret providers](./secret-providers.md)
 - [Environment variables](./environment-variables.md)
-- [Image pull secrets](./image-pull-secrets.md)
 - [LLM providers](./llm-providers.md)

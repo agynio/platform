@@ -41,7 +41,7 @@ The sidebar groups sections by domain:
 - **Organization** — Overview, Members.
 - **Agents** — Agents, Volumes, Runners, Apps.
 - **Models** — LLM Providers, Models.
-- **Secrets** — Secret Providers, Secrets, Image Pull Secrets.
+- **Secrets** — Secret Providers, Secrets.
 - **Activity** — Workloads, Storage, Threads, Usage.
 
 In **Cluster Administration** context, the sidebar instead shows Users, Runners, Apps, and Organizations.

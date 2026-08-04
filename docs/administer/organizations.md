@@ -61,7 +61,7 @@ If you have access to a single organization, the switcher only shows that organi
 Deleting an organization is destructive. It removes:
 
 - All agents and their sub-resources (MCPs, skills, ENVs, volumes).
-- All LLM providers, models, secrets, secret providers, image pull secrets.
+- All LLM providers, models, secrets, secret providers, images.
 - All org-scoped runners.
 - All installed apps.
 - All threads, messages, and traces.

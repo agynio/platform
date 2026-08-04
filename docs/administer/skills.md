@@ -46,7 +46,6 @@ resource "agyn_agent_skill" "tone_guide" {
 - **Skill** — text that the agent should reliably see in every run. Tone guides, domain glossaries, policy reminders.
 - **Init script** — actions that must happen before the agent starts (clone a repo, fetch data, set up the workspace). See [Init scripts](./init-scripts.md).
 - **MCP server** — capabilities the agent calls during a run. See [MCP servers](./mcp-servers.md).
-- **Hook** — code that responds to platform events outside the agent's main loop. See [Hooks](./hooks.md).
 
 ## Edit and delete
 
@@ -56,4 +55,3 @@ Same pattern as other agent sub-resources — edit on the same tab, or update/de
 
 - [Agents](./agents.md)
 - [Init scripts](./init-scripts.md)
-- [Hooks](./hooks.md)

@@ -1,6 +1,6 @@
 ---
 title: Volumes
-description: Persistent disks attached to agents, MCPs, and hooks.
+description: Persistent disks attached to agents and MCPs.
 order: 12
 ---
 
@@ -49,13 +49,13 @@ resource "agyn_volume" "workspace" {
 
 ## Attach a volume
 
-Volumes by themselves do nothing — you must attach them to an agent, MCP server, or hook for them to mount inside the workload.
+Volumes by themselves do nothing — you must attach them to an agent or MCP server for them to mount inside the workload.
 
 ### In the Console
 
 1. Console → **Agents → <agent>** → **Volume attachments** tab.
 2. Click **Attach volume**.
-3. Pick a volume and the target container (the agent itself, one of its MCPs, or one of its hooks).
+3. Pick a volume and the target container (the agent itself or one of its MCPs).
 4. Save.
 
 
@@ -70,7 +70,7 @@ resource "agyn_agent_volume_attachment" "workspace_on_support" {
 }
 ```
 
-Attach to an MCP or hook by specifying `mcp_id` or `hook_id` instead of (or in addition to) `agent_id`.
+Attach to an MCP by specifying `mcp_id` instead of (or in addition to) `agent_id`.
 
 ## Storage class and sizing
 
@@ -104,5 +104,4 @@ Delete the resource block and apply. Terraform issues `DeleteVolume`.
 
 - [Agents](./agents.md)
 - [MCP servers](./mcp-servers.md)
-- [Hooks](./hooks.md)
 - [Monitoring](./monitoring.md) — see live volume instance state.

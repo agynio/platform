@@ -24,7 +24,7 @@ The platform splits into three planes:
 
 | Service | Responsibility |
 |---|---|
-| **Agents** | Stores agent definitions and sub-resources (MCPs, skills, hooks, ENVs, init scripts, volumes, attachments). Publishes `agent.updated` events when configuration changes. |
+| **Agents** | Stores agent definitions and sub-resources (MCPs, skills, ENVs, init scripts, volumes, attachments). Publishes `agent.updated` events when configuration changes. |
 | **Agents Orchestrator** | Reconciler. Watches threads with unacked messages, selects an eligible runner, calls `StartWorkload`. Enforces idle timeout. Cleans up. Leader-elected via Kubernetes Lease. |
 | **Runners** | Central registry of runners (cluster + org scopes) and runtime workload state. Reconciles container status via `InspectWorkload` calls to each runner. |
 | **Organizations** | Org CRUD, membership lifecycle, invites. Owner of org-level authorization tuples. |
@@ -57,7 +57,6 @@ Each agent pod contains:
 
 - **Runtime container** — runs `agynd`, which runs the agent CLI.
 - **MCP server sidecars** — one per MCP attached to the agent. Same pod network, accessed over localhost.
-- **Hook sidecars** — one per hook configured.
 - **Init container** — copies `agynd`, the agyn CLI, and the agent CLI binary into the runtime container.
 - **Ziti sidecar** — provides OpenZiti tunnels for outbound calls to Gateway, LLM Proxy, and Tracing.
 

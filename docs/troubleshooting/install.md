@@ -79,7 +79,6 @@ Look at the **Events**:
 - `manifest unknown` → the image tag in `stacks/platform/variables.tf` doesn't exist upstream. Either bump or pin a known-good version.
 - `rate limited` → Docker Hub. The k3d image and some upstream deps are on Docker Hub; authenticated pulls or a mirror avoid this.
 
-For agent workloads (not the platform services themselves) pulling from your private registry: see [Administer → Image pull secrets](../administer/image-pull-secrets.md).
 
 ## Database migrations stuck
 
