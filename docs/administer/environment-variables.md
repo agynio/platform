@@ -1,12 +1,12 @@
 ---
 title: Environment variables
-description: Pass plain values and secrets to agents, MCP servers, and hooks.
+description: Pass plain values and secrets to agents and MCP servers.
 order: 10
 ---
 
 # Environment variables
 
-Environment variables are how the agent runtime, MCP sidecars, and hooks receive configuration. Two kinds are supported:
+Environment variables are how the agent runtime and MCP sidecars receive configuration. Two kinds are supported:
 
 - **Plain values** — string literals stored on the resource.
 - **Secret references** — values resolved at workload start from a [secret](./secrets.md).
@@ -15,13 +15,12 @@ The orchestrator injects ENVs into the container at workload assembly time. The 
 
 ## Where ENVs are configured
 
-ENVs belong to an agent, MCP server, or hook — not to the organization. Set them per resource so each container gets only what it needs.
+ENVs belong to an agent or MCP server — not to the organization. Set them per resource so each container gets only what it needs.
 
 | Resource | Console path |
 |---|---|
 | Agent | Agents → <agent> → **ENVs** tab |
 | MCP server | Agents → <agent> → MCPs → <mcp> → **ENVs** tab |
-| Hook | Agents → <agent> → Hooks → <hook> → **ENVs** tab |
 
 ## Add a plain ENV
 
@@ -89,4 +88,3 @@ ENVs are visible in Console → agent detail. Secret-backed ENVs show only the s
 - [Secret providers](./secret-providers.md)
 - [Agents](./agents.md)
 - [MCP servers](./mcp-servers.md)
-- [Hooks](./hooks.md)

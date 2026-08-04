@@ -31,7 +31,7 @@ Each init image bundles `agynd`, the `agyn` CLI, the agent CLI binary, and a sma
 
 ## Switching CLIs
 
-Switching is a configuration change on the agent — replace the init image and (typically) the model. The agent's MCPs, secrets, volumes, and hooks transfer across CLIs because they are managed by the platform, not the CLI.
+Switching is a configuration change on the agent — replace the init image and (typically) the model. The agent's MCPs, secrets, and volumes transfer across CLIs because they are managed by the platform, not the CLI.
 
 In the Console (Administer → Agents → edit) or Terraform:
 
@@ -53,7 +53,6 @@ Pod
 ├── runtime container (your dev image)  # runs agynd, which runs the CLI
 ├── files-mcp sidecar (if attached)     # tool sidecar
 ├── your other MCP sidecars             # one per MCP
-├── hooks sidecars (if any)             # one per hook
 └── Ziti sidecar                        # private network access
 ```
 
@@ -92,9 +91,6 @@ The base image provides `agynd` and the `agyn` CLI. `startup.sh` is a shell scri
 
 Push the image, then set it as `init_image` on an agent.
 
-## Hooks across CLIs
-
-[Hooks](../administer/hooks.md) are sidecar processes that respond to events emitted by the agent CLI. Each CLI emits a slightly different event set; consult the CLI's documentation for the canonical list. `agynd` translates platform events into hook invocations.
 
 ## agynd
 

@@ -23,7 +23,7 @@ Check:
 Runner couldn't pull one of the workload's images.
 
 - **Init image, runtime image, or an MCP image is wrong or missing.** Check the agent's config in Console → Agents → <agent> → Configuration. Confirm each image tag exists.
-- **Private registry — no image pull secret.** Configure an [image pull secret](../administer/image-pull-secrets.md) and attach it to the agent / MCP / hook.
+- **Private registry — no image pull secret.** Configure an [image pull secret](../administer/image-pull-secrets.md) and attach it to the agent or MCP.
 - **Image pull secret wrong.** Test by pulling the image manually with the same credentials.
 
 ## `status = failed, reason = config_invalid`

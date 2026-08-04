@@ -11,7 +11,7 @@ A secret holds a credential value. Two storage modes:
 - **Local secret** — value stored in the platform database, encrypted at rest with a Kubernetes Secret key. Use this when you don't have an external secret store.
 - **Remote secret** — value stored in a [secret provider](./secret-providers.md) (e.g. Vault) and resolved at workload start.
 
-Either kind can be referenced from an [agent ENV](./environment-variables.md), an [MCP server ENV](./mcp-servers.md), a [hook ENV](./hooks.md), or an [LLM provider's credentials](./llm-providers.md).
+Either kind can be referenced from an [agent ENV](./environment-variables.md), an [MCP server ENV](./mcp-servers.md), or an [LLM provider's credentials](./llm-providers.md).
 
 ## Create a local secret
 
@@ -71,7 +71,7 @@ resource "agyn_secret" "stripe_api_key" {
 
 Secrets are useful only when referenced. The main consumers:
 
-- **ENVs** on agents, MCP servers, or hooks. See [Environment variables](./environment-variables.md).
+- **ENVs** on agents or MCP servers. See [Environment variables](./environment-variables.md).
 - **LLM provider credentials**. See [LLM providers](./llm-providers.md).
 - **Image pull secrets** when the underlying password lives in a provider. See [Image pull secrets](./image-pull-secrets.md).
 
