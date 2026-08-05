@@ -60,7 +60,6 @@ Pod
 ├── runtime container (agent runtime image)
 ├── files-mcp sidecar (if attached)
 ├── ... other MCP sidecars
-├── ... hook sidecars
 └── Ziti sidecar
 ```
 

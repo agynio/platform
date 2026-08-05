@@ -13,7 +13,7 @@ Every microservice, app, CLI, runtime image, runner, and deployment artifact. Us
 | Service | Description | Repository |
 |---|---|---|
 | Gateway | External ConnectRPC API entry point. Authenticates every request and routes to internal services. | [agynio/gateway](https://github.com/agynio/gateway) |
-| Agents | Stores desired state for agents and sub-resources (MCPs, skills, hooks, ENVs, init scripts, volume attachments, image pull secret attachments). | [agynio/agents](https://github.com/agynio/agents) |
+| Agents | Stores desired state for agents and sub-resources (MCPs, skills, ENVs, init scripts, volume attachments). | [agynio/agents](https://github.com/agynio/agents) |
 | Agents Orchestrator | Reconciler. Watches thread activity and agent configuration; requests workloads from eligible runners. | [agynio/agents-orchestrator](https://github.com/agynio/agents-orchestrator) |
 | Runners | Registry of runners and workload runtime state. | [agynio/runners](https://github.com/agynio/runners) |
 | Organizations | Organization lifecycle, memberships, invites. | [agynio/organizations](https://github.com/agynio/organizations) |

@@ -49,7 +49,6 @@ Same terms as in [Introduction → Concepts](../introduction/concepts.md), plus 
 | **MCP server** | Model Context Protocol server providing tools. Sidecar in the agent pod. | [Administer → MCP servers](../administer/mcp-servers.md), [Build & extend → MCP servers](../build-extend/mcp-servers.md) |
 | **Tool** | A capability exposed by an MCP server. | [Build & extend → MCP servers](../build-extend/mcp-servers.md) |
 | **Skill** | Prompt fragment placed on the agent's filesystem. | [Administer → Skills](../administer/skills.md) |
-| **Hook** | Event-driven sidecar. | [Administer → Hooks](../administer/hooks.md) |
 | **Volume** | Persistent disk attached to an agent or sub-resource. | [Administer → Volumes](../administer/volumes.md) |
 | **Init script** | Shell script run before the agent CLI starts. | [Administer → Init scripts](../administer/init-scripts.md) |
 | **Environment variable** | Plain or secret-backed value injected into a container. | [Administer → Environment variables](../administer/environment-variables.md) |
@@ -75,7 +74,6 @@ Same terms as in [Introduction → Concepts](../introduction/concepts.md), plus 
 | **Model** | Platform-side identifier (`gpt-4o`) mapped to a provider and remote model name. | [Administer → Models](../administer/models.md) |
 | **Secret** | Credential value, stored locally or by reference to an external provider. | [Administer → Secrets](../administer/secrets.md) |
 | **Secret provider** | External secret store the platform reads at workload start. | [Administer → Secret providers](../administer/secret-providers.md) |
-| **Image pull secret** | Registry credentials for pulling private images. | [Administer → Image pull secrets](../administer/image-pull-secrets.md) |
 
 ## Infrastructure
 

@@ -69,7 +69,7 @@ The surfaces you interact with directly:
 
 Stores *desired state* — what should exist:
 
-- **Agents** — agent definitions, plus their MCP servers, skills, hooks, environment variables, init scripts, and volume attachments.
+- **Agents** — agent definitions, plus their MCP servers, skills, environment variables, init scripts, and volume attachments.
 - **Agents Orchestrator** — reconciler that ensures conversations with unacknowledged messages have running agent workloads.
 - **Runners** — registry of where workloads can run (cluster-scoped or org-scoped) and the runtime state of each workload.
 - **Organizations** — org lifecycle, membership, invites, and roles.

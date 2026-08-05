@@ -32,7 +32,6 @@ Add an MCP server when you want the agent to do something the LLM cannot do alon
    - **Compute** — CPU/memory requests and limits.
    - **Environment variables** — both plain values and references to [secrets](./secrets.md).
    - **Init scripts** — shell scripts run before the MCP server starts.
-   - **Image pull secrets** — credentials for private registries.
 4. Save. The MCP is added to the agent's spec. The next workload includes it as a sidecar.
 
 

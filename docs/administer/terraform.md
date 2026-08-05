@@ -143,7 +143,7 @@ Use a remote state backend (S3 + DynamoDB, GCS, Terraform Cloud) for any non-tri
 | Secret providers | Terraform |
 | Long-lived secrets | Terraform (sourced from Vault) |
 | Agents (production) | Terraform |
-| Agent sub-resources (MCPs, hooks, skills) | Terraform |
+| Agent sub-resources (MCPs, skills) | Terraform |
 | Runners | Terraform |
 | Apps installations | Terraform |
 | Members | Either — owner-only roles tend to live in Terraform; member invites in the Console |

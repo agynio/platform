@@ -38,7 +38,6 @@ If you are new to the Console, read these in order:
 - [Agent roles](./agent-roles.md) — per-agent owner, maintainer, participant grants.
 - [MCP servers](./mcp-servers.md) — tools agents can call.
 - [Skills](./skills.md) — reusable prompt fragments.
-- [Hooks](./hooks.md) — event-driven sidecars.
 - [Environment variables](./environment-variables.md) — plain values and secret references.
 - [Init scripts](./init-scripts.md) — pre-start setup.
 - [Volumes](./volumes.md) — persistent disks for agents.
@@ -52,7 +51,6 @@ If you are new to the Console, read these in order:
 
 - [Secret providers](./secret-providers.md) — Vault and other external stores.
 - [Secrets](./secrets.md) — values stored locally or referenced remotely.
-- [Image pull secrets](./image-pull-secrets.md) — private registry credentials.
 
 ### Runtime
 

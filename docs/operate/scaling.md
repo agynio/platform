@@ -113,7 +113,7 @@ The platform expects:
 
 - One Pod per service deployment by default; scale up via Deployment replicas.
 - Agent workload Pods land in `agyn-workloads` (or wherever you configure the runner).
-- Each agent Pod has 1 runtime container + N MCP sidecars + (optional) hook sidecars + Ziti sidecar. Plan accordingly.
+- Each agent Pod has 1 runtime container + N MCP sidecars + Ziti sidecar. Plan accordingly.
 
 A typical 8-vCPU / 32 GiB runner node handles ~30-50 concurrent simple agents, far fewer if agents use heavy MCPs or many sidecars.
 

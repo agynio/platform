@@ -40,9 +40,8 @@ These terms have the same meaning everywhere they appear in the product and in t
 | **Agent availability** | Who may initiate conversations with the agent. `internal` allows any org member; `private` allows only identities holding an agent role. |
 | **Model** | A platform-side identifier (e.g. `gpt-4o`) that maps to an LLM provider and a remote model name. Agents reference models by their platform name. |
 | **LLM provider** | A configured upstream model provider (OpenAI, Anthropic, etc.) with endpoint, auth method, and credentials. |
-| **Secret** | A credential value stored either locally (encrypted) or by reference in an external secret provider (e.g. Vault). Referenced from agents, MCP servers, hooks. |
+| **Secret** | A credential value stored either locally (encrypted) or by reference in an external secret provider (e.g. Vault). Referenced from agents and MCP servers. |
 | **Volume** | A persistent disk attached to an agent or sub-resource. Agents use volumes for working memory and durable state. |
-| **Hook** | An event-driven function attached to an agent. Runs as a sidecar container in response to platform events. |
 | **Skill** | A reusable prompt fragment placed on the agent's filesystem at startup. |
 | **Init script** | A shell script run before the agent CLI starts. Used for environment preparation. |
 

@@ -17,7 +17,7 @@ Before creating an agent, you need:
 - At least one [LLM provider](./llm-providers.md) registered.
 - At least one [model](./models.md) registered.
 - A runtime [container image](#runtime-image) and matching [init image](#init-image) selected — the platform provides defaults for Codex, Claude Code, and the native `agn` CLI.
-- Optionally: [secrets](./secrets.md), [MCP servers](./mcp-servers.md), [volumes](./volumes.md), [hooks](./hooks.md), [skills](./skills.md), [environment variables](./environment-variables.md), [init scripts](./init-scripts.md).
+- Optionally: [secrets](./secrets.md), [MCP servers](./mcp-servers.md), [volumes](./volumes.md), [skills](./skills.md), [environment variables](./environment-variables.md), [init scripts](./init-scripts.md).
 
 ## Create an agent
 
@@ -50,7 +50,7 @@ Before creating an agent, you need:
 - **Capabilities** — `gpu`, `docker`, etc. The orchestrator schedules only on runners advertising every capability.
 - **Behavioral configuration** — JSON blob passed to the agent CLI on startup. Schema depends on the chosen CLI.
 
-After creation, the **agent detail page** opens. Sub-resources (MCPs, hooks, skills, ENVs, init scripts, volumes, image pull secret attachments) are configured as tabs on this page.
+After creation, the **agent detail page** opens. Sub-resources (MCPs, skills, ENVs, init scripts, volumes) are configured as tabs on this page.
 
 
 ### With Terraform
@@ -125,7 +125,7 @@ Availability does not affect whether the agent is visible — `private` agents s
 ## Editing and deleting
 
 - Editing the agent applies to **future** workloads. Workloads already running keep their current configuration until they restart.
-- Deleting an agent is destructive — it removes the agent and all its sub-resources (MCPs, hooks, skills, etc.). Conversations the agent participated in remain.
+- Deleting an agent is destructive — it removes the agent and all its sub-resources (MCPs, skills, etc.). Conversations the agent participated in remain.
 
 You need agent `owner` or org `owner` to delete. Agent `maintainer` can edit configuration but cannot delete or change availability.
 
@@ -136,11 +136,9 @@ The agent's tabs in the Console map to separate documentation pages:
 - [Agent roles](./agent-roles.md) — who can configure or chat with this agent.
 - [MCP servers](./mcp-servers.md) — tools the agent can call.
 - [Skills](./skills.md) — prompt fragments on disk at startup.
-- [Hooks](./hooks.md) — event-driven sidecars.
 - [Environment variables](./environment-variables.md) — plain values and secret references.
 - [Init scripts](./init-scripts.md) — shell scripts run before the agent CLI starts.
 - [Volumes](./volumes.md) — persistent disks attached to the agent.
-- [Image pull secrets](./image-pull-secrets.md) — credentials for pulling the runtime or init image.
 
 ## Related
 
