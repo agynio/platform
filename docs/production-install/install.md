@@ -124,8 +124,8 @@ Each carries conditions saying whether it is reconciled, pending, or failing and
 why. `Pending` on a fresh install is ordinary — a service still starting, an
 identity not yet enrolled — and clears on its own.
 
-**A declared cluster administrator stays pending until that person first signs
-in.** There is no account to grant against before then; signing in completes the
+**A declared cluster administrator stays pending until that person first signs in.**
+There is no account to grant against before then; signing in completes the
 declaration rather than triggering it. An install that names none has none —
 nobody is granted the role for arriving first.
 
