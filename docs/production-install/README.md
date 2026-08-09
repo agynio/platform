@@ -13,7 +13,6 @@ Skip this section if you use Agyn Cloud — your platform is already running. Fo
 | Chart | What it deploys |
 |---|---|
 | `agyn-platform` | The control plane — the services behind the API |
-| `agyn-apps` | The workload layer — the runner that executes agents |
 
 Between them you authorize the OpenZiti overlay, sign in, and enroll a runner. That middle step cannot live in a chart: it acts on the OpenZiti controller and on the platform API the first chart has just started. [Install](./install.md) covers all four phases.
 

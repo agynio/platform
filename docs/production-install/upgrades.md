@@ -11,16 +11,13 @@ An upgrade is a chart version bump:
 ```sh
 helm upgrade agyn-platform oci://ghcr.io/agynio/charts/agyn-platform \
   --version <new> -n platform -f values-platform.yaml
-
-helm upgrade agyn-apps oci://ghcr.io/agynio/charts/agyn-apps \
-  --version <new> -n platform -f values-apps.yaml
 ```
 
-Upgrade `agyn-platform` first: the runner in `agyn-apps` talks to the control plane, not the other way round.
+One release moves everything: the runner and the bundled apps ship in `agyn-platform`, and provisioning re-runs against what the new release declares.
 
 ## Before you upgrade
 
-**Re-read the [prerequisites](./prerequisites.md) when the minor version moves.** A new chart version can bundle a dependency that did not exist before, and bundled dependencies are enabled by default — an upgrade can deploy a second Postgres, or a MinIO that rewrites your object-storage credentials secret, unless your values disable them.
+**Re-read the [prerequisites](./prerequisites.md) when the minor version moves.** A new chart version can bundle a dependency that did not exist before. Every bundled dependency is off unless your values switch it on, so an upgrade will not deploy a second Postgres behind your back — but a dependency you do want still has to be named.
 
 **Check what your values still line up with.** Value paths move between versions. A setting that no longer matches anything is silently ignored rather than rejected, so the symptom is a component quietly reverting to its default.
 

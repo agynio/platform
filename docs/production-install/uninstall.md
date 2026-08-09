@@ -6,14 +6,13 @@ order: 5
 
 # Uninstall
 
-Remove the workload layer first, then the control plane:
+Remove the release:
 
 ```sh
-helm uninstall agyn-apps -n platform
 helm uninstall agyn-platform -n platform
 ```
 
-That deletes what the charts created. Everything below outlives them, because the charts did not create it.
+That deletes what the chart created. Provisioned resources are left in place — an organization, image, app or runner is not destroyed by removing its declaration — while cluster administrator grants are revoked. Everything below outlives them, because the charts did not create it.
 
 ## What Helm leaves behind
 
