@@ -55,10 +55,10 @@ If you ship your own internal callers (e.g. a custom reconciler), extend the aff
 
 OpenZiti is a zero-trust overlay network. The platform uses it for:
 
-- **Agent workloads** dialing Gateway, LLM Proxy, and Tracing — `gateway.ziti`, `llm-proxy.ziti`, `tracing.ziti`.
+- **Agent workloads** dialing Gateway, LLM Proxy, and Tracing — `gateway.agyn`, `llm-proxy.agyn`, `tracing.agyn`.
 - **Runners** dialed by the Orchestrator over `runner-<id>` services.
 - **Apps** dialing Gateway as themselves.
-- **User devices** reaching exposed services in agent containers via `exposed-<id>.ziti:<port>`.
+- **User devices** reaching exposed services in agent containers via `exposed-<id>.agyn:<port>`.
 
 ### Service naming
 
@@ -99,8 +99,8 @@ The controller credentials are mounted into Ziti Management as a Secret. Rotate 
 
 Apart from the public ingress hostnames, the platform needs:
 
-- **`.ziti` DNS** resolvable inside agent pods. The Ziti sidecar handles this.
-- **`.ziti` DNS** resolvable on enrolled user devices. The Ziti tunnel client handles this.
+- **`.agyn` DNS** resolvable inside agent pods. The Ziti sidecar handles this.
+- **`.agyn` DNS** resolvable on enrolled user devices. The Ziti tunnel client handles this.
 - **In-cluster service DNS** (standard Kubernetes `<service>.<ns>.svc.cluster.local`). Used for service-to-service over Istio.
 
 Public DNS only carries the customer-facing hostnames.

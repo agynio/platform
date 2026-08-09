@@ -96,8 +96,8 @@ resource "agyn_agent_mcp" "weather" {
 
 If your MCP needs to call platform services (e.g. it wants to act as the agent on the user's behalf), use the agent's OpenZiti-injected identity. The agent pod has Ziti hostnames available:
 
-- `gateway.ziti` — Gateway API.
-- `llm-proxy.ziti` — LLM Proxy.
+- `gateway.agyn` — Gateway API.
+- `llm-proxy.agyn` — LLM Proxy.
 
 Your MCP container does not need explicit credentials for these — the Ziti sidecar handles mTLS. See [files-mcp](./files-mcp.md) for a working example.
 

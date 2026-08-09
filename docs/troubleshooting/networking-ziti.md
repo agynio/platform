@@ -1,14 +1,14 @@
 ---
 title: Networking / OpenZiti
-description: Agent can't reach Gateway, `.ziti` hostname fails.
+description: Agent can't reach Gateway, `.agyn` hostname fails.
 order: 3
 ---
 
 # Networking / OpenZiti
 
-## Agent pod can't reach Gateway over `gateway.ziti`
+## Agent pod can't reach Gateway over `gateway.agyn`
 
-Symptom: `agynd` logs show `dial tcp: lookup gateway.ziti: no such host` or `connection refused`.
+Symptom: `agynd` logs show `dial tcp: lookup gateway.agyn: no such host` or `connection refused`.
 
 Walk through:
 
@@ -26,11 +26,11 @@ Walk through:
 
 If the Ziti sidecar isn't there at all, the runner is not injecting it. Check the runner's configuration.
 
-## Device can't reach `exposed-<id>.ziti:<port>`
+## Device can't reach `exposed-<id>.agyn:<port>`
 
 1. **Tunnel client running?** `pgrep ziti-edge-tunnel` (Linux) or check Ziti Desktop Edge is signed in.
 2. **Identity enrolled?** In Ziti Desktop Edge, the identity should show as enrolled and connected. In `ziti-edge-tunnel`, check `journalctl -u ziti-edge-tunnel`.
-3. **DNS resolution working?** `dig +short exposed-<id>.ziti`. If empty, the tunnel client isn't routing the hostname; restart it.
+3. **DNS resolution working?** `dig +short exposed-<id>.agyn`. If empty, the tunnel client isn't routing the hostname; restart it.
 4. **Service registered?** The expose service creates an OpenZiti service per exposure. Confirm:
    ```sh
    ziti edge list services --filter 'name contains "exposed-"'
@@ -55,7 +55,7 @@ Symptom: services log `mTLS handshake failure` or `peer not authenticated`.
 
 ## DNS resolution for Ziti hostnames inside agent pods
 
-The Ziti sidecar provides DNS resolution for `.ziti` names. If resolution fails:
+The Ziti sidecar provides DNS resolution for `.agyn` names. If resolution fails:
 
 - The sidecar is not enrolled (see above).
 - The pod's `/etc/resolv.conf` doesn't list the sidecar's DNS first. The runner should configure this — check the pod spec for `dnsConfig`.

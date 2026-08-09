@@ -30,7 +30,7 @@ When `agynd` boots an agent that has `files-mcp` attached:
 
 When the agent calls `read_file`:
 
-1. `files-mcp` calls Gateway → Files service over OpenZiti (`gateway.ziti`) authenticated as the agent's identity.
+1. `files-mcp` calls Gateway → Files service over OpenZiti (`gateway.agyn`) authenticated as the agent's identity.
 2. Files service fetches metadata, downloads from S3, returns bytes.
 3. `files-mcp` wraps the bytes in an MCP content block — text for plain text files, image for images, generic resource for binary types — and returns to the agent.
 

@@ -12,7 +12,7 @@ The mechanism is simple:
 
 1. You enroll your device into the platform's private network (one time).
 2. The agent runs `agyn expose add <port>` inside its container.
-3. The platform returns a `http://exposed-<id>.ziti:<port>` URL.
+3. The platform returns a `http://exposed-<id>.agyn:<port>` URL.
 4. You open that URL in a browser running on your enrolled device. The Ziti tunnel routes the request to the agent container.
 5. When you're done, the agent runs `agyn expose remove <port>` — or the workload stops, and the exposure is cleaned up automatically.
 
@@ -29,7 +29,7 @@ There is no HTTPS/TLS termination on the exposed URL — exposed services are pl
 ## What you need
 
 1. **An enrolled device.** See [Devices](./devices.md) to add one.
-2. **A Ziti tunnel client** on the device — [Ziti Desktop Edge](https://openziti.io/docs/reference/tunnelers/) on macOS / Windows / Linux, or `ziti-edge-tunnel` on a server. The tunnel client makes `.ziti` hostnames resolvable.
+2. **A Ziti tunnel client** on the device — [Ziti Desktop Edge](https://openziti.io/docs/reference/tunnelers/) on macOS / Windows / Linux, or `ziti-edge-tunnel` on a server. The tunnel client makes `.agyn` hostnames resolvable.
 
 ## Use a port exposure URL
 
@@ -38,7 +38,7 @@ There is no HTTPS/TLS termination on the exposed URL — exposed services are pl
    ```sh
    agyn expose add 3000
    ```
-   The platform responds with a URL like `http://exposed-abc123.ziti:3000`.
+   The platform responds with a URL like `http://exposed-abc123.agyn:3000`.
 3. Open the URL in your browser.
 
 The first time, the browser may take a moment as the Ziti tunnel sets up the connection. Subsequent requests are fast.
