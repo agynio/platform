@@ -20,14 +20,14 @@ The runtime container's image is the dev container you picked when creating the 
 
 ## Startup sequence
 
-1. **Identity.** Read `AGENT_ID` from the environment. The Ziti sidecar already holds the agent's OpenZiti identity — outbound calls to `gateway.ziti` and `llm-proxy.ziti` are mTLS-authenticated transparently.
+1. **Identity.** Read `AGENT_ID` from the environment. The Ziti sidecar already holds the agent's OpenZiti identity — outbound calls to `gateway.agyn` and `llm-proxy.agyn` are mTLS-authenticated transparently.
 2. **Fetch agent configuration.** Call Gateway:
    - `GetAgent` — base configuration.
    - `ListSkills` — written to `/skills/<name>.md`.
    - `ListMCPs` — used to build the agent CLI's MCP config file.
    - `ListInitScripts` — executed in order.
 3. **Run init scripts.** Each script runs in `$WORKSPACE_DIR` (or `/tmp` if unset) with all ENVs available (plain and secret-backed, injected by the orchestrator at workload creation).
-4. **Export LLM endpoint.** Set `OPENAI_API_BASE` / `ANTHROPIC_API_URL` to `http://llm-proxy.ziti:<port>/v1` and supply a synthetic API key. The agent CLI's HTTP client uses this without needing to know about the platform.
+4. **Export LLM endpoint.** Set `OPENAI_API_BASE` / `ANTHROPIC_API_URL` to `http://llm-proxy.agyn:<port>/v1` and supply a synthetic API key. The agent CLI's HTTP client uses this without needing to know about the platform.
 5. **Write MCP config.** For Codex / Claude Code, write the appropriate `mcp.json` or equivalent. For custom CLIs, write a config file at `$AGYND_MCP_CONFIG`.
 6. **Wait for the first unacknowledged message.** Subscribe to `thread_participant:me` notifications via Gateway, then pull the unacknowledged message list with `GetUnackedMessages`.
 7. **Spawn the agent CLI.** Pass the message body via stdin / file (CLI-specific). Stream stdout back as outgoing thread messages.
@@ -70,7 +70,7 @@ All calls go through Gateway over OpenZiti (the Ziti sidecar in the pod). `agynd
 
 ## Tracing proxy
 
-`agynd` runs a small OTLP gRPC proxy on `localhost:4317`. The agent CLI exports spans to this proxy (set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`). The proxy decorates spans with thread, workload, and agent identifiers, then forwards to the Tracing service over `tracing.ziti`.
+`agynd` runs a small OTLP gRPC proxy on `localhost:4317`. The agent CLI exports spans to this proxy (set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`). The proxy decorates spans with thread, workload, and agent identifiers, then forwards to the Tracing service over `tracing.agyn`.
 
 This is how the [Run Timeline](../use/run-timeline.md) gets its data without each agent CLI needing to know the platform's tracing setup.
 

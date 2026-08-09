@@ -60,7 +60,7 @@ Inside the runtime container:
 
 1. `/agyn-bin/agynd` is the entrypoint.
 2. `agynd` fetches agent configuration from Gateway (skills → `/skills/*.md`, MCP configs → CLI's MCP config file, init scripts → executed in order).
-3. `agynd` exports `OPENAI_API_BASE` / `ANTHROPIC_API_URL` / equivalents to point at `llm-proxy.ziti` so LLM calls route through the platform proxy.
+3. `agynd` exports `OPENAI_API_BASE` / `ANTHROPIC_API_URL` / equivalents to point at `llm-proxy.agyn` so LLM calls route through the platform proxy.
 4. `agynd` spawns the agent CLI.
 5. The CLI runs its loop. `agynd` posts model output to the thread, acknowledges messages, and sends [keepalives](../administer/agents.md#idle-timeout) while the CLI is producing output.
 

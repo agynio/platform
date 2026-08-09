@@ -8,7 +8,7 @@ order: 10
 
 A device is a personal endpoint — a laptop, a workstation, a CI runner — enrolled into the platform's OpenZiti overlay network. Enrolled devices can reach services exposed by agent containers (see [Port exposure](./port-exposure.md)).
 
-You enroll devices once. After that, running the Ziti tunnel client on the device gives you access to any `.ziti` URL the platform issues.
+You enroll devices once. After that, running the Ziti tunnel client on the device gives you access to any `.agyn` URL the platform issues.
 
 ## Add a device
 
@@ -39,14 +39,14 @@ sudo ziti-edge-tunnel enroll --jwt /path/to/device.jwt --identity /var/lib/ziti/
 sudo systemctl start ziti-edge-tunnel
 ```
 
-After this, `.ziti` hostnames resolve on the device.
+After this, `.agyn` hostnames resolve on the device.
 
 ## Verify
 
 With the tunnel running, try resolving a known service:
 
 ```sh
-dig +short gateway.ziti
+dig +short gateway.agyn
 ```
 
 A non-empty response means enrollment worked. Without the tunnel running, the hostname will not resolve.
@@ -58,7 +58,7 @@ The Devices page lists every device you have enrolled:
 - **Status** — `pending` (JWT generated, not enrolled) or `enrolled`.
 - **Created** — when the JWT was generated.
 
-You can **revoke** a device — removes its OpenZiti identity. The device loses access to `.ziti` services immediately. Useful for laptops you no longer use or for lost machines.
+You can **revoke** a device — removes its OpenZiti identity. The device loses access to `.agyn` services immediately. Useful for laptops you no longer use or for lost machines.
 
 ## Lost the JWT?
 

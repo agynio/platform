@@ -12,7 +12,7 @@ Symptoms grouped by where they tend to show up. Start with whichever page matche
 
 - [Install](./install.md) — bootstrap or production install failed, services won't come up.
 - [Authentication / OIDC](./auth-oidc.md) — can't sign in, sign-in loop, claims missing.
-- [Networking / OpenZiti](./networking-ziti.md) — agent can't reach Gateway, `.ziti` hostname fails.
+- [Networking / OpenZiti](./networking-ziti.md) — agent can't reach Gateway, `.agyn` hostname fails.
 - [Agents won't start](./agents.md) — workload fails, init container errors, image pull issues.
 - [LLM calls fail](./llm-calls.md) — auth errors, rate limits, model not found.
 - [MCP tools fail](./mcp-tools.md) — tool returns error, tool not visible to agent.

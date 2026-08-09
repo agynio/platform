@@ -84,7 +84,7 @@ Same terms as in [Introduction → Concepts](../introduction/concepts.md), plus 
 | **Istio** | Service mesh for in-cluster mTLS and authorization. | [Operate → Networking](../operate/networking.md) |
 | **OpenFGA** | ReBAC engine backing the Authorization service. | [Operate → Authorization](../operate/authorization.md) |
 | **Device** | Personal endpoint enrolled into OpenZiti. | [Use → Devices](../use/devices.md) |
-| **Port exposure** | Reachable endpoint for a service inside an agent container. URL `http://exposed-<id>.ziti:<port>`. | [Use → Port exposure](../use/port-exposure.md) |
+| **Port exposure** | Reachable endpoint for a service inside an agent container. URL `http://exposed-<id>.agyn:<port>`. | [Use → Port exposure](../use/port-exposure.md) |
 | **Notification** | Real-time event delivered to UIs via WebSocket. | [Operate → Architecture](../operate/architecture.md) |
 
 ## Components & repositories

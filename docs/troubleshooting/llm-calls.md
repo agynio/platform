@@ -70,7 +70,7 @@ This shouldn't happen — `agynd` exports `OPENAI_API_BASE` pointing at LLM Prox
 ## Direct test against LLM Proxy
 
 ```sh
-curl -X POST http://llm-proxy.ziti:8080/v1/responses \
+curl -X POST http://llm-proxy.agyn:8080/v1/responses \
   -H "Authorization: Bearer ignored-by-proxy" \
   -d '{"model": "gpt-4o", "input": "hi"}'
 ```

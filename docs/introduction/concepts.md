@@ -73,7 +73,7 @@ These terms have the same meaning everywhere they appear in the product and in t
 | **Workload** | A running agent process — pod + sidecars + volumes — provisioned on a runner. |
 | **Container** | An individual container within a workload, accessible via terminal logs. |
 | **Device** | A user device enrolled into the platform's private network, used to reach exposed services in agent containers. |
-| **Port exposure** | A reachable endpoint for a service running in an agent container. URL form: `http://exposed-<id>.ziti:<port>`. |
+| **Port exposure** | A reachable endpoint for a service running in an agent container. URL form: `http://exposed-<id>.agyn:<port>`. |
 | **Notification** | A real-time event delivered to the UI via WebSocket. Drives live updates for conversations, messages, runs, and tool output. |
 
 ## Apps

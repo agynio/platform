@@ -13,9 +13,9 @@ The Tracing service captures spans emitted by agents and platform services. If t
 Two possibilities: the run never happened, or the spans never reached Tracing.
 
 - **Did the agent start?** Check Activity → Workloads for the conversation. If there is no workload, the orchestrator never started a run — likely an authorization or scheduling issue (see [Agents won't start](./agents.md)).
-- **Spans not reaching Tracing.** `agynd` runs an OTLP proxy on `localhost:4317` and forwards spans to Tracing over `tracing.ziti`. If either side breaks, the timeline is empty.
+- **Spans not reaching Tracing.** `agynd` runs an OTLP proxy on `localhost:4317` and forwards spans to Tracing over `tracing.agyn`. If either side breaks, the timeline is empty.
   - Check `agynd`'s logs for tracing errors.
-  - Check the Ziti sidecar can resolve `tracing.ziti`.
+  - Check the Ziti sidecar can resolve `tracing.agyn`.
   - Check the Tracing service's ingest metrics.
 
 ## Some events missing
