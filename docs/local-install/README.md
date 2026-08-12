@@ -22,7 +22,7 @@ A single VM running the same components a production install deploys, sized for 
 
 | | Local | Production |
 |---|---|---|
-| Install | One command | Two charts and a provisioning step between them |
+| Install | One command | One Helm release |
 | Runs on | A VM on your machine | Your Kubernetes cluster |
 | Dependencies | Bundled | Bundled or your own |
 | Ingress | `https://*.agyn.dev:2496` | Your domain and certificates |

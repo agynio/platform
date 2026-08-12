@@ -6,7 +6,7 @@ order: 3
 
 # Production installation
 
-Agyn deploys to your own Kubernetes cluster from two umbrella charts at `oci://ghcr.io/agynio/charts`, with a provisioning step between them.
+Agyn deploys to your own Kubernetes cluster from one umbrella chart at `oci://ghcr.io/agynio/charts`.
 
 Skip this section if you use Agyn Cloud — your platform is already running. For a laptop, see [Local installation](../local-install/README.md) instead.
 
@@ -14,7 +14,7 @@ Skip this section if you use Agyn Cloud — your platform is already running. Fo
 |---|---|
 | `agyn-platform` | The control plane — the services behind the API |
 
-Between them you authorize the OpenZiti overlay, sign in, and enroll a runner. That middle step cannot live in a chart: it acts on the OpenZiti controller and on the platform API the first chart has just started. [Install](./install.md) covers all four phases.
+The release provisions its own resources — the overlay authorization, the runner, and the bundled apps — so there is no operator step in the middle. [Install](./install.md) covers the three phases.
 
 ## Pages
 
