@@ -47,7 +47,7 @@ If you would rather not touch the system trust store, start with `--no-ca` and a
 
 Open `https://console.agyn.dev:2496/` (or your configured port) and sign in.
 
-The first account provisioned claims cluster admin — see [Production installation → First admin](../production-install/first-admin.md) for how that claim works and why it is one-shot. On a local VM this is simply you.
+Cluster admin is declared, not claimed — see [Production installation → Cluster administrators](../production-install/first-admin.md). On a local VM the bundled account is already declared, so it holds the role from the first sign-in.
 
 ## Configure
 

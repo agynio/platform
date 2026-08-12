@@ -41,7 +41,7 @@ You are a platform operator.
 2. [Production installation → Prerequisites](../production-install/prerequisites.md).
 3. For dev/demo: [Local installation](../local-install/install.md).
 4. For production: [Production installation → Install](../production-install/install.md).
-5. [Production installation → First admin](../production-install/first-admin.md) — claim the cluster admin role.
+5. [Production installation → Cluster administrators](../production-install/first-admin.md) — declare who administers the cluster.
 6. [Operate → Architecture overview](../operate/architecture.md), [Networking](../operate/networking.md), [Identity](../operate/identity.md), [Authorization](../operate/authorization.md).
 7. [Operate → Backup & DR](../operate/backup-disaster-recovery.md), [Upgrades](../operate/upgrades.md), [Security](../operate/security.md).
 

@@ -52,7 +52,7 @@ An OIDC provider with Authorization Code + PKCE. You need the issuer URL, a clie
 
 If your IdP implements [RFC 8707 resource indicators](https://datatracker.ietf.org/doc/html/rfc8707), the access token is audience-restricted and the OIDC UserInfo endpoint rejects it. The gateway then has to read profile claims from the token itself, and the IdP has to put them there — see [Troubleshooting → Auth & OIDC](../troubleshooting/auth-oidc.md).
 
-For the first sign-in to claim cluster admin reliably, the IdP should also mark the address verified — see [First admin](./first-admin.md).
+The address the IdP asserts is what a cluster admin declaration is matched against, so it has to be the address you declare — see [Cluster administrators](./first-admin.md).
 
 ## Registry access
 
@@ -61,5 +61,5 @@ None. Charts and images are published publicly at `ghcr.io/agynio/*` and pull an
 ## Related
 
 - [Install](./install.md)
-- [First admin](./first-admin.md)
+- [Cluster administrators](./first-admin.md)
 - [Operate → Security](../operate/security.md)

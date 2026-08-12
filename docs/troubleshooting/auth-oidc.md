@@ -54,7 +54,19 @@ The user authenticated but has no organization. By design, new users have no acc
 
 ## Cluster admin role missing after first install
 
-See [Production installation → First admin](../production-install/first-admin.md). The bootstrap binds the OIDC subject set in `ADMIN_OIDC_SUBJECT` (default `admin@agyn.io`); if your real IdP issues a different `sub` for you, you won't be cluster admin until you re-apply the `apps` stack with the correct value.
+The role is granted by a declaration matched on the address your IdP asserts, so
+the usual cause is that no declaration names it:
+
+```sh
+kubectl -n <namespace> get clusteradmin -o wide
+```
+
+`Ready=False` with a pending message means no account holds that address yet —
+compare it against the `email` claim your IdP actually sends, which is what the
+match is made on. No object at all means the install declared nobody: add an
+entry to `provisioning.clusterAdmins` and upgrade.
+
+See [Production installation → Cluster administrators](../production-install/first-admin.md).
 
 ## API token authentication fails
 
@@ -78,5 +90,5 @@ The Console and Chat apps store sessions in browser localStorage. If sessions va
 ## Related
 
 - [Operate → Identity](../operate/identity.md)
-- [Production installation → First admin](../production-install/first-admin.md)
+- [Production installation → Cluster administrators](../production-install/first-admin.md)
 - [Use → API tokens](../use/api-tokens.md)

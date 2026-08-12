@@ -52,7 +52,7 @@ Delete `agyn-workloads` only once no agent workloads are still running in it.
 
 ## Partial teardown
 
-To reinstall rather than remove, keep the databases, object storage, and OpenZiti state, and uninstall only the two releases. A reinstall then reconnects to existing data — but note the provisioning step is **not** fully repeatable: the first-admin claim is already spent, and a new runner enrollment mints a new token that must replace the old secret.
+To reinstall rather than remove, keep the databases, object storage, and OpenZiti state, and uninstall only the two releases. A reinstall then reconnects to existing data — but note one part of provisioning is **not** repeatable: a new runner enrollment mints a new token that must replace the old secret. Declared administrators are re-granted on reconcile.
 
 ## Related
 
