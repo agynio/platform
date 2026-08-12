@@ -69,9 +69,8 @@ admin-278f97081067   operator@example.com   True    ["1aeb7409-…"]
 ## When an address names several accounts
 
 `identityIds` is a list because one address can name more than one account. An
-account is keyed on the subject its identity provider asserts, so **changing
-provider leaves the same person holding a new account while the old one still
-carries the address**.
+account is keyed on the subject its identity provider asserts.
+**Changing provider leaves the same person holding a new account while the old one still carries the address.**
 
 A declaration names a person rather than a row, so it grants to every account
 for the address. The abandoned one keeps a role nothing can authenticate; the
@@ -102,8 +101,8 @@ procedure below.
 
 Either add a second entry to `provisioning.clusterAdmins`, which is the
 reproducible form and survives a reinstall, or — as an existing admin — open
-Console → **Cluster Administration → Users**, find the user and toggle **Cluster
-Admin** on. A role granted through the Console is not written back to the
+Console → **Cluster Administration → Users**, find the user and toggle
+**Cluster Admin** on. A role granted through the Console is not written back to the
 declarations, so a rebuilt cluster will not have it.
 
 ## Recovery
