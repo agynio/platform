@@ -39,7 +39,7 @@ The [provisioning step](./install.md#3-provisioning) is not part of an upgrade:
 
 - Overlay policies persist in the OpenZiti controller.
 - The runner stays enrolled, and its service token stays valid.
-- The first-admin claim is already spent.
+- Administrators are declared, so they are re-granted rather than re-claimed.
 
 ## Read the release notes
 

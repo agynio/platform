@@ -152,12 +152,12 @@ A healthy runner reports `RUNNER_STATUS_ENROLLED`, and its log shows the gRPC se
 | `produced zero addresses` | The named service has no endpoints — usually a component that was never enabled |
 | Empty `OPENFGA_API_URL` | Connection details set on the top-level `openfga` key instead of `platform.openfga` |
 | Files stop authenticating after an upgrade | Bundled MinIO re-created the S3 credentials secret — see `s3.createSecret` |
-| Console shows no Cluster Administration | The first-admin claim went to another account, or `FIRST_ADMIN_EMAIL` is set and the IdP did not mark the address verified (3b) |
+| Console shows no Cluster Administration | No `provisioning.clusterAdmins` entry names the address your IdP asserts, or its `ClusterAdmin` object is not Ready (3b) |
 
 ## Related
 
 - [Prerequisites](./prerequisites.md)
 - [Local installation](../local-install/README.md)
-- [First admin](./first-admin.md)
+- [Cluster administrators](./first-admin.md)
 - [Troubleshooting → Networking & Ziti](../troubleshooting/networking-ziti.md)
 - [Troubleshooting → Auth & OIDC](../troubleshooting/auth-oidc.md)

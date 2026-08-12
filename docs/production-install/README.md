@@ -20,7 +20,7 @@ Between them you authorize the OpenZiti overlay, sign in, and enroll a runner. T
 
 - [Prerequisites](./prerequisites.md) — cluster, dependencies, DNS, OIDC.
 - [Install](./install.md) — the four phases, in order.
-- [First admin](./first-admin.md) — how cluster admin is claimed, and how to recover it.
+- [Cluster administrators](./first-admin.md) — how cluster admin is declared, and how to recover it.
 - [Upgrades](./upgrades.md) — moving between chart versions.
 - [Uninstall](./uninstall.md) — removing Agyn cleanly.
 
