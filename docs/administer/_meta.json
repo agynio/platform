@@ -20,6 +20,7 @@
     "apps",
     "reminders-app",
     "telegram-connector",
+    "slack-connector",
     "monitoring",
     "terraform"
   ]

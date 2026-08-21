@@ -62,6 +62,7 @@ If you are new to the Console, read these in order:
 - [Apps](./apps.md) — install and configure apps from the marketplace or your org.
 - [Reminders app](./reminders-app.md) — let agents schedule follow-ups.
 - [Telegram Connector](./telegram-connector.md) — bridge Telegram chats to Agyn conversations.
+- [Slack Connector](./slack-connector.md) — bridge Slack threads to Agyn conversations.
 
 ### Automation
 

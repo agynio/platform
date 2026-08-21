@@ -1,7 +1,7 @@
 ---
 title: Monitoring
 description: Live views of workloads, volumes, threads, and usage.
-order: 22
+order: 23
 ---
 
 # Monitoring
