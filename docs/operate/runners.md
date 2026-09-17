@@ -50,6 +50,108 @@ capabilities:
 
 The runner enrolls with its service token on first start. After enrollment, it accepts `StartWorkload` calls from the orchestrator and provisions pods in `workloadNamespace`.
 
+## Runner catalog: flavors and storage classes
+
+A **flavor** is a named compute size — the sizes your users get to pick from. A
+**storage class** is a named storage tier. Together with the runner's
+capabilities they form the runner's **catalog**.
+
+The catalog is declared in the runner's own Helm values, not through any
+platform API. There is no Console screen and no Terraform resource for it: only
+the runner can honour the sizes it advertises, so the sizes live next to the
+runner that implements them.
+
+```yaml
+catalog:
+  flavors:
+    - name: ram-2gb
+      default: true
+      resources:
+        requestsCpu: "500m"
+        requestsMemory: "2Gi"
+        limitsCpu: "2"
+        limitsMemory: "2Gi"
+      sidecarResources:
+        requestsCpu: "100m"
+        requestsMemory: "128Mi"
+        limitsCpu: "500m"
+        limitsMemory: "256Mi"
+    - name: ram-4gb
+      resources:
+        requestsCpu: "1"
+        requestsMemory: "4Gi"
+        limitsCpu: "4"
+        limitsMemory: "4Gi"
+
+  storageClasses:
+    - name: default
+      default: true
+      storageClassName: ""      # empty = the cluster's default StorageClass
+    - name: fast-ssd
+      storageClassName: premium-rwo
+
+  capabilities: [docker]
+```
+
+`resources` sizes the agent's main container. `sidecarResources` sizes each MCP
+sidecar in the workload. One flavor covers both, because a user picks a size for
+their workload — not a budget per container. `sidecarResources` is optional; a
+flavor without it leaves sidecars unsized.
+
+| Field | Rules |
+|---|---|
+| `name` | Unique within the runner, max 64 chars, `^[a-z0-9-]+$` |
+| `resources` | All four values required |
+| `sidecarResources` | Optional — but all four required if you set any |
+| `default` | At most one flavor and one storage class may set it |
+| `deprecated` | Hides the entry from pickers; existing references still run |
+
+A malformed catalog is rejected at startup with the offending entry named, and
+the runner keeps reporting whatever it last reported successfully.
+
+### Applying a catalog change
+
+The runner reports its catalog **once, at startup**. The chart handles this: the
+catalog is rendered into a ConfigMap and its checksum is stamped onto the pod
+annotations, so `helm upgrade` rolls the runner whenever the catalog changes.
+
+```sh
+helm upgrade acme-runner oci://ghcr.io/agynio/charts/k8s-runner \
+  --version <chart-version> \
+  --namespace agyn-runners \
+  --values runner-values.yaml
+```
+
+Confirm the report landed:
+
+```sh
+kubectl -n agyn-runners logs -l app=k8s-runner | grep "catalog reported"
+```
+
+A `catalog report failed; serving without it` line instead means the runner is
+up but the platform still has the previous catalog — environments naming a new
+flavor stay unschedulable until a report succeeds.
+
+To see what the platform now offers users, open the flavor picker on any
+environment in the Console. There is currently no CLI command that lists a
+runner's catalog.
+
+### How users reach a flavor
+
+Users never name a flavor on an agent. They name it on an
+[environment](../administer/agents.md), which pairs a runner with a flavor from
+that runner's catalog; agents and sandboxes then reference the environment.
+
+Names are **late-bound** — resolved at every workload start, not when the
+environment is saved. So you can apply platform config and runner config in
+either order, and an environment may name a flavor you have not added yet.
+The cost is that a name you remove stops scheduling: environments referencing
+it are flagged unschedulable rather than being quietly moved somewhere else.
+
+Removing a flavor from your values and upgrading is therefore a breaking change
+for anyone using it. Mark it `deprecated` first — it disappears from pickers
+while existing environments keep running.
+
 ## Pod layout the runner creates
 
 For each agent workload, the runner creates:
@@ -100,8 +202,8 @@ Failed workloads transition to `failed` with one of these reasons:
 A runner can host many concurrent workloads. Capacity depends on:
 
 - Available node CPU/memory in the runner's cluster.
-- Each agent's `compute` resource requests/limits.
-- Number of MCP sidecars per agent (each consumes some CPU/memory).
+- The [flavors](#runner-catalog-flavors-and-storage-classes) you declare, and which ones your environments name — a flavor's `resources` is reserved on a node for as long as the workload runs.
+- Number of MCP sidecars per agent — each is sized by the flavor's `sidecarResources`, so a workload's real footprint is `resources` plus `sidecarResources` times its sidecar count.
 - StorageClass IOPS — agent volumes can be IO-bound for some workloads.
 
 Practical guidance:
