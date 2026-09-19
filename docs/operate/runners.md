@@ -68,20 +68,25 @@ catalog:
       default: true
       resources:
         requestsCpu: "500m"
-        requestsMemory: "2Gi"
+        requestsMemory: "512Mi"
         limitsCpu: "2"
         limitsMemory: "2Gi"
       sidecarResources:
-        requestsCpu: "100m"
-        requestsMemory: "128Mi"
+        requestsCpu: "50m"
+        requestsMemory: "64Mi"
         limitsCpu: "500m"
         limitsMemory: "256Mi"
     - name: ram-4gb
       resources:
         requestsCpu: "1"
-        requestsMemory: "4Gi"
+        requestsMemory: "1Gi"
         limitsCpu: "4"
         limitsMemory: "4Gi"
+      sidecarResources:
+        requestsCpu: "50m"
+        requestsMemory: "64Mi"
+        limitsCpu: "500m"
+        limitsMemory: "256Mi"
 
   storageClasses:
     - name: default
@@ -92,6 +97,14 @@ catalog:
 
   capabilities: [docker]
 ```
+
+Note that a flavor named `ram-2gb` *limits* memory to 2Gi but only *requests*
+512Mi. Requests are what a workload reserves on a node for its whole life;
+limits are the ceiling it may burst to. An agent waiting on an LLM call idles
+far below its ceiling, so requesting the ceiling would strand most of a node —
+five workloads reserving 2Gi each fill a 16 GiB node and the sixth will not
+schedule. Raise the requests if you would rather guarantee the memory than fit
+more agents per node.
 
 `resources` sizes the agent's main container. `sidecarResources` sizes each MCP
 sidecar in the workload. One flavor covers both, because a user picks a size for
