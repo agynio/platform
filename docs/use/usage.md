@@ -45,13 +45,17 @@ Cache efficiency is a leading indicator of cost — high cached-token ratios mea
 
 ## Compute
 
-CPU and RAM consumed by agent workloads, in core-hours and GB-hours.
+Time agent workloads spent occupying a [flavor](../operate/runners.md#runner-catalog-flavors-and-storage-classes), in flavor-hours.
 
-- **Summary cards** — CPU-core-hours, RAM-GB-hours over the selected range.
-- **Usage over time** — bars showing CPU and RAM per bucket.
+- **Summary cards** — flavor-hours over the selected range.
+- **Usage over time** — bars per bucket, broken down by flavor.
 - **Top agents** — horizontal bars by agent.
 
-Compute is **allocation-based**, not actual utilization. The platform records what each workload reserved, not what it actually used. This is the durable signal — it does not depend on metrics scraping inside the workload.
+Compute is billed by **which flavor a workload occupied and for how long**, not
+by what it actually used. A flavor is recorded against the runner that declared
+it, because the same name on two runners need not describe the same resources.
+The flavor is fixed when the workload starts: repointing its environment
+afterwards does not change what a running workload bills.
 
 ## Storage
 

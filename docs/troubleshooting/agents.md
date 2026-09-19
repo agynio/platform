@@ -14,7 +14,7 @@ The orchestrator couldn't start the workload at all.
 
 Check:
 
-- **No eligible runner.** The agent has `runner_labels` or `capabilities` that no enrolled runner satisfies. Console → Runners. Verify there is an enrolled runner with matching labels/capabilities.
+- **Environment cannot be scheduled.** Its runner is not `enrolled`, its flavor name is not in that runner's catalog, or the agent requires `capabilities` the runner does not advertise. Console → Runners, and check the environment for an unschedulable flag naming the unresolved reference.
 - **Runner unreachable.** The orchestrator timed out dialing the runner. Check the runner's status — it might say `enrolled` but actually be offline (the controller hasn't noticed yet). Restart the runner.
 - **Quota exceeded on the runner's cluster.** The runner couldn't create the pod. Look at the workload detail page — the failure message often includes the Kubernetes error.
 

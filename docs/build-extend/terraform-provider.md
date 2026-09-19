@@ -119,14 +119,11 @@ resource "agyn_agent" "support" {
   nickname    = "support"
   description = "Front-line support."
 
-  model      = agyn_llm_model.gpt_4o.name
-  image      = "ghcr.io/agynio/agent-runtime:v1.0.0"
-  init_image = "ghcr.io/agynio/agent-init-codex:v1.0.0"
+  model          = agyn_llm_model.gpt_4o.name
+  environment_id = agyn_environment.support.id
 
   idle_timeout = "5m"
   availability = "internal"
-
-  runner_labels = { region = "us-east-1" }
 }
 
 resource "agyn_agent_mcp" "files" {

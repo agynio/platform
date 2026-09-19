@@ -78,14 +78,21 @@ Service tokens are long-lived and reusable. If the runner restarts, it re-enroll
 
 ## Selection
 
-When the orchestrator needs to start a workload, it picks a runner using:
+The orchestrator does not choose among runners. A workload runs on the runner
+its [environment](../operate/runners.md#how-users-reach-a-flavor) names, and the
+orchestrator only validates that reference at start:
 
-1. **Scope filtering** — eligible runners = the org's runners + all cluster-scoped runners (status `enrolled` only).
-2. **Label matching** — if the agent has `runner_labels`, only runners whose `labels` contain every key-value pair qualify. Runners may have additional labels.
-3. **Capability matching** — if the agent requires `capabilities`, only runners whose `capabilities` include every entry qualify. Runners may advertise more.
-4. **Random pick** from the qualifying set.
+1. **Resolve the runner** — the environment's `runner_id`. It must be visible to the organization, which is checked when the environment is saved.
+2. **Validate enrollment** — the runner's status must be `enrolled`.
+3. **Resolve the flavor** — the environment's flavor name must appear in that runner's [reported catalog](../operate/runners.md#runner-catalog-flavors-and-storage-classes), or the runner must declare a `default`.
+4. **Validate capabilities** — if the agent requires `capabilities`, the runner must advertise every one.
 
-If no runner qualifies, the workload fails to schedule with an error naming the unmet constraint.
+If any step fails the workload does not schedule, and the environment is flagged
+unschedulable naming the unresolved reference. There is no fallback runner: a
+different one has no contract to honour the same names.
+
+Runner `labels` are metadata — searchable and informative, but they do not
+participate in placement.
 
 ## Inspect a runner
 

@@ -78,9 +78,8 @@ resource "agyn_agent" "support" {
   nickname    = "support"
   description = "Front-line customer support."
 
-  model      = agyn_llm_model.gpt_4o.name
-  image      = "ghcr.io/agynio/agent-runtime:v1.0.0"
-  init_image = "ghcr.io/agynio/agent-init-codex:v1.0.0"
+  model          = agyn_llm_model.gpt_4o.name
+  environment_id = agyn_environment.support.id
 
   idle_timeout = "5m"
   availability = "internal"

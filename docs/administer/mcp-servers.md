@@ -29,7 +29,6 @@ Add an MCP server when you want the agent to do something the LLM cannot do alon
    - **Image** — container image of the MCP server.
    - **Command** — optional entrypoint override.
    - **Args** — command arguments.
-   - **Compute** — CPU/memory requests and limits.
    - **Environment variables** — both plain values and references to [secrets](./secrets.md).
    - **Init scripts** — shell scripts run before the MCP server starts.
 4. Save. The MCP is added to the agent's spec. The next workload includes it as a sidecar.
@@ -47,10 +46,6 @@ resource "agyn_agent_mcp" "postgres" {
   image   = "ghcr.io/agynio/mcp-postgres:latest"
   command = ["mcp-postgres"]
 
-  compute = {
-    cpu_limit    = "500m"
-    memory_limit = "256Mi"
-  }
 
   envs = [
     {
@@ -104,3 +99,12 @@ MCPs are edited and deleted just like other agent sub-resources — through the 
 - [Secrets](./secrets.md)
 - [Build & extend → MCP servers](../build-extend/mcp-servers.md) — write your own.
 - [Build & extend → files-mcp](../build-extend/files-mcp.md) — the file-reading built-in.
+
+## Compute
+
+MCP servers run as sidecars in the agent's workload pod, and their size comes
+from the same [flavor](../operate/runners.md#runner-catalog-flavors-and-storage-classes)
+as the workload — its `sidecarResources` budget, applied to every sidecar. There
+is no per-MCP size to set: a workload asks for one size, not a budget per
+container. To give sidecars more room, change `sidecarResources` on the flavor,
+or point the environment at a flavor that allocates more.

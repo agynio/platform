@@ -33,13 +33,20 @@ Each init image bundles `agynd`, the `agyn` CLI, the agent CLI binary, and a sma
 
 Switching is a configuration change on the agent — replace the init image and (typically) the model. The agent's MCPs, secrets, and volumes transfer across CLIs because they are managed by the platform, not the CLI.
 
-In the Console (Administer → Agents → edit) or Terraform:
+The agent CLI comes from the environment's agent runtime image, so it is
+chosen on the environment rather than on each agent:
 
 ```hcl
+resource "agyn_environment" "support" {
+  # ...
+  agent_runtime_image_id  = agyn_image.claude_code.id
+  agent_runtime_image_tag = "v1.0.0"
+}
+
 resource "agyn_agent" "support" {
   # ...
-  init_image = "ghcr.io/agynio/agent-init-claude:v1.0.0"
-  model      = agyn_llm_model.sonnet_4_6.name
+  environment_id = agyn_environment.support.id
+  model          = agyn_llm_model.sonnet_4_6.name
 }
 ```
 
@@ -89,7 +96,8 @@ COPY startup.sh /agyn-bin/startup.sh
 
 The base image provides `agynd` and the `agyn` CLI. `startup.sh` is a shell script copied to the runtime container that prepares anything CLI-specific (mostly: which CLI binary `agynd` should spawn).
 
-Push the image, then set it as `init_image` on an agent.
+Push the image, register it in the catalog, then name it as an
+environment's agent runtime image.
 
 
 ## agynd

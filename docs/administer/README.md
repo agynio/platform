@@ -34,7 +34,7 @@ If you are new to the Console, read these in order:
 
 ### Agents and their sub-resources
 
-- [Agents](./agents.md) — agent resource, model, image, availability, idle timeout, compute.
+- [Agents](./agents.md) — agent resource, model, environment, availability, idle timeout.
 - [Agent roles](./agent-roles.md) — per-agent owner, maintainer, participant grants.
 - [MCP servers](./mcp-servers.md) — tools agents can call.
 - [Skills](./skills.md) — reusable prompt fragments.

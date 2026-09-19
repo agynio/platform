@@ -229,11 +229,14 @@ Practical guidance:
 
 You can register many runners. Some patterns:
 
-- **Per-region runners** — `labels: { region: "eu-west-1" }` on the runner, same `runner_labels` on agents. The orchestrator only places eu-west-1 agents on eu-west-1 runners.
-- **Per-team runners** — `organization_id` set, agents in that org default to its runner.
-- **Tiered runners** — different node sizes. Use `labels: { tier: "high-memory" }` and require it via the agent's `runner_labels`.
+- **Per-region runners** — one runner per region, and an environment per region naming it. Workloads follow the environment their agent references.
+- **Per-team runners** — `organization_id` set, so only that organization's environments can name the runner.
+- **Tiered runners** — different node pools behind different runners, each declaring its own flavors. A user picks the tier by picking an environment.
 
-The orchestrator's selection is: scope-filtered → label-matched → capability-matched → random pick. See [Administer → Runners](../administer/runners.md#selection).
+Placement is the environment's `runner_id`, not a search: the orchestrator
+validates the named runner rather than choosing among them, and runner `labels`
+are metadata that do not affect it. See
+[Administer → Runners](../administer/runners.md#selection).
 
 ## Observability
 
