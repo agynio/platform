@@ -106,7 +106,7 @@ Console → **Activity → Usage** (`/organizations/<org>/activity/usage`).
 A one-page dashboard of four sections:
 
 - **LLM** — tokens (input, cached, output), successful and failed requests. Top consumers, top models.
-- **Compute** — CPU-core-hours and RAM-GB-hours. Top agents.
+- **Compute** — flavor-hours, broken down by flavor. Top agents.
 - **Storage** — Storage-GB-hours. Top agents.
 - **Platform** — threads created, messages sent.
 

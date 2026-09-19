@@ -30,7 +30,10 @@ Common causes:
 - **Wrong arguments.** The agent guessed at the tool's input schema. Tighten the schema in your MCP — required fields, JSON Schema constraints — so the agent retries with valid input.
 - **Missing credentials.** The MCP needs an API key or secret that isn't set in its ENVs. Check `Administer → MCP servers → <mcp> → ENVs`.
 - **Network unreachable.** The MCP's outbound network can't reach the system it's calling. Check egress policies for the agent's namespace.
-- **Tool ran out of resources.** Memory limit hit. Bump the MCP's `compute` resources.
+- **Tool ran out of resources.** Memory limit hit. Sidecars are sized by the
+  workload's flavor, so raise `sidecarResources` on that flavor or move the
+  environment to a larger one — there is no per-MCP limit to bump. See
+  [Runner catalog](../operate/runners.md#runner-catalog-flavors-and-storage-classes).
 
 ## Tool runs but returns wrong data
 

@@ -6,7 +6,9 @@ order: 5
 
 # Agents
 
-An agent is an AI entity that participates in conversations. It is defined by a configuration record that specifies the LLM model it uses, the container images that run it, the tools it can call, the secrets it has access to, and its runtime behavior (idle timeout, compute limits, availability).
+An agent is an AI entity that participates in conversations. It is defined by a configuration record that specifies the LLM model it uses, the container images that run it, the tools it can call, the secrets it has access to, and its runtime behavior (idle timeout, availability). The images it runs and the
+compute it gets come from the [environment](../operate/runners.md#how-users-reach-a-flavor)
+it references, not from the agent itself.
 
 You configure the desired state. The platform reconciles workloads toward it — agents do not run continuously, they spin up on demand when there are messages to process.
 
@@ -38,15 +40,12 @@ Before creating an agent, you need:
 | **Description** | Optional but recommended — appears next to the agent in chat composers. |
 | **Role** | A short label for the agent's purpose (`assistant`, `reviewer`, `support`, etc.). Free-text — affects display only. |
 | **Model** | Pick from the org's registered models. |
-| **Runtime image** | Container image for the agent runtime (the dev container, e.g. `ghcr.io/agynio/agent-runtime:v1.0.0`). |
-| **Init image** | The init container providing `agynd` and the agent CLI. Pick one for Codex, Claude Code, or `agn` — see [Init image](#init-image) below. |
+| **Environment** | The runtime the agent runs in: a runner, a [flavor](../operate/runners.md#runner-catalog-flavors-and-storage-classes) naming its compute size, and the images it runs. One environment is shared by many agents and sandboxes. |
 | **Idle timeout** | Duration after the agent stops producing output before the workload is stopped. Default `5m`. |
 | **Availability** | `internal` (any org member can start a conversation) or `private` (role-restricted). See [Agent roles](./agent-roles.md). |
 
 #### Optional fields
 
-- **Compute resources** — CPU and memory requests/limits for the runtime container.
-- **Runner labels** — `key=value` pairs the workload must match against a runner's labels. See [Runners](./runners.md).
 - **Capabilities** — `gpu`, `docker`, etc. The orchestrator schedules only on runners advertising every capability.
 - **Behavioral configuration** — JSON blob passed to the agent CLI on startup. Schema depends on the chosen CLI.
 
@@ -64,21 +63,37 @@ resource "agyn_agent" "support" {
   description = "Front-line customer support."
   role        = "assistant"
 
-  model      = agyn_llm_model.gpt_4o.name
-  image      = "ghcr.io/agynio/agent-runtime:v1.0.0"
-  init_image = "ghcr.io/agynio/agent-init-codex:v1.0.0"
+  model          = agyn_llm_model.gpt_4o.name
+  environment_id = agyn_environment.support.id
 
   idle_timeout = "5m"
   availability = "internal"
-
-  compute = {
-    cpu_request    = "500m"
-    cpu_limit      = "2"
-    memory_request = "512Mi"
-    memory_limit   = "2Gi"
-  }
 }
 ```
+
+The environment supplies the images, the runner, and — through its flavor — the
+compute the workload runs with:
+
+```hcl
+resource "agyn_environment" "support" {
+  organization_id = agyn_organization.acme.id
+
+  name      = "support-runtime"
+  runner_id = agyn_runner.team_runner.id
+  flavor    = "ram-2gb"
+
+  workspace_image_id      = agyn_image.workspace.id
+  workspace_image_tag     = "v1.0.0"
+  agent_runtime_image_id  = agyn_image.codex.id
+  agent_runtime_image_tag = "v1.0.0"
+
+  availability = "internal"
+}
+```
+
+`flavor` names an entry in that runner's catalog. What it allocates is defined
+on the runner, not here — see
+[Runner catalog](../operate/runners.md#runner-catalog-flavors-and-storage-classes).
 
 The creator's identity is granted `owner` on the new agent automatically. Add roles for other identities through [Agent roles](./agent-roles.md).
 
